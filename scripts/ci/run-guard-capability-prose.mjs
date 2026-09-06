@@ -191,9 +191,14 @@ export function isShippedSourcePath(path) {
 // `run-guard-capability-prose.mjs` on the committed tree, one at a time —
 // each site's own `CORRECTED`-quoted false sentence, reconstructed
 // UNMARKED and appended as a comment to the file it originally lived in,
-// then removed again (never `git checkout --`, per CLAUDE.md's "re-read
-// HEAD before you commit a shared file" caution about that command; a
-// saved scratch copy restored the file each time):
+// then removed again (never `git checkout --`; a saved scratch copy
+// restored the file each time). CORRECTED (P6-W25 merge gate): this
+// attributed the restore-from-scratch rule to CLAUDE.md's "re-read HEAD
+// before you commit a shared file" caution. CLAUDE.md contains neither
+// phrase — that wording is HANDOFF.md's and
+// `run-guard-no-wave-self-revert.mjs`'s, and it is about the P5-W22
+// concurrent-edit failure mode, not about `git checkout --` at all. The
+// rule this comment follows comes from the wave prompt.
 //
 //   Site 1 (Dockerfile): exit 1 — CATCHABLE, unaffected by T187.
 //   Site 2 (docker/README.md, `.dockerignore`-exclusion claim): exit 0.

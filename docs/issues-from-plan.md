@@ -352,6 +352,8 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T189   | Recreate the six deleted root dotfiles (done at recovery)                       | phase-8   | tooling          | P6-W24 | T180                                                                  |
 | T190   | Re-initialise version control and keep an off-volume bundle backup              | phase-8   | tooling          | P6-W24 | —                                                                     |
 | T191   | Guard the scratch-dir variable in the T93 worktree step                         | phase-8   | docs             | P6-W24 | —                                                                     |
+| T192   | Add .gitattributes so Windows checkouts stop failing four committed tests       | phase-8   | tooling          | P8-W5  | —                                                                     |
+| T193   | Bind the collision test to the shipped regex it claims to be about              | phase-8   | tooling          | P8-W5  | T187                                                                  |
 | T32S14 | Mount T66's reconnect path and the route-level fetchImpl seam                   | phase-5   | android          | P5-W20 | T66, T32S13                                                           |
 | T69    | Build the share target chooser so features/share/ has an entry point            | phase-5   | android          | P5-W21 | T36F, T32S14                                                          |
 | T70    | Mount the voice feature behind a real entry point or delete it                  | phase-5   | android          | P5-W21 | T36D, T32S14                                                          |
@@ -584,7 +586,7 @@ the task details always agree.
 | P7-W4  | T42A3 (blocked behind T42A1)                                             | 1     |
 | P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
 | P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
-| P8-W5  | T43B2a                                                                   | 1     |
+| P8-W5  | T43B2a, T192, T193 (both filed at the P6-W25 gate)                       | 3     |
 | P8-W6  | T43B2b                                                                   | 1     |
 | P8-W7  | T59                                                                      | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
@@ -6679,6 +6681,56 @@ be a literal path that was just printed, never a bare variable, and shows the `s
 
 - [x] CLAUDE.md updated
 - [x] Wave prompt updated (P6-W25 onward)
+
+#### T192 — Add `.gitattributes` so Windows checkouts stop failing four committed tests
+
+`labels: phase-8, area: tooling` · `wave: P8-W5`
+
+The repository has no `.gitattributes`, and this machine has `core.autocrlf=true`, so every
+Windows checkout materialises CRLF working files while the committed blobs are LF. Four tests
+in `scripts/ci/guard-docker-packaging-paths.test.mjs` and
+`scripts/ci/guard-capability-prose.test.mjs` anchor their regexes on `\n` and read the real
+`packaging/docker/Dockerfile` and `packaging/nix/flake.nix`, so they fail locally and pass on
+CI's Linux checkout. `oxfmt --check .` is red on roughly 2361 of 2369 files for the same
+reason. The P6-W25 verifier proved the failures are environment-only by re-running the suite
+in a clean worktree at the wave base and seeing the same four names fail.
+
+The cost is not the four tests. It is that the local signal is dead: every future agent sees
+a red suite and a red formatter and has to re-derive that both are noise, and a real
+regression hiding among them would be invisible. CLAUDE.md's stated `385/385` baseline is
+also wrong on this machine — the honest local number is `381/385`.
+
+Owns: `.gitattributes` and any CLAUDE.md sentence stating the local test baseline. No other
+task in this wave touches those files.
+
+- [ ] `.gitattributes` normalises text files to LF so a fresh Windows checkout matches the
+      committed blobs, and the four named tests pass locally without editing any test
+- [ ] `oxfmt --check .` is clean on a fresh checkout, with the before/after file counts shown
+- [ ] Re-normalisation does not rewrite any committed blob: `git diff` after the change shows
+      only line-ending changes to working files, and `git hash-object` on a sample of ten
+      files matches what `git cat-file` reports for HEAD
+- [ ] CLAUDE.md's baseline sentence states the real number and says which platform it is for
+
+#### T193 — Bind the collision test to the shipped regex it claims to be about
+
+`labels: phase-8, area: tooling` · `wave: P8-W5` · `depends-on: T187`
+
+T187's whole-repo collision test re-declares the denying phrase as a literal in the test file
+instead of importing it from `CAPABILITIES`. The P6-W25 merge gate demonstrated the
+detachment: it replaced the shipped phrase with `/T174 closed the ordering gap/i` — a
+sentence that is TRUE and in scope — and the collision test still passed. Three other
+mechanisms caught the broadened phrase, so this is a maintainability defect rather than a
+hole, but it is exactly the catalogued class "an assertion pinned to a fixture declared in
+the same test file": the test cannot notice the thing it is named after changing.
+
+Owns: `scripts/ci/guard-capability-prose.test.mjs`. No other task in this wave touches that
+file.
+
+- [ ] The collision test reads its phrase from the shipped `CAPABILITIES` entry, never from a
+      literal in the test file
+- [ ] Broadening the shipped phrase to a true in-scope sentence now fails THIS test, shown as
+      a RED/GREEN pair — not merely the three other tests that already caught it
+- [ ] `node scripts/ci/run-guard-capability-prose.mjs` still exits 0 on the committed tree
 
 #### T32A1 — Build the Android connect form
 

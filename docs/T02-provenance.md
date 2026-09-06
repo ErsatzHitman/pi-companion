@@ -9,9 +9,19 @@ This document records exactly what T02 copied for AGPL attribution (to be consol
 
 ### 1. `packages/protocol` — `@picompanion/protocol`
 
-Copied via `git archive HEAD -- packages/protocol` (108 tracked files —
+Copied via `git archive HEAD -- packages/protocol` (107 tracked files).
+
+CORRECTED (P6-W25 merge gate): T43B1 changed this to `108 tracked files —
 corrected T43B1, 2026-09-06; the original count of 107 never matched this
-section's own file list below, which has always enumerated 108 entries).
+section's own file list below, which has always enumerated 108 entries`. That
+was wrong in both halves. The list below enumerates 107 tracked bullets and
+then, under its own `Generated at build time (not committed, gitignored):`
+sub-heading, one generated file — counting that one into a total headed
+"tracked files" is what produced 108. `git -C D:\paseo ls-files
+packages/protocol` returns 107, and `git check-ignore` confirms
+`src/generated/validation/*.aot.ts` is ignored there. The relay (18) and
+highlight (13) corrections in the same commit are correct and stand; only this
+one was a regression.
 Full file list from `git ls-files -- packages/protocol`:
 
 - `packages/protocol/README.md`
