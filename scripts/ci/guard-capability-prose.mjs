@@ -222,7 +222,7 @@ const COMPACTION_FILES_MODIFIED_FIELD =
 // appFiles exist. Measured directly on the real, committed tree:
 // `node scripts/ci/run-guard-capability-prose.mjs` at **0.8s**, down from
 // the 4m3-4m5s this entry's own numbers describe.
-const FIND_BUILD_ORDER_VIOLATIONS_MEMBER = /\bfunction\s+findBuildOrderViolations\s*\(/;
+const FIND_BUILD_ORDER_VIOLATIONS_MEMBER = "findBuildOrderViolations";
 
 // T215: T211 (`guard-run-guard-wiring.mjs`) added a dedicated walk over the
 // allowlist's OWN keys — `for (const [runner, allowlistReason] of
@@ -560,35 +560,52 @@ export const CAPABILITIES = [
     // `run-guard-capability-prose.mjs`, both stripped before the
     // declaration check runs).
     //
-    // So this member is a `RegExp` (`FIND_BUILD_ORDER_VIOLATIONS_MEMBER`,
-    // defined above). T183 originally chose `RegExp` here for PERFORMANCE,
-    // not T169's disambiguation reason — see that constant's own doc
-    // comment, whose CLOSED (T184) paragraph records that this rationale is
-    // now stale: `findCapabilityDenialViolations` resolves "is this
-    // capability shipped?" once per capability, over the whole
-    // `shippedFiles` list, before `appFiles` is walked at all, so a
-    // member's position within that list — the entire premise T183's
-    // performance argument rested on — no longer affects runtime, whether
-    // the member is a `RegExp` or a bare string. Confirmed directly on the
-    // real, committed tree (T221), not merely inferred from CLOSED (T184)'s
-    // own account: `node scripts/ci/run-guard-capability-prose.mjs`
-    // completes in ~1.2s, and swapping this entry's `methodNames` to the
-    // bare string `"findBuildOrderViolations"` in a scratch copy of this
-    // file produces the identical 1219-shipped/944-app-file summary at
-    // exit 0 in the same ~1.2s — no runtime difference, no behavior
-    // difference. T169's disambiguation reason is not a live justification
-    // for this member either, for the reason already given above: a bare
-    // `findBuildOrderViolations` collides with nothing to disambiguate
-    // from, today, in this tree. This member is left as a `RegExp` anyway
-    // (T221 is a comment-only fix; reverting `methodNames` to a bare string
-    // is a separate, non-comment change, out of that task's scope) — but as
-    // of today neither cited reason is why it needs to be one. Confirmed
-    // the gate goes quiet correctly too: deleting
-    // `findBuildOrderViolations`'s declaration (the
-    // `export function findBuildOrderViolations(` line) leaves zero
-    // declaring files, so a denying phrase inserted afterward is ALLOWED
-    // (exit 0) — the token disappears with the capability, per CLAUDE.md's
-    // "a shipped-gate token must disappear when the capability does".
+    // So this member (`FIND_BUILD_ORDER_VIOLATIONS_MEMBER`, defined above)
+    // is the bare string `"findBuildOrderViolations"` — T223. Before T223
+    // it was a `RegExp` (`/\bfunction\s+findBuildOrderViolations\s*\(/`),
+    // and T183/T221 (see that constant's own doc comment) established that
+    // neither rationale ever offered for the `RegExp` form is live today:
+    // the PERFORMANCE argument died once `findCapabilityDenialViolations`
+    // started resolving "is this capability shipped?" once per capability
+    // over the whole `shippedFiles` list (T184), and T169's DISAMBIGUATION
+    // reason was never live for this member either, since a bare
+    // `findBuildOrderViolations` collides with nothing in this tree (the
+    // measurement two paragraphs up).
+    //
+    // With no live reason to keep it, the `RegExp` form's cost became the
+    // reason to drop it: `declarationPatternsFor` recognizes four
+    // declaration shapes for a bare-string member (an `async`/`Promise`-
+    // returning method, a `function name(` declaration, a `const`/`let
+    // name =` assignment, and an interface/type property), and the old
+    // `RegExp` matched only the second of those four. Proven directly
+    // against the real, exported `isCapabilityMemberDeclared` (not a
+    // private copy of either pattern), by rewriting the real, committed
+    // `guard-docker-packaging-paths.mjs` declaration from
+    // `export function findBuildOrderViolations(commandText) {` to
+    // `export const findBuildOrderViolations = (commandText) => {` — still
+    // exported, still shipped, a behaviour-preserving refactor: the bare
+    // string kept matching (`declared: true`) while the old `RegExp`
+    // stopped (`matches: false`). Under the `RegExp` form that refactor
+    // silently disabled this entry — the capability resolved as NOT
+    // shipped, every denying phrase below became ALLOWED, exit 0, no
+    // signal — a check-cannot-fail arriving by refactor rather than by
+    // deletion, which the deletion proof below does not cover.
+    // `guard-capability-prose.test.mjs`'s "T223" test pins this end-to-end
+    // through the real, module-level `CAPABILITIES` entry — not a private
+    // fixture — and was confirmed to fail (0 violations, not 1) against
+    // the pre-fix `RegExp` member and pass against the bare string above.
+    // The bare string is a strict superset of the `RegExp` form for this
+    // member (nothing in this tree gives it a same-name collision to
+    // disambiguate, so none of the extra three shapes it now also matches
+    // can falsely mark it "shipped"), so switching costs nothing.
+    //
+    // The gate still goes quiet correctly on real deletion, a different
+    // case from the refactor above: deleting `findBuildOrderViolations`'s
+    // declaration entirely (in any of the four recognized shapes) leaves
+    // zero declaring files, so a denying phrase inserted afterward is
+    // still ALLOWED (exit 0) — the token disappears with the capability,
+    // per CLAUDE.md's "a shipped-gate token must disappear when the
+    // capability does".
     //
     // `denyingPhrases`: matches the two false claims the P6-W20 gate's
     // corrected quotations in `packaging/docker/Dockerfile` and

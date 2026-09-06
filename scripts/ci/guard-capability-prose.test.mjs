@@ -2128,6 +2128,63 @@ test("T183: with findBuildOrderViolations's declaration removed, the same denyin
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
 
+// === T223: the findBuildOrderViolations member must survive a ===
+// === behaviour-preserving const-arrow refactor of its declaration ===
+//
+// T221 proved (against the real, exported `isCapabilityMemberDeclared`)
+// that the bare-string member ("findBuildOrderViolations") is a STRICT
+// SUPERSET of `declarationPatternsFor`'s four recognized declaration
+// shapes, while `FIND_BUILD_ORDER_VIOLATIONS_MEMBER` (a `RegExp` anchored
+// to only the second shape, `function name(`) matches just one of them.
+// This test drives that gap through the REAL, module-level `CAPABILITIES`
+// entry — via `findCapabilityDenialViolations`, which reads `CAPABILITIES`
+// directly rather than taking it as a parameter — so it proves the actual
+// shipped entry's behavior, not a private copy of either pattern.
+//
+// Before T223's fix (methodNames: [FIND_BUILD_ORDER_VIOLATIONS_MEMBER]):
+// rewriting `guard-docker-packaging-paths.mjs`'s real, exported
+// `findBuildOrderViolations` from `export function findBuildOrderViolations(
+// commandText) {` to `export const findBuildOrderViolations = (commandText)
+// => {` — a behaviour-preserving refactor, still exported, still shipped —
+// makes the `RegExp` member stop matching. The capability then resolves as
+// NOT shipped, the denying phrase below becomes ALLOWED, and this test's
+// `violations.length` assertion fails (0, not 1) — a check that can be
+// silently switched off by a refactor, never a deletion.
+test("T223: the build-order capability's shipped-gate survives a const-arrow refactor of findBuildOrderViolations's declaration", () => {
+  const real = readRepoFile("scripts/ci/guard-docker-packaging-paths.mjs");
+  const refactored = real.replace(
+    "export function findBuildOrderViolations(commandText) {",
+    "export const findBuildOrderViolations = (commandText) => {",
+  );
+  assert.notEqual(
+    refactored,
+    real,
+    "fixture setup must actually rewrite the real declaration to a const-arrow form",
+  );
+
+  const shippedFiles = [
+    { path: "scripts/ci/guard-docker-packaging-paths.mjs", content: refactored },
+  ];
+  const appFiles = [
+    {
+      path: "packaging/docker/README.md",
+      content:
+        "The guard checks that the build order matches `packages/server/package.json`'s `prepack`.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === "packaging build-order checking (findBuildOrderViolations)",
+  );
+
+  assert.equal(
+    violations.length,
+    1,
+    "the capability must still resolve as shipped, and the denying phrase must still be caught, " +
+      "after a behaviour-preserving const-arrow refactor of its declaration",
+  );
+});
+
 // === T184: shipped-resolution once per capability, not per (capability, appFile) ===
 
 test("T184: the declaring file's OWN denial is now reported — reproduces the exact P6-W23 mutation as TWO violations", () => {
@@ -2230,14 +2287,23 @@ test("T147/T184: the same fixture DOES flag once a real declaration exists elsew
   assert.match(violations[0].capability, /clipboard-failure/);
 });
 
-test("T184: a RegExp group member's declaration check is also immune to a property-shaped string literal", () => {
-  // The same protection extended to the RegExp member path (T169's
-  // CONTROLLER_CANCEL_MEMBER, T183's FIND_BUILD_ORDER_VIOLATIONS_MEMBER):
-  // findCapabilityDenialViolations's isGroupMemberDeclared now runs BOTH
+test("T184: a bare-string member's declaration check is also immune to a property-shaped string literal", () => {
+  // The same protection also holds for the RegExp member path (T169's
+  // CONTROLLER_CANCEL_MEMBER; see the "T169" tests above for that half) —
+  // findCapabilityDenialViolations's isGroupMemberDeclared runs BOTH
   // member shapes against the same comments-and-strings-stripped source.
-  // A string literal that merely CONTAINS the exact regex-matched text
-  // ("function findBuildOrderViolations(") must not count as a
-  // declaration.
+  // This fixture exercises the bare-string half through the real
+  // findBuildOrderViolations capability: a string literal that merely
+  // CONTAINS text shaped like its declaration ("function
+  // findBuildOrderViolations(") must not count as a real one.
+  //
+  // CORRECTED (T223): this test used to describe FIND_BUILD_ORDER_
+  // VIOLATIONS_MEMBER as the RegExp half of this proof. T223 moved that
+  // member to a bare string (a strict superset of declaration shapes,
+  // proven refactor-safe by the "T223" test above), so this fixture now
+  // demonstrates the bare-string path instead — the assertion was already
+  // true either way, since stripStringLiterals erases the literal's
+  // contents before either member shape is tested.
   const content =
     'export const EXAMPLE = "function findBuildOrderViolations( ) { return []; }";\n' +
     "// the guard checks that the build order matches packages/server/package.json prepack.\n";
