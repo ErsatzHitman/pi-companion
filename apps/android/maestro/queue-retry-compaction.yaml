@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "queue mode picker shows a truthful unavailable state; retry/compaction banner disclosed as unreachable this wave"
 tags:
   - composer

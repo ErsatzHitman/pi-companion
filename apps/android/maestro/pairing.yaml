@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "pairing — direct host connect, and the relay entry point's honest state"
 tags:
   - pairing

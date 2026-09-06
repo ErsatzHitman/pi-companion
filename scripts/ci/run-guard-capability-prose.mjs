@@ -311,6 +311,27 @@ const PACKAGING_EXTENSIONS = new Set([".md", ".nix"]);
 // above and `guard-capability-prose.test.mjs`'s "T197" cases.
 const DOCS_PREFIX = "docs/";
 const DOCS_EXTENSIONS = new Set([".md"]);
+// T207: found live, the same way T179 and T197 each found their own gap
+// — by tracing where a real false-premise site actually lived and
+// checking this scan could see it. The P8-W10 merge gate wrote a
+// "cannot pass as written" disclosure into THREE places once T207's own
+// dependency (T43B2b) shipped a defect it couldn't yet fix:
+// `.github/workflows/android-maestro-e2e.yml`'s header and its
+// `packaged-app-smoke` run step, and `apps/android/maestro/README.md`.
+// None of the three is under `apps/web/src`, `apps/android/src`,
+// `scripts/ci`, `packaging/**`, or `docs/**` — the widened scan would
+// have exited 0 with all three still reading "cannot pass" the moment
+// T207 made that false, the identical shape T179 and T197 each closed
+// for their own trees. `.github/workflows/` (`.yml` only — the three
+// files there today are all `.yml`) and `apps/android/maestro/`
+// (`.md` only — `README.md` is the one Markdown file in that directory;
+// the flow `.yaml` files themselves are governed by
+// `guard-no-production-daemon-port.mjs`'s narrower rule, not this one)
+// are the two prefixes this widening adds.
+const WORKFLOWS_PREFIX = ".github/workflows/";
+const WORKFLOWS_EXTENSIONS = new Set([".yml"]);
+const MAESTRO_PREFIX = "apps/android/maestro/";
+const MAESTRO_EXTENSIONS = new Set([".md"]);
 // T197: `docs/issues-from-plan.md` is the repository's own task ledger —
 // CLAUDE.md calls it out by name as governing task scope, so it is not one
 // of the "reference-only" documents this task's brief warned about, and it
@@ -385,10 +406,29 @@ function isDocsProsePath(path) {
   return dot !== -1 && DOCS_EXTENSIONS.has(basename.slice(dot));
 }
 
+// T207: see `WORKFLOWS_PREFIX`/`MAESTRO_PREFIX`'s own comment above for
+// why these two were added. Same curated-extension shape as
+// `isPackagingProsePath`/`isDocsProsePath` above, not "everything under
+// the prefix."
+function isWorkflowsProsePath(path) {
+  if (!path.startsWith(WORKFLOWS_PREFIX)) return false;
+  const basename = path.slice(path.lastIndexOf("/") + 1);
+  const dot = basename.lastIndexOf(".");
+  return dot !== -1 && WORKFLOWS_EXTENSIONS.has(basename.slice(dot));
+}
+
+function isMaestroProsePath(path) {
+  if (!path.startsWith(MAESTRO_PREFIX)) return false;
+  const basename = path.slice(path.lastIndexOf("/") + 1);
+  const dot = basename.lastIndexOf(".");
+  return dot !== -1 && MAESTRO_EXTENSIONS.has(basename.slice(dot));
+}
+
 /**
  * Whether `path` is in scope for the denial-prose scan itself — T179:
  * `apps/web/src`, `apps/android/src`, `scripts/ci`, and `packaging/**`;
- * T197 added `docs/**` — except this guard's own three files (see
+ * T197 added `docs/**`; T207 added `.github/workflows/*.yml` and
+ * `apps/android/maestro/*.md` — except this guard's own three files (see
  * `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`) and the task ledger,
  * `docs/issues-from-plan.md` (see `DOCS_LEDGER_DENIAL_EXCLUSIONS`).
  * Comments AND test files both included throughout (one of the ten P6-W6
@@ -403,6 +443,8 @@ export function isAppSourcePath(path) {
     return hasSourceExtension(path);
   }
   if (isPackagingProsePath(path)) return true;
+  if (isWorkflowsProsePath(path)) return true;
+  if (isMaestroProsePath(path)) return true;
   return isDocsProsePath(path);
 }
 
@@ -425,7 +467,8 @@ export function main() {
     console.log(
       `guard-capability-prose: OK — ${CAPABILITIES.length} capability group(s) checked against ` +
         `${shippedPaths.length} packages/*/src|apps/*/src|scripts/ci file(s) and ${appPaths.length} ` +
-        `apps/web|android src + scripts/ci + packaging/** + docs/** file(s); no live denial found ` +
+        `apps/web|android src + scripts/ci + packaging/** + docs/** + .github/workflows/*.yml + ` +
+        `apps/android/maestro/*.md file(s); no live denial found ` +
         `for a shipped capability.`,
     );
     return;

@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "session tree sheet — the real tree renders, selection reaches a fake, and fork/clone/rename show a truthful state"
 tags:
   - sessions

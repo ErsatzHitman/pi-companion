@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "recovered-turn banner — the real banner text, and Resend/Discard reaching a real outbox"
 tags:
   - transcript

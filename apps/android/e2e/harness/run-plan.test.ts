@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRunPlan } from "./run-plan.js";
+import { DEFAULT_APP_ID, buildRunPlan } from "./run-plan.js";
 import type { IsolatedDaemonEndpoint } from "./daemon-endpoint.js";
 
 const SAFE_ENDPOINT: IsolatedDaemonEndpoint = {
@@ -28,9 +28,35 @@ describe("buildRunPlan", () => {
     expect(plan.daemon.stopArgv).toEqual(["stop", "--home", SAFE_ENDPOINT.paseoHome, "--force"]);
   });
 
-  it("builds a maestro argv naming the resolved flow path", () => {
+  it("builds a maestro argv naming the resolved flow path and the default appId override", () => {
     const plan = buildRunPlan("smoke", "/repo/apps/android/maestro/smoke.yaml", SAFE_ENDPOINT);
-    expect(plan.maestro.argv).toEqual(["test", "/repo/apps/android/maestro/smoke.yaml"]);
+    expect(plan.maestro.argv).toEqual([
+      "test",
+      "-e",
+      `APP_ID=${DEFAULT_APP_ID}`,
+      "/repo/apps/android/maestro/smoke.yaml",
+    ]);
+  });
+
+  it("defaults the appId override to sh.picompanion.debug — the package maestro-e2e needs, and needed before appId was parameterized (T207)", () => {
+    expect(DEFAULT_APP_ID).toBe("sh.picompanion.debug");
+    const plan = buildRunPlan("smoke", "/repo/apps/android/maestro/smoke.yaml", SAFE_ENDPOINT);
+    expect(plan.maestro.argv).toContain("APP_ID=sh.picompanion.debug");
+  });
+
+  it("passes an explicit appId through as the -e APP_ID override, for packaged-app-smoke's sh.picompanion", () => {
+    const plan = buildRunPlan(
+      "smoke",
+      "/repo/apps/android/maestro/smoke.yaml",
+      SAFE_ENDPOINT,
+      "sh.picompanion",
+    );
+    expect(plan.maestro.argv).toEqual([
+      "test",
+      "-e",
+      "APP_ID=sh.picompanion",
+      "/repo/apps/android/maestro/smoke.yaml",
+    ]);
   });
 
   it("passes the emulator-reachable address to the flow as env vars", () => {

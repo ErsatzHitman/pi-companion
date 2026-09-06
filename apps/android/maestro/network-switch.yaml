@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "network path switch — a genuine unreachable-to-direct recovery, an honestly-unavailable relay switch, and the session list's own visible connection path"
 tags:
   - network-switch

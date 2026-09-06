@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "files and terminal — open both routes, verify terminal teardown"
 tags:
   - files-and-terminal

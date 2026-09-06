@@ -205,15 +205,25 @@ on the real PACKAGED build" — `apps/android/eas.json`'s `production-apk` profi
 set because it has no daemon dependency and no paired-host precondition, making it the right
 size for "does the packaged artifact boot" rather than "do all ten scenarios work."
 
-**This job cannot pass yet, and the blocker is a wiring defect rather than the missing
-secret** (P8-W10 merge gate). It installs `sh.picompanion`, then runs a flow whose first line
-is a literal `appId: sh.picompanion.debug` — a package the job never installs.
-`../e2e/harness/run-plan.ts` puts only the `DAEMON_*` variables in Maestro's environment, and
-Maestro has no flag that overrides a literal `appId`, so no run-time value can reconcile them.
-T207 parameterizes every flow's `appId` and adds a guard that fails when a workflow's EAS
-profile resolves to a package none of the flows it runs can launch. Read the paragraph above
-as intent until T207 lands.
+**CORRECTED (T207): this said the job "cannot pass yet" because it was a wiring defect —
+it installed `sh.picompanion`, then ran a flow whose first line was a literal `appId:
+sh.picompanion.debug`, a package the job never installed, and `../e2e/harness/run-plan.ts`
+put only the `DAEMON_*` variables in Maestro's environment with no way to reconcile the two.**
+That is fixed. Every flow's `appId:` line (including `smoke.yaml`'s) is now the variable
+`${APP_ID}`, resolved at Maestro invocation time via the `-e APP_ID=<value>` flag
+`run-plan.ts`'s `buildRunPlan` adds to the `maestro test` argv — the mechanism
+docs.maestro.dev's "Parameters and constants" page documents for exactly this "appId varies
+by target" case. The Phase 5 gate above never overrides it, so it keeps getting
+`run-plan.ts`'s `DEFAULT_APP_ID` (`sh.picompanion.debug`, unchanged); this job's own workflow
+step passes `APP_ID=sh.picompanion` before invoking `run-flow.ts`, so `smoke.yaml` launches
+the exact package `packaged-app-smoke` just installed.
+`../../../scripts/ci/guard-app-id-package-pairing.mjs` is the CI check that a job's resolved
+EAS package and the appId(s) its flows launch can never drift apart again — it reads the real
+`eas.json`, `app.config.ts`, every flow file, and this workflow, and fails the moment they
+disagree (reverting the fix on any one flow file reproduces the original failure — see that
+guard's own test file for the mutation proof).
 
 Same disclosure as the Phase 5 gate above: this job has never executed end-to-end either (no
 `EXPO_TOKEN`, no verified emulator boot in this repository), dry-runs with a logged notice
-until `EXPO_TOKEN` is configured, and stays `workflow_dispatch` for the identical reason.
+until `EXPO_TOKEN` is configured, and stays `workflow_dispatch` for the identical reason —
+that part of the original disclosure stands (T208, owner-gated).

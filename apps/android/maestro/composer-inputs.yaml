@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "composer inputs — keyboard entry live; voice, attachment picking, and share intent blocked, named"
 tags:
   - composer

@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "extension sheets — roster, form, and panel"
 tags:
   - extension-sheets

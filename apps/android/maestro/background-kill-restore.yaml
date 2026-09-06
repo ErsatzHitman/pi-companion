@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "background and kill during a turn attempt, then restore — reconciles to Failed before backgrounding is possible; kill loses the local record (no persistence, no outbox mount); restore comes back clean, empty, and usable"
 tags:
   - background-kill-restore

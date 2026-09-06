@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "cold start restores the last opened session"
 tags:
   - cold-start

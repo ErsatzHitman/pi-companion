@@ -2582,3 +2582,219 @@ test("T197: on the real, committed tree, run-guard-capability-prose.mjs's own de
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
+
+// === T207: DENIAL scan widened to .github/workflows/*.yml and
+// apps/android/maestro/*.md, plus a CAPABILITIES entry for the new
+// appId/package pairing guard ==================================
+//
+// Same shape as T179 and T197: neither of the two false-premise sites
+// this widening targets (the workflow header/run-step comment, the
+// maestro README paragraph) lived under any previously-scanned tree, so
+// the un-widened scan would have exited 0 with both still false the
+// moment T207 shipped the fix they were disclosing the absence of.
+
+test("T207: isAppSourcePath now covers .github/workflows/*.yml", () => {
+  assert.equal(isAppSourcePath(".github/workflows/android-maestro-e2e.yml"), true);
+  assert.equal(isAppSourcePath(".github/workflows/ci.yml"), true);
+});
+
+test("T207: isAppSourcePath now covers apps/android/maestro/*.md", () => {
+  assert.equal(isAppSourcePath("apps/android/maestro/README.md"), true);
+});
+
+test("T207: isAppSourcePath does not admit apps/android/maestro/*.yaml (a different guard's job) or unrelated workflow-adjacent files", () => {
+  assert.equal(isAppSourcePath("apps/android/maestro/smoke.yaml"), false);
+  assert.equal(isAppSourcePath(".github/dependabot.yml"), false);
+  assert.equal(isAppSourcePath(".github/ISSUE_TEMPLATE/bug.md"), false);
+});
+
+test("T207: isShippedSourcePath is unaffected by the denial-scan widening", () => {
+  assert.equal(isShippedSourcePath(".github/workflows/android-maestro-e2e.yml"), false);
+  assert.equal(isShippedSourcePath("apps/android/maestro/README.md"), false);
+});
+
+test("T207: findAppIdPackagePairingViolations, declared only in the real guard-app-id-package-pairing.mjs, marks the capability shipped and fires on the workflow header's original claim", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-app-id-package-pairing.mjs",
+      content: readRepoFile("scripts/ci/guard-app-id-package-pairing.mjs"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: ".github/workflows/android-maestro-e2e.yml",
+      content: "# `packaged-app-smoke` cannot pass as written even with EXPO_TOKEN configured.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, ".github/workflows/android-maestro-e2e.yml");
+  assert.equal(
+    violations[0].capability,
+    "appId/package pairing guard (findAppIdPackagePairingViolations)",
+  );
+});
+
+test("T207: the run-step denying phrase fires across a #-wrapped multi-line comment", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-app-id-package-pairing.mjs",
+      content: readRepoFile("scripts/ci/guard-app-id-package-pairing.mjs"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: ".github/workflows/android-maestro-e2e.yml",
+      content: "# why this step cannot succeed until T207: the flow it runs is\n# pinned.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+  assert.equal(violations.length, 1);
+});
+
+test("T207: the README denying phrase fires in plain Markdown prose", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-app-id-package-pairing.mjs",
+      content: readRepoFile("scripts/ci/guard-app-id-package-pairing.mjs"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: "apps/android/maestro/README.md",
+      content:
+        "This job cannot pass yet, and the blocker is a wiring defect rather than the missing secret.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+  assert.equal(violations.length, 1);
+});
+
+test("T207: a CORRECTED historical quotation of the workflow-header denial does not trip the guard", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-app-id-package-pairing.mjs",
+      content: readRepoFile("scripts/ci/guard-app-id-package-pairing.mjs"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: ".github/workflows/android-maestro-e2e.yml",
+      content:
+        "# CORRECTED (T207): this said `packaged-app-smoke` cannot pass as written even\n" +
+        "# with a valid EXPO_TOKEN. That is fixed.\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T207: deleting only the CORRECTED marker from that same sentence makes it a live violation again", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-app-id-package-pairing.mjs",
+      content: readRepoFile("scripts/ci/guard-app-id-package-pairing.mjs"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: ".github/workflows/android-maestro-e2e.yml",
+      content:
+        "# `packaged-app-smoke` cannot pass as written even\n# with a valid EXPO_TOKEN. That is fixed.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+  assert.equal(violations.length, 1);
+});
+
+test("T207: with findAppIdPackagePairingViolations's declaration removed, the same denying sentence is ALLOWED (the shipped-gate token disappears with the capability)", () => {
+  const real = readRepoFile("scripts/ci/guard-app-id-package-pairing.mjs");
+  const withoutDeclaration = real.replace(
+    "export function findAppIdPackagePairingViolations(",
+    "export function findAppIdPackagePairingViolationsRENAMED(",
+  );
+  assert.notEqual(withoutDeclaration, real, "fixture setup must actually rename the declaration");
+  assert.equal(
+    isCapabilityMemberDeclared(withoutDeclaration, "findAppIdPackagePairingViolations"),
+    false,
+    "the renamed file must no longer declare the bare member name",
+  );
+
+  const shippedFiles = [
+    { path: "scripts/ci/guard-app-id-package-pairing.mjs", content: withoutDeclaration },
+  ];
+  const appFiles = [
+    {
+      path: ".github/workflows/android-maestro-e2e.yml",
+      content: "# `packaged-app-smoke` cannot pass as written even with EXPO_TOKEN configured.\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T207: reproduces the real, committed tree — every corrected site already carries a marker, so today's tree is clean", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = [
+    ".github/workflows/android-maestro-e2e.yml",
+    "apps/android/maestro/README.md",
+  ].map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === "appId/package pairing guard (findAppIdPackagePairingViolations)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T207: reproduces the real, committed workflow's own #-wrapped header sentence as a live violation once its CORRECTED marker is removed", () => {
+  const real = readRepoFile(".github/workflows/android-maestro-e2e.yml");
+  assert.match(real, /CORRECTED \(T207\): this said `packaged-app-smoke`/);
+
+  const unmarked = real.replace(/CORRECTED \(T207\): this said /, "");
+  assert.notEqual(unmarked, real);
+
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-app-id-package-pairing.mjs",
+      content: readRepoFile("scripts/ci/guard-app-id-package-pairing.mjs"),
+    },
+  ];
+  const appFiles = [{ path: ".github/workflows/android-maestro-e2e.yml", content: unmarked }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === "appId/package pairing guard (findAppIdPackagePairingViolations)",
+  );
+
+  assert.equal(violations.length, 1);
+});
+
+test("T207: on the real, committed tree, run-guard-capability-prose.mjs's own denial scan (workflows + maestro docs included) exits clean", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+  const workflowAndMaestroDocPaths = tracked.filter(
+    (p) => p.startsWith(".github/workflows/") || p === "apps/android/maestro/README.md",
+  );
+  const scannedPaths = workflowAndMaestroDocPaths.filter(isAppSourcePath);
+  assert.deepEqual(scannedPaths.sort(), workflowAndMaestroDocPaths.sort());
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});

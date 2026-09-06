@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "notification approval — respond to a permission request, in-app and (once wired) from a system notification"
 tags:
   - notification-approval

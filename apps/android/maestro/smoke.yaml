@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "smoke — the app launches to onboarding"
 tags:
   - smoke

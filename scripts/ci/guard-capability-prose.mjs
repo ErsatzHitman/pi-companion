@@ -1,7 +1,8 @@
 // T124: CI guard — a named capability shipped anywhere in this
 // repository's real source (not just `packages/client/src`) may not
 // coexist with prose in `apps/web/src`, `apps/android/src`, `scripts/ci`,
-// or `packaging/**` (T179 widened the denial scan to the latter two;
+// `packaging/**` (T179 widened the denial scan to the latter two), `docs/**`
+// (T197), or `.github/workflows/*.yml`/`apps/android/maestro/*.md` (T207 —
 // `run-guard-capability-prose.mjs`'s `isAppSourcePath` is the scope check)
 // asserting that capability is absent.
 //
@@ -366,6 +367,45 @@ export const CAPABILITIES = [
       /rests on a grep performed when this was written, not on any executable check/i,
       /enforced by nothing but (?:an? )?(?:author's )?grep/i,
       /no executable check enforces[^.]*legacy schema reader/i,
+    ],
+  },
+  {
+    // T207 shipped the appId/package pairing guard AND fixed the defect
+    // it checks for in the same commit: every `apps/android/maestro/*.yaml`
+    // flow's `appId:` line became the variable `${APP_ID}`, and
+    // `.github/workflows/android-maestro-e2e.yml`'s `packaged-app-smoke`
+    // job started passing `APP_ID=sh.picompanion`. That made three P8-W10
+    // merge-gate disclosures false the instant T207 landed: the workflow
+    // header's "cannot pass as written" paragraph, its `packaged-app-smoke`
+    // run step's "cannot succeed until T207" comment, and
+    // `apps/android/maestro/README.md`'s "This job cannot pass yet"
+    // paragraph — CLAUDE.md's T124 shape one more time, corrected in the
+    // same commit that shipped the capability.
+    //
+    // This entry could not have existed usefully before T207 widened
+    // `isAppSourcePath` to `.github/workflows/*.yml` and
+    // `apps/android/maestro/*.md`: none of the three sites above lives
+    // under `apps/web/src`, `apps/android/src`, `scripts/ci`,
+    // `packaging/**`, or `docs/**`, so the pre-T207 scan would have exited
+    // 0 with all three still false — the same shape T179 and T197 each
+    // found for their own trees. Measured against the real, committed
+    // tree with this entry added: 0 violations (every real site now
+    // carries a `CORRECTED (T207)` note); reinstating any one of the three
+    // phrases below unmarked makes the guard exit 1 — see
+    // `guard-capability-prose.test.mjs`'s "T207" cases for the proof.
+    //
+    // `methodNames`: `findAppIdPackagePairingViolations` is a full,
+    // camel-cased function name declared in exactly one file
+    // (`scripts/ci/guard-app-id-package-pairing.mjs`), which is not the
+    // file either denial site lives in — the T183/T184 self-judging trap
+    // (CLAUDE.md's "a guard cannot police the file its own capability
+    // ships in") does not apply here.
+    name: "appId/package pairing guard (findAppIdPackagePairingViolations)",
+    methodNames: ["findAppIdPackagePairingViolations"],
+    denyingPhrases: [
+      /packaged-app-smoke[\s#"'`]*cannot[\s#]+pass[\s#]+as[\s#]+written/i,
+      /this[\s#]+step[\s#]+cannot[\s#]+succeed[\s#]+until[\s#]+T207/i,
+      /this[\s#]+job[\s#]+cannot[\s#]+pass[\s#]+yet,?[\s#]+and[\s#]+the[\s#]+blocker[\s#]+is[\s#]+a[\s#]+wiring[\s#]+defect/i,
     ],
   },
   {

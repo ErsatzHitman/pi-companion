@@ -50,21 +50,33 @@ name: Android Maestro E2E
 #     profile, `apps/android/eas.json` -- the same profile
 #     `android-apk-release.yml` and plan.md §15.3 use for a real release)?
 #
-# BLOCKED, and NOT only by the missing secret disclosed further down
-# (P8-W10 merge gate): `packaged-app-smoke` cannot pass as written even
-# with a valid `EXPO_TOKEN` and an emulator that boots perfectly. It
-# installs `sh.picompanion` -- the `production-apk` profile sets no
-# `APP_VARIANT`, so `apps/android/app.config.ts`'s package expression
-# resolves to the release id -- and then runs a flow whose first line is
-# a literal `appId: sh.picompanion.debug`, a package this job never
-# installs. `apps/android/e2e/harness/run-plan.ts` puts only the
-# `DAEMON_*` variables in Maestro's environment, and Maestro has no CLI
-# flag that replaces a literal `appId`, so nothing at run time can
-# reconcile the two. T207 parameterizes every flow's `appId` and adds
-# the guard that ties a workflow's EAS profile to the packages its
-# flows can actually launch. Until T207 lands, every "runs `smoke.yaml`
-# against the packaged build" sentence in this file states intent, not
-# behavior.
+# CORRECTED (T207): this said `packaged-app-smoke` "cannot pass as
+# written even with a valid `EXPO_TOKEN` and an emulator that boots
+# perfectly" -- it installed `sh.picompanion` (the `production-apk`
+# profile sets no `APP_VARIANT`, so `apps/android/app.config.ts`'s
+# package expression resolves to the release id) and then ran a flow
+# whose first line was a literal `appId: sh.picompanion.debug`, a
+# package that job never installed. That wiring defect is fixed: every
+# flow's `appId:` line (`apps/android/maestro/*.yaml`) is now the
+# variable `${APP_ID}`, resolved at Maestro invocation time via the
+# `-e APP_ID=<value>` flag `apps/android/e2e/harness/run-plan.ts`'s
+# `buildRunPlan` adds to the `maestro test` argv -- the mechanism
+# docs.maestro.dev's "Parameters and constants" page documents for
+# exactly this "appId varies by target" case. `maestro-e2e` above never
+# overrides it, so it keeps getting `run-plan.ts`'s `DEFAULT_APP_ID`
+# (`sh.picompanion.debug`, the `development` profile's package --
+# behaviorally unchanged). The `packaged-app-smoke` job below passes
+# `APP_ID=sh.picompanion` before invoking `run-flow.ts`, so the flow it
+# runs launches the exact package this job just installed.
+# `scripts/ci/guard-app-id-package-pairing.mjs` is the CI check that a
+# job's EAS profile and the package(s) its flows launch can never drift
+# apart again -- it resolves each job's profile to a package from the
+# real `eas.json`/`app.config.ts` and fails when a flow it runs would
+# launch a different one; reverting this fix on any one flow file turns
+# it red (see that guard's own test file for the proof). This job is
+# still blocked by the missing `EXPO_TOKEN` secret disclosed further
+# down and an unverified emulator boot (T208, owner-gated) -- that part
+# of the original disclosure stands.
 # It deliberately runs only `smoke.yaml` -- `apps/android/e2e/harness/
 # shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` already excludes `smoke`
 # from the Phase 5 ten-flow set for exactly this reason: it is the one
@@ -142,6 +154,21 @@ jobs:
           npm run build --workspace=@picompanion/design-tokens
           npm run build --workspace=@picompanion/highlight
           npm run build --workspace=@picompanion/frontend-core
+
+      # T207 (folding in the P8-W10 merge gate's F4): neither Android job
+      # built the daemon this workflow's own `run-flow.ts` spawns.
+      # `packages/cli/bin/paseo` is `import '../dist/index.js'` — without
+      # this, that import throws `MODULE_NOT_FOUND` and the isolated
+      # daemon never comes up. Benign for `smoke.yaml` (no daemon
+      # dependency) but latent for every other flow, and previously
+      # invisible either way: `run-flow.ts` checked only the spawned
+      # child's `error` event, never its exit code, so a dead daemon was
+      # silently tolerated (apps/android/e2e/harness/daemon-exit-
+      # policy.ts now closes that; see run-flow.ts).
+      - name: Build the daemon (server, cli)
+        run: |
+          npm run build --workspace=@picompanion/server
+          npm run build --workspace=@picompanion/cli
 
       - name: Check EAS credentials are configured
         id: eas-secrets
@@ -273,6 +300,21 @@ jobs:
           npm run build --workspace=@picompanion/highlight
           npm run build --workspace=@picompanion/frontend-core
 
+      # T207 (folding in the P8-W10 merge gate's F4): neither Android job
+      # built the daemon this workflow's own `run-flow.ts` spawns.
+      # `packages/cli/bin/paseo` is `import '../dist/index.js'` — without
+      # this, that import throws `MODULE_NOT_FOUND` and the isolated
+      # daemon never comes up. Benign for `smoke.yaml` (no daemon
+      # dependency) but latent for every other flow, and previously
+      # invisible either way: `run-flow.ts` checked only the spawned
+      # child's `error` event, never its exit code, so a dead daemon was
+      # silently tolerated (apps/android/e2e/harness/daemon-exit-
+      # policy.ts now closes that; see run-flow.ts).
+      - name: Build the daemon (server, cli)
+        run: |
+          npm run build --workspace=@picompanion/server
+          npm run build --workspace=@picompanion/cli
+
       - name: Check EAS credentials are configured
         id: eas-secrets
         shell: bash
@@ -352,10 +394,15 @@ jobs:
 
       # Only `smoke.yaml` -- see this file's header comment for why the
       # packaging exit gate's Android half is scoped to that one flow
-      # rather than the Phase 5 ten-flow set. That header also records
-      # why this step cannot succeed until T207: the flow it runs is
-      # pinned to `sh.picompanion.debug` and the APK installed on the
-      # line above is `sh.picompanion`.
+      # rather than the Phase 5 ten-flow set. CORRECTED (T207): this
+      # comment said the step "cannot succeed" because the flow it runs
+      # was "pinned to `sh.picompanion.debug`" while the APK installed
+      # above is `sh.picompanion`. `smoke.yaml`'s `appId:` line is now the
+      # variable `${APP_ID}`, and `APP_ID=sh.picompanion` below resolves
+      # it to the exact package `adb install` just installed --
+      # `scripts/ci/guard-app-id-package-pairing.mjs` fails CI if this
+      # job's profile and the package its flow launches ever drift apart
+      # again.
       - name: Boot emulator, install the packaged APK, and run the smoke flow
         if: steps.eas-secrets.outputs.configured == 'true'
         uses: reactivecircus/android-emulator-runner@v2
@@ -367,7 +414,7 @@ jobs:
           script: |
             set -euo pipefail
             adb install -r "${{ steps.artifact.outputs.apk_path }}"
-            npx tsx apps/android/e2e/run-flow.ts smoke
+            APP_ID=sh.picompanion npx tsx apps/android/e2e/run-flow.ts smoke
 
       - name: Dry run (EXPO_TOKEN not configured)
         if: steps.eas-secrets.outputs.configured == 'false'

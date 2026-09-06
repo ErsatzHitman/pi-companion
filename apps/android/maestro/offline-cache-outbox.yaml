@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "offline cache and outbox flush — the composer's own queue/retry cycle, and two disclosed gaps blocking the rest"
 tags:
   - offline

@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "accessibility audit — 48dp touch targets and TalkBack labels"
 tags:
   - accessibility

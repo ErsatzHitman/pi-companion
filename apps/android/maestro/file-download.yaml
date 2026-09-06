@@ -1,4 +1,4 @@
-appId: sh.picompanion.debug
+appId: ${APP_ID}
 name: "file download — real pairing, real round trip, the honest reachable state"
 tags:
   - file-download
