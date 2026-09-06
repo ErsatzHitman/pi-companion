@@ -1,0 +1,36 @@
+# Line-ending policy (T192).
+#
+# Every committed blob in this repository is LF. Without this file a Windows
+# checkout with `core.autocrlf=true` materialises CRLF working copies, and four
+# committed tests in scripts/ci/ read the REAL packaging/docker/Dockerfile and
+# packaging/nix/flake.nix through `\n`-anchored regexes, so they fail locally
+# while passing on CI's Linux checkout. `oxfmt --check .` went red on ~2361 of
+# 2369 files for the same reason. The cost is not those four tests: it is that
+# the local signal is dead, so a real regression hiding among the noise is
+# invisible to the next person who runs the suite.
+#
+# `text=auto eol=lf` normalises on commit and checks out LF on every platform.
+# It changes no committed blob — they are already LF.
+* text=auto eol=lf
+
+# Binaries: never touched, on any platform.
+*.png binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.onnx binary
+*.jar binary
+*.keystore binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.mp3 binary
+*.wav binary
+*.pdf binary
+*.zip binary
+*.gz binary
+
+# Lockfiles are generated; keep them out of diffs but still LF-normalised.
+package-lock.json -diff
