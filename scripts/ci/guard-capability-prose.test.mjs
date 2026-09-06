@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -2188,4 +2189,141 @@ test("T184: a RegExp group member's declaration check is also immune to a proper
   const appFiles = [{ path: "scripts/ci/guard-docker-packaging-paths.mjs", content }];
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+// === T187: re-measure T183's six sites now that T184 removed the
+// per-appFile self-exclusion, and decide, per site, whether to widen ===
+//
+// Each fixture below is one of T179's six real corrected sentences,
+// reconstructed UNMARKED (no "CORRECTED"/"this said" prefix) so the
+// result reflects only `denyingPhrases` coverage, not the separate
+// historical-quote exemption already covered by the "T183" tests above.
+// This IS the pinned six-site table CLAUDE.md's T187 section asks for:
+// changing `denyingPhrases` on the "packaging build-order checking" entry
+// without re-running every one of these six is exactly the mistake this
+// task exists to prevent.
+
+const BUILD_ORDER_CAPABILITY = "packaging build-order checking (findBuildOrderViolations)";
+
+function buildOrderViolations(sentence) {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-docker-packaging-paths.mjs",
+      content: readRepoFile("scripts/ci/guard-docker-packaging-paths.mjs"),
+    },
+  ];
+  const appFiles = [{ path: "packaging/docker/README.md", content: `${sentence}\n` }];
+  return findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === BUILD_ORDER_CAPABILITY,
+  );
+}
+
+test("T187: site 1 (Dockerfile's build-order-matches-prepack claim) is catchable, unchanged", () => {
+  const violations = buildOrderViolations(
+    "The guard checks that the build order matches packages/server/package.json's prepack.",
+  );
+  assert.equal(violations.length, 1);
+});
+
+test("T187: site 2 (the .dockerignore-exclusion claim) is deliberately NOT phrase-matched", () => {
+  // See the entry's own doc comment: this denies a DIFFERENT,
+  // still-genuinely-absent capability (whether this guard checks a COPY
+  // source against `.dockerignore` exclusion) -- unrelated to build
+  // order -- so matching it here would forbid an accurate sentence,
+  // under the wrong capability's name, that has no announced plan to
+  // ever become false.
+  const violations = buildOrderViolations(
+    "The guard checks the source is not excluded by .dockerignore in a way that would break the build.",
+  );
+  assert.equal(violations.length, 0);
+});
+
+test("T187: site 3 (the T43A1-bundling-invariant claim) is catchable, unchanged", () => {
+  const violations = buildOrderViolations(
+    "This packaging path cannot silently skip the T43A1 bundling invariant.",
+  );
+  assert.equal(violations.length, 1);
+});
+
+test("T187: site 4 (the REQUIRED_WORKSPACE_BUILD_STEPS provenance claim) is deliberately NOT phrase-matched", () => {
+  // Denies that the workspace list is derived from live `package.json`
+  // reads rather than the hardcoded literal array it is by design -- a
+  // provenance/implementation-detail claim, not a claim that build-order
+  // checking is absent, and likely to stay accurate indefinitely.
+  const violations = buildOrderViolations(
+    "Those workspace names are checked against real package.json files in this repository.",
+  );
+  assert.equal(violations.length, 0);
+});
+
+test("T187: site 5 (the T171-equivalence overclaim) is deliberately NOT phrase-matched", () => {
+  // The correction's own text says the true relationship is "strictly
+  // weaker", not "absent" -- T171 and this guard check different
+  // artifacts at different pipeline stages by design, so a phrase
+  // forbidding "this is weaker than T171" would forbid an accurate,
+  // permanent statement. Even the original false sentence never claimed
+  // build-order checking was absent; it claimed a false equivalence to a
+  // different guard.
+  const violations = buildOrderViolations(
+    "This is the exact failure mode T171 guards on the OUTPUT side, checked here on the INPUT (packaging-recipe) side instead.",
+  );
+  assert.equal(violations.length, 0);
+});
+
+test("T187: site 6 (the comment-free-by-construction claim) is now catchable — widened by T187", () => {
+  const violations = buildOrderViolations(
+    "That output is comment-free by construction, since both extractors only ever collect RUN lines / phase-string bodies.",
+  );
+  assert.equal(violations.length, 1);
+});
+
+test("T187: site 6's real, committed CORRECTED quotation in guard-docker-packaging-paths.mjs does not trip the widened phrase", () => {
+  const real = readRepoFile("scripts/ci/guard-docker-packaging-paths.mjs");
+  assert.match(real, /CORRECTED \(P6-W21 gate\): this said that output is/);
+
+  const shippedFiles = [{ path: "scripts/ci/guard-docker-packaging-paths.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-docker-packaging-paths.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === BUILD_ORDER_CAPABILITY,
+  );
+  assert.deepEqual(violations, []);
+});
+
+test("T187: deleting only that CORRECTED marker makes the real quotation a live violation again", () => {
+  const real = readRepoFile("scripts/ci/guard-docker-packaging-paths.mjs");
+  const unmarked = real.replace(/CORRECTED \(P6-W21 gate\): this said /, "");
+  assert.notEqual(unmarked, real);
+
+  const shippedFiles = [{ path: "scripts/ci/guard-docker-packaging-paths.mjs", content: unmarked }];
+  const appFiles = [{ path: "scripts/ci/guard-docker-packaging-paths.mjs", content: unmarked }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === BUILD_ORDER_CAPABILITY,
+  );
+  assert.equal(violations.length, 1);
+});
+
+test("T187: the widened phrase's anchor text has exactly one hit across every real app-source file in scope", () => {
+  // Whole-scope collision check: walk every tracked path
+  // isAppSourcePath admits (mirrors the denial scan's real trees:
+  // apps/web/src, apps/android/src, scripts/ci, packaging/**) and confirm
+  // the new phrase matches only the one real, CORRECTED-marked site it
+  // was written for -- never an unrelated TRUE sentence elsewhere.
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+  const appPaths = tracked.filter(isAppSourcePath);
+  const phrase =
+    /(?:that\s+)?output\s+is\s+"?comment-free\s+by\s+construction,?\s+since\s+both\s+extractors\s+only\s+ever\s+collect\s+RUN\s+lines\s*\/\s*phase-string\s+bodies/i;
+
+  const matches = [];
+  for (const appPath of appPaths) {
+    const flat = readRepoFile(appPath)
+      .replace(/^[ \t]*\*(?!\*)[ \t]?/gm, "")
+      .replace(/\s+/g, " ");
+    if (phrase.test(flat)) matches.push(appPath);
+  }
+
+  assert.deepEqual(matches, ["scripts/ci/guard-docker-packaging-paths.mjs"]);
 });

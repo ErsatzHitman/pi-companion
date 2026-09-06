@@ -505,11 +505,111 @@ export const CAPABILITIES = [
     // Dockerfile's `#` comment marker the way it strips a JSDoc `*`
     // gutter, so a plain `\s+` separator would silently never match this
     // file's wrapped copy of the sentence.
+    //
+    // T187: T184 removed the per-appFile self-exclusion that used to make
+    // two of T179's six sites structurally invisible, so all six became
+    // re-measurable. Re-measured directly against
+    // `run-guard-capability-prose.mjs` on the committed tree, one at a
+    // time (each site's exact `CORRECTED`-quoted false sentence, appended
+    // UNMARKED as a comment to the file it lives in, then removed):
+    //
+    //   1. Dockerfile: "the guard checks that the build order matches
+    //      packages/server/package.json's prepack" -> exit 1 (already
+    //      caught by the first phrase above).
+    //   2. docker/README.md: "the guard checks the source is not excluded
+    //      by .dockerignore in a way that would break the build" -> exit
+    //      0 (not caught; see below — NOT widened, on purpose).
+    //   3. docker/README.md: "...concluded that 'this packaging path
+    //      cannot silently skip the T43A1 bundling invariant'" -> exit 1
+    //      (already caught by the second phrase above).
+    //   4. nix/README.md: "those workspace names are checked against real
+    //      package.json files in this repository" -> exit 0 (not caught;
+    //      NOT widened, on purpose).
+    //   5. guard-docker-packaging-paths.mjs (~line 30): "the exact failure
+    //      mode T171 guards on the OUTPUT side, checked here on the INPUT
+    //      (packaging-recipe) side instead" -> exit 0 (not caught; NOT
+    //      widened, on purpose).
+    //   6. guard-docker-packaging-paths.mjs (~line 160): "that output is
+    //      comment-free by construction, since both extractors only ever
+    //      collect RUN lines / phase-string bodies" -> exit 0 (not
+    //      caught pre-T187; WIDENED below).
+    //
+    // So: two were already catchable (1, 3, unchanged by T187), and of
+    // the remaining four, only site 6 is added here. The other three are
+    // deliberately left unmatched, because none of them actually DENIES
+    // this capability's existence — each is a claim this guard's
+    // `denyingPhrases` mechanism cannot safely encode without risking a
+    // phrase that goes on forbidding an accurate statement forever (see
+    // CLAUDE.md's "A shipped-gate token must disappear when the
+    // capability does", the same principle one level up: a denying
+    // PHRASE, not just a shipped-gate token, must not survive past the
+    // point where what it denies stops being false):
+    //
+    //   - Site 2 denies a DIFFERENT, still-genuinely-absent capability —
+    //     whether this guard checks a `COPY` source against
+    //     `.dockerignore` exclusion. `grep -c dockerignore` across all
+    //     three guard files in this repository still returns 0 today (a
+    //     separate guard, `guard-dockerignore-depth.mjs`, checks
+    //     `.dockerignore` pattern DEPTH, T177/T180 — an unrelated
+    //     capability with its own future entry if one is ever written,
+    //     not this one). "The guard does not check dockerignore
+    //     exclusion" is accurate today and has no announced plan to
+    //     become false. Phrase-matching it here would forbid an
+    //     accurate sentence about an absent, unrelated feature under a
+    //     capability name that has nothing to do with it.
+    //   - Site 4 denies that `REQUIRED_WORKSPACE_BUILD_STEPS` is derived
+    //     from live `package.json` reads rather than being the hardcoded
+    //     literal array it is by design (see that array's own doc
+    //     comment above `REQUIRED_WORKSPACE_BUILD_STEPS` in
+    //     `guard-docker-packaging-paths.mjs`). Nothing about landing more
+    //     of `findBuildOrderViolations` makes this array read a real
+    //     manifest — it is a provenance/implementation-detail claim, not
+    //     a claim that build-order checking is absent, and it is likely
+    //     to stay accurate indefinitely.
+    //   - Site 5 denies that this guard is EQUIVALENT in power to T171's
+    //     `guard-daemon-web-ui-bundled.mjs` ("the exact failure mode T171
+    //     guards ... checked here ... instead"). The correction's own
+    //     text says the true relationship is "strictly weaker", not
+    //     "absent" — T171 catches a missing bundle for ANY reason in the
+    //     packed tarball; this guard catches only the specific omission
+    //     and ordering failures `findBuildOrderViolations` and its
+    //     sibling presence checks enumerate. That gap is real and
+    //     permanent by design (the two guards check different artifacts
+    //     at different pipeline stages), so a phrase forbidding "this is
+    //     weaker than T171" would forbid an accurate statement forever.
+    //     Even the ORIGINAL (false) sentence never claimed build-order
+    //     checking didn't exist — it claimed a false EQUIVALENCE to a
+    //     different guard, which isn't the shape this guard exists to
+    //     catch.
+    //
+    // Site 6 is different in kind: T178 shipped active comment-stripping
+    // (`stripDockerfileComments`/`stripNixComments`, run BEFORE
+    // `extractDockerRunCommands`/`extractNixPhaseCommands` join
+    // continuations) specifically because the extracted RUN/phase text
+    // was NOT comment-free "by construction" — a `#`-prefixed comment
+    // inside a continuation could weld into real command text and defeat
+    // the build-order check. Site 6's sentence denies that this active
+    // stripping was ever necessary or exists; it is squarely the
+    // capability's own "T178's comment-awareness" half (this entry's own
+    // header names both halves), so it belongs here.
+    //
+    // RED/GREEN proof for the new phrase (also pinned in
+    // `guard-capability-prose.test.mjs`'s "T187" cases): appending site
+    // 6's sentence, unmarked, to a scratch copy of
+    // `guard-docker-packaging-paths.mjs` and running
+    // `run-guard-capability-prose.mjs` gives exit 1 with exactly this
+    // capability's name; removing it again returns exit 0. Whole-scope
+    // grep for the phrase's anchor text ("comment-free by construction")
+    // across every `apps/web/src`, `apps/android/src`, `scripts/ci`, and
+    // `packaging/**` file finds exactly one hit outside this guard's own
+    // three self-excluded files (the real, `CORRECTED`-marked site this
+    // phrase was written for) — see the test file for the exact count.
     name: "packaging build-order checking (findBuildOrderViolations)",
     methodNames: [FIND_BUILD_ORDER_VIOLATIONS_MEMBER],
     denyingPhrases: [
       /the[\s#]+guard[\s#]+check(?:s|ed)?[\s#]+(?:that[\s#]+)?the[\s#]+build[\s#]+order[\s#]+matches\b/i,
       /this\s+packaging\s+path\s+cannot\s+silently\s+skip\s+the\s+T43A1\s+bundling\s+invariant/i,
+      /(?:that\s+)?output\s+is\s+"?comment-free\s+by\s+construction,?\s+since\s+both\s+extractors\s+only\s+ever\s+collect\s+RUN\s+lines\s*\/\s*phase-string\s+bodies/i,
     ],
   },
 ];

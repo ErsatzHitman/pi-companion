@@ -178,6 +178,71 @@ export function isShippedSourcePath(path) {
 // exclusion reasoning above) is entirely T187's to decide. This guard does
 // not widen `denyingPhrases` itself.
 //
+// (Note for the next reader: "Site 5 (this file's own `~30`...)" and
+// "Site 6 (this file's own `~160`...)" above both meant
+// `scripts/ci/guard-docker-packaging-paths.mjs` — the sole declaring file
+// for `findBuildOrderViolations`, which is also where two of the six
+// sites live — not THIS file, `run-guard-capability-prose.mjs`. Left as
+// written per "keep the record"; flagging the imprecision here rather
+// than editing it, since it does not change which six sites were meant or
+// what was measured about them.)
+//
+// CLOSED (T187): re-measured all six sites directly against
+// `run-guard-capability-prose.mjs` on the committed tree, one at a time —
+// each site's own `CORRECTED`-quoted false sentence, reconstructed
+// UNMARKED and appended as a comment to the file it originally lived in,
+// then removed again (never `git checkout --`, per CLAUDE.md's "re-read
+// HEAD before you commit a shared file" caution about that command; a
+// saved scratch copy restored the file each time):
+//
+//   Site 1 (Dockerfile): exit 1 — CATCHABLE, unaffected by T187.
+//   Site 2 (docker/README.md, `.dockerignore`-exclusion claim): exit 0.
+//   Site 3 (docker/README.md, T43A1-bundling-invariant claim): exit 1 —
+//     CATCHABLE, unaffected by T187.
+//   Site 4 (nix/README.md, `REQUIRED_WORKSPACE_BUILD_STEPS` provenance
+//     claim): exit 0.
+//   Site 5 (guard-docker-packaging-paths.mjs, the T171-equivalence
+//     overclaim): exit 0.
+//   Site 6 (guard-docker-packaging-paths.mjs, the comment-free-by-
+//     construction claim): exit 0 — WIDENED below.
+//
+// Decision, per site, recorded in full (with the RED/GREEN proof and the
+// whole-scope collision grep for the new phrase) in
+// `guard-capability-prose.mjs`'s own entry comment and pinned by
+// `guard-capability-prose.test.mjs`'s "T187" test block — summarized
+// here so this qualification's own record stays accurate without having
+// to repeat the reasoning twice:
+//
+//   - Sites 1 and 3 needed nothing; already catchable.
+//   - Site 6 was WIDENED: a third `denyingPhrase` now matches it. It is
+//     squarely a denial of this capability's own "T178's
+//     comment-awareness" half (the entry's header names both halves) —
+//     T178 shipped active comment-stripping precisely because the
+//     extracted RUN/phase text was NOT comment-free "by construction",
+//     so a sentence denying that stripping is necessary denies a real,
+//     shipped part of this capability. RED/GREEN and a whole-scope grep
+//     (exactly one hit, the real marked site) both confirm this.
+//   - Sites 2, 4, and 5 were deliberately left UNWIDENED, each for its
+//     own reason, not swept together: Site 2 denies a different,
+//     still-genuinely-absent capability (`.dockerignore`-exclusion
+//     checking, unrelated to build order); Site 4 denies a
+//     provenance/implementation-detail (a hardcoded array vs a live
+//     manifest read) that is likely to stay accurate indefinitely; Site 5
+//     denies false EQUIVALENCE to a different guard (T171), and the
+//     correction's own true relationship — "strictly weaker", by
+//     permanent design — would itself become a forbidden-forever
+//     statement if phrase-matched. None of the three denies that
+//     `findBuildOrderViolations` (or its comment-awareness) exists, which
+//     is the only thing this guard's `denyingPhrases` mechanism can
+//     safely encode without eventually forbidding an accurate sentence.
+//
+// So: three catchable (1, 3, 6) and three sites this guard deliberately
+// never phrase-matches, in writing, with a stated reason each — not
+// "structurally uncatchable" (T184 already closed that) and not merely
+// "unmeasured" (this closes that too). Nothing here is expected to need
+// re-deciding unless a future task changes what any of the three unmatched
+// sites actually claims.
+//
 // Widened to the two DEMONSTRATED trees only, per plan.md's "curated, not
 // generic" mandate for this guard:
 //  - `scripts/ci/*.mjs` — this repository's own guards, which carry doc
