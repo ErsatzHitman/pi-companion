@@ -53,10 +53,18 @@ that recomputation has to be domain-specific:
   `docs/legacy-retirement.md` §2.3 uses for its gate figures: a snapshot to recount and re-date,
   never to silently overwrite. Do not bump that number without doing the count yourself
   (distinct task IDs in the table above) and updating the date alongside it.
-- **The Android "construction-site gate counter"** narrated across `T32S11`, `T32S12`, `T32S13`,
-  `T62` and `T68` below (each task's own account of how many merge gates in a row `getProbeUrl`,
-  `SqliteStructuredStorage`/`OfflineCache`, and the terminal transport had stayed unconstructed at
-  the time it was written) is **not one running quantity and must never be read as one**: it does
+- **The Android "construction-site" counters.** This family is defined by SHAPE, not by a list:
+  any count — in merge gates _or_ in waves, which are the same claim in two phrasings — of
+  how long `getProbeUrl`/`NativeNetworkReachability`, `SqliteStructuredStorage`/`OfflineCache`,
+  or the terminal transport has stayed unconstructed, wherever it appears. Each such number is
+  that task's own account at the time it was written. Today the family is `T32S7`, `T32S11`,
+  `T32S12`, `T32S13`, `T60C`, `T62`, `T68` and `T32B6`, and a ninth task narrating the same
+  sites is covered on the day it lands, which is why the rule is the shape and not that list.
+  (CORRECTED at the P8-W18 merge gate: this named five tasks and defined the family BY that
+  enumeration, which left `T32S7`'s "two waves running", `T60C`'s "three consecutive waves"
+  and `T32B6`'s "three waves" — all counted, so none of them reachable by the no-count
+  exemption below — in neither the covered set nor the excused one.)
+  The family is **not one running quantity and must never be read as one**: it does
   not even increase monotonically. `T62` (wave `P5-W17`) reports the terminal at "four merge gates
   and counting" one wave _after_ `T32S11` (wave `P5-W16`) reported it at "five gates", and `T68`
   (wave `P5-W20`) reports `OfflineCache` at "twelve consecutive merge gates" a full wave after
@@ -472,6 +480,7 @@ that recomputation has to be domain-specific:
 | T217   | Investigate a guard for count claims in committed prose                         | phase-8   | ci               | P8-W17 | —                                                                     |
 | T218   | Date-qualify the drifting shipped-file counts in scripts/ci                     | phase-8   | ci               | P8-W18 | —                                                                     |
 | T219   | Decide what to do with issues-from-plan's hand-incremented tallies              | phase-8   | docs             | P8-W18 | —                                                                     |
+| T221   | guard-capability-prose states two contradictory member rationales               | phase-8   | ci               | P8-W19 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -513,14 +522,15 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**432 tasks** (distinct IDs counted directly from the table above), at commit
-`9bc08d0413975f77f82c0fa92282854381b0f19f` (P8-W18, T219) — up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 211 tasks filed as follow-up work
+**433 tasks** (distinct IDs counted directly from the table above), recounted at the P8-W18
+merge gate — the commit that filed `T221`, one row past the **432** T219 verified at
+`9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
+previously claimed. That is not new phases (both counts run P0 through P9): it is 212 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 49 (+44), P9 unchanged at 6. See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 50 (+45), P9 unchanged at 6. See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 49, P9 6. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 50, P9 6. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -684,7 +694,9 @@ the task details always agree.
 |        | falsifying test title and an already-wrong tally, and filed T217.        |       |
 | P8-W17 | T217 (filed by the P8-W16 gate; investigate-first, may conclude no).     | 1     |
 |        | KEEP, not built; the gate fixed the scope its rationale misstated.       |       |
-| P8-W18 | T218, T219 (both filed by the P8-W17 gate; disjoint: ci vs docs)         | 2     |
+| P8-W18 | T218, T219 (both filed by the P8-W17 gate; disjoint: ci vs docs).        | 2     |
+|        | Both KEEP; the gate widened T219's policy from a list to a shape.        |       |
+| P8-W19 | T221 (filed by the P8-W18 gate; pre-existing, not this wave's)           | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7715,6 +7727,39 @@ Owns: `docs/issues-from-plan.md`. Nothing else.
 - [ ] The choice and its reasoning are recorded in the file, not only in a commit message
 - [ ] Verify each figure you keep against the tree before you date it — dating a wrong number is
       worse than leaving it undated
+
+#### T221 — `guard-capability-prose.mjs` states two contradictory rationales for one member
+
+`labels: phase-8, area: ci` · `wave: P8-W19` · `depends-on: none`
+
+The `findBuildOrderViolations` entry's comment says the member is a `RegExp` "for a DIFFERENT
+reason than T169's disambiguation one: **performance**", and cites a 905-appFile scan taking
+6m0.591s with a bare string instead of ~3m49s. The `CLOSED (T184)` block earlier in the same
+file says the opposite on both halves: the `RegExp` "still matters **for the reasons T169 gave**
+(disambiguating a same-file, same-name collision)", and the position of the sole match within
+the shipped-file list "**no longer affects runtime at all**", with the whole run measured at
+**0.8s**.
+
+Both sentences are present tense and neither is marked superseded. Verified pre-existing at
+`9bc08d0` — P8-W18 did not introduce it — but T218 made it more visible, because its own
+edit added a pointer from the live entry into the doc comment that retires it. This is the
+false-premise-in-a-doc-comment class `CLAUDE.md`'s T124 section governs, sitting in the guard
+that exists to catch that class.
+
+Decide which rationale is true today by reading `findCapabilityDenialViolations`, not by
+believing either comment, and make the entry say only that. If the `RegExp` is needed only for
+T169's disambiguation, delete the performance rationale rather than dating it: a retired reason
+is not a snapshot worth keeping.
+
+Owns: that entry's comment in `scripts/ci/guard-capability-prose.mjs`. **No behaviour change, no
+assertion change, no `CAPABILITIES` value change.**
+
+- [ ] Exactly one live rationale for the member remains, and it matches what the runner does
+      today
+- [ ] The 6m0.591s / ~3m49s figures are removed, or explicitly marked as belonging to the
+      superseded algorithm
+- [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
+      `node scripts/ci/run-guard-capability-prose.mjs` still exits 0
 
 #### T32A1 — Build the Android connect form
 
