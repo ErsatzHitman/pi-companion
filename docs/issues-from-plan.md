@@ -37,6 +37,43 @@ record what actually ran. **Phases 5, 6 and 7 are capped at 4 concurrent agents*
 wave tables were recomputed by list scheduling over the declared dependency graph under that
 cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its dependencies.
 
+**Tallies in this file (decided at T219, P8-W18):** this file carries a few hand-incremented
+running counts rather than values any guard can check —
+`scripts/ci/guard-capability-prose.mjs`'s `DOCS_LEDGER_DENIAL_EXCLUSIONS` excludes this whole
+file from its denial scan, so no check in this repository can ever see one of these go stale.
+Keeping them honest here is a convention, not a gate. Two shapes exist, and they get different
+treatment because one counts a single set that keeps growing and the other is many independent
+tasks each recording their own local snapshot of the same three named sites — see `CLAUDE.md`'s
+T217 subsection for why a generic guard over count claims was investigated and rejected, and why
+that recomputation has to be domain-specific:
+
+- **The master table's own size** (the total-task-count line right below it) is an open,
+  ever-growing count — every wave adds rows, so no fixed number is ever going to stay true. Per
+  this decision it is _dated_ to the commit it was last verified against, the same convention
+  `docs/legacy-retirement.md` §2.3 uses for its gate figures: a snapshot to recount and re-date,
+  never to silently overwrite. Do not bump that number without doing the count yourself
+  (distinct task IDs in the table above) and updating the date alongside it.
+- **The Android "construction-site gate counter"** narrated across `T32S11`, `T32S12`, `T32S13`,
+  `T62` and `T68` below (each task's own account of how many merge gates in a row `getProbeUrl`,
+  `SqliteStructuredStorage`/`OfflineCache`, and the terminal transport had stayed unconstructed at
+  the time it was written) is **not one running quantity and must never be read as one**: it does
+  not even increase monotonically. `T62` (wave `P5-W17`) reports the terminal at "four merge gates
+  and counting" one wave _after_ `T32S11` (wave `P5-W16`) reported it at "five gates", and `T68`
+  (wave `P5-W20`) reports `OfflineCache` at "twelve consecutive merge gates" a full wave after
+  `T32S13` (wave `P5-W19`) reported `getProbeUrl` — a different site — at twelve. Every number in
+  this family belongs to the paragraph it sits in and is dated by that paragraph's own task, whose
+  `wave:` line is the date; most entries even say so in the prose itself ("updated after P5-W15",
+  "after P5-W17", "confirmed at the P5-W16 merge gate"). **Do not edit any of these numbers to
+  make them agree with each other or with anything measured today, and do not try to derive a
+  single current count from them** — that arithmetic was never valid, which is exactly why this
+  decision leaves the family alone rather than reconciling it. The one pair named in T219's own
+  brief that predates every later task's "as of wave X" phrasing — `T32S11`'s "since P5-W9 — six
+  gates" / "since P5-W10 — five gates" — is the sole exception: it is annotated in place, below,
+  with the wave that produced it, and nothing about its meaning is changed by that annotation.
+- A bare "unmounted since P5-Wxx" with no attached count (for example `T32S10`'s, elsewhere in
+  this file) is not a tally at all — it names a starting wave, not a number that grows — and
+  needs no dating.
+
 ---
 
 ## Master table
@@ -476,7 +513,17 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**221 tasks.** 117 are merged (P0 17, P1 9, P2 10, P3 4, P3.5 4, P4 73). Remaining: P4 8, P5 51, P6 20, P7 14, P8 5, P9 6.
+**432 tasks** (distinct IDs counted directly from the table above), at commit
+`9bc08d0413975f77f82c0fa92282854381b0f19f` (P8-W18, T219) — up from the **221** this line
+previously claimed. That is not new phases (both counts run P0 through P9): it is 211 tasks filed as follow-up work
+within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 49 (+44), P9 unchanged at 6. See the tallies
+note above this table for why that is expected and how to keep this figure honest rather than
+silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
+4, P4 84, P5 127, P6 103, P7 19, P8 49, P9 6. The previous line's merged/remaining split is
+dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
+verified by reading the table alone, only by cross-referencing which tasks have actually landed
+elsewhere — a mixing of concerns this line should not reintroduce.
 
 #lesson **jsdom accessibility tests are not accessibility tests.** The first axe run in a REAL
 browser (E2E, batch F) found WCAG-AA colour-contrast failures in the Beautiful UI palette itself —
@@ -2682,7 +2729,8 @@ T36C filed as exact JSON rather than editing outside its grant.
 panels simply never render. **Blocked on T32P2** building the adapters and resolving the daemon
 HTTP origin.
 
-**(4) The four long-blocked construction sites.** `core.ts` still builds
+**(4) The four long-blocked construction sites** (counts as of this task's own wave, P5-W16 —
+see the tallies note at the top of this file). `core.ts` still builds
 `createPollingNetworkReachability` with `getProbeUrl` hardcoded to `() => null`
 (`NativeNetworkReachability`, unmounted since P5-W9 - **six gates**); nothing constructs
 `SqliteStructuredStorage` (since P5-W9 - **six gates**), which also strands T37C's
