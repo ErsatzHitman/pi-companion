@@ -419,6 +419,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T42B1  | Execute the client data migration or reset                                      | phase-7   | android          | P7-W7  | T22 (T42A3 edge dropped, T203)                                        |
 | T42B2  | Test versioned-JSON import                                                      | phase-7   | android          | P7-W8  | T42B1                                                                 |
 | T203   | Correct three P7 dependency edges that are scheduling artifacts                 | phase-7   | docs             | P8-W6  | —                                                                     |
+| T204   | Make the local Expo config plugin resolvable on CI, not only on the workstation | phase-8   | android          | P8-W7  | T201                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -600,7 +601,7 @@ the task details always agree.
 | P7-W8  | T42B2 (genuinely behind T42B1)                                           | 1     |
 | P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
 | P8-W6  | T194, T195, T196, T198, T199, T200, T201, T197, T202 (gate)              | 9     |
-| P8-W7  | T43B2b (moved from P8-W6; needs CI green first)                          | 1     |
+| P8-W7  | T204 (main is red), then T43B2b                                          | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7142,6 +7143,79 @@ wave table.
 - [x] Each dropped edge is justified against the code, not against prose
 - [x] The kept edge (T42B2 behind T42B1) is stated and the same-directory conflict noted
 - [x] T42A1 and T42A2 remain blocked; nothing here pretends the install happened
+
+#### T204 — Make the local Expo config plugin resolvable on CI, not only on the workstation
+
+`labels: phase-8, area: android` · `wave: P8-W7` · `depends-on: T201`
+
+**`main` is red.** CI run `34026629398` at `d434b63`: `android-tests` fails, one step,
+**Production prebuild smoke**. `docker-checks` and `nix-checks` are skipped behind it.
+Every other job is green.
+
+**T201 worked.** Its original error — `Cannot find module
+'./src/features/share/share-intent-config.js'` — is gone from the log, and the config
+module now evaluates. The build gets one layer further and dies on the next thing:
+
+```
+PluginError: Failed to resolve plugin for module "./plugins/with-share-intent-module"
+relative to "/home/runner/work/pi-companion/pi-companion/apps/android".
+Do you have node modules installed?
+    at resolvePluginForModule (apps/android/node_modules/@expo/config-plugins/build/utils/plugin-resolver.js:94:9)
+```
+
+`apps/android/plugins/with-share-intent-module.ts` is a TypeScript file, and Expo's
+plugin resolver requires it from disk through Node, which cannot load `.ts`. This is the
+same root cause as T201 one level up: `@expo/require-utils` compiles only the entry
+config file, so anything Expo resolves _afterwards_ must already be JavaScript.
+
+**Do not trust `gh run watch --exit-status` for this.** On this run it exited **0** while
+`gh run view --json conclusion` reported **`failure`**. Read the conclusion, not the
+watcher's exit code. That mistake would have closed this task as green.
+
+**The workstation cannot reproduce it, and the reason is the finding.** I stripped only
+the `expo-router` plugin string (the separate, T200-documented local gap) and ran
+`cd apps/android && npx expo config --type public`. It **succeeded**, plugin and all.
+The tree was clean, and there is no stale compiled `plugins/with-share-intent-module.js`
+— `git ls-files apps/android/plugins/` lists exactly the `.ts` and its test, and `ls`
+agrees. The divergence is in the install layout:
+
+|                           | `@expo/config-plugins` resolves from                                   |
+| ------------------------- | ---------------------------------------------------------------------- |
+| This workstation          | `node_modules/@expo/config-plugins` → **57.0.9** (hoisted to the root) |
+| CI (from the stack trace) | `apps/android/node_modules/@expo/config-plugins` (**nested**)          |
+
+`apps/android/node_modules/@expo/config-plugins` does **not exist** locally. `sucrase`
+and `typescript` are both present at the root here. So a clean `npm ci` on CI produces a
+nested install this machine does not have, and the two resolve a `.ts` plugin
+differently. **Establishing exactly why is this task's first job** — do not fix past it.
+
+**Directions (pick one, justify it):**
+
+1. **Write the plugin as JavaScript.** `plugins/with-share-intent-module.js` with a
+   JSDoc `@type {import("expo/config-plugins").ConfigPlugin}` annotation. This is how
+   Expo config plugins are conventionally written, keeps type-checking under `checkJs`,
+   and removes the loader question entirely. The test imports the `.js`.
+2. **Generate the `.js` before prebuild.** Keeps the `.ts` source, adds a build step and
+   a generated artifact that must be gitignored and must never drift from its source.
+3. **Pass the plugin as a function, not a path string.** Expo's mod compiler accepts a
+   `ConfigPlugin` reference at runtime; `app.config.ts:6-14`'s comment already records
+   that `@expo/config-types` only _types_ the entry as a string. That comment is the
+   constraint to re-examine, not to obey blindly — but re-examine it, do not assume it
+   is wrong.
+
+Owns: `apps/android/plugins/`, and the `plugins` array in `apps/android/app.config.ts`.
+Nothing else.
+
+- [ ] Reproduce the CI failure in a way this workstation actually exhibits — a clean
+      install, or the nested `apps/android/node_modules` CI builds. Quote the command.
+      "It works locally" is the defect, not the proof
+- [ ] `expo prebuild --platform android --no-install` resolves the plugin and completes
+- [ ] `patchMainActivityContents`' behaviour is unchanged, proven by MUTATION: break the
+      injected `onNewIntent` override, show `with-share-intent-module.test.ts` fails,
+      restore. A green suite after a rewrite that lost the override is a REGRESSION
+- [ ] No generated `.js` is committed unless direction 2 is chosen and gitignored
+- [ ] **`android-tests` green on a real CI run, INCLUDING Production prebuild smoke** —
+      quote the run id and read it with `gh run view --json conclusion`, not `run watch`
 
 #### T32A1 — Build the Android connect form
 
