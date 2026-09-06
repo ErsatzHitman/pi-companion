@@ -28,24 +28,39 @@
  * `+html`, and `+native-intent` (each with a `.js`/`.jsx`/`.ts`/`.tsx`
  * extension).
  *
- * PROVENANCE, STATED PLAINLY: no installed copy of `expo-router` exists
- * anywhere reachable from this checkout to diff this against — not
- * `apps/android/node_modules` (never installed, T87/T116), not the
- * global npm cache, not the read-only `D:\paseo` or `D:\pi-web`
- * reference checkouts (neither has `expo-router` under its
- * `node_modules` either; checked directly before writing this file).
- * This regex is therefore this repository's own faithful
- * re-implementation of the BEHAVIOUR documented above, not a verified
- * byte-for-byte copy of the real package's source text.
- * `../app/router-root.test.ts`'s "vendored EXPO_ROUTER_CTX_IGNORE parity
- * with the real expo-router package" block exists precisely so that the
- * day `expo-router` becomes installable again, a single test run either
- * confirms this text is right or names exactly how it drifted — see
- * `tryRequireRealCtxIgnore` below, and that block's own doc comment for
- * how the "package present" branch is proven live without an install.
+ * PROVENANCE (T200, corrected). This is now a verified byte-for-byte copy
+ * of `expo-router@6.0.13`'s own `_ctx-shared.js`, from two independent
+ * sources that agree exactly:
+ *
+ *   1. GitHub Actions run 34022711589, where the parity test below ran for
+ *      the FIRST time and printed the installed package's value.
+ *   2. `https://unpkg.com/expo-router@6.0.13/_ctx-shared.js`, read directly.
+ *
+ * CORRECTED (T200): this said no installed copy of `expo-router` exists
+ * anywhere reachable, and that the regex was therefore this repository's
+ * own re-implementation of the behaviour rather than a verified copy. The
+ * first half was a fact about THIS WORKSTATION, not about the repository:
+ * `npm ci` installs `expo-router` normally on a CI runner, which is why
+ * the parity test skips here and runs there. The second half was true, and
+ * the re-implementation had drifted. It read:
+ *
+ *   /^\.\/(?:.*\/)?(?!.*(?:\+api|\+html|\+native-intent)\.[jt]sx?$).*\.[jt]sx?$/
+ *
+ * Two differences, one cosmetic and one real. Cosmetic: `[jt]` vs `[tj]`.
+ * Real: the vendored copy excluded `+html` and `+native-intent` at ANY
+ * depth, while the real one excludes them only at the router root — only
+ * `+api` is excluded at any depth. So `./dev/+html.tsx` counts as part of
+ * the route union in expo-router and did not in the vendored copy. No file
+ * in this tree exercises that difference today (the only `+` file is
+ * `../app/+not-found.tsx`, which is not one of the three), so the drift was
+ * latent — which is exactly why only a real installed copy could catch it.
+ *
+ * `../app/router-root.test.ts`'s parity block is what caught this, working
+ * as designed. Keep it: it is the only thing standing between this constant
+ * and the next expo-router release that changes the regex again.
  */
 export const EXPO_ROUTER_CTX_IGNORE =
-  /^\.\/(?:.*\/)?(?!.*(?:\+api|\+html|\+native-intent)\.[jt]sx?$).*\.[jt]sx?$/;
+  /^(?:\.\/)(?!(?:(?:(?:.*\+api)|(?:\+(html|native-intent))))\.[tj]sx?$).*\.[tj]sx?$/;
 
 /**
  * Text-level equality for two `EXPO_ROUTER_CTX_IGNORE` candidates —

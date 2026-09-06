@@ -43,6 +43,26 @@ describe("EXPO_ROUTER_CTX_IGNORE (vendored)", () => {
       expect(EXPO_ROUTER_CTX_IGNORE.test(path), path).toBe(false);
     }
   });
+
+  // T200. The three exclusions do NOT share one depth rule, and the copy
+  // vendored before an installed expo-router could be diffed against got
+  // this wrong: it excluded all three at any depth. `+api` is excluded at
+  // any depth; `+html` and `+native-intent` are excluded only at the router
+  // root, because they are single, root-only files in expo-router's own
+  // conventions rather than a per-directory pattern. Nothing in this tree
+  // exercises the difference today, so without these cases the corrected
+  // regex and the drifted one are indistinguishable from this workstation.
+  it("excludes +html and +native-intent ONLY at the router root, while +api is excluded at any depth", () => {
+    for (const path of ["./+html.tsx", "./+native-intent.ts"]) {
+      expect(EXPO_ROUTER_CTX_IGNORE.test(path), `${path} (root)`).toBe(false);
+    }
+    for (const path of ["./dev/+html.tsx", "./dev/+native-intent.ts", "./h/[serverId]/+html.tsx"]) {
+      expect(EXPO_ROUTER_CTX_IGNORE.test(path), `${path} (nested)`).toBe(true);
+    }
+    for (const path of ["./+api.ts", "./dev/+api.ts", "./h/[serverId]/foo+api.tsx"]) {
+      expect(EXPO_ROUTER_CTX_IGNORE.test(path), `${path} (+api, any depth)`).toBe(false);
+    }
+  });
 });
 
 describe("regexTextEquals", () => {
