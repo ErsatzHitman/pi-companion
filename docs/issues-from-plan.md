@@ -430,7 +430,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T43A3  | Add Docker and Nix packaging paths                                              | phase-8   | tooling          | P8-W3  | T43A2                                                                 |
 | T43B1  | Re-verify provenance and notices                                                | phase-8   | docs             | P6-W25 | T05, T43A3                                                            |
 | T43B2a | Retire the legacy install and pass static gates                                 | phase-8   | tooling          | P8-W5  | T43B1                                                                 |
-| T43B2b | Pass browser and device suites as packaging gate                                | phase-8   | tooling          | P8-W6  | T43B2a                                                                |
+| T43B2b | Pass browser and device suites as packaging gate                                | phase-8   | tooling          | P8-W10 | T43B2a                                                                |
 | T59    | Deploy the daemon to a public VPS behind TLS                                    | phase-8   | tooling          | P8-W7  | T43A3, T43B2b                                                         |
 | T44A1  | Run the performance checks                                                      | phase-9   | ci               | P9-W1  | T40B2, T41A4, T41B3, T42B2, T43B2b                                    |
 | T44A2  | Run the accessibility gates                                                     | phase-9   | ci               | P9-W2  | T44A1                                                                 |
@@ -605,6 +605,9 @@ the task details always agree.
 | P8-W6  | T194, T195, T196, T198, T199, T200, T201, T197, T202 (gate)              | 9     |
 | P8-W7  | T204, T42B2 (both landed; gate corrected four prose sites)               | 2     |
 | P8-W9  | T205, T206 (both filed by the P8-W7 gate; disjoint)                      | 2     |
+| P8-W10 | T43B2b (orphaned from this table until now; its row said P8-W6, a wave   | 1     |
+|        | that ran without it. Nothing else is runnable to pair it with: T59 and   |       |
+|        | T42A1/T42A2 are owner-blocked, and every P9 task is behind it.)          |       |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -9376,7 +9379,20 @@ those files.
 
 #### T43B2b — Pass the browser and device suites as the packaging exit gate
 
-`labels: phase-8, area: tooling` · `wave: P8-W6` · `depends-on: T43B2a`
+`labels: phase-8, area: tooling` · `wave: P8-W10` · `depends-on: T43B2a`
+
+**Where the two suites actually stand today (measured at `89717dd`, not assumed).** The web
+half exists but points at the wrong artifact: `ci.yml`'s `web-tests` job builds `apps/web` with
+`npm run build --workspace=@picompanion/web` and runs Playwright against that, with the E2E
+fixture spawning a daemon out of `@picompanion/server/dist`. That is a dev build, not the
+packaged daemon-served UI this task's first criterion names — T43A1 made `apps/web/dist` the
+daemon's bundled UI in every packaging path, and `daemon-package-dry-run` plus
+`run-guard-daemon-web-ui-bundled.mjs` already prove the artifact is produced. Pointing the
+existing suite at that artifact is the work.
+
+The Android half does not exist at all. `apps/android/maestro/` holds ten flows, and the only
+Maestro-related CI job is `guard / apps/android/maestro never names port 6767`, which reads the
+YAML and never runs it. There is no emulator job, and no job builds an APK.
 
 Run the two slow suites against the packaged build produced by T43A1-T43A3 — the ones that
 need a real browser and a real emulator, and which therefore must not be interleaved with a
