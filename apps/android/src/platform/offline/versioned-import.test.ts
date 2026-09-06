@@ -26,24 +26,34 @@
  * exists anywhere under `apps/android/src` or `packages/frontend-core/
  * src`, and this task does not add one.
  *
- * **How much of that sentence is enforced, and how much is a grep.** The
+ * **Both halves of that claim are enforced, not grepped (T206).** The
  * test below is scoped exactly as its own title says — *this directory's
  * own storage*. It genuinely discriminates: injecting an
  * envelope-recognising branch into `SqliteStructuredStorage.get` makes
- * it fail (P8-W7 merge gate ran that mutation). What it CANNOT see is an
- * importer added in some other file — adding one elsewhere leaves this
- * suite green (P8-W7 verifier ran that one). Both experiments are right;
- * they answer different questions. So the repo-wide half of the claim
- * above rests on a grep performed when this was written, not on any
- * executable check. Filed as T206 if that prohibition is ever to be
- * enforced rather than asserted. Do not read a green run here as proof
- * of the repo-wide claim — doing so would contradict the
- * written decision, plan.md §5's legacy-frontend exclusion boundary,
- * and `docs/frontend-data-migration.md` §3's own words: "the export
- * format would be versioned JSON... The utility would live in the
- * legacy checkout... never in `D:\pi-companion`." An import path
- * belongs beside that future export utility, not here, and only if one
- * is ever built.
+ * it fail (P8-W7 merge gate ran that mutation). What it alone CANNOT see
+ * is an importer added in some other file — adding one elsewhere used to
+ * leave this suite green (P8-W7 verifier ran that one). T206 closed
+ * exactly that gap with a committed, repo-wide check:
+ * `scripts/ci/guard-no-legacy-schema-reader.mjs`, run in CI as
+ * "guard / no legacy §3 envelope reader" and locally via
+ * `node scripts/ci/run-guard-no-legacy-schema-reader.mjs`. It scans every
+ * `.ts`/`.tsx` file (test files excluded) under `apps/android/src` and
+ * `packages/frontend-core/src` for the co-occurring signature of a real
+ * reader — a literal `version === 1` discriminant plus an actual read
+ * (dot-access or destructure) of `hosts`/`drafts`/`attachments` out of a
+ * value, in the same file — and fails the build if either is ever added.
+ * Proven by mutation at T206: a working importer of exactly this shape,
+ * added under `apps/android/src/platform/offline/`, makes that guard
+ * exit 1; removing it again returns it to exit 0. So a green run of
+ * *this* test proves the local claim it always proved, and a green run
+ * of the guard now proves the repo-wide claim above — neither one on its
+ * own, but together they are exactly what the sentence asserts. See
+ * `guard-no-legacy-schema-reader.mjs`'s own header for the full signature
+ * rationale and its disclosed, deliberate blind spots. This remains true
+ * regardless: `docs/frontend-data-migration.md` §3 still says any future
+ * export utility "would live in the legacy checkout... never in
+ * `D:\pi-companion`," and an import path belongs beside that utility, not
+ * here, and only if one is ever built.
  *
  * Given that, criteria 2 and 3 cannot be tested against an importer
  * that does not exist and must not be invented to give them something

@@ -866,6 +866,37 @@ jobs:
       - name: Fail on a shipped capability that this guard's own scope finds denied in prose
         run: node scripts/ci/run-guard-capability-prose.mjs
 
+  # T206: `apps/android/src/platform/offline/versioned-import.test.ts`'s own
+  # doc comment (T42B2) states no legacy versioned-JSON schema reader,
+  # envelope parser, or `hosts`/`drafts`/`attachments` deserializer keyed to
+  # `docs/frontend-data-migration.md` §3's synthetic export envelope exists
+  # anywhere under `apps/android/src` or `packages/frontend-core/src`. The
+  # P8-W7 merge gate found that repo-wide half enforced by nothing but a
+  # grep run once when the test was written — that test's own suite
+  # discriminates only within `SqliteStructuredStorage`, and is blind to a
+  # working importer added in any other file. This guard is the replacement
+  # check: unconditional, alongside guard-legacy-paths et al. above, not
+  # gated on any path filter, since the prohibition it enforces is a
+  # standing repository invariant, not something scoped to one changed
+  # directory. See scripts/ci/guard-no-legacy-schema-reader.mjs for the
+  # exact signature (a literal `version === 1` discriminant plus a real
+  # `hosts`/`drafts`/`attachments` read, co-occurring in one file) and its
+  # disclosed, deliberate blind spots — do not restate the signature here;
+  # that header comment is the authoritative source and this comment cannot
+  # watch itself for staleness any better than the ones above it did.
+  guard-no-legacy-schema-reader:
+    name: guard / no legacy §3 envelope reader
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on a version===1-keyed hosts/drafts/attachments reader under apps/android/src or packages/frontend-core/src
+        run: node scripts/ci/run-guard-no-legacy-schema-reader.mjs
+
   # T126: unconditional guard, alongside guard-legacy-paths et al. above —
   # `vite build` reports a `node:` builtin reaching apps/web's bundle graph
   # as a "has been externalized for browser compatibility" **warning** and
