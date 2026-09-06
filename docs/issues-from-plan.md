@@ -431,6 +431,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T213   | guard-no-legacy-app-tree's ALLOWLISTED_PATHS has the shape T211 closed          | phase-8   | ci               | P8-W14 | —                                                                     |
 | T214   | guard-run-guard-wiring's CI job copy names one of its three failure modes       | phase-8   | ci               | P8-W14 | T211                                                                  |
 | T215   | Decide whether a stale-allowlist check is a guard-capability-prose capability   | phase-8   | ci               | P8-W15 | T211, T213                                                            |
+| T216   | guard-capability-prose test T147 passes for a reason its title denies           | phase-8   | ci               | P8-W16 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -627,7 +628,9 @@ the task details always agree.
 |        | KEEP; the gate fixed one contradictory sentence and filed T213, T214.    |       |
 | P8-W14 | T213, T214 (both filed by the P8-W13 gate; disjoint: guard vs ci.yml).   | 2     |
 |        | Both KEEP; the gate fixed one carried-over header premise, filed T215.   |       |
-| P8-W15 | T215 (filed by the P8-W14 gate; a policy decision, so it runs alone)     | 1     |
+| P8-W15 | T215 (filed by the P8-W14 gate; a policy decision, so it runs alone).    | 1     |
+|        | KEEP; the gate fixed two stale CLAUDE.md bullets and filed T216.         |       |
+| P8-W16 | T216 (filed by the P8-W15 gate)                                          | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7539,6 +7542,34 @@ the decision.
 - [ ] `node scripts/ci/run-guard-capability-prose.mjs` exits 0 on the real tree afterwards
 - [ ] A MUTATION proves the new entry can actually fire — an entry the runner's scope cannot see
       is a check that cannot fail, which is the defect this guard exists to catch
+
+#### T216 — `guard-capability-prose.test.mjs`'s T147 test passes for a different reason than its title claims
+
+`labels: phase-8, area: ci` · `wave: P8-W16` · `depends-on: none`
+
+`scripts/ci/guard-capability-prose.test.mjs`'s test titled
+"T147: isAppSourcePath is unchanged — apps/web/src and apps/android/src only, tests included"
+was true when T147 wrote it. It is false now: `isAppSourcePath` aggregates six areas after
+T179, T197 and T207. Its three assertions still pass, because all three name paths outside every
+one of those areas — so the test proves the T147 boundary it really cares about (`packages/*/src`
+is shipped-scope but NOT denial-scope) while its title claims a narrower scope than the function
+has. That is two catalogue entries at once: a check that passes for a different reason than its
+title claims, and a false-premise test title — the exact shape T124 exists to catch, in the test
+file of the guard that catches it.
+
+The fix is not to widen the assertions. It is to say what this test actually proves, and to add
+the assertions that would now fail if someone narrowed `isAppSourcePath` back — a positive case
+from each area the three widenings added, so the title and the coverage agree.
+
+Owns: `scripts/ci/guard-capability-prose.test.mjs`. Nothing else.
+
+- [ ] The test's title states what its assertions prove
+- [ ] Each of the six in-scope areas has at least one positive assertion, so narrowing
+      `isAppSourcePath` to any subset fails a test
+- [ ] Proven by MUTATION: remove one area from `isAppSourcePath`, show a named test fails,
+      restore from a scratchpad copy (never `git checkout --`)
+- [ ] `git grep` for other prose naming the denial scope as two directories, and correct or
+      report each
 
 #### T32A1 — Build the Android connect form
 

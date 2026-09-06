@@ -269,8 +269,16 @@ backstop for it:
   declared in any `packages/*/src`, `apps/*/src`, or `scripts/ci` file, test files excluded
   (comments stripped first, so a TODO mentioning the method doesn't count as "shipped")
   while a comment OR string literal (a test title counts — one of the ten P6-W6 sites
-  was one) in `apps/web/src` or `apps/android/src` uses one of that capability's denying
-  phrases.
+  was one) anywhere the DENIAL scan reaches uses one of that capability's denying
+  phrases. That scan is wider than this list long claimed. The authoritative answer is
+  `isAppSourcePath` in `run-guard-capability-prose.mjs`, which aggregates six areas —
+  `apps/web/src` and `apps/android/src`, plus `scripts/ci` and `packaging/**` (T179),
+  `docs/**` (T197), and `.github/workflows/*.yml` with `apps/android/maestro/*.md`
+  (T207) — less this guard's own three files and the task ledger. **Read that function
+  before you rely on a scope, including the one in this sentence.** (CORRECTED at the
+  P8-W15 merge gate: this said the prose had to be in `apps/web/src` or
+  `apps/android/src`, which was three widenings out of date and contradicted the T215
+  subsection below it.)
 - It deliberately does **not** fire on a quoted historical correction — prose reading
   "CORRECTED (P6-W6 merge gate): this said \`...\`" while explaining what used to be wrong.
   `dabe8c4`'s own fix left several files quoting the exact false sentence verbatim for this
@@ -283,7 +291,11 @@ backstop for it:
   outside the client package proved inert, and T156 to `scripts/ci` after an entry for a
   guard's own capability proved inert the same way. An entry the runner cannot see is a
   check that cannot fail. The value of this guard is in the next capability it catches,
-  not the five listed here.
+  not the ones enumerated above. **Do not restate the entry COUNT here**, for the same
+  reason the repository-invariants section gives for the test count: every wave that
+  registers a capability invalidates it, and a stale figure reads as a defect to the next
+  reader. This bullet list said "the five listed here" while the paragraph above it said
+  "Seven entries as of the P6-W17 gate" and the guard itself reported twelve.
 
 `scripts/ci/guard-capability-prose.test.mjs` covers this with `node --test`, including a
 pair of tests proving the historical-quotation handling is real: the exact corrected
