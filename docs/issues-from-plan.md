@@ -6666,7 +6666,8 @@ before it is gone, and this ledger is now the only task-by-task record of it.
 
 - [x] `git init` at the surviving tree; baseline commit carries the incident record
 - [x] Remote `origin` added and `main` pushed
-- [x] `git bundle create` of `--all` written to a second volume after every wave (the gate does this)
+- [x] `git bundle create --all` written to `C:\Users\aksha\Downloads` at every wave close (the
+      orchestrator does this; gates report only)
 
 #### T191 — Guard the scratch-dir variable in the T93 worktree step
 

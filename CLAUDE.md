@@ -72,7 +72,9 @@ These hold everywhere in the codebase, not just for a single task:
   `@picompanion/design-tokens`), never source-relative cross-workspace paths.
 - Any `@/` alias is package-local; no root-level alias maps into a package `src`.
 - Nothing from any Paseo `packages/app` tree may enter this repository, in any form.
-- Add no git remote.
+- The only git remote is `origin` = `https://github.com/ErsatzHitman/pi-companion.git`, added
+  by the owner on 2026-09-06 (T190) after the repository loss showed that "add no git remote"
+  left zero recovery path. Add no other remote, and never one pointing at Paseo.
 - The repository is AGPL-3.0-or-later from its first commit.
 
 ## Working locally
