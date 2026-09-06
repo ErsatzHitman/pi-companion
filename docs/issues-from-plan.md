@@ -358,6 +358,9 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T195   | Build @picompanion/client before frontend-core in every CI job                  | phase-8   | ci               | P8-W6  | —                                                                     |
 | T196   | Read CI after every push now that a remote exists                               | phase-8   | docs             | P8-W6  | T194, T195                                                            |
 | T197   | Bring docs/ into guard-capability-prose's denial scan                           | phase-8   | tooling          | P8-W7  | T187, T193                                                            |
+| T198   | Build apps/web's declared workspace dependencies from its own scripts           | phase-8   | tooling          | P8-W6  | T195                                                                  |
+| T199   | Build @picompanion/server before the web-tests Playwright run                   | phase-8   | ci               | P8-W6  | T195                                                                  |
+| T200   | Correct the vendored EXPO_ROUTER_CTX_IGNORE against the real package            | phase-8   | tooling          | P8-W6  | T196                                                                  |
 | T32S14 | Mount T66's reconnect path and the route-level fetchImpl seam                   | phase-5   | android          | P5-W20 | T66, T32S13                                                           |
 | T69    | Build the share target chooser so features/share/ has an entry point            | phase-5   | android          | P5-W21 | T36F, T32S14                                                          |
 | T70    | Mount the voice feature behind a real entry point or delete it                  | phase-5   | android          | P5-W21 | T36D, T32S14                                                          |
@@ -591,7 +594,7 @@ the task details always agree.
 | P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
 | P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
 | P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
-| P8-W6  | T194, T195, T196 (the CI outage found when origin was added)             | 3     |
+| P8-W6  | T194, T195, T196, T198, T199, T200 (the CI outage)                       | 6     |
 | P8-W7  | T43B2b (moved from P8-W6; needs CI green first), T197                    | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
@@ -6878,6 +6881,87 @@ Owns: `scripts/ci/run-guard-capability-prose.mjs` and
       the reference-only documents named in CLAUDE.md do not start failing the guard — if
       any does, that is a finding to report, not a phrase to delete
 - [ ] `node --test scripts/ci/*.test.mjs` — no regression against the wave-base count
+
+#### T198 — Build `apps/web`'s declared workspace dependencies from its own scripts
+
+`labels: phase-8, area: tooling` · `wave: P8-W6` · `depends-on: T195`
+
+`daemon-package-dry-run` failed with four `TS2307: Cannot find module
+'@picompanion/highlight'` errors from `apps/web`. That job builds protocol,
+design-tokens, frontend-core and web — never highlight, which `apps/web` declares and
+imports as a value in `file-code-editor.tsx`, `file-syntax-highlight.ts` (both the main
+entry and `./lezer-only`) and one test.
+
+Same class as T195 and fixed the same way, at the package rather than in the workflow:
+`apps/web`'s `build` and `typecheck` now build design-tokens, frontend-core, highlight
+and protocol first, exactly as `apps/android`'s scripts already did. A new job cannot
+re-break it by forgetting a step.
+
+- [ ] `daemon-package-dry-run` is green on a real CI run
+- [x] `apps/web`'s scripts mirror `apps/android`'s existing chain rather than inventing
+      a second convention
+
+#### T199 — Build `@picompanion/server` before the `web-tests` Playwright run
+
+`labels: phase-8, area: ci` · `wave: P8-W6` · `depends-on: T195`
+
+The Playwright step died before a single spec ran:
+
+```
+Error: Cannot find module '.../node_modules/@picompanion/server/dist/server/server/exports.js'
+imported from apps/web/e2e/fixtures/daemon.ts
+```
+
+`web-tests` builds the frontend-core chain and the client chain, and never built
+`@picompanion/server`, whose `dist/` is gitignored and therefore absent on a clean
+`npm ci` checkout. Unmasked by T195: this job used to die earlier, at the frontend-core
+build, so the E2E step never got far enough to fail this way.
+
+Fixed in the workflow rather than in a package script, because the dependency is the
+E2E FIXTURE's, not `apps/web`'s: `apps/web` does not declare `@picompanion/server` and
+must not start.
+
+- [ ] `web-tests` reaches and runs the Playwright specs on a real CI run
+
+#### T200 — Correct the vendored `EXPO_ROUTER_CTX_IGNORE` against the real package
+
+`labels: phase-8, area: tooling` · `wave: P8-W6` · `depends-on: T196`
+
+`apps/android`'s suite went **2484 passed / 1 failed** on CI, on the parity test T136
+wrote for exactly this moment:
+
+```
+vendored: /^\.\/(?:.*\/)?(?!.*(?:\+api|\+html|\+native-intent)\.[jt]sx?$).*\.[jt]sx?$/
+real:     /^(?:\.\/)(?!(?:(?:(?:.*\+api)|(?:\+(html|native-intent))))\.[tj]sx?$).*\.[tj]sx?$/
+```
+
+**The premise that made this invisible was wrong, and that is the more useful finding.**
+`expo-router` has been recorded since T87/T116 as declared-but-never-installable, and
+the vendored module's own provenance comment stated that no installed copy exists
+"anywhere reachable from this checkout". That was a fact about the owner's workstation,
+not about the repository: `npm ci` installs `expo-router` normally on a CI runner. The
+parity test skips here and runs there, and the first time it ever ran it caught the
+drift — working exactly as designed.
+
+The drift has one cosmetic difference (`[jt]` vs `[tj]`) and one real one: the vendored
+copy excluded `+html` and `+native-intent` at ANY depth, while expo-router excludes them
+only at the router root. Only `+api` is excluded at any depth. Nothing in this tree
+exercises the difference (`+not-found.tsx` is the only `+` file and is not one of the
+three), so the defect was latent and no local test could have found it.
+
+Corrected against two independent sources that agree byte for byte: CI run 34022711589's
+own printout of the installed value, and `https://unpkg.com/expo-router@6.0.13/
+_ctx-shared.js` read directly.
+
+- [x] The vendored constant is the real package's source text, with both sources cited
+- [x] A new colocated test pins the depth rule the drift got wrong, and DISCRIMINATES:
+      re-planting the drifted regex fails it, restoring passes it
+- [x] `cd apps/android && npx vitest run` — 193 files, 2485 passed, 1 skipped
+- [ ] `android-tests` is green on a real CI run
+
+**Follow-on, unowned:** the "expo-router is not installed" premise appears in more than
+this one file. Someone should grep for it and correct every site that states it as a
+property of the repository rather than of one workstation.
 
 #### T32A1 — Build the Android connect form
 
