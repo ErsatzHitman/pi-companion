@@ -528,6 +528,16 @@ jobs:
       # exists in this repository, so there is nothing left to gate on.
       # `npm run test:e2e` runs every `apps/web/e2e/**/*.spec.ts` file,
       # including `performance-budgets.spec.ts` (plan.md §14.5's CI gate).
+      # T199: apps/web/e2e/fixtures/daemon.ts imports
+      # @picompanion/server/dist/server/server/exports.js as a VALUE, and no
+      # step in this job ever built that package. On a clean npm ci checkout
+      # dist/ does not exist (it is gitignored), so the Playwright run died
+      # during module resolution before a single spec executed. Invisible
+      # until T194/T195 unmasked it: this job used to fail earlier, at the
+      # frontend-core build.
+      - name: Build @picompanion/server (the E2E fixture's daemon)
+        run: npm run build --workspace=@picompanion/server
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
