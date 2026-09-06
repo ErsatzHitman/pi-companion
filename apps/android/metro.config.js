@@ -1,3 +1,4 @@
+// @ts-check
 // Android-only Metro configuration — plan.md §6, §9.1.
 //
 // `apps/android` never targets web (or iOS): resolvable platforms are
@@ -8,7 +9,17 @@
 const path = require("node:path");
 const { getDefaultConfig } = require("expo/metro-config");
 
-/** @type {import("expo/metro-config").MetroConfig} */
+// No `@type` JSDoc annotation here: `import("expo/metro-config").MetroConfig` names
+// the public `InputConfigT` — the caller-supplied, deeply-`Readonly<Partial<...>>`
+// shape Metro accepts as input — not what `getDefaultConfig()` actually returns.
+// Annotating `config` with that type made every mutation below fail to type-check
+// (TS2540 assigning to a read-only property, TS7006 implicit-`any` callback
+// parameters with no contextual type to infer from, and a TS2300 duplicate
+// identifier from the resulting conflicting `resolver` shapes) even though the
+// real return type of `getDefaultConfig()` (see `@expo/metro-config`'s
+// `ExpoMetroConfig.d.ts`) has concrete, mutable fields for exactly what this file
+// assigns. Leaving `config` to its inferred (accurate) type lets tsc check these
+// assignments for real instead of against a type that was never applicable here.
 const config = getDefaultConfig(__dirname);
 
 config.resolver.platforms = ["android"];
@@ -29,7 +40,8 @@ config.resolver.platforms = ["android"];
 const REACT_NATIVE_ORIGIN = path.join(__dirname, "node_modules", "react-native", "package.json");
 const defaultResolveRequest = config.resolver.resolveRequest;
 
-config.resolver.resolveRequest = (context, moduleName, platform) => {
+/** @type {import("@expo/metro/metro-resolver").CustomResolver} */
+const resolveRequest = (context, moduleName, platform) => {
   const resolve = defaultResolveRequest ?? context.resolveRequest;
   if (moduleName === "react-native" || moduleName.startsWith("react-native/")) {
     return resolve({ ...context, originModulePath: REACT_NATIVE_ORIGIN }, moduleName, platform);
@@ -61,4 +73,17 @@ config.resolver.blockList = [
   TEST_FILE_BLOCK_PATTERN,
 ];
 
-module.exports = config;
+// `resolver.resolveRequest` is the one field here Metro's own types declare
+// read-only (`ConfigT.resolver: Readonly<ResolverConfigT>`, unlike `platforms`
+// and `blockList` above, which `getDefaultConfig()`'s richer return type widens
+// back to mutable). Rather than writing through the read-only property — which
+// only "works" because Metro's runtime object isn't actually frozen — produce a
+// new config object with the override applied, which is what a read-only type
+// is asking for and changes nothing Metro reads at runtime.
+module.exports = {
+  ...config,
+  resolver: {
+    ...config.resolver,
+    resolveRequest,
+  },
+};
