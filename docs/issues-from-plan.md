@@ -433,6 +433,8 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T215   | Decide whether a stale-allowlist check is a guard-capability-prose capability   | phase-8   | ci               | P8-W15 | T211, T213                                                            |
 | T216   | guard-capability-prose test T147 passes for a reason its title denies           | phase-8   | ci               | P8-W16 | —                                                                     |
 | T217   | Investigate a guard for count claims in committed prose                         | phase-8   | ci               | P8-W17 | —                                                                     |
+| T218   | Date-qualify the drifting shipped-file counts in scripts/ci                     | phase-8   | ci               | P8-W18 | —                                                                     |
+| T219   | Decide what to do with issues-from-plan's hand-incremented tallies              | phase-8   | docs             | P8-W18 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -633,7 +635,9 @@ the task details always agree.
 |        | KEEP; the gate fixed two stale CLAUDE.md bullets and filed T216.         |       |
 | P8-W16 | T216 (filed by the P8-W15 gate). KEEP; the gate removed a self-          | 1     |
 |        | falsifying test title and an already-wrong tally, and filed T217.        |       |
-| P8-W17 | T217 (filed by the P8-W16 gate; investigate-first, may conclude no)      | 1     |
+| P8-W17 | T217 (filed by the P8-W16 gate; investigate-first, may conclude no).     | 1     |
+|        | KEEP, not built; the gate fixed the scope its rationale misstated.       |       |
+| P8-W18 | T218, T219 (both filed by the P8-W17 gate; disjoint: ci vs docs)         | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7605,6 +7609,64 @@ Owns: a new guard under `scripts/ci/` and its test, if the measurement supports 
 - [ ] If it is buildable, it is curated and narrow like `guard-capability-prose.mjs`, never a
       generic "grep every comment" linter
 - [ ] Proven by MUTATION against real committed prose, restored afterwards
+
+#### T218 — Date-qualify the drifting shipped-file counts in `scripts/ci`
+
+`labels: phase-8, area: ci` · `wave: P8-W18` · `depends-on: none`
+
+`scripts/ci/run-guard-capability-prose.mjs` says "= the 1198 this runner reports", and five
+sites in `scripts/ci/guard-capability-prose.mjs` say "~1204 files". The runner reports 1219
+today.
+
+**None of these is currently a defect**, and the P8-W17 merge gate probed them specifically as
+the hardest candidates against T217's zero-defect finding: the first is governed by an explicit
+"Counted at the gate:" qualifier, and the `~1204` family carries both a tilde and a
+`CLOSED (T184)` marker recording that the paragraph describes the state at the time it was
+written. T217's classification survives them, which is why no guard was built.
+
+They are filed because they are the tree's closest live example of the drift T217 measured, they
+sit inside `isAppSourcePath`'s scope, and each further widening of the shipped-file set moves
+them further from the figure they name. The cheapest durable fix is the one this repository has
+now applied four times: state the SHA or wave the figure was measured at, or drop the figure and
+describe what it counts.
+
+Owns: `scripts/ci/run-guard-capability-prose.mjs` and `scripts/ci/guard-capability-prose.mjs`
+comments only. **No behaviour change, no assertion change.**
+
+- [ ] Every one of the six sites either carries an explicit dated qualifier or no longer states
+      a figure
+- [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
+      `node scripts/ci/run-guard-capability-prose.mjs` still exits 0
+- [ ] No assertion anywhere is pinned to the numbers you change — confirm by `grep` before and
+      by the suite after
+
+#### T219 — Decide what to do with `docs/issues-from-plan.md`'s hand-incremented tallies
+
+`labels: phase-8, area: docs` · `wave: P8-W18` · `depends-on: none`
+
+This file carries running tallies that a human increments by hand: "since P5-W9 — six gates",
+"since P5-W10 — five gates", and a total task count. They are pre-existing and T217 correctly
+left them alone as outside its scope.
+
+They are a special case worth deciding rather than drifting into: this file is excluded from the
+capability-prose denial scan by `DOCS_LEDGER_DENIAL_EXCLUSIONS`, so **no guard in this repository
+can ever see them**, and the P8-W17 gate confirmed that its own re-trigger condition therefore
+cannot fire on them. Whatever is decided here has to be a convention, because it can never be a
+check.
+
+Pick one and record the reasoning in the file itself:
+
+- date each tally to the wave it was last counted at, the way §2.3 of `docs/legacy-retirement.md`
+  now works, or
+- replace each with the enumeration it summarises, so there is nothing to increment, or
+- keep them and record that they are known-approximate, so a reader does not act on one.
+
+Owns: `docs/issues-from-plan.md`. Nothing else.
+
+- [ ] Each tally is dated, removed, or explicitly marked approximate
+- [ ] The choice and its reasoning are recorded in the file, not only in a commit message
+- [ ] Verify each figure you keep against the tree before you date it — dating a wrong number is
+      worse than leaving it undated
 
 #### T32A1 — Build the Android connect form
 

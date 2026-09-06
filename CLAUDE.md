@@ -385,7 +385,7 @@ to measure whether a `guard-capability-prose.mjs`-style curated check could catc
 
 **Measured before building anything, per the task brief.** A candidate matcher was run
 against every tracked `.md` file in full and the COMMENT text only of every tracked
-`.ts`/`.tsx`/`.mjs`/`.js`/`.yml` file (code and test-assertion literals excluded up front —
+`.ts`/`.tsx`/`.mjs`/`.js`/`.yml`/`.yaml` file (code and test-assertion literals excluded up front —
 a first pass that also scanned code was dominated by `assert.equal(x, 5)`-shaped noise and
 confirmed prose-only scope is the floor, not the fix). Four regex shapes: a number or
 spelled-out word immediately before a countable noun (`five entries`, `six areas`, `484
@@ -416,7 +416,7 @@ gap below. Reported as findings, not fixed, per this task's scope.
 One in-scope case looked like a defect and was not: this file's T124 section says
 `isAppSourcePath` "aggregates six areas" while the P8-W16 gate measured "seven
 independently-deletable admitting branches". Both are correct under different, self-declared
-units — "six areas" groups by which task introduced each check (T147's pair, T179's pair,
+units — "six areas" groups by which task introduced each check (T124's original pair, T179's pair,
 T197's one, T207's one merged pair), "seven branches" counts independently-deletable code
 paths (`APP_SRC_PREFIXES` alone contributes two). Telling that apart required reading
 `isAppSourcePath`'s source, not matching a regex against the sentence — which is the
@@ -431,7 +431,15 @@ already carries either a dated qualifier or the two explicit "do not restate thi
 instructions this file already added at the P8-W12 and P8-W15 gates — so an entry today would
 ship with nothing live to catch, the inert-entry shape this file already warns against
 elsewhere. **Not built.** Revisit only if a NEW count claim is found stale in a file this
-guard could actually see (`apps/*/src`, `packages/*/src`, `scripts/ci`, `docs/**`,
-`.github/workflows/*.yml`, `apps/android/maestro/*.md` — `isAppSourcePath`'s own scope) and
-the fifth gate is tempted to re-propose a generic version rather than fixing that one site by
-hand.
+guard could actually see — `isAppSourcePath`'s own scope: `apps/web/src` and
+`apps/android/src`, `scripts/ci`, `packaging/**`, `docs/**`, `.github/workflows/*.yml`
+and `apps/android/maestro/*.md` — and the fifth gate is tempted to re-propose a generic
+version rather than fixing that one site by hand. Two caveats on that condition, both of
+which make it narrower than it looks. `packages/*/src` is NOT in it: that is
+`isShippedSourcePath`'s scope, and conflating the two is the exact error T147 and T216 each
+had to close. And `docs/issues-from-plan.md` is excluded by
+`DOCS_LEDGER_DENIAL_EXCLUSIONS`, so the running tallies flagged above as the likeliest
+drift site can never satisfy this condition — if one of them goes stale, fix it by hand;
+no guard was ever going to see it. (CORRECTED at the P8-W17 merge gate: this listed
+`packages/*/src` as in scope and omitted `packaging/**`. Both were checked against the real
+exported function, not inferred.)
