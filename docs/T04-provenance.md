@@ -196,9 +196,13 @@ npm run smoke:daemon --workspace @picompanion/server
 
 ## 7. Hand-off notes for T05 / T11
 
-- **T05**: attribute `packages/server` (657 reference-derived files after
-  trimming, from 696 copied; plus 2 files original to this repo —
-  `scripts/smoke-daemon-hello.ts` and the `vitest-setup.ts` Pi-dir pin) to Paseo `v0.3.0-beta.2` (`ede26c8e2`), AGPL-3.0-or-later,
+- **T05**: attribute `packages/server` (658 reference-derived files after
+  trimming, from 696 copied, less the 38 files itemized in §2 — **corrected
+  T43B1, 2026-09-06**: this line previously said "657"/"39 removed", which
+  matched neither §2's own itemized lists (6 + 32 = 38) nor 696 − 38 = 658;
+  plus 1 file original to this repo, `scripts/smoke-daemon-hello.ts` — the
+  `vitest-setup.ts` Pi-dir pin is a behavioral change to an already-ported
+  file, per §3 item 5, not a second new file) to Paseo `v0.3.0-beta.2` (`ede26c8e2`), AGPL-3.0-or-later,
   copyright Mohamed Boudra / Paseo project. `scripts/smoke-daemon-hello.ts` is
   original to this repository. `packages/server/CLAUDE.md`, `AGENTS.md` and
   `README.md` are reference documents carried over verbatim.

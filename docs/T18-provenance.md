@@ -28,14 +28,28 @@ Adaptations made for this repository's layout and phasing:
   `npm run build:web --workspace=@picompanion/app` to
   `npm run build --workspace=@picompanion/web`.
 - Target directory is unchanged: `packages/server/dist/server/web-ui`.
-- Behavioral divergence (intentional, required by plan.md §13 Phase 1 item 5
-  and the Phase 1 exit criterion "the daemon packages cleanly with or without
-  a bundled web artifact"): the reference script **throws** if
-  `packages/app/dist` is missing after the build step. This repository's
-  script instead logs a message and **exits successfully**, clearing any
-  stale bundle, when `apps/web/dist` does not exist. This lets
-  `packages/server` build/prepack succeed before T15 lands a real web build,
-  and lets any environment intentionally skip the web build. Added a
+- Behavioral divergence, **as of T18 (Phase 1)** (intentional, required by
+  plan.md §13 Phase 1 item 5 and the Phase 1 exit criterion "the daemon
+  packages cleanly with or without a bundled web artifact"): the reference
+  script **throws** if `packages/app/dist` is missing after the build step.
+  This repository's script instead logged a message and **exited
+  successfully**, clearing any stale bundle, when `apps/web/dist` did not
+  exist. This let `packages/server` build/prepack succeed before T15 landed
+  a real web build, and let any environment intentionally skip the web
+  build.
+  > **CORRECTED (T43B1, 2026-09-06):** this divergence no longer exists.
+  > T43A1 (Phase 8, plan.md §13 item 1: "Make `apps/web/dist` the daemon's
+  > bundled web UI in every packaging path") retired the exit-clean leniency
+  > once `apps/web` had a real build to depend on: the script now **throws**
+  > when `apps/web/dist` is missing after the build step, matching the
+  > reference script's behavior again (see the header comment in
+  > `scripts/build-daemon-web-ui.mjs` itself, which records this same
+  > correction). A missing `apps/web/dist` is now treated as a packaging
+  > failure, not an expected pre-T15 state. This section is left in place,
+  > marked corrected rather than rewritten, as the historical record of what
+  > T18 actually shipped and why; treat the header comment in the script as
+  > the current source of truth for its behavior.
+- Added a
   `--skip-build` flag (not present in the reference) so the bundling step can
   be exercised/tested against a pre-existing `apps/web/dist` without
   reinvoking the web app's own build script.

@@ -9,7 +9,10 @@ This document records exactly what T02 copied for AGPL attribution (to be consol
 
 ### 1. `packages/protocol` — `@picompanion/protocol`
 
-Copied via `git archive HEAD -- packages/protocol` (107 tracked files). Full file list from `git ls-files -- packages/protocol`:
+Copied via `git archive HEAD -- packages/protocol` (108 tracked files —
+corrected T43B1, 2026-09-06; the original count of 107 never matched this
+section's own file list below, which has always enumerated 108 entries).
+Full file list from `git ls-files -- packages/protocol`:
 
 - `packages/protocol/README.md`
 - `packages/protocol/package.json`
@@ -125,7 +128,9 @@ Generated at build time (not committed, gitignored):
 
 ### 2. `packages/relay` — `@picompanion/relay`
 
-Copied via `git archive HEAD -- packages/relay` (15 tracked files):
+Copied via `git archive HEAD -- packages/relay` (18 tracked files —
+corrected T43B1, 2026-09-06; the original count of 15 never matched this
+section's own file list below, which has always enumerated 18 entries):
 
 - `packages/relay/package.json`
 - `packages/relay/tsconfig.json`
@@ -148,7 +153,13 @@ Copied via `git archive HEAD -- packages/relay` (15 tracked files):
 
 ### 3. `packages/highlight` — `@picompanion/highlight`
 
-Copied via `git archive HEAD -- packages/highlight` (11 tracked files):
+Copied via `git archive HEAD -- packages/highlight` (13 tracked files —
+corrected T43B1, 2026-09-06; the original count of 11 never matched this
+section's own file list below, which has always enumerated 13 entries).
+`packages/highlight/src/{codemirror-highlight-style,highlighter-core,lezer-highlighter,lezer-parsers}.ts`
+were added later, splitting the originally-ported `highlighter.ts`; they do
+not exist anywhere in the `D:\paseo` reference and are original to this
+repository, not further Paseo ports:
 
 - `packages/highlight/package.json`
 - `packages/highlight/tsconfig.json`
