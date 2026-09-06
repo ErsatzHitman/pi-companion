@@ -373,3 +373,65 @@ file (`docs/legacy-retirement.md`, restored afterward from a scratchpad copy —
 each time, and restoring the file returned it to exit 0 with `git status --porcelain`
 showing no diff. `guard-capability-prose.test.mjs` pins the same two firing cases at the
 fixture level, plus the two real-file non-collision cases and a full-tree clean-scan case.
+
+## T217: a guard for count claims in committed prose was investigated and rejected
+
+Four consecutive merge gates removed a stale figure from committed prose: `CLAUDE.md`'s
+pinned `scripts/ci` test count (P8-W12), `docs/legacy-retirement.md` §2.3's churning file
+and test counts plus a bolded sentence contradicting the fix at the same gate (P8-W13),
+`CLAUDE.md`'s "the five listed here" against a list of twelve (P8-W15), and a test comment's
+"eight claims (six areas, two exclusions)", wrong the day it landed (P8-W16). T217 was filed
+to measure whether a `guard-capability-prose.mjs`-style curated check could catch a fifth.
+
+**Measured before building anything, per the task brief.** A candidate matcher was run
+against every tracked `.md` file in full and the COMMENT text only of every tracked
+`.ts`/`.tsx`/`.mjs`/`.js`/`.yml` file (code and test-assertion literals excluded up front —
+a first pass that also scanned code was dominated by `assert.equal(x, 5)`-shaped noise and
+confirmed prose-only scope is the floor, not the fix). Four regex shapes: a number or
+spelled-out word immediately before a countable noun (`five entries`, `six areas`, `484
+tests`), "the N listed/enumerated/named", "N of M", and a bare `N/N` ratio. At `bd4ae93`
+(the P8-W16 gate commit) this matched **867 hits across 2288 files** (736 + 95 + 29 + 7 by
+shape). A stratified hand classification of roughly 120 of those hits, sampled across every
+file area the matcher touched (`docs/` 326 hits, `scripts/ci` 132, `apps/android` 131,
+`apps/web` 67, `memory.md`/`HANDOFF.md`/`claude-code-handoff.md` 107, `CLAUDE.md` 20, the
+rest under 30 each), found **zero confirmed, currently-live, in-scope defects** — every
+sampled hit was one of: a dated snapshot ("394 when written, 424 at P8-W10..." — this file's
+own test-count paragraph above), a ceiling the tree enforces ("26 orphan module(s) (ceiling
+26)"), a historical `CORRECTED`-marked quotation, a count of an already-fixed, closed
+incident ("Four sites in the tree", "Two defects this guard shipped with, both now
+covered"), a structural invariant tied to a fixed type that cannot grow ("the three named
+error states" — a closed union), an HTTP status code or port number that happens to be
+digit-slash-digit shaped (`400/403`, `6767/6768`), or a per-task dated baseline written into
+`docs/issues-from-plan.md` at authoring time ("baseline: 232/232"). That is a **100% false
+positive rate on every hit this session actually classified.**
+
+Two borderline cases surfaced, both in `docs/issues-from-plan.md`, which this task's `Owns`
+line does not cover and which T217 does not edit: a running tally ("since P5-W9 - **six
+gates**", "since P5-W10 - **five gates**", near line 2684) that must be hand-incremented
+every wave and is a plausible drift site, and the top-of-file ledger total ("**221
+tasks.**", line 477). Neither can be confirmed stale by text shape alone — both require
+recomputing the real figure from wave history or the table itself, which is exactly the
+gap below. Reported as findings, not fixed, per this task's scope.
+
+One in-scope case looked like a defect and was not: this file's T124 section says
+`isAppSourcePath` "aggregates six areas" while the P8-W16 gate measured "seven
+independently-deletable admitting branches". Both are correct under different, self-declared
+units — "six areas" groups by which task introduced each check (T147's pair, T179's pair,
+T197's one, T207's one merged pair), "seven branches" counts independently-deletable code
+paths (`APP_SRC_PREFIXES` alone contributes two). Telling that apart required reading
+`isAppSourcePath`'s source, not matching a regex against the sentence — which is the
+structural reason this class of guard does not generalize the way `guard-capability-prose.mjs`
+does: "is this capability shipped" is a boolean fact a declaration search can answer; "is this
+count still accurate" requires recomputing the actual figure from the tree (a wave count, a
+table row count, a branch count), and a text matcher cannot tell a dated snapshot from a live
+claim, or a correct count under one convention from a stale one under another, without that
+domain-specific recomputation. A curated, per-figure version (one entry per volatile number,
+mirroring `CAPABILITIES`) is buildable in principle, but every candidate site measured above
+already carries either a dated qualifier or the two explicit "do not restate this count here"
+instructions this file already added at the P8-W12 and P8-W15 gates — so an entry today would
+ship with nothing live to catch, the inert-entry shape this file already warns against
+elsewhere. **Not built.** Revisit only if a NEW count claim is found stale in a file this
+guard could actually see (`apps/*/src`, `packages/*/src`, `scripts/ci`, `docs/**`,
+`.github/workflows/*.yml`, `apps/android/maestro/*.md` — `isAppSourcePath`'s own scope) and
+the fifth gate is tempted to re-propose a generic version rather than fixing that one site by
+hand.
