@@ -265,20 +265,74 @@ export function isShippedSourcePath(path) {
 //
 // Deliberately NOT widened to `.github/**` (arguable: workflow YAML is
 // step definitions, not narrative prose, and no demonstrated false site
-// lives there — nothing forces adding a tree "just in case") or `docs/**`
-// (wrong: `docs/issues-from-plan.md`'s ledger is full of historical task
-// briefs that correctly described a capability as absent AT THE TIME they
-// were written — including this very task's own writeup, which says "The
-// denial scan was never widened" about a state this exact commit makes
-// false. Scanning `docs/` would turn the ledger of past and in-flight work
-// into a permanent, unfixable source of guard failures against its own
-// history).
+// lives there — nothing forces adding a tree "just in case").
+//
+// CORRECTED (T197): this paragraph previously said `docs/**` was also
+// deliberately left out, reasoning that `docs/issues-from-plan.md`'s
+// ledger is full of historical task briefs that correctly described a
+// capability as absent AT THE TIME they were written, and that scanning
+// `docs/` would turn that ledger into "a permanent, unfixable source of
+// guard failures against its own history". That reasoning was right about
+// the ledger and wrong about the conclusion: T197 was filed BECAUSE P8-W5
+// shipped a 370-line `docs/legacy-retirement.md`, almost entirely
+// capability claims, that this guard could not see at all — the same
+// "curated entry the runner's scope can never see" shape T147 and T156
+// each closed one directory over. The ledger's own hazard is real (proven
+// below, by running the widened scan against the real, committed tree
+// before committing to it, exactly as T179's own paragraph above did for
+// `scripts/ci`): 13 violations, across all six then-CAPABILITIES entries
+// with a shipped member, every one of them inside
+// `docs/issues-from-plan.md` narrating a PAST wave's already-fixed defect
+// (a task brief quoting the exact denying sentence a prior gate corrected,
+// most without one of `HISTORICAL_QUOTE_MARKERS`' exact-phrase triggers
+// immediately before the quotation — the ledger instead says things like
+// "which was already false" or "stay narrow deliberately and were never
+// meant to fire on"). Zero violations came from any of the other ten
+// tracked `docs/*.md` files, `docs/legacy-retirement.md` included (whose
+// three `CORRECTED (P8-W5 merge gate)` markers all worked correctly in
+// this same run). So the fix is the same shape T179 used for its own
+// three self-referential files below, one directory up: exclude the ONE
+// file demonstrated to trip on its own historical narration, not the tree
+// that file happens to live in. `DOCS_LEDGER_DENIAL_EXCLUSIONS` is that
+// exclusion, checked the same way `SELF_REFERENTIAL_DENIAL_EXCLUSIONS` is.
 const SCRIPTS_CI_DENIAL_PREFIX = "scripts/ci/";
 const PACKAGING_PREFIX = "packaging/";
 // Curated, not "every extension under packaging/" — matches what the
 // demonstrated sites actually are: `Dockerfile` (no extension at all),
 // `README.md`, and `flake.nix`.
 const PACKAGING_EXTENSIONS = new Set([".md", ".nix"]);
+// T197: `docs/` narrative prose (`.md` only — every tracked `docs/` file is
+// Markdown today; a future non-.md addition should be judged on its own
+// merits rather than silently admitted). `docs/legacy-retirement.md` (the
+// file that motivated this task) and the four reference-only Paseo
+// documents CLAUDE.md names (`docs/T02-provenance.md`, `T03`, `T04`,
+// `docs/frontend-data-migration.md`, `docs/pi-extension-compatibility.md`)
+// all scan clean today — measured directly, see this file's header note
+// above and `guard-capability-prose.test.mjs`'s "T197" cases.
+const DOCS_PREFIX = "docs/";
+const DOCS_EXTENSIONS = new Set([".md"]);
+// T197: `docs/issues-from-plan.md` is the repository's own task ledger —
+// CLAUDE.md calls it out by name as governing task scope, so it is not one
+// of the "reference-only" documents this task's brief warned about, and it
+// is not a place a Paseo doc's OLD description of a different product could
+// leak from. It is excluded for a narrower, demonstrated reason: it
+// narrates, in its own voice, exactly the kind of past-tense capability
+// history `guard-capability-prose.mjs`'s own header describes about
+// itself — quoting a prior wave's false claim to explain what a gate
+// corrected — and it does so overwhelmingly without one of
+// `HISTORICAL_QUOTE_MARKERS`' triggers immediately before the quotation
+// (a ledger entry says "was already false" or "which stay narrow
+// deliberately", not "CORRECTED: this said"). Measured directly against
+// the real, committed tree: including `docs/issues-from-plan.md` in the
+// denial scan produces exactly 13 violations, none of them a genuine
+// present-tense denial of a shipped capability — see this file's header
+// note for the count broken down by capability. Excluding exactly this
+// one file, the same way `SELF_REFERENTIAL_DENIAL_EXCLUSIONS` excludes
+// exactly three `scripts/ci` files rather than `scripts/ci` at large,
+// keeps the widening's real target (every OTHER `docs/*.md` file, which is
+// where `docs/legacy-retirement.md` — the file that motivated this task —
+// actually lives) fully in scope.
+const DOCS_LEDGER_DENIAL_EXCLUSIONS = new Set(["docs/issues-from-plan.md"]);
 
 // T179: found live, by actually running the widened guard against this
 // repository before committing to the widening (exactly what this task's
@@ -321,11 +375,22 @@ function isPackagingProsePath(path) {
   return dot !== -1 && PACKAGING_EXTENSIONS.has(basename.slice(dot));
 }
 
+// T197: see `DOCS_LEDGER_DENIAL_EXCLUSIONS`'s own doc comment above for why
+// exactly one file is excluded rather than `docs/` at large.
+function isDocsProsePath(path) {
+  if (DOCS_LEDGER_DENIAL_EXCLUSIONS.has(path)) return false;
+  if (!path.startsWith(DOCS_PREFIX)) return false;
+  const basename = path.slice(path.lastIndexOf("/") + 1);
+  const dot = basename.lastIndexOf(".");
+  return dot !== -1 && DOCS_EXTENSIONS.has(basename.slice(dot));
+}
+
 /**
  * Whether `path` is in scope for the denial-prose scan itself — T179:
- * `apps/web/src`, `apps/android/src`, `scripts/ci`, and `packaging/**`,
- * except this guard's own three files (see
- * `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`).
+ * `apps/web/src`, `apps/android/src`, `scripts/ci`, and `packaging/**`;
+ * T197 added `docs/**` — except this guard's own three files (see
+ * `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`) and the task ledger,
+ * `docs/issues-from-plan.md` (see `DOCS_LEDGER_DENIAL_EXCLUSIONS`).
  * Comments AND test files both included throughout (one of the ten P6-W6
  * sites this guard exists to catch was a test title, not a doc comment).
  */
@@ -337,7 +402,8 @@ export function isAppSourcePath(path) {
   if (path.startsWith(SCRIPTS_CI_DENIAL_PREFIX)) {
     return hasSourceExtension(path);
   }
-  return isPackagingProsePath(path);
+  if (isPackagingProsePath(path)) return true;
+  return isDocsProsePath(path);
 }
 
 function readFiles(paths) {
@@ -359,8 +425,8 @@ export function main() {
     console.log(
       `guard-capability-prose: OK — ${CAPABILITIES.length} capability group(s) checked against ` +
         `${shippedPaths.length} packages/*/src|apps/*/src|scripts/ci file(s) and ${appPaths.length} ` +
-        `apps/web|android src + scripts/ci + packaging/** file(s); no live denial found for a ` +
-        `shipped capability.`,
+        `apps/web|android src + scripts/ci + packaging/** + docs/** file(s); no live denial found ` +
+        `for a shipped capability.`,
     );
     return;
   }

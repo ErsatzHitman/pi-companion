@@ -2354,3 +2354,220 @@ test("T187: the widened phrase's anchor text has exactly one hit across every re
 
   assert.deepEqual(matches, ["scripts/ci/guard-docker-packaging-paths.mjs"]);
 });
+
+// === T197: DENIAL scan widened to docs/** ==================================
+//
+// T147 and T156 widened the SHIPPED (declaration) scan; T179 widened the
+// DENIAL scan to scripts/ci and packaging/**. `docs/` was left out of both,
+// and T179's own comment (see `run-guard-capability-prose.mjs`'s header,
+// "CORRECTED (T197)") explained why: `docs/issues-from-plan.md`'s ledger
+// narrates past waves' already-fixed defects, quoting the exact false
+// sentences a prior gate corrected. P8-W5 then shipped
+// `docs/legacy-retirement.md` -- 370 lines, almost entirely capability
+// claims -- that this guard could not see at all, the same
+// "curated-entry-the-runner-can't-see" shape one directory over. This
+// section proves the widening is real (a seeded docs/ denial is caught),
+// proves the ledger carve-out is exact rather than a blanket docs/
+// exclusion (every OTHER docs/*.md file stays in scope), and proves the
+// historical-quotation carve-out still works against the real
+// docs/legacy-retirement.md.
+
+test("T197: isAppSourcePath now covers docs/*.md", () => {
+  assert.equal(isAppSourcePath("docs/legacy-retirement.md"), true);
+  assert.equal(isAppSourcePath("docs/agent-configuration-surface.md"), true);
+  assert.equal(isAppSourcePath("docs/T02-provenance.md"), true);
+});
+
+test("T197: isAppSourcePath excludes docs/issues-from-plan.md specifically, not docs/ at large", () => {
+  assert.equal(isAppSourcePath("docs/issues-from-plan.md"), false);
+  // Confirms the exclusion is exact, not a blanket "docs/*plan*" or
+  // "docs/*.md starting with issues" pattern: a differently-named ledger
+  // file would remain in scope.
+  assert.equal(isAppSourcePath("docs/other-ledger.md"), true);
+});
+
+test("T197: isAppSourcePath does not admit non-Markdown docs/ files", () => {
+  assert.equal(isAppSourcePath("docs/diagram.png"), false);
+  assert.equal(isAppSourcePath("docs/notes.txt"), false);
+});
+
+test("T197: isShippedSourcePath is unaffected by the denial-scan widening — docs/ never counts as declaration evidence", () => {
+  assert.equal(isShippedSourcePath("docs/legacy-retirement.md"), false);
+  assert.equal(isShippedSourcePath("docs/issues-from-plan.md"), false);
+});
+
+test("T197: BEFORE this task's widening, a live denying sentence in docs/ could not trip the guard even with the capability shipped", () => {
+  // Reproduces the P8-W5 finding by construction: an appFiles pool
+  // restricted to the pre-T197 scope (apps/web/src, apps/android/src,
+  // scripts/ci, packaging/**) never sees docs/, so a live denial there is
+  // invisible — same shape as T179's own "BEFORE" tests above.
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: "export async function cancelUpload(): Promise<void> {}\n",
+    },
+  ];
+  const candidateAppFiles = [
+    {
+      path: "docs/legacy-retirement.md",
+      content: "The protocol has no cancel opcode.\n",
+    },
+  ];
+  const preT197AppFiles = candidateAppFiles.filter(
+    (file) =>
+      file.path.startsWith("apps/web/src/") ||
+      file.path.startsWith("apps/android/src/") ||
+      file.path.startsWith("scripts/ci/") ||
+      file.path.startsWith("packaging/"),
+  );
+
+  assert.deepEqual(preT197AppFiles, []); // nothing in the pre-T197 scope
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles: preT197AppFiles }), []);
+});
+
+test("T197: a live denying sentence in docs/ is flagged once the capability is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: "export async function cancelUpload(): Promise<void> {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/legacy-retirement.md",
+      content: "The protocol has no cancel opcode.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "docs/legacy-retirement.md");
+  assert.equal(
+    violations[0].capability,
+    "upload cancel opcode (cancelUpload/file.upload.cancel.request)",
+  );
+});
+
+test("T197: the same seeded denial in docs/, with the denial removed, passes clean (the discriminating half of the regression proof)", () => {
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: "export async function cancelUpload(): Promise<void> {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/legacy-retirement.md",
+      content: "The protocol supports cancelling an in-flight upload.\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T197: a CORRECTED historical quotation in docs/ does not trip the guard, in the newly widened scope", () => {
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: "export async function cancelUpload(): Promise<void> {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/legacy-retirement.md",
+      content:
+        "CORRECTED (T197 test): this said the protocol has no cancel opcode. That is no longer true.\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T197: deleting only the CORRECTED marker from that same docs/ sentence makes it a live violation again", () => {
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: "export async function cancelUpload(): Promise<void> {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/legacy-retirement.md",
+      content: "the protocol has no cancel opcode. That is no longer true.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "docs/legacy-retirement.md");
+});
+
+test("T197: the real docs/legacy-retirement.md — the file that motivated this task — scans clean against the full real CAPABILITIES list and its own three CORRECTED markers", () => {
+  // Full end-to-end proof against the committed tree: every shipped file
+  // this guard would actually read, and the real docs/legacy-retirement.md
+  // content (which the P8-W5 merge gate already checked once as a
+  // one-off; this pins it as a real regression test). 0 violations
+  // expected — T197 is hardening, not a fix for a live defect in this file.
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const violations = findCapabilityDenialViolations({
+    shippedFiles,
+    appFiles: [
+      { path: "docs/legacy-retirement.md", content: readRepoFile("docs/legacy-retirement.md") },
+    ],
+  });
+
+  assert.deepEqual(violations, []);
+});
+
+test("T197: the reference-only Paseo documents CLAUDE.md names all scan clean too", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const referenceOnlyDocs = [
+    "docs/T02-provenance.md",
+    "docs/T03-provenance.md",
+    "docs/T04-provenance.md",
+    "docs/frontend-data-migration.md",
+    "docs/pi-extension-compatibility.md",
+  ];
+  const appFiles = referenceOnlyDocs.map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T197: on the real, committed tree, run-guard-capability-prose.mjs's own denial scan (docs/ included) exits clean", () => {
+  // End-to-end proof at the CLI-entry-point level, not just via the pure
+  // function: excludes exactly docs/issues-from-plan.md (per
+  // `DOCS_LEDGER_DENIAL_EXCLUSIONS`) and includes every other tracked
+  // docs/*.md file, with zero violations on the committed tree — matching
+  // this task's brief: hardening, not a fix for a live defect.
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+  const docPaths = tracked.filter((p) => p.startsWith("docs/"));
+  const scannedDocPaths = docPaths.filter(isAppSourcePath);
+  assert.ok(scannedDocPaths.length > 0);
+  assert.ok(!scannedDocPaths.includes("docs/issues-from-plan.md"));
+  assert.ok(docPaths.includes("docs/issues-from-plan.md")); // the exclusion has something real to exclude
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
