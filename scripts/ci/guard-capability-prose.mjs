@@ -558,15 +558,33 @@ export const CAPABILITIES = [
     // `scripts/ci/guard-docker-packaging-paths.mjs` itself (every other hit
     // is inside a comment in that same file or in
     // `run-guard-capability-prose.mjs`, both stripped before the
-    // declaration check runs). So this member is a `RegExp`
-    // (`FIND_BUILD_ORDER_VIOLATIONS_MEMBER`, defined above) for a DIFFERENT
-    // reason than T169's disambiguation one: performance, see that
-    // constant's own doc comment — a bare string here made the real,
-    // 905-appFile denial scan take 6m0.591s instead of ~3m49s, because its
-    // sole declaring file sorts last among the shipped files (an UNdated
-    // `~1204` stood here until T218 dropped it) and a bare-string member
-    // is never cached. Confirmed the gate goes quiet correctly too:
-    // deleting `findBuildOrderViolations`'s declaration (the
+    // declaration check runs).
+    //
+    // So this member is a `RegExp` (`FIND_BUILD_ORDER_VIOLATIONS_MEMBER`,
+    // defined above). T183 originally chose `RegExp` here for PERFORMANCE,
+    // not T169's disambiguation reason — see that constant's own doc
+    // comment, whose CLOSED (T184) paragraph records that this rationale is
+    // now stale: `findCapabilityDenialViolations` resolves "is this
+    // capability shipped?" once per capability, over the whole
+    // `shippedFiles` list, before `appFiles` is walked at all, so a
+    // member's position within that list — the entire premise T183's
+    // performance argument rested on — no longer affects runtime, whether
+    // the member is a `RegExp` or a bare string. Confirmed directly on the
+    // real, committed tree (T221), not merely inferred from CLOSED (T184)'s
+    // own account: `node scripts/ci/run-guard-capability-prose.mjs`
+    // completes in ~1.2s, and swapping this entry's `methodNames` to the
+    // bare string `"findBuildOrderViolations"` in a scratch copy of this
+    // file produces the identical 1219-shipped/944-app-file summary at
+    // exit 0 in the same ~1.2s — no runtime difference, no behavior
+    // difference. T169's disambiguation reason is not a live justification
+    // for this member either, for the reason already given above: a bare
+    // `findBuildOrderViolations` collides with nothing to disambiguate
+    // from, today, in this tree. This member is left as a `RegExp` anyway
+    // (T221 is a comment-only fix; reverting `methodNames` to a bare string
+    // is a separate, non-comment change, out of that task's scope) — but as
+    // of today neither cited reason is why it needs to be one. Confirmed
+    // the gate goes quiet correctly too: deleting
+    // `findBuildOrderViolations`'s declaration (the
     // `export function findBuildOrderViolations(` line) leaves zero
     // declaring files, so a denying phrase inserted afterward is ALLOWED
     // (exit 0) — the token disappears with the capability, per CLAUDE.md's
