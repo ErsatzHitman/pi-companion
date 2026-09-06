@@ -363,7 +363,7 @@ test("T147: isShippedSourcePath excludes test files and non-src paths", () => {
 // scope (T147 widened THAT to cover it) but has never been
 // `isAppSourcePath` (denial) scope. Retitled to say exactly that.
 //
-// The six areas' own positive coverage lives beside the task that added
+// Each area's own positive coverage lives beside the task that added
 // each one, not here: apps/web/src (this test, below), apps/android/src
 // (the "T216" test immediately after this one — the one area with no
 // direct `isAppSourcePath(...) === true` assertion anywhere in this file
@@ -378,11 +378,19 @@ test("T147: isShippedSourcePath excludes test files and non-src paths", () => {
 // its own test file, and its CLI entry point are excluded..." above) and
 // DOCS_LEDGER_DENIAL_EXCLUSIONS ("T197: isAppSourcePath excludes
 // docs/issues-from-plan.md specifically..." below). Every one of those
-// eight claims (six areas, two exclusions) was proven at T216 by actually
-// deleting the corresponding line from `isAppSourcePath` in a scratch copy
-// of run-guard-capability-prose.mjs, running this file, confirming a named
+// claims was proven at T216 by actually deleting the corresponding
+// branch from `isAppSourcePath` in a scratch copy of
+// run-guard-capability-prose.mjs, running this file, confirming a named
 // test failed, and restoring byte-identically — never by re-deriving an
-// equivalent regex or trusting that the assertion existed.
+// equivalent regex or trusting that the assertion existed. Do not restate
+// a COUNT of them here. (CORRECTED at the P8-W16 merge gate: this said
+// "eight claims (six areas, two exclusions)", which was already wrong —
+// `isAppSourcePath` has seven independently-deletable admitting branches,
+// because APP_SRC_PREFIXES holds two and isWorkflowsProsePath and
+// isMaestroProsePath are separate branches failing different named tests.
+// The enumeration above was and is complete; only the tally was wrong, and
+// a tally beside a complete enumeration carries nothing the enumeration
+// does not.)
 test("T147: packages/*/src counts as shipped-scope (T147's own widening of isShippedSourcePath) but not denial-scope — isAppSourcePath still excludes it, unlike apps/web/src", () => {
   assert.equal(isAppSourcePath("apps/web/src/features/composer/Composer.test.tsx"), true);
   assert.equal(isAppSourcePath("packages/client/src/daemon-client.ts"), false);
@@ -398,7 +406,7 @@ test("T147: packages/*/src counts as shipped-scope (T147's own widening of isShi
 // deleting "apps/android/src/" from `APP_SRC_PREFIXES` in
 // run-guard-capability-prose.mjs left all 135 pre-T216 tests in this file
 // passing. This closes that gap directly.
-test("T216: isAppSourcePath admits apps/android/src, tests included — the one area this file never asserted directly", () => {
+test("T216: isAppSourcePath admits apps/android/src, tests included", () => {
   assert.equal(isAppSourcePath("apps/android/src/features/composer/use-queue-modes.ts"), true);
   assert.equal(isAppSourcePath("apps/android/src/features/composer/Composer.test.tsx"), true);
 });

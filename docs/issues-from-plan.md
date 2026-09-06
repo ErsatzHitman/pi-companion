@@ -432,6 +432,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T214   | guard-run-guard-wiring's CI job copy names one of its three failure modes       | phase-8   | ci               | P8-W14 | T211                                                                  |
 | T215   | Decide whether a stale-allowlist check is a guard-capability-prose capability   | phase-8   | ci               | P8-W15 | T211, T213                                                            |
 | T216   | guard-capability-prose test T147 passes for a reason its title denies           | phase-8   | ci               | P8-W16 | —                                                                     |
+| T217   | Investigate a guard for count claims in committed prose                         | phase-8   | ci               | P8-W17 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -630,7 +631,9 @@ the task details always agree.
 |        | Both KEEP; the gate fixed one carried-over header premise, filed T215.   |       |
 | P8-W15 | T215 (filed by the P8-W14 gate; a policy decision, so it runs alone).    | 1     |
 |        | KEEP; the gate fixed two stale CLAUDE.md bullets and filed T216.         |       |
-| P8-W16 | T216 (filed by the P8-W15 gate)                                          | 1     |
+| P8-W16 | T216 (filed by the P8-W15 gate). KEEP; the gate removed a self-          | 1     |
+|        | falsifying test title and an already-wrong tally, and filed T217.        |       |
+| P8-W17 | T217 (filed by the P8-W16 gate; investigate-first, may conclude no)      | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7570,6 +7573,38 @@ Owns: `scripts/ci/guard-capability-prose.test.mjs`. Nothing else.
       restore from a scratchpad copy (never `git checkout --`)
 - [ ] `git grep` for other prose naming the denial scope as two directories, and correct or
       report each
+
+#### T217 — Investigate a guard for count claims in committed prose
+
+`labels: phase-8, area: ci` · `wave: P8-W17` · `depends-on: none`
+
+Four consecutive merge gates have now removed a stale figure from committed prose: the pinned
+`scripts/ci` test count from `CLAUDE.md` (P8-W12), the churning file and test counts from
+`docs/legacy-retirement.md` §2.3 (P8-W13, and the bolded sentence that contradicted the
+result at the same gate), `CLAUDE.md`'s "the five listed here" against a list of twelve
+(P8-W15), and a test comment's "eight claims (six areas, two exclusions)" that was already
+wrong on the day it landed (P8-W16). Every one cost gate time to find and re-derive.
+
+The pattern is narrow enough to be worth investigating: a spelled-out or numeric count
+adjacent to a term the tree can grow — `areas`, `entries`, `tests`, `capabilities`, `files`,
+`jobs`, `guards`. A count is legitimate when it is dated ("424 at P8-W10") or when it is a
+ceiling the tree enforces ("26 orphan modules (ceiling 26)"); it is a defect when it reads as
+a live claim about a set that changes.
+
+**File as investigate-first, and be willing to conclude it should not be built.** A naive
+matcher would false-positive on every legitimate dated figure and be disabled within two
+waves, which is exactly the failure mode `guard-capability-prose.mjs`'s curated-list design
+exists to avoid. The first deliverable is the measurement, not the guard.
+
+Owns: a new guard under `scripts/ci/` and its test, if the measurement supports one.
+
+- [ ] Measure first: run a candidate matcher across the tree and report how many hits are real
+      defects versus legitimate dated or ceiling figures, with examples of each
+- [ ] If the false-positive rate makes a guard unusable, say so and record WHY in `CLAUDE.md`
+      so the fifth gate does not re-propose it — that is a successful outcome for this task
+- [ ] If it is buildable, it is curated and narrow like `guard-capability-prose.mjs`, never a
+      generic "grep every comment" linter
+- [ ] Proven by MUTATION against real committed prose, restored afterwards
 
 #### T32A1 — Build the Android connect form
 
