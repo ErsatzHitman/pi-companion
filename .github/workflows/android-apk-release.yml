@@ -1,0 +1,165 @@
+name: Android APK Release
+
+# T17B (plan.md §15.3, §15.4; docs/issues-from-plan.md T17B).
+#
+# Written from scratch for this repository's own workspace layout
+# (`apps/android`, npm workspace `@picompanion/android`). The reference
+# `D:\paseo\.github\workflows\android-apk-release.yml` (Paseo
+# v0.3.0-beta.2, AGPL-3.0-or-later) was consulted only as behavioral
+# documentation of the required steps (resolve tag -> ensure GitHub release
+# -> `eas build --platform android --profile production-apk` -> download
+# artifact -> `gh release upload`) — no reference workflow content was
+# copied.
+#
+# EAS project ownership and signing credentials are not yet verified (see
+# docs/frontend-data-migration.md §4.2-4.6, checklist unchecked). Until the
+# `EXPO_TOKEN` secret is configured on this repository, the build/upload
+# steps below intentionally no-op with a logged message instead of failing,
+# so this workflow is dry-run-safe from Phase 1 onward and only starts
+# producing real signed APKs once that verification (T44) adds the secret.
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "android-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v0.1.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: android-apk-release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  publish-android-apk:
+    name: publish-android-apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - run: npm ci
+
+      # Build frontend-core's own dependency chain so `apps/android`'s build
+      # script (which runs `frontend-core`'s build + the no-web-artifacts
+      # guard before `expo prebuild`) has real output to consume, matching
+      # the `android-tests` job in ci.yml.
+      - name: Build frontend-core dependencies (protocol, design-tokens, frontend-core)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/frontend-core
+
+      - name: Check EAS credentials are configured
+        id: eas-secrets
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ensure GitHub release exists
+        if: steps.eas-secrets.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          if ! gh release create "$RELEASE_TAG" \
+            --repo "${{ github.repository }}" \
+            --title "Pi Companion $RELEASE_TAG" \
+            --notes ""; then
+            echo "Release creation raced with another workflow; continuing."
+          fi
+
+      - name: Setup Expo and EAS
+        if: steps.eas-secrets.outputs.configured == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android APK on EAS
+        id: eas_build
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          build_json="$(npx eas build --platform android --profile production-apk --non-interactive --wait --json)"
+          echo "$build_json" > "$RUNNER_TEMP/eas-build.json"
+
+          build_id="$(jq -r 'if type == "array" then .[0].id // empty else .id // empty end' "$RUNNER_TEMP/eas-build.json")"
+          if [ -z "$build_id" ]; then
+            echo "Failed to determine EAS build ID."
+            cat "$RUNNER_TEMP/eas-build.json"
+            exit 1
+          fi
+
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve APK artifact URL
+        id: artifact
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          build_view_json="$(npx eas build:view '${{ steps.eas_build.outputs.build_id }}' --json)"
+          echo "$build_view_json" > "$RUNNER_TEMP/eas-build-view.json"
+
+          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/eas-build-view.json")"
+          if [ -z "$artifact_url" ]; then
+            echo "Failed to determine APK artifact URL."
+            cat "$RUNNER_TEMP/eas-build-view.json"
+            exit 1
+          fi
+
+          asset_name="picompanion-${RELEASE_TAG}-android.apk"
+          asset_path="$RUNNER_TEMP/$asset_name"
+
+          curl --fail --location --output "$asset_path" "$artifact_url"
+
+          echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
+          echo "asset_path=$asset_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK to GitHub Release
+        if: steps.eas-secrets.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$RELEASE_TAG" "${{ steps.artifact.outputs.asset_path }}" --clobber --repo "${{ github.repository }}"
+
+      - name: Dry run (EXPO_TOKEN not configured)
+        if: steps.eas-secrets.outputs.configured == 'false'
+        run: |
+          echo "::notice::EXPO_TOKEN secret is not configured on this repository yet."
+          echo "::notice::EAS project ownership and signing credentials are unverified"
+          echo "::notice::(see docs/frontend-data-migration.md section 4.2-4.6)."
+          echo "::notice::Skipping EAS build/upload; this run is a dry run for tag $RELEASE_TAG."
