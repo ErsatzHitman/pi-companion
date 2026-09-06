@@ -180,6 +180,25 @@ results or declaring the wave done:
 4. A gate result is only reportable once step 2 exits `0` on the exact tree the gates
    in step 1 ran against. "The suite passed" and "the tree is clean" are two separate,
    both-required facts — report both, never only the first.
+5. **After you push, read the real CI run for the commit you pushed, and record its
+   conclusion and run id.** Local green plus CI red is a **RED wave**, not a passing one
+   with an infrastructure footnote. Until 2026-09-06 this repository had no remote (T190),
+   so the strongest available gate was a local approximation of CI — and the first push
+   proved the approximation disagreed. Two defects had sat on `main` across many waves:
+   an undeclared workspace dependency in `apps/android` (T194) and every CI job building
+   `frontend-core` before `@picompanion/client` (T195). Both were invisible locally because
+   every local checkout carries a stale `packages/client/dist` that a clean `npm ci`
+   checkout does not have, so the same typecheck passes here and fails there. **A stale
+   `dist` is the standing reason a local build can disagree with CI; suspect it first.**
+
+   No browser is needed, and the orchestrator — not an implementer — is the one who
+   pushes and reads the result:
+
+   ```bash
+   gh run list --branch main --limit 3
+   gh run view <run-id>
+   gh run view --job <job-id> --log-failed
+   ```
 
 This check is local-only, run by hand at wave end as step 2 above, and is deliberately
 NOT wired into CI (`.github/workflows/ci.yml`). T96 closed that as will-not-wire:
