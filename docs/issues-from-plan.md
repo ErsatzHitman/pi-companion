@@ -361,6 +361,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T198   | Build apps/web's declared workspace dependencies from its own scripts           | phase-8   | tooling          | P8-W6  | T195                                                                  |
 | T199   | Build @picompanion/server before the web-tests Playwright run                   | phase-8   | ci               | P8-W6  | T195                                                                  |
 | T200   | Correct the vendored EXPO_ROUTER_CTX_IGNORE against the real package            | phase-8   | tooling          | P8-W6  | T196                                                                  |
+| T201   | Make expo prebuild able to load app.config.ts without duplicating the allowlist | phase-8   | android          | P8-W6  | T36E, T200                                                            |
 | T32S14 | Mount T66's reconnect path and the route-level fetchImpl seam                   | phase-5   | android          | P5-W20 | T66, T32S13                                                           |
 | T69    | Build the share target chooser so features/share/ has an entry point            | phase-5   | android          | P5-W21 | T36F, T32S14                                                          |
 | T70    | Mount the voice feature behind a real entry point or delete it                  | phase-5   | android          | P5-W21 | T36D, T32S14                                                          |
@@ -594,7 +595,7 @@ the task details always agree.
 | P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
 | P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
 | P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
-| P8-W6  | T194, T195, T196, T198, T199, T200 (the CI outage)                       | 6     |
+| P8-W6  | T194, T195, T196, T198, T199, T200, T201 (the CI outage)                 | 7     |
 | P8-W7  | T43B2b (moved from P8-W6; needs CI green first), T197                    | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
@@ -6962,6 +6963,77 @@ _ctx-shared.js` read directly.
 **Follow-on, unowned:** the "expo-router is not installed" premise appears in more than
 this one file. Someone should grep for it and correct every site that states it as a
 property of the repository rather than of one workstation.
+
+#### T201 — Make `expo prebuild` able to load `app.config.ts` without duplicating the allowlist
+
+`labels: phase-8, area: android` · `wave: P8-W6` · `depends-on: T36E, T200`
+
+`android-tests`' **Production prebuild smoke** step fails on every run:
+
+```
+Cannot find module './src/features/share/share-intent-config.js'
+Require stack:
+- apps/android/app.config.ts
+- .../@expo/config/build/evalConfig.js
+```
+
+`expo prebuild` has therefore never once succeeded. It was invisible for two reasons:
+this step runs only in CI, and until T200 the job died at the unit tests before reaching
+it.
+
+**Cause.** `@expo/config` transpiles `app.config.ts` to CommonJS and evaluates it with
+`require-from-string`. `@expo/require-utils`'s loader compiles ONLY the entry config
+file; a relative import inside it becomes a plain `require` resolved by Node against the
+real filesystem, where only `share-intent-config.ts` exists. Reproduce in one command:
+
+```bash
+cd apps/android && npx expo config --type public
+```
+
+**Dropping the extension does not fix it.** Verified: `"./src/features/share/
+share-intent-config"` fails the same way (`Cannot find module`), because the loader
+registers no `.ts` handler for nested requires. `app.config.ts` cannot import ANY
+relative TypeScript module under this Expo version — and the chain here is two deep
+(`app.config.ts` — `share-intent-config.ts` — `share-intent-model.ts`).
+
+**The constraint that makes this non-trivial, and that you must not break.** T36E made
+`app.config.ts` call `buildShareIntentFilters()` precisely so the Android share-target
+MIME list cannot drift from `ACCEPTED_FILE_MIME_TYPES`. A drift would advertise this app
+to the whole OS as a share target for a type `classifyShareIntent` then silently refuses.
+Read `share-intent-config.ts`'s doc comment before you touch it. **Retyping the list, or
+the filter shape, into `app.config.ts` is a REGRESSION even if CI turns green.**
+
+Three directions, none obviously right — pick one, and say in the commit why you rejected
+the other two:
+
+1. **A JSON single source of truth.** Move the allowlist to
+   `accepted-file-mime-types.json`; `share-intent-model.ts` imports it
+   (`resolveJsonModule`), `app.config.ts` `require`s it, since JSON requires work fine in
+   CommonJS. Cost: the two-filter SHAPE then lives in `app.config.ts`, and
+   `share-intent-config.test.ts` would be asserting a function the config no longer calls
+   — a check that cannot fail. If you take this route the test MUST move to asserting
+   the config's real output.
+2. **Precompile `share-intent-config.ts` to `.js`** in `apps/android`'s `build` script
+   before `expo prebuild`. Keeps one source of truth exactly as today. Cost: the config
+   is then unloadable except after a build, so `npx expo config` breaks for humans.
+3. **Make `app.config.js` a plain CommonJS file** that builds the filters from a
+   `require`d JSON list. Same trade as 1, without the TypeScript config file.
+
+Owns: `apps/android/app.config.ts`, `apps/android/src/features/share/
+share-intent-config.ts` and its test, and `apps/android/src/features/share/
+share-intent-model.ts`'s allowlist declaration only.
+
+- [ ] `cd apps/android && npx expo config --type public` succeeds and PRINTS
+      `android.intentFilters` containing every entry of `ACCEPTED_FILE_MIME_TYPES` and
+      `text/plain`, and nothing else — quote the output
+- [ ] The anti-drift property survives, and is proven by MUTATION: add a MIME type to
+      `ACCEPTED_FILE_MIME_TYPES`, show the config's filters change with it and/or the
+      test fails, then restore. A green suite after retyping the list is a REGRESSION
+- [ ] `share-intent-config.test.ts` asserts against whatever `app.config.ts` actually
+      uses. If the config stops calling `buildShareIntentFilters()`, the test moves too
+- [ ] `cd apps/android && npx vitest run` — 193 files, no regression on 2485 passed
+- [ ] **`android-tests` is green on a real CI run, INCLUDING the Production prebuild
+      smoke step** — quote the run id. Nothing else closes this task
 
 #### T32A1 — Build the Android connect form
 
