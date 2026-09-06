@@ -430,6 +430,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T212   | Drop the churning file and test counts from legacy-retirement.md 2.3            | phase-8   | docs             | P8-W13 | —                                                                     |
 | T213   | guard-no-legacy-app-tree's ALLOWLISTED_PATHS has the shape T211 closed          | phase-8   | ci               | P8-W14 | —                                                                     |
 | T214   | guard-run-guard-wiring's CI job copy names one of its three failure modes       | phase-8   | ci               | P8-W14 | T211                                                                  |
+| T215   | Decide whether a stale-allowlist check is a guard-capability-prose capability   | phase-8   | ci               | P8-W15 | T211, T213                                                            |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -624,7 +625,9 @@ the task details always agree.
 |        | KEEP; the gate found nothing to fix and filed T211, T212.                |       |
 | P8-W13 | T211, T212 (both filed by the P8-W12 gate; disjoint: ci vs docs). Both   | 2     |
 |        | KEEP; the gate fixed one contradictory sentence and filed T213, T214.    |       |
-| P8-W14 | T213, T214 (both filed by the P8-W13 gate; disjoint: guard vs ci.yml)    | 2     |
+| P8-W14 | T213, T214 (both filed by the P8-W13 gate; disjoint: guard vs ci.yml).   | 2     |
+|        | Both KEEP; the gate fixed one carried-over header premise, filed T215.   |       |
+| P8-W15 | T215 (filed by the P8-W14 gate; a policy decision, so it runs alone)     | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7504,6 +7507,38 @@ Owns: the `guard-run-guard-wiring` job block in `.github/workflows/ci.yml`, noth
 
 - [ ] The step name and its comment name all three failure modes
 - [ ] No other job block is touched
+
+#### T215 — Decide whether a guard's own stale-allowlist check is a `guard-capability-prose` capability
+
+`labels: phase-8, area: ci` · `wave: P8-W15` · `depends-on: T211, T213`
+
+`CLAUDE.md` says to add a `CAPABILITIES` entry "the moment you ship one". Two waves have now
+shipped the same capability class — T211's `stale-missing-runner`/`stale-wired` and T213's
+`findStaleAllowlistViolations` — and neither registered an entry. Neither task's `Owns:` line
+included `guard-capability-prose.mjs`, so this is genuinely unowned rather than a miss by either
+implementer. It is the third chance to notice; the next one lands unregistered too unless the
+policy is written down.
+
+It is a DECISION task, not two lines of data entry. The natural denying phrases — "unreachable
+and silently ignored", "cannot report a stale allowlist entry", "an allowlist that cannot go
+red" — appear verbatim in this file's own T211 and T213 specs, and `docs/**` is inside the prose
+guard's scan scope. Registering the capability naively turns the guard red against frozen,
+deliberately-historical task specs, which is the "strict check that fires on valid input" shape.
+
+Either outcome is acceptable; leaving it undecided is not:
+
+- (a) Register both capabilities and mark the frozen specs with the guard's existing historical-
+  quotation markers (`CORRECTED`, `this said`, `previously said`), or
+- (b) Record in `CLAUDE.md` that frozen `issues-from-plan.md` specs are exempt, and why — then
+  register.
+
+Owns: `scripts/ci/guard-capability-prose.mjs`, its test, and the `CLAUDE.md` paragraph recording
+the decision.
+
+- [ ] The chosen policy is written down in `CLAUDE.md`, with its reasoning
+- [ ] `node scripts/ci/run-guard-capability-prose.mjs` exits 0 on the real tree afterwards
+- [ ] A MUTATION proves the new entry can actually fire — an entry the runner's scope cannot see
+      is a check that cannot fail, which is the defect this guard exists to catch
 
 #### T32A1 — Build the Android connect form
 

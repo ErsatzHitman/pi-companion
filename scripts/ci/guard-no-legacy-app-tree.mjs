@@ -12,11 +12,18 @@
 //
 // `findLegacyReferenceViolations` originally consulted `ALLOWLISTED_PATHS`
 // only *inside* its loop over `files` — for whichever path it happened to be
-// looking at. That means an allowlist entry is only ever read when a
-// matching path is present in `files` AND that path's content still trips
-// `LEGACY_IMPORT_PATTERN`. Two kinds of entry were therefore unreachable and
-// silently ignored, forever — the same shape `guard-run-guard-wiring.mjs`
-// closed for its own allowlist at T211, one wave earlier:
+// looking at. That means an allowlist entry is only ever consulted when a
+// matching path is present in `files`, and, because
+// `if (ALLOWLISTED_PATHS.has(path)) continue;` is the FIRST line of that loop
+// body, it is honoured without the file's extension or content ever being
+// looked at. Two kinds of entry were therefore unreachable and silently
+// ignored, forever — the same shape `guard-run-guard-wiring.mjs` closed for
+// its own allowlist at T211, one wave earlier. (CORRECTED at the P8-W14 merge
+// gate: this said the entry is read only when the path is present "AND that
+// path's content still trips `LEGACY_IMPORT_PATTERN`", which is exactly true
+// of T211's guard — it consults its allowlist AFTER `if (wired) continue;` —
+// and false here, where the order is reversed. Item 2 below always described
+// the real order; the lead sentence contradicted it.)
 //
 //   1. A key naming a path that has since been deleted or renamed — nothing
 //      in `files` ever carries that path, so a stale key just sits there.
