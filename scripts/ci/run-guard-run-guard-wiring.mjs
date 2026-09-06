@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// CLI entry point for the run-guard-wiring guard (T209). Run from the
-// repository root; CI runs it as the `guard-run-guard-wiring` job in
-// `.github/workflows/ci.yml` — that job is itself the proof this guard
-// works, since it is exactly the `run:` line this guard looks for, in the
-// exact workflow file it scans.
+// CLI entry point for the run-guard-wiring guard (T209, widened by T211).
+// Run from the repository root; CI runs it as the `guard-run-guard-wiring`
+// job in `.github/workflows/ci.yml` — that job is itself the proof this
+// guard works, since it is exactly the `run:` line this guard looks for, in
+// the exact workflow file it scans.
 // See scripts/ci/guard-run-guard-wiring.mjs for the checked rule, the
-// allowlist and its two recorded reasons, and why comment text can never
-// satisfy this check.
+// allowlist and its two recorded reasons, why comment text can never
+// satisfy this check, and (T211) why a stale allowlist entry is reported as
+// a violation class distinct from an unwired runner.
 
 import { readFileSync, readdirSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -66,20 +67,35 @@ export function main() {
   }
 
   console.error("guard-run-guard-wiring: FAILED");
-  for (const { runner, allowlistReason } of violations) {
-    if (allowlistReason === null) {
+  for (const { kind, runner, allowlistReason } of violations) {
+    if (kind === "stale-missing-runner") {
       console.error(
-        `  ${CI_SCRIPTS_DIR}${runner} is referenced by no \`run:\` step in any ${WORKFLOWS_DIR}*.yml ` +
-          "file (a comment mentioning its filename does not count). Either wire it into a " +
-          `workflow job (\`run: node ${CI_SCRIPTS_DIR}${runner}\`), or add a reasoned entry to ` +
-          "ALLOWLISTED_UNWIRED_RUN_GUARDS in scripts/ci/guard-run-guard-wiring.mjs explaining why " +
-          "it stays unwired on purpose.",
+        `  STALE ALLOWLIST ENTRY: ALLOWLISTED_UNWIRED_RUN_GUARDS in ` +
+          `scripts/ci/guard-run-guard-wiring.mjs names "${runner}", but no file by that name ` +
+          `exists under ${CI_SCRIPTS_DIR} today (recorded reason: "${allowlistReason}"). Delete ` +
+          "or correct that allowlist entry — there is no runner left to wire.",
+      );
+    } else if (kind === "stale-wired") {
+      console.error(
+        `  STALE ALLOWLIST ENTRY: ALLOWLISTED_UNWIRED_RUN_GUARDS in ` +
+          `scripts/ci/guard-run-guard-wiring.mjs names "${runner}" as unwired-on-purpose ` +
+          `(recorded reason: "${allowlistReason}"), but a real \`run:\` step in some ` +
+          `${WORKFLOWS_DIR}*.yml file now genuinely invokes it. The entry has outlived its ` +
+          "reason — delete it, and never unwire the runner just to make the old reason true again.",
+      );
+    } else if (allowlistReason === null) {
+      console.error(
+        `  UNWIRED RUNNER: ${CI_SCRIPTS_DIR}${runner} is referenced by no \`run:\` step in any ` +
+          `${WORKFLOWS_DIR}*.yml file (a comment mentioning its filename does not count). Either ` +
+          `wire it into a workflow job (\`run: node ${CI_SCRIPTS_DIR}${runner}\`), or add a ` +
+          "reasoned entry to ALLOWLISTED_UNWIRED_RUN_GUARDS in scripts/ci/guard-run-guard-wiring.mjs " +
+          "explaining why it stays unwired on purpose.",
       );
     } else {
       console.error(
-        `  ${CI_SCRIPTS_DIR}${runner} has an ALLOWLISTED_UNWIRED_RUN_GUARDS entry, but its reason ` +
-          `("${allowlistReason}") is too short to count as a recorded decision (minimum 20 ` +
-          "characters). Write a real reason, or wire the runner into a workflow instead.",
+        `  UNWIRED RUNNER: ${CI_SCRIPTS_DIR}${runner} has an ALLOWLISTED_UNWIRED_RUN_GUARDS entry, ` +
+          `but its reason ("${allowlistReason}") is too short to count as a recorded decision ` +
+          "(minimum 20 characters). Write a real reason, or wire the runner into a workflow instead.",
       );
     }
   }

@@ -61,6 +61,55 @@
 // `guard-run-guard-wiring` job in `.github/workflows/ci.yml` — the neatest
 // available proof this guard works: its own job is exactly the kind of
 // `run:` line it looks for, in the exact workflow file it scans.
+//
+// ## T211: a stale allowlist entry, and why it is a SEPARATE violation class
+//
+// The loop that built `findUnwiredRunGuardViolations`'s original result
+// iterated `runnerFilenames` — the real `run-guard-*.mjs` files found on
+// disk — and consulted `ALLOWLISTED_UNWIRED_RUN_GUARDS` only *inside* that
+// loop, for whichever runner it happened to be looking at. That means an
+// allowlist key is only ever read when a matching runner exists AND that
+// runner is unwired. Two kinds of entry were therefore unreachable and
+// silently ignored, forever:
+//
+//   1. A key naming a runner that no longer exists (renamed or deleted) —
+//      the loop never iterates a filename that isn't on disk, so a stale
+//      key just sits there.
+//   2. A key naming a runner some workflow now genuinely wires — the
+//      `if (wired) continue;` above skips straight past the allowlist for
+//      that runner, so an entry can outlive the reason it was written for
+//      and nothing will ever say so.
+//
+// This is the "check that cannot fail" shape from CLAUDE.md's catalogue,
+// inside the guard that exists to close exactly that shape. There was no
+// live defect when T211 was filed (the P8-W12 gate verified both real
+// entries name files that exist and are genuinely unwired) — the point is
+// that the check could not have told us if there were one.
+//
+// **A stale allowlist entry is a SEPARATE violation class from an unwired
+// runner, not the same one wearing a different runner name.** The two are
+// caused by different mistakes and fixed by different edits:
+//   - `kind: "unwired"` means a real, on-disk `run-guard-*.mjs` has no
+//     workflow invoking it and no valid allowlist entry rescuing it. The fix
+//     is to WIRE THE RUNNER (add a `run:` step) or add a new allowlist entry.
+//   - `kind: "stale-missing-runner"` means an allowlist entry names a
+//     runner that is not one of today's on-disk `run-guard-*.mjs` files. The
+//     fix is to DELETE OR CORRECT THE ALLOWLIST ENTRY — there is no runner
+//     left to wire.
+//   - `kind: "stale-wired"` means an allowlist entry names a real runner
+//     that some workflow's `run:` content now genuinely invokes. The entry
+//     has outlived its reason; the fix is to DELETE THE NOW-UNNECESSARY
+//     ALLOWLIST ENTRY, never to unwire the runner to make the old reason
+//     true again.
+// `run-guard-run-guard-wiring.mjs` prints a distinct message per `kind` so a
+// reader can tell which mistake happened without reading this source.
+//
+// The stale check below reuses the exact `runnerFilenames` and `workflows`
+// this module already reads for the main loop — it does not re-read the
+// filesystem with a second, possibly-different notion of "which runners
+// exist". It walks `Object.entries(allowlist)` directly, independently of
+// whether the main loop below ever reaches that key, which is the only way
+// to make a key that the main loop would never visit still reachable.
 
 /**
  * Two runners are unwired on purpose. An allowlist entry REQUIRES a
@@ -216,10 +265,26 @@ export function isRunnerWiredInWorkflow(runnerFilename, workflowContent) {
 }
 
 /**
- * @typedef {{ runner: string, allowlistReason: string | null }} UnwiredRunGuardViolation
- *   `allowlistReason` is `null` when the runner has no allowlist entry at
- *   all, or the invalid (too-short/non-string) reason string when it has an
- *   entry that fails `isValidAllowlistReason` — either way, a violation.
+ * @typedef {{
+ *   kind: "unwired" | "stale-missing-runner" | "stale-wired",
+ *   runner: string,
+ *   allowlistReason: string | null,
+ * }} RunGuardWiringViolation
+ *   `kind: "unwired"` — a real, on-disk `run-guard-*.mjs` that no workflow's
+ *   `run:` content invokes and that has no valid allowlist entry rescuing
+ *   it. `allowlistReason` is `null` when the runner has no allowlist entry
+ *   at all, or the invalid (too-short/non-string) reason string when it has
+ *   an entry that fails `isValidAllowlistReason` — either way, a violation.
+ *   `kind: "stale-missing-runner"` — an `ALLOWLISTED_UNWIRED_RUN_GUARDS` key
+ *   naming a filename that is not one of today's real `run-guard-*.mjs`
+ *   files (renamed or deleted). `allowlistReason` is that entry's recorded
+ *   reason, whatever it says — the entry is stale regardless of the
+ *   reason's own quality.
+ *   `kind: "stale-wired"` — an `ALLOWLISTED_UNWIRED_RUN_GUARDS` key naming a
+ *   real runner that some workflow's `run:` content now genuinely invokes.
+ *   `allowlistReason` is that entry's recorded reason. See this module's
+ *   header ("T211") for why these are a separate violation class from
+ *   `"unwired"`, not the same one under a different name.
  */
 
 /**
@@ -228,9 +293,12 @@ export function isRunnerWiredInWorkflow(runnerFilename, workflowContent) {
  *   workflows: { path: string, content: string }[],
  *   allowlist?: Record<string, string>,
  * }} inputs
- * @returns {UnwiredRunGuardViolation[]} every `run-guard-*.mjs` runner that
- *   is referenced by no workflow's real `run:` content and has no VALID
- *   allowlist entry
+ * @returns {RunGuardWiringViolation[]} every real `run-guard-*.mjs` runner
+ *   that is referenced by no workflow's real `run:` content and has no VALID
+ *   allowlist entry (`kind: "unwired"`), PLUS every allowlist entry that has
+ *   gone stale — naming a runner that no longer exists (`kind:
+ *   "stale-missing-runner"`) or one a workflow now genuinely wires (`kind:
+ *   "stale-wired"`)
  */
 export function findUnwiredRunGuardViolations({
   runnerFilenames,
@@ -238,14 +306,33 @@ export function findUnwiredRunGuardViolations({
   allowlist = ALLOWLISTED_UNWIRED_RUN_GUARDS,
 }) {
   const violations = [];
+  const runnerFilenameSet = new Set(runnerFilenames);
+  const isWired = (runner) =>
+    workflows.some((workflow) => isRunnerWiredInWorkflow(runner, workflow.content));
+
+  // Stale allowlist entries: walked over the allowlist's OWN keys,
+  // independently of the main loop below, so an entry the main loop would
+  // never reach (because its runner doesn't exist, or because the main loop
+  // `continue`s past a now-wired runner before ever consulting the
+  // allowlist) is still checked. See this module's header ("T211") for why
+  // this must not be folded into the loop below.
+  for (const [runner, allowlistReason] of Object.entries(allowlist)) {
+    if (!runnerFilenameSet.has(runner)) {
+      violations.push({ kind: "stale-missing-runner", runner, allowlistReason });
+      continue;
+    }
+    if (isWired(runner)) {
+      violations.push({ kind: "stale-wired", runner, allowlistReason });
+    }
+  }
+
   for (const runner of runnerFilenames) {
-    const wired = workflows.some((workflow) => isRunnerWiredInWorkflow(runner, workflow.content));
-    if (wired) continue;
+    if (isWired(runner)) continue;
 
     const reason = Object.hasOwn(allowlist, runner) ? allowlist[runner] : null;
     if (reason !== null && isValidAllowlistReason(reason)) continue;
 
-    violations.push({ runner, allowlistReason: reason });
+    violations.push({ kind: "unwired", runner, allowlistReason: reason });
   }
   return violations;
 }

@@ -198,6 +198,13 @@ jobs:
 `,
       },
     ],
+    // Explicit empty allowlist: this fixture's runnerFilenames deliberately
+    // don't include the two real ALLOWLISTED_UNWIRED_RUN_GUARDS keys, and
+    // (T211) the default (real) allowlist is now ALSO checked for staleness
+    // against whatever runnerFilenames this call passes — so leaving the
+    // default in place here would spuriously report both real entries as
+    // stale-missing-runner. Tests about the allowlist itself pass their own.
+    allowlist: {},
   });
   assert.deepEqual(violations, []);
 });
@@ -215,6 +222,7 @@ test("findUnwiredRunGuardViolations: passes when a runner is wired in a DIFFEREN
         content: "jobs:\n  b:\n    steps:\n      - run: node scripts/ci/run-guard-foo.mjs\n",
       },
     ],
+    allowlist: {}, // see the comment in the previous test for why this is explicit
   });
   assert.deepEqual(violations, []);
 });
@@ -228,8 +236,10 @@ test("findUnwiredRunGuardViolations: FAILS and names the runner when nothing run
         content: "jobs:\n  a:\n    steps:\n      - run: echo hi\n",
       },
     ],
+    allowlist: {}, // see the comment two tests up for why this is explicit
   });
   assert.equal(violations.length, 1);
+  assert.equal(violations[0].kind, "unwired");
   assert.equal(violations[0].runner, "run-guard-foo.mjs");
   assert.equal(violations[0].allowlistReason, null);
 });
@@ -249,9 +259,26 @@ jobs:
 `,
       },
     ],
+    allowlist: {}, // see the comment several tests up for why this is explicit
   });
   assert.equal(violations.length, 1);
+  assert.equal(violations[0].kind, "unwired");
   assert.equal(violations[0].runner, "run-guard-app-id-package-pairing.mjs");
+});
+
+test("findUnwiredRunGuardViolations: kind is 'unwired' for a too-short allowlist reason on a real, unwired runner", () => {
+  const violations = findUnwiredRunGuardViolations({
+    runnerFilenames: ["run-guard-foo.mjs"],
+    workflows: [
+      {
+        path: ".github/workflows/ci.yml",
+        content: "jobs:\n  a:\n    steps:\n      - run: echo hi\n",
+      },
+    ],
+    allowlist: { "run-guard-foo.mjs": "todo" },
+  });
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].kind, "unwired");
 });
 
 test("findUnwiredRunGuardViolations: an unwired runner with a VALID allowlist entry is not a violation", () => {
@@ -379,6 +406,95 @@ test("MUTATION PROOF: deleting the real guard-app-id-package-pairing job from ci
     workflows: mutatedWorkflows,
   });
   assert.equal(violations.length, 1);
+  assert.equal(violations[0].kind, "unwired");
   assert.equal(violations[0].runner, "run-guard-app-id-package-pairing.mjs");
   assert.equal(violations[0].allowlistReason, null);
+});
+
+// ---------------------------------------------------------------------------
+// T211: a stale ALLOWLISTED_UNWIRED_RUN_GUARDS entry must be a hard failure,
+// proven against the REAL allowlist and the real tree — not a fixture
+// allowlist that proves nothing about scripts/ci/guard-run-guard-wiring.mjs's
+// own shipped ALLOWLISTED_UNWIRED_RUN_GUARDS.
+// ---------------------------------------------------------------------------
+
+test("T211 MUTATION PROOF: a real allowlist entry naming a runner that does not exist on disk is a stale-missing-runner violation", () => {
+  const runnerFilenames = readRealRunnerFilenames();
+  const workflows = readRealWorkflows();
+
+  const mutatedAllowlist = {
+    ...ALLOWLISTED_UNWIRED_RUN_GUARDS,
+    "run-guard-does-not-exist.mjs":
+      "a perfectly valid, long-enough reason string that would pass isValidAllowlistReason " +
+      "on its own -- the violation must come from the runner not existing, not from a short reason",
+  };
+  assert.ok(
+    !runnerFilenames.includes("run-guard-does-not-exist.mjs"),
+    "the fixture key must genuinely not exist on disk for this proof to mean anything",
+  );
+
+  const violations = findUnwiredRunGuardViolations({
+    runnerFilenames,
+    workflows,
+    allowlist: mutatedAllowlist,
+  });
+
+  const stale = violations.filter((v) => v.runner === "run-guard-does-not-exist.mjs");
+  assert.equal(stale.length, 1);
+  assert.equal(stale[0].kind, "stale-missing-runner");
+  // The real two allowlist entries must still be reported clean alongside
+  // this fabricated one -- this is not "flag everything once the allowlist
+  // has any problem", it is "flag the one entry that is actually stale".
+  assert.equal(
+    violations.some((v) => v.runner === "run-guard-clean-working-tree.mjs"),
+    false,
+  );
+  assert.equal(
+    violations.some((v) => v.runner === "run-guard-server-test-typecheck-ceiling.mjs"),
+    false,
+  );
+});
+
+test("T211 MUTATION PROOF: a real allowlist entry naming a runner a workflow now really wires is a stale-wired violation", () => {
+  const runnerFilenames = readRealRunnerFilenames();
+  const workflows = readRealWorkflows();
+
+  // Pick a runner this repository's ci.yml genuinely, currently invokes
+  // (verified by hand against .github/workflows/ci.yml before writing this
+  // test), and pretend it is allowlisted as unwired-on-purpose. A real
+  // allowlist entry naming an actually-wired runner is exactly the "entry
+  // outlived its reason" shape T211 exists to catch.
+  const nowWiredRunner = "run-guard-no-legacy-app-tree.mjs";
+  assert.ok(
+    runnerFilenames.includes(nowWiredRunner),
+    "expected to find the real runner this proof allowlists",
+  );
+  assert.ok(
+    workflows.some((workflow) => isRunnerWiredInWorkflow(nowWiredRunner, workflow.content)),
+    "expected this runner to already be genuinely wired in the real tree",
+  );
+
+  const mutatedAllowlist = {
+    ...ALLOWLISTED_UNWIRED_RUN_GUARDS,
+    [nowWiredRunner]:
+      "pretending, for this test only, that this already-wired runner was allowlisted as " +
+      "unwired-on-purpose -- the entry has outlived its reason and must be reported as stale",
+  };
+
+  const violations = findUnwiredRunGuardViolations({
+    runnerFilenames,
+    workflows,
+    allowlist: mutatedAllowlist,
+  });
+
+  const stale = violations.filter((v) => v.runner === nowWiredRunner);
+  assert.equal(stale.length, 1);
+  assert.equal(stale[0].kind, "stale-wired");
+  // The runner itself must never ALSO be reported as "unwired" merely
+  // because it is (falsely, for this test) allowlisted -- it is wired, so
+  // the main loop's `if (isWired(runner)) continue;` must still skip it.
+  assert.equal(
+    violations.some((v) => v.runner === nowWiredRunner && v.kind === "unwired"),
+    false,
+  );
 });
