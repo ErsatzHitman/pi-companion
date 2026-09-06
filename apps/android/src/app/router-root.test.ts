@@ -114,6 +114,11 @@ describe("Expo Router root contains only real routes (or a named exception)", ()
     "./h/[serverId]/(tabs)/_layout.tsx",
     "./h/[serverId]/(tabs)/sessions.tsx",
     "./h/[serverId]/(tabs)/settings.tsx",
+    // P7-W7 merge gate: mounts the `DiagnosticsScreen` T42A3 built, at
+    // the same `/h/:serverId/diagnostics` path web serves it at. Not
+    // under `(tabs)/` because diagnostics is not a tab and there is no
+    // `{ type: "diagnostics" }` navigation intent, on either platform.
+    "./h/[serverId]/diagnostics.tsx",
     "./h/[serverId]/session/[agentId]/index.tsx",
     "./h/[serverId]/session/[agentId]/files/[...path].tsx",
     "./h/[serverId]/session/[agentId]/terminal/[terminalId].tsx",

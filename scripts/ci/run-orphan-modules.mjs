@@ -49,13 +49,22 @@ import { findOrphanModules, isTrackedModuleFile } from "./orphan-modules.mjs";
 //     test harness (package.json's "test:local" script) and its scratch
 //     fixtures, not caught by any of the six modes (a "tests/" directory
 //     is not one of the CLI/child-process convention segments);
-//   - apps/web/src/features/settings/index.ts — a real, currently-unwired
-//     barrel (T131, a later wave task, mounts AgentSettingsPanel).
+// CORRECTED (P7-W7 merge gate, 2026-09-06): the list above used to close
+// with a 27th bucket — "apps/web/src/features/settings/index.ts — a real,
+// currently-unwired barrel (T131, a later wave task, mounts
+// AgentSettingsPanel)". That barrel is wired now and is no longer in the
+// walker's output, so the real count is 26 and the ceiling drops with it.
 // Lower this number as an orphan above is wired, deleted, or the walker
 // gains a seventh mode that resolves it; raise it only for a single
 // deliberate commit that legitimately adds a not-yet-wired module, and say
 // so in that commit's message.
-export const ORPHAN_COUNT_CEILING = 27;
+//
+// This ratchet is the whole point of the guard, and P7-W7 is what proved
+// it: T42A3 shipped four modules under
+// apps/android/src/features/diagnostics/ that no route imported, the count
+// went 26 -> 30, and CI run 34029733785 went red. The fix was to mount the
+// screen (app/h/[serverId]/diagnostics.tsx), not to raise this number.
+export const ORPHAN_COUNT_CEILING = 26;
 
 const WORKSPACE_GLOB_DIRS = ["packages", "apps"];
 

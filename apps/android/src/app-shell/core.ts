@@ -110,7 +110,18 @@ import {
 } from "./terminal-transport-adapter.js";
 
 /** This app's fixed daemon hello `clientId` for any `AppCore`-constructed connection — mirrors `features/connect/connection-shell.tsx`'s own `ANDROID_DAEMON_CLIENT_ID`. Since T32A4 both feed the *same* store (`connection` below): this copy builds the direct-connect attempt, that file's copy builds the QR/relay offer attempt it hands to `connection.adoptLifecycle`. */
-const ANDROID_DAEMON_CLIENT_ID = "picompanion-android";
+export const ANDROID_DAEMON_CLIENT_ID = "picompanion-android";
+
+/**
+ * This app's fixed daemon hello `appVersion` for every `AppCore`-constructed
+ * connection. Exported for the same reason `ANDROID_DAEMON_CLIENT_ID` above
+ * is: `app/h/[serverId]/diagnostics.tsx` shows the identity this app really
+ * declares on `hello`, and a diagnostics screen that reads a second,
+ * separately-typed copy of these strings would drift silently from the ones
+ * actually sent. Was a bare `"0.1.0"` literal repeated at both construction
+ * sites below until this constant replaced them.
+ */
+export const ANDROID_DAEMON_APP_VERSION = "0.1.0";
 
 /**
  * The one scope every `AppCore`-owned `OfflineCacheOwner` uses unless a
@@ -939,7 +950,7 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     createDaemonConnectAttempt({
       clientId: ANDROID_DAEMON_CLIENT_ID,
       clientType: "mobile",
-      appVersion: "0.1.0",
+      appVersion: ANDROID_DAEMON_APP_VERSION,
     }),
   );
   const keyValueStorage = createExpoKeyValueStorage();
@@ -1270,7 +1281,7 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
   const reconnectHostProfile = createReconnectHostProfile({
     clientId: ANDROID_DAEMON_CLIENT_ID,
     clientType: "mobile",
-    appVersion: "0.1.0",
+    appVersion: ANDROID_DAEMON_APP_VERSION,
     ...(overrides.reconnect?.createDaemonClient !== undefined
       ? { createDaemonClient: overrides.reconnect.createDaemonClient }
       : {}),

@@ -88,7 +88,13 @@ describe("DiagnosticsScreen source", () => {
     expect(code).toMatch(/<StatusIndicator\b/);
   });
 
-  it("is not mounted by any route yet — this task's Owns grant is features/diagnostics/ only", () => {
-    expect(source).toMatch(/Not mounted anywhere yet/);
+  it("is mounted by a real route, and says so", () => {
+    // CORRECTED (P7-W7 merge gate): this test asserted the opposite —
+    // `expect(source).toMatch(/Not mounted anywhere yet/)` — locking in
+    // prose that the gate's own route falsified. A test that pins an
+    // absence has to be retired by whoever ends the absence, or it fails
+    // the commit that fixes the gap.
+    expect(source).toMatch(/Mounted at `\/h\/:serverId\/diagnostics`/);
+    expect(source).not.toMatch(/\*\*Not mounted anywhere yet\.\*\*/);
   });
 });

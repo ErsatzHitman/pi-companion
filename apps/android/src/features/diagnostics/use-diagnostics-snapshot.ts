@@ -25,12 +25,17 @@
  * `app-shell/core.ts`'s `AgentStreamCapableClient` already performs for
  * an identical reason.
  *
- * **Not wired to a live store anywhere in production yet** — no route
- * under `apps/android/src/app/` mounts `DiagnosticsScreen` at all (T42A3's
- * `Owns` grant is `features/diagnostics/` only; `app/`/`app-shell/` are a
- * different task's grant, mirroring `SettingsScreen.tsx`'s own identical,
- * already-accepted disclosure). See this task's report for the exact
- * route file and props a future task needs to supply.
+ * **Wired to the live `DaemonConnectionStore` in production** by
+ * `app/h/[serverId]/diagnostics.tsx`, which passes `core.connection`
+ * straight in as the `connectionSource` and re-reads
+ * `getActiveLifecycle()?.getDaemonClient()` on every call. That route
+ * performs exactly the `on` narrow-cast this docstring predicted.
+ *
+ * CORRECTED (P7-W7 merge gate): this said **"Not wired to a live store
+ * anywhere in production yet — no route under `apps/android/src/app/`
+ * mounts `DiagnosticsScreen` at all"**. True as written by T42A3, whose
+ * `Owns` grant excluded `app/`; false from the moment the gate mounted
+ * the route.
  */
 import { useEffect, useMemo, useState } from "react";
 

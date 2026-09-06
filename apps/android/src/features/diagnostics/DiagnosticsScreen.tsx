@@ -17,11 +17,17 @@
  * `-model.ts`/`-export.ts` unit tests, and this file's own shape by
  * `DiagnosticsScreen.test.ts`'s anchored source-text assertions.
  *
- * **Not mounted anywhere yet.** No route under `apps/android/src/app/`
- * renders this screen — `app/`/`app-shell/` are outside this task's
- * `Owns` grant this wave (mirrors `SettingsScreen.tsx`'s identical,
- * already-accepted disclosure). See this task's report for the exact
- * route file and props this needs.
+ * **Mounted at `/h/:serverId/diagnostics`** by
+ * `app/h/[serverId]/diagnostics.tsx`, the same path web serves it at.
+ *
+ * CORRECTED (P7-W7 merge gate): this said **"Not mounted anywhere yet.
+ * No route under `apps/android/src/app/` renders this screen"**, which
+ * was true when T42A3 wrote it — `app/` was outside that task's `Owns`
+ * grant, and the gap was disclosed rather than hidden. It stopped being
+ * true the moment the gate added the route. It is corrected here rather
+ * than left standing because CI proved the cost of leaving it: with no
+ * importer, this file and its three siblings took the committed
+ * import-graph orphan ceiling from 27 to 30 and turned `main` red.
  *
  * **No per-field copy action.** Web's `CopyableField.tsx` copies through
  * `@picompanion/frontend-core`'s `Clipboard` platform interface; Android
