@@ -426,6 +426,8 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T208   | Owner-gated: configure EXPO_TOKEN and confirm the emulator action boots here    | phase-8   | ci               | owner  | T207                                                                  |
 | T209   | A guard-guard: every run-guard-\*.mjs is wired into a workflow, or allowlisted  | phase-8   | ci               | P8-W12 | T207                                                                  |
 | T210   | Fix legacy-retirement.md ordering: the undo must precede the cutover            | phase-8   | docs             | P8-W12 | —                                                                     |
+| T211   | guard-run-guard-wiring cannot report a stale allowlist entry                    | phase-8   | ci               | P8-W13 | T209                                                                  |
+| T212   | Drop the churning file and test counts from legacy-retirement.md 2.3            | phase-8   | docs             | P8-W13 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -616,7 +618,9 @@ the task details always agree.
 | P8-W11 | T207 (filed by the P8-W10 gate: `packaged-app-smoke` cannot pass as      | 1     |
 |        | written, and nothing detects that). Landed; the gate wired the new       |       |
 |        | guard into CI, which T207 shipped unwired, and filed T209.               |       |
-| P8-W12 | T209, T210 (both filed by the P8-W11 gate; disjoint: ci vs docs)         | 2     |
+| P8-W12 | T209, T210 (both filed by the P8-W11 gate; disjoint: ci vs docs). Both   | 2     |
+|        | KEEP; the gate found nothing to fix and filed T211, T212.                |       |
+| P8-W13 | T211, T212 (both filed by the P8-W12 gate; disjoint: ci vs docs)         | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7419,6 +7423,43 @@ whether §5 should quote a number at all, or simply point at §2.3.
 
 - [ ] The undo section precedes the cutover section
 - [ ] No section states a gate figure that another section contradicts
+
+#### T211 — `guard-run-guard-wiring` cannot report a stale allowlist entry
+
+`labels: phase-8, area: ci` · `wave: P8-W13` · `depends-on: T209`
+
+T209's guard iterates the `run-guard-*.mjs` files it finds on disk and asks whether each is wired.
+An `ALLOWLISTED_UNWIRED_RUN_GUARDS` key is therefore only ever consulted when a matching runner
+exists: a key naming a deleted runner, or one that some workflow now genuinely wires, is
+unreachable and silently ignored.
+
+There is no live defect — both current entries name files that exist and are genuinely unwired,
+and the P8-W12 merge gate verified both claims against the tree. But an allowlist that cannot go
+red is the "check that cannot fail" shape this guard was built to close, in the guard itself.
+
+Owns: `scripts/ci/guard-run-guard-wiring.mjs` and its test.
+
+- [ ] The guard fails when an allowlist key names a runner that does not exist
+- [ ] The guard fails when an allowlist key names a runner a workflow now really invokes, so an
+      entry cannot outlive the reason it was written
+- [ ] Both proven by MUTATION against the real allowlist, restored afterwards
+
+#### T212 — Drop the churning file and test counts from `docs/legacy-retirement.md` §2.3
+
+`labels: phase-8, area: docs` · `wave: P8-W13` · `depends-on: none`
+
+Three of §2.3's five figures moved again within a day of the P8-W10 re-measure: format 2387 to
+2395 files, lint 2213 to 2221, tests 424 to 484. The load-bearing rows did not move and are still
+exactly right: orphan 26 against a ceiling of 26, typecheck exit 2 with 18 `TS2307` `expo-router`
+errors, lint 8 warnings and 0 errors.
+
+The table already declares itself a dated snapshot and tells the reader to re-measure, so it is
+honest by its own contract. The problem is that a count of files scanned and a count of tests run
+carry no information the exit code does not, while creating a standing re-measure obligation that
+has now been paid three times. Keep what discriminates; drop what only decorates.
+
+- [ ] Every remaining figure is one whose change would mean something is wrong
+- [ ] No figure in the document is restated in a second place
 
 #### T32A1 — Build the Android connect form
 

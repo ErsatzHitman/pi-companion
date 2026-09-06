@@ -82,8 +82,11 @@ These hold everywhere in the codebase, not just for a single task:
   `packaging/docker/Dockerfile` and `packaging/nix/flake.nix` through `\n`-anchored regexes
   failed locally while passing on CI, and `oxfmt --check .` reported ~2361 of 2369 files as
   misformatted. Three waves burned verifier time re-proving that noise was noise. **The local
-  baseline is now `node --test scripts/ci/*.test.mjs` → 424/424 and `oxfmt --check .` → clean;
-  a failure in either is real.** If you ever see the whole formatter go red at once, check
+  baseline is `node --test scripts/ci/*.test.mjs` all-pass and `oxfmt --check .` → clean;
+  a failure in either is real.** Do not restate the test COUNT here. It changes on any wave that
+  adds a guard, and a stale figure reads as a regression to the next reader: it was 394 when this
+  paragraph was written, 424 at P8-W10, 461 at P8-W11 and 484 at P8-W12, and a merge gate paid to
+  re-derive it each time. What matters is that nothing fails. If you ever see the whole formatter go red at once, check
   `.gitattributes` is still present before you believe anything else.
 
 ## Working locally
