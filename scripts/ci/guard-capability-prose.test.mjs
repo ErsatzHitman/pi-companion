@@ -6,6 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  CAPABILITIES,
   findCapabilityDenialViolations,
   isCapabilityMemberDeclared,
 } from "./guard-capability-prose.mjs";
@@ -2310,12 +2311,38 @@ test("T187: the widened phrase's anchor text has exactly one hit across every re
   // apps/web/src, apps/android/src, scripts/ci, packaging/**) and confirm
   // the new phrase matches only the one real, CORRECTED-marked site it
   // was written for -- never an unrelated TRUE sentence elsewhere.
+  //
+  // T193: the phrase used to be RE-TYPED here as its own literal, so this
+  // test could not notice the shipped `denyingPhrases` entry changing
+  // underneath it -- the P6-W25 merge gate proved that by swapping the
+  // shipped phrase for `/T174 closed the ordering gap/i` (a true, in-scope
+  // sentence) and watching this test keep passing. Reading the phrase out
+  // of the real `CAPABILITIES` entry instead means a rename of the
+  // capability fails loudly here (the `.find` below returns `undefined`
+  // and the `assert.ok` fails) and a changed or reordered `denyingPhrases`
+  // entry changes what this test actually checks the collision of, rather
+  // than leaving it checking a phrase nothing ships any more. See
+  // `guard-capability-prose.mjs`'s "packaging build-order checking" entry:
+  // its THIRD `denyingPhrase` (index 2) is site 6's comment-free-by-
+  // construction claim -- the one this test names.
+  const packagingCapability = CAPABILITIES.find(
+    (capability) => capability.name === BUILD_ORDER_CAPABILITY,
+  );
+  assert.ok(
+    packagingCapability,
+    `expected a CAPABILITIES entry named ${JSON.stringify(BUILD_ORDER_CAPABILITY)}`,
+  );
+  const phrase = packagingCapability.denyingPhrases[2];
+  assert.ok(
+    phrase,
+    "expected the packaging build-order capability to have a third denyingPhrase " +
+      "(T187's widened site-6 comment-free-by-construction phrase)",
+  );
+
   const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
     .split("\n")
     .filter(Boolean);
   const appPaths = tracked.filter(isAppSourcePath);
-  const phrase =
-    /(?:that\s+)?output\s+is\s+"?comment-free\s+by\s+construction,?\s+since\s+both\s+extractors\s+only\s+ever\s+collect\s+RUN\s+lines\s*\/\s*phase-string\s+bodies/i;
 
   const matches = [];
   for (const appPath of appPaths) {
