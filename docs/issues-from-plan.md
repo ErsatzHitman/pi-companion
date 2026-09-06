@@ -354,6 +354,10 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T191   | Guard the scratch-dir variable in the T93 worktree step                         | phase-8   | docs             | P6-W24 | —                                                                     |
 | T192   | Add .gitattributes so Windows checkouts stop failing four committed tests       | phase-8   | tooling          | P8-W5  | —                                                                     |
 | T193   | Bind the collision test to the shipped regex it claims to be about              | phase-8   | tooling          | P8-W5  | T187                                                                  |
+| T194   | Declare @picompanion/highlight in apps/android so CI typecheck passes           | phase-8   | tooling          | P8-W6  | —                                                                     |
+| T195   | Build @picompanion/client before frontend-core in every CI job                  | phase-8   | ci               | P8-W6  | —                                                                     |
+| T196   | Read CI after every push now that a remote exists                               | phase-8   | docs             | P8-W6  | T194, T195                                                            |
+| T197   | Bring docs/ into guard-capability-prose's denial scan                           | phase-8   | tooling          | P8-W7  | T187, T193                                                            |
 | T32S14 | Mount T66's reconnect path and the route-level fetchImpl seam                   | phase-5   | android          | P5-W20 | T66, T32S13                                                           |
 | T69    | Build the share target chooser so features/share/ has an entry point            | phase-5   | android          | P5-W21 | T36F, T32S14                                                          |
 | T70    | Mount the voice feature behind a real entry point or delete it                  | phase-5   | android          | P5-W21 | T36D, T32S14                                                          |
@@ -587,8 +591,9 @@ the task details always agree.
 | P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
 | P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
 | P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
-| P8-W6  | T43B2b                                                                   | 1     |
-| P8-W7  | T59                                                                      | 1     |
+| P8-W6  | T194, T195, T196 (the CI outage found when origin was added)             | 3     |
+| P8-W7  | T43B2b (moved from P8-W6; needs CI green first), T197                    | 2     |
+| P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
 | P9-W3  | T44A3                                                                    | 1     |
@@ -6739,6 +6744,140 @@ file.
 - [ ] Broadening the shipped phrase to a true in-scope sentence now fails THIS test, shown as
       a RED/GREEN pair — not merely the three other tests that already caught it
 - [ ] `node scripts/ci/run-guard-capability-prose.mjs` still exits 0 on the committed tree
+
+#### T194 — Declare `@picompanion/highlight` in `apps/android` so CI typecheck passes
+
+`labels: phase-8, area: tooling` · `wave: P8-W6`
+
+`apps/android/src/features/files/file-syntax-highlight.ts` imports `@picompanion/highlight`,
+and `apps/android/package.json` does not declare it. The `typecheck` job's
+`run-guard-declared-workspace-deps.mjs` step fails on that, exit 1, on every push:
+
+```
+guard-declared-workspace-deps: FAILED for apps/android
+  @picompanion/highlight is imported but not declared in apps/android/package.json:
+    imported by: apps/android/src/features/files/file-syntax-highlight.ts
+```
+
+This was carried for many waves as "owner-blocked, needs `npm install`". **It is not an
+install.** `@picompanion/highlight` is a workspace package in this monorepo:
+`node_modules/@picompanion/highlight` is already symlinked to `packages/highlight`,
+`packages/highlight` is already a `package-lock.json` entry, and `apps/web` already declares
+the identical `"@picompanion/highlight": "0.3.0-beta.2"` and passes the same guard. What is
+missing is one dependency edge in two files. No registry request is required to add it.
+
+Owns: `apps/android/package.json` and the `apps/android` entry of `package-lock.json`. No
+other task in this wave touches those files.
+
+- [ ] `apps/android/package.json` declares `@picompanion/highlight` at the same exact version
+      `apps/web` declares, and `package-lock.json`'s `apps/android` entry carries the matching
+      edge — shown by diffing the two apps' lock entries before and after
+- [ ] `node scripts/ci/run-guard-declared-workspace-deps.mjs` exits 0 locally
+- [ ] The lockfile is still internally consistent: no new `node_modules/*` entry was created,
+      and the diff is confined to the one `apps/android` dependency edge
+- [ ] **The `typecheck` job is green on a real CI run of the commit that lands this** — quote
+      the run id. A local pass does not close this task; the guard already passed locally.
+
+#### T195 — Build `@picompanion/client` before `frontend-core` in every CI job
+
+`labels: phase-8, area: ci` · `wave: P8-W6`
+
+Six CI jobs fail with the same five errors, on every push:
+
+```
+src/connection/daemon-client-lifecycle.ts(27,30): error TS2307: Cannot find module '@picompanion/client'
+src/connection/daemon-client-lifecycle.ts(28,71): error TS2307: Cannot find module '@picompanion/client'
+src/hosts/host-controller.ts(32,41):            error TS2307: Cannot find module '@picompanion/client'
+src/hosts/host-controller.ts(289,7):            error TS2353: 'reconnect' does not exist in type 'DaemonClientLifecycleConfig'
+src/terminal/terminal-controller.ts(36,42):     error TS2307: Cannot find module '@picompanion/client/internal/daemon-client'
+```
+
+The failing jobs are `frontend-core-tests` (ubuntu and windows), `web-unit-tests`, `web-tests`,
+`android-tests` and `daemon-package-dry-run`.
+
+`packages/frontend-core` declares `@picompanion/client` correctly, so this is not T194's
+class. The cause is ordering: `packages/frontend-core`'s own `build` script runs
+`npm run build --workspace=@picompanion/protocol && tsc`, which builds protocol but never
+client, and `.github/workflows/ci.yml` puts "Build frontend-core dependencies (protocol,
+design-tokens, highlight, frontend-core)" BEFORE "Build @picompanion/client (protocol ->
+relay -> client chain)" — and `android-tests` never builds client at all. On a clean
+`npm ci` checkout there is no `packages/client/dist`, so `tsc` cannot resolve the types.
+
+**Why nobody saw it:** the repository had no remote until 2026-09-06 (T190), and every local
+checkout has a stale `packages/client/dist` left over from an earlier build, which makes the
+same typecheck pass. The first push to `origin` made it visible immediately.
+
+Decide between the two fixes and say why in the commit: reorder the workflow steps, or make
+`frontend-core`'s `build` script build its own declared dependency chain. The second fixes
+every consumer at once and cannot be re-broken by a new job; the first matches the existing
+convention of an explicit "Build backend dependency chain" workflow step. Do not do both.
+
+Owns: `.github/workflows/ci.yml` and `packages/frontend-core/package.json`. No other task in
+this wave touches those files.
+
+- [ ] A clean-checkout reproduction is shown first: with `packages/client/dist` moved aside,
+      `npm run build --workspace=@picompanion/frontend-core` fails with those five errors
+- [ ] After the fix, the same clean-checkout reproduction succeeds
+- [ ] The `TS2353` `reconnect` error is accounted for explicitly: either it disappears with
+      the other four (it was downstream) or it is a real type defect, in which case FILE it
+      rather than widening this task
+- [ ] **All six named jobs are green on a real CI run** — quote the run id and the job ids
+
+#### T196 — Read CI after every push now that a remote exists
+
+`labels: phase-8, area: docs` · `wave: P8-W6` · `depends-on: T194, T195`
+
+Two defects sat on `main` across many waves because no gate could see them: local checkouts
+carried a stale `packages/client/dist`, and there was no remote to run the real matrix. Both
+were found within minutes of the first push. The lesson is not "those two bugs" — it is
+that until 2026-09-06 the wave machinery's strongest gate was a local approximation of CI,
+and it disagreed with CI.
+
+CLAUDE.md's wave-end procedure (T93) must now require reading the real run, and must say that
+a locally green tree with a red CI run is a RED wave.
+
+Owns: `CLAUDE.md`. No other task in this wave touches that file.
+
+- [ ] CLAUDE.md's T93 section requires, as a numbered step after the clean-tree guard, reading
+      the CI run for the pushed commit and recording its conclusion and run id
+- [ ] It states plainly that local green plus CI red is a red wave, and names the stale-`dist`
+      trap as the reason a local build can disagree
+- [ ] It says how to get the result without a browser (`gh run list`, `gh run view --log-failed`)
+      and that the orchestrator, not an implementer, is the one who pushes and reads it
+
+#### T197 — Bring `docs/` into `guard-capability-prose`'s denial scan
+
+`labels: phase-8, area: tooling` · `wave: P8-W7` · `depends-on: T187, T193`
+
+`run-guard-capability-prose.mjs` scans for capability-denying prose in `apps/web/src`,
+`apps/android/src` (`APP_SRC_PREFIXES`), `scripts/ci` and `packaging/**`
+(`isPackagingProsePath`). **`docs/` is in none of them.** P8-W5 shipped a 370-line
+document that is almost entirely capability claims, and the guard could not see one line
+of it. That is the catalogued "a curated entry whose runner's scope can never see the
+case" shape, one directory up — the same shape that made the guard inert twice before
+and forced the scope to widen at T147 and again at T156.
+
+The P8-W5 merge gate checked whether the blind spot is live rather than theoretical by
+running `findCapabilityDenialViolations` over `docs/legacy-retirement.md` as though it
+were an in-scope file: **0 violations**. So `docs/` is clean under today's phrases and
+this is hardening, not a fix. Do not present it as closing an open hole.
+
+Owns: `scripts/ci/run-guard-capability-prose.mjs` and
+`scripts/ci/guard-capability-prose.test.mjs`. Do not edit `guard-capability-prose.mjs`'s
+`CAPABILITIES` list — this task changes WHERE the runner looks, never WHAT it looks for.
+
+- [ ] The runner's denial scan includes `docs/`, and the guard's own summary line names
+      the widened scope so a future reader can see what it covers without reading code
+- [ ] A regression test proves the widening is real: a seeded denial in a `docs/` fixture
+      is CAUGHT, and the same fixture with the denial removed passes. A test that only
+      asserts the prefix list contains `docs/` does not discriminate and does not count
+- [ ] The historical-quotation carve-out still works inside `docs/`: prose reading
+      `CORRECTED (...): this said ...` around a denying phrase must still pass. Prove it
+      with the real `docs/legacy-retirement.md`, which now carries three such markers
+- [ ] `node scripts/ci/run-guard-capability-prose.mjs` exits 0 on the committed tree, and
+      the reference-only documents named in CLAUDE.md do not start failing the guard — if
+      any does, that is a finding to report, not a phrase to delete
+- [ ] `node --test scripts/ci/*.test.mjs` — no regression against the wave-base count
 
 #### T32A1 — Build the Android connect form
 
