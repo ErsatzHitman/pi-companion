@@ -586,7 +586,7 @@ the task details always agree.
 | P7-W4  | T42A3 (blocked behind T42A1)                                             | 1     |
 | P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
 | P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
-| P8-W5  | T43B2a, T192, T193 (both filed at the P6-W25 gate)                       | 3     |
+| P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
 | P8-W6  | T43B2b                                                                   | 1     |
 | P8-W7  | T59                                                                      | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
@@ -6703,13 +6703,21 @@ also wrong on this machine — the honest local number is `381/385`.
 Owns: `.gitattributes` and any CLAUDE.md sentence stating the local test baseline. No other
 task in this wave touches those files.
 
-- [ ] `.gitattributes` normalises text files to LF so a fresh Windows checkout matches the
+**Closed by the P6-W25 gate, 2026-09-06** (commit `713801d`), done by the orchestrator between
+waves rather than inside P8-W5: renormalising a whole tree while agents edit it would give them
+a moving target. `git add --renormalize .` staged nothing but `.gitattributes` itself, which is
+the proof that no committed blob changed; a blob-hash diff of all 2431 tracked files before and
+after is empty. The local suite went 390/394 — **394/394**, and `oxfmt --check .` went from
+~2361-of-2369 red — **clean**.
+
+- [x] `.gitattributes` normalises text files to LF so a fresh Windows checkout matches the
       committed blobs, and the four named tests pass locally without editing any test
-- [ ] `oxfmt --check .` is clean on a fresh checkout, with the before/after file counts shown
-- [ ] Re-normalisation does not rewrite any committed blob: `git diff` after the change shows
+- [x] `oxfmt --check .` is clean on a fresh checkout, with the before/after file counts shown
+- [x] Re-normalisation does not rewrite any committed blob: `git diff` after the change shows
       only line-ending changes to working files, and `git hash-object` on a sample of ten
       files matches what `git cat-file` reports for HEAD
-- [ ] CLAUDE.md's baseline sentence states the real number and says which platform it is for
+- [x] CLAUDE.md's invariants list states the real baseline (394/394, formatter clean) and what
+      to check first if the formatter ever goes red all at once
 
 #### T193 — Bind the collision test to the shipped regex it claims to be about
 

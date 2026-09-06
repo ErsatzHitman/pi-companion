@@ -76,6 +76,15 @@ These hold everywhere in the codebase, not just for a single task:
   by the owner on 2026-09-06 (T190) after the repository loss showed that "add no git remote"
   left zero recovery path. Add no other remote, and never one pointing at Paseo.
 - The repository is AGPL-3.0-or-later from its first commit.
+- Every committed blob is LF, and `.gitattributes` (`* text=auto eol=lf`, T192) keeps working
+  copies LF on every platform. Before it existed, a Windows checkout with `core.autocrlf=true`
+  materialised CRLF and four committed `scripts/ci` tests that read the real
+  `packaging/docker/Dockerfile` and `packaging/nix/flake.nix` through `\n`-anchored regexes
+  failed locally while passing on CI, and `oxfmt --check .` reported ~2361 of 2369 files as
+  misformatted. Three waves burned verifier time re-proving that noise was noise. **The local
+  baseline is now `node --test scripts/ci/*.test.mjs` → 394/394 and `oxfmt --check .` → clean;
+  a failure in either is real.** If you ever see the whole formatter go red at once, check
+  `.gitattributes` is still present before you believe anything else.
 
 ## Working locally
 
