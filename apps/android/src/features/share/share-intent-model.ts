@@ -29,6 +29,8 @@
 
 import { security } from "@picompanion/frontend-core";
 
+import acceptedFileMimeTypesJson from "./accepted-file-mime-types.json";
+
 /** The only two Android actions a share intent can arrive as. `SEND_MULTIPLE` is refused — see `"unsupported-action"`. */
 export type ShareIntentAction = "SEND" | "SEND_MULTIPLE" | (string & {});
 
@@ -51,17 +53,22 @@ export interface RawShareIntent {
   file?: RawShareIntentFile;
 }
 
-/** File MIME types this app accepts from a share intent — the allowlist. */
-export const ACCEPTED_FILE_MIME_TYPES: readonly string[] = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-  "text/markdown",
-  "text/csv",
-  "application/json",
-];
+/**
+ * File MIME types this app accepts from a share intent — the allowlist.
+ *
+ * Sourced from `accepted-file-mime-types.json` (T201), the single source
+ * of truth this list and `app.config.ts`'s `android.intentFilters` both
+ * derive from. That split exists because `app.config.ts` cannot import
+ * ANY relative TypeScript module — `@expo/require-utils`'s loader
+ * transpiles only the entry config file, so a nested `require` of a
+ * `.ts` file resolves against the real filesystem and fails
+ * (`share-intent-config.ts`'s doc comment has the full story) — but a
+ * `.json` file needs no transform, so both this module and
+ * `app.config.ts` can `import`/`require` it directly without either one
+ * duplicating the literal list. See `share-intent-config.ts` for how
+ * `app.config.ts`'s filters are kept from drifting off this same list.
+ */
+export const ACCEPTED_FILE_MIME_TYPES: readonly string[] = acceptedFileMimeTypesJson;
 
 /**
  * Per-file size bound for a shared file, matching

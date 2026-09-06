@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ACCEPTED_FILE_MIME_TYPES } from "./share-intent-model";
 import { buildShareIntentFilters } from "./share-intent-config";
+import type { ShareIntentFilter } from "./share-intent-config";
 
 describe("buildShareIntentFilters", () => {
   it("declares a text/plain SEND filter", () => {
@@ -45,6 +46,43 @@ describe("buildShareIntentFilters", () => {
         });
         expect(result.accepted).toBe(true);
       }
+    }
+  });
+});
+
+/**
+ * T201: `app.config.ts` can no longer call `buildShareIntentFilters()`
+ * directly (`@expo/require-utils`'s loader has no `.ts` handler for a
+ * nested `require`, so a two-hop-deep relative TypeScript import from
+ * `app.config.ts` fails — see `share-intent-config.ts`'s doc comment).
+ * `app.config.ts` now builds its `android.intentFilters` inline from
+ * `accepted-file-mime-types.json` instead, so the assertions above (on
+ * `buildShareIntentFilters()` alone) no longer say anything about what
+ * the real Expo config declares. These assertions import `app.config.ts`
+ * itself and check its ACTUAL `android.intentFilters` output — the
+ * config `expo prebuild`/`expo config` really reads.
+ */
+describe("app.config.ts's real android.intentFilters", () => {
+  it("equals buildShareIntentFilters()'s output — proves the inline build in app.config.ts has not drifted from this feature's reference derivation", async () => {
+    const { default: config } = await import("../../../app.config");
+    expect(config.android?.intentFilters).toEqual(buildShareIntentFilters());
+  });
+
+  it("names every entry of ACCEPTED_FILE_MIME_TYPES plus text/plain, and nothing else", async () => {
+    const { default: config } = await import("../../../app.config");
+    const filters = (config.android?.intentFilters ?? []) as unknown as ShareIntentFilter[];
+    const declaredMimeTypes = filters.flatMap((filter) =>
+      filter.data.map((entry) => entry.mimeType),
+    );
+    expect(declaredMimeTypes.sort()).toEqual(["text/plain", ...ACCEPTED_FILE_MIME_TYPES].sort());
+  });
+
+  it("every filter is a plain SEND filter — never SEND_MULTIPLE", async () => {
+    const { default: config } = await import("../../../app.config");
+    const filters = (config.android?.intentFilters ?? []) as unknown as ShareIntentFilter[];
+    expect(filters.length).toBeGreaterThan(0);
+    for (const filter of filters) {
+      expect(filter.action).toBe("SEND");
     }
   });
 });

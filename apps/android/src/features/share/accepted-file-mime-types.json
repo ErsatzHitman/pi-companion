@@ -1,0 +1,10 @@
+[
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+  "text/markdown",
+  "text/csv",
+  "application/json"
+]
