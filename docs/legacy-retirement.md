@@ -154,19 +154,24 @@ empty before and after every command below).
 
 **The Result column is a dated snapshot, not a live expectation.** Every figure
 below was re-measured by the P8-W10 merge gate and orchestrator at `56122cf`
-on 2026-09-06, replacing T43B2a's original measurements, which had drifted on
-four of five rows and told a reader that an 18th typecheck error was a
-regression when it is the baseline. Counts of files and tests move with every
-wave; when a figure below disagrees with your tree, re-measure and update it
-with the SHA you measured at, rather than treating the difference as a defect.
+on 2026-09-06, replacing T43B2a's original measurements, which had drifted and
+once told a reader that an 18th typecheck error was a regression when it is
+the baseline. T212 dropped this table's earlier counts of files scanned and
+tests run — they moved every wave and carried no information the exit code
+and the figures beside them did not, the same distinction `CLAUDE.md`'s
+paragraph on the local test-suite baseline draws for
+`scripts/ci/*.test.mjs`. Every figure that remains below is one whose change
+would mean something is wrong: if a figure disagrees with your tree, that
+disagreement is itself the finding — investigate it, rather than re-measuring
+and overwriting the table.
 
 | Gate                                                                                                                                                 | Command                                              | Result                                                                                                                                                                                                                               |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Import-graph orphan ceiling (this repository's knip replacement — see `CLAUDE.md` "Do not trust knip", and `scripts/ci/orphan-modules.mjs`'s header) | `node scripts/ci/run-orphan-modules.mjs`             | `26 orphan module(s) (ceiling 26)` — exit 0                                                                                                                                                                                          |
 | Typecheck                                                                                                                                            | `npm run typecheck --workspaces --if-present`        | Exit 2 from exactly **18** `TS2307: Cannot find module 'expo-router'` errors under `apps/android`, and nothing else — this is the documented, owner-blocked `expo-router` gap (T116: declared but never installed), not a new defect |
-| Format                                                                                                                                               | `npm run format:check` (root `oxfmt 0.46.0`, pinned) | `All matched files use the correct format.` — 2387 files, exit 0                                                                                                                                                                     |
-| Lint                                                                                                                                                 | `npm run lint`                                       | `Found 8 warnings and 0 errors.` — 2213 files, exit 0                                                                                                                                                                                |
-| Targeted CI-guard unit tests                                                                                                                         | `node --test scripts/ci/*.test.mjs`                  | `# tests 424` / `# pass 424` / `# fail 0` — exit 0, matching `CLAUDE.md`'s baseline                                                                                                                                                  |
+| Format                                                                                                                                               | `npm run format:check` (root `oxfmt 0.46.0`, pinned) | `All matched files use the correct format.` — exit 0                                                                                                                                                                                 |
+| Lint                                                                                                                                                 | `npm run lint`                                       | `Found 8 warnings and 0 errors.` — exit 0                                                                                                                                                                                            |
+| Targeted CI-guard unit tests                                                                                                                         | `node --test scripts/ci/*.test.mjs`                  | `# fail 0` — exit 0, matching `CLAUDE.md`'s baseline                                                                                                                                                                                 |
 
 **Why `npx knip` itself is not one of these gates, and not wired into CI:**
 run directly, `npx knip` exits **1** with ~2600 lines of output dominated by
