@@ -1008,11 +1008,22 @@ jobs:
   # distinction is the entire point of this guard) and has no reasoned entry
   # in that module's `ALLOWLISTED_UNWIRED_RUN_GUARDS`.
   #
+  # T211 widened this guard with two further failure modes, both about the
+  # allowlist itself going stale rather than about an unwired runner: an
+  # entry naming a runner filename that no longer exists on disk (`kind:
+  # "stale-missing-runner"`), and an entry naming a runner some workflow's
+  # `run:` content now genuinely invokes (`kind: "stale-wired"`) — see
+  # scripts/ci/guard-run-guard-wiring.mjs's own header ("T211") for why
+  # these are a separate violation class, not the unwired one under a
+  # different name. `run-guard-run-guard-wiring.mjs` reports the first
+  # failure mode as `UNWIRED RUNNER` and both stale kinds as `STALE
+  # ALLOWLIST ENTRY`.
+  #
   # Unconditional, alongside guard-legacy-paths et al. above — this job's
   # own `run:` line, in this exact workflow file, is also the neatest
   # available proof that the guard it runs actually works.
   guard-run-guard-wiring:
-    name: guard / every run-guard-*.mjs is wired, or allowlisted
+    name: guard / every run-guard-*.mjs is wired, allowlisted, and the allowlist is not stale
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -1021,5 +1032,5 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Fail when a run-guard-*.mjs runner is referenced by no workflow's real run step and is not allowlisted
+      - name: Fail on an unwired run-guard runner, or a stale allowlist entry (missing runner or now-wired)
         run: node scripts/ci/run-guard-run-guard-wiring.mjs
