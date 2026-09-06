@@ -225,10 +225,7 @@ test("isScannedPath: only .ts/.tsx under apps/android/src or packages/frontend-c
   assert.equal(isScannedPath("packages/frontend-core/src/offline/legacy-importer.ts"), true);
   assert.equal(isScannedPath("apps/android/src/platform/offline/legacy-importer.tsx"), true);
 
-  assert.equal(
-    isScannedPath("apps/android/src/platform/offline/versioned-import.test.ts"),
-    false,
-  );
+  assert.equal(isScannedPath("apps/android/src/platform/offline/versioned-import.test.ts"), false);
   assert.equal(isScannedPath("apps/web/src/platform/offline/legacy-importer.ts"), false);
   assert.equal(isScannedPath("packages/client/src/legacy-importer.ts"), false);
   assert.equal(isScannedPath("docs/frontend-data-migration.md"), false);
@@ -274,7 +271,10 @@ test("T206 mutation proof, reproduced inline: the same real reader shape the P8-
 
   const violations = findLegacySchemaReaderViolations(files);
   assert.equal(violations.length, 1);
-  assert.equal(violations[0].path, "apps/android/src/platform/offline/hypothetical-legacy-importer.ts");
+  assert.equal(
+    violations[0].path,
+    "apps/android/src/platform/offline/hypothetical-legacy-importer.ts",
+  );
   assert.deepEqual(violations[0].fields.sort(), ["drafts", "hosts"]);
 });
 
