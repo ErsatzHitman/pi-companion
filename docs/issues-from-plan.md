@@ -422,6 +422,8 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T204   | Make the local Expo config plugin resolvable on CI, not only on the workstation | phase-8   | android          | P8-W7  | T201                                                                  |
 | T205   | Type-check metro.config.js and babel.config.js, or say in writing why not       | phase-8   | android          | P8-W9  | T204                                                                  |
 | T206   | Enforce the "no legacy schema reader" prohibition with a check, not a grep      | phase-8   | ci               | P8-W9  | T42B2                                                                 |
+| T207   | Make the Android flows launchable on the packaged package id, and guard it      | phase-8   | android/tooling  | P8-W11 | T43B2b                                                                |
+| T208   | Owner-gated: configure EXPO_TOKEN and confirm the emulator action boots here    | phase-8   | ci               | owner  | T207                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -607,7 +609,10 @@ the task details always agree.
 | P8-W9  | T205, T206 (both filed by the P8-W7 gate; disjoint)                      | 2     |
 | P8-W10 | T43B2b (orphaned from this table until now; its row said P8-W6, a wave   | 1     |
 |        | that ran without it. Nothing else is runnable to pair it with: T59 and   |       |
-|        | T42A1/T42A2 are owner-blocked, and every P9 task is behind it.)          |       |
+|        | T42A1/T42A2 are owner-blocked, and every P9 task is behind it.) Landed;  |       |
+|        | the gate found the Android half cannot pass and filed T207.              |       |
+| P8-W11 | T207 (filed by the P8-W10 gate: `packaged-app-smoke` cannot pass as      | 1     |
+|        | written, and nothing detects that)                                       |       |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7304,6 +7309,66 @@ job.
       envelope shape, nor on the test that proves its absence
 - [ ] The doc comment stops distinguishing "enforced" from "grepped", because the guard
       makes both halves enforced
+
+#### T207 — Make the Android flows launchable on the packaged package id, and guard the pairing
+
+`labels: phase-8, area: android/tooling` · `wave: P8-W11` · `depends-on: T43B2b`
+
+**T43B2b's `packaged-app-smoke` job cannot pass as written, and no check in this repository
+says so.** The job installs `sh.picompanion` — `apps/android/eas.json`'s `production-apk`
+profile sets no `APP_VARIANT`, so `app.config.ts`'s package expression resolves to the release
+id — and then runs a flow whose first line is a literal `appId: sh.picompanion.debug`, which
+that job never installs. All fifteen flow files under `apps/android/maestro/` are pinned the
+same way. `apps/android/e2e/harness/run-plan.ts` puts only the `DAEMON_*` variables in
+Maestro's environment, and Maestro offers no CLI flag that replaces a literal `appId`.
+
+The P8-W10 merge gate proved nothing discriminates: it rewrote `smoke.yaml`'s first line to
+`appId: sh.picompanion`, the id the new job actually needs, and both `node --test
+scripts/ci/*.test.mjs` (424/424) and `apps/android`'s `vitest run e2e` (343/343) stayed green.
+Every `sh.picompanion.debug` occurrence in test code is a fixture the test writes itself, never
+the real flow file, so no assertion is pinned to the shipped pairing.
+
+Owns: `apps/android/maestro/*.yaml`, `apps/android/e2e/harness/run-plan.ts`,
+`.github/workflows/android-maestro-e2e.yml`'s build steps, and the new guard under
+`scripts/ci/`. Fold in the P8-W10 gate's F4 while here: neither Android job builds
+`@picompanion/cli`, whose `bin/paseo` imports `../dist/index.js`, and `run-flow.ts` inspects
+only the spawn `error` event, so a `MODULE_NOT_FOUND` daemon is silently tolerated. Benign for
+`smoke` (no daemon dependency, which is why it was chosen) and latent for the ten flows.
+
+No device is needed for any of this — the guard is unit-testable and the wiring is static.
+
+- [ ] Every flow's `appId` is parameterized, with `run-plan.ts` supplying a default that
+      leaves `maestro-e2e` behaviorally unchanged, and `packaged-app-smoke` supplying the
+      release id
+- [ ] A `scripts/ci` guard reads the REAL `apps/android/maestro/*.yaml`, `eas.json` and
+      `app.config.ts` and fails when a workflow's profile resolves to a package no flow it
+      runs can launch — proven by MUTATION: the P8-W10 gate's edit must turn it red
+- [ ] Both Android jobs build `@picompanion/cli` and `@picompanion/server`, and `run-flow.ts`
+      fails on a non-zero daemon exit rather than only on the spawn `error` event
+- [ ] The three prose sites the P8-W10 gate marked as intent (`android-maestro-e2e.yml`'s
+      header and run step, `apps/android/maestro/README.md`) are rewritten to describe what
+      the tree then does, with the "cannot pass yet" blocks removed
+
+#### T208 — Owner-gated: configure `EXPO_TOKEN` and confirm the emulator action boots here
+
+`labels: phase-8, area: ci` · `wave: owner-blocked` · `depends-on: T207`
+
+Same shape as T59's VPS gate: this cannot be cleared by an agent. Add the `EXPO_TOKEN`
+repository secret from an Expo account with EAS build access, dispatch
+`android-maestro-e2e.yml`, and read whether KVM is available to
+`reactivecircus/android-emulator-runner` on this repository's `ubuntu-latest` runners. Both
+Android jobs dry-run with a logged notice until then, and neither has ever executed
+end-to-end.
+
+Expect on the first real run: EAS queue plus build 15–30 min for `production-apk`, emulator
+cold boot 5–8 min, `smoke.yaml` under a minute — call it 25–40 min for `packaged-app-smoke`,
+and roughly that again per `maestro-e2e` shard in parallel.
+
+**Must land after T207**, or the first real run burns that wall time rediscovering the appId
+mismatch T207 exists to fix.
+
+- [ ] `EXPO_TOKEN` is configured, or a written decision records that it will not be
+- [ ] A real dispatched run is read, and its conclusion and run id are recorded here
 
 #### T32A1 — Build the Android connect form
 

@@ -28,8 +28,8 @@
  * spec in this suite drives (`connect.smoke.spec.ts` and everything
  * built on `fixtures/test.ts`'s `daemonConnection` fixture). Merging
  * the two origins would require rewriting those specs' expectations,
- * which is out of T43B2b's scope ("not rewriting the suites
- * themselves"); see that task's report for the full analysis. What
+ * which is out of T43B2b's scope — that task owns the CI job wiring
+ * for these two suites, not the specs those jobs run. What
  * changed here — serving the actual packaged bundle contents instead of
  * a fresh, separately-built copy — is the improvement available without
  * that rewrite.

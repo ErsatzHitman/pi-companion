@@ -82,7 +82,7 @@ These hold everywhere in the codebase, not just for a single task:
   `packaging/docker/Dockerfile` and `packaging/nix/flake.nix` through `\n`-anchored regexes
   failed locally while passing on CI, and `oxfmt --check .` reported ~2361 of 2369 files as
   misformatted. Three waves burned verifier time re-proving that noise was noise. **The local
-  baseline is now `node --test scripts/ci/*.test.mjs` → 394/394 and `oxfmt --check .` → clean;
+  baseline is now `node --test scripts/ci/*.test.mjs` → 424/424 and `oxfmt --check .` → clean;
   a failure in either is real.** If you ever see the whole formatter go red at once, check
   `.gitattributes` is still present before you believe anything else.
 

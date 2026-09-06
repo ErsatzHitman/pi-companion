@@ -49,6 +49,22 @@ name: Android Maestro E2E
 #     on the PACKAGED build (`sh.picompanion`, EAS `production-apk`
 #     profile, `apps/android/eas.json` -- the same profile
 #     `android-apk-release.yml` and plan.md §15.3 use for a real release)?
+#
+# BLOCKED, and NOT only by the missing secret disclosed further down
+# (P8-W10 merge gate): `packaged-app-smoke` cannot pass as written even
+# with a valid `EXPO_TOKEN` and an emulator that boots perfectly. It
+# installs `sh.picompanion` -- the `production-apk` profile sets no
+# `APP_VARIANT`, so `apps/android/app.config.ts`'s package expression
+# resolves to the release id -- and then runs a flow whose first line is
+# a literal `appId: sh.picompanion.debug`, a package this job never
+# installs. `apps/android/e2e/harness/run-plan.ts` puts only the
+# `DAEMON_*` variables in Maestro's environment, and Maestro has no CLI
+# flag that replaces a literal `appId`, so nothing at run time can
+# reconcile the two. T207 parameterizes every flow's `appId` and adds
+# the guard that ties a workflow's EAS profile to the packages its
+# flows can actually launch. Until T207 lands, every "runs `smoke.yaml`
+# against the packaged build" sentence in this file states intent, not
+# behavior.
 # It deliberately runs only `smoke.yaml` -- `apps/android/e2e/harness/
 # shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` already excludes `smoke`
 # from the Phase 5 ten-flow set for exactly this reason: it is the one
@@ -336,7 +352,10 @@ jobs:
 
       # Only `smoke.yaml` -- see this file's header comment for why the
       # packaging exit gate's Android half is scoped to that one flow
-      # rather than the Phase 5 ten-flow set.
+      # rather than the Phase 5 ten-flow set. That header also records
+      # why this step cannot succeed until T207: the flow it runs is
+      # pinned to `sh.picompanion.debug` and the APK installed on the
+      # line above is `sh.picompanion`.
       - name: Boot emulator, install the packaged APK, and run the smoke flow
         if: steps.eas-secrets.outputs.configured == 'true'
         uses: reactivecircus/android-emulator-runner@v2

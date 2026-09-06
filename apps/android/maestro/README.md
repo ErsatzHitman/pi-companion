@@ -205,6 +205,15 @@ on the real PACKAGED build" — `apps/android/eas.json`'s `production-apk` profi
 set because it has no daemon dependency and no paired-host precondition, making it the right
 size for "does the packaged artifact boot" rather than "do all ten scenarios work."
 
+**This job cannot pass yet, and the blocker is a wiring defect rather than the missing
+secret** (P8-W10 merge gate). It installs `sh.picompanion`, then runs a flow whose first line
+is a literal `appId: sh.picompanion.debug` — a package the job never installs.
+`../e2e/harness/run-plan.ts` puts only the `DAEMON_*` variables in Maestro's environment, and
+Maestro has no flag that overrides a literal `appId`, so no run-time value can reconcile them.
+T207 parameterizes every flow's `appId` and adds a guard that fails when a workflow's EAS
+profile resolves to a package none of the flows it runs can launch. Read the paragraph above
+as intent until T207 lands.
+
 Same disclosure as the Phase 5 gate above: this job has never executed end-to-end either (no
 `EXPO_TOKEN`, no verified emulator boot in this repository), dry-runs with a logged notice
 until `EXPO_TOKEN` is configured, and stays `workflow_dispatch` for the identical reason.
