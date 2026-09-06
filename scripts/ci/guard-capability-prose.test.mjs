@@ -2798,3 +2798,176 @@ test("T207: on the real, committed tree, run-guard-capability-prose.mjs's own de
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
+
+// T215: two forward-guard entries for the "stale allowlist entry" shape
+// T211 (`guard-run-guard-wiring.mjs`) and T213 (`guard-no-legacy-app-tree.mjs`)
+// each closed independently. Like T162's "transfer cancellation" entry,
+// there is no live denial site anywhere in scope today -- these tests prove
+// the entries CAN fire (fixture-level) and, separately, that the two real
+// declaring files' own historical narration of the pre-fix defect does not
+// accidentally satisfy either entry's `denyingPhrases` (measured against the
+// actual committed source, not assumed).
+
+test("T215: a live denying sentence about guard-run-guard-wiring is flagged once the capability is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-run-guard-wiring.mjs",
+      content:
+        "export function findUnwiredRunGuardViolations({ allowlist }) {\n" +
+        "  for (const [runner, allowlistReason] of Object.entries(allowlist)) {}\n" +
+        "}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-example-fixture.mjs",
+      content: "// guard-run-guard-wiring cannot report a stale allowlist entry.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "scripts/ci/guard-example-fixture.mjs");
+  assert.equal(
+    violations[0].capability,
+    "guard-run-guard-wiring detects stale allowlist entries (stale-missing-runner/stale-wired)",
+  );
+});
+
+test("T215: a live denying sentence about guard-no-legacy-app-tree is flagged once the capability is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-no-legacy-app-tree.mjs",
+      content: "export function findStaleAllowlistViolations(paths, files, allowlist) {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "guard-no-legacy-app-tree cannot report a stale allowlist entry.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "docs/some-other-doc.md");
+  assert.equal(
+    violations[0].capability,
+    "guard-no-legacy-app-tree detects stale allowlist entries (findStaleAllowlistViolations)",
+  );
+});
+
+test("T215: neither entry's methodNames token is satisfied by the OTHER guard's shipped file (they are not merged into one shipped-gate token)", () => {
+  const shippedFiles = [
+    {
+      // Only the run-guard-wiring shape is shipped here.
+      path: "scripts/ci/guard-run-guard-wiring.mjs",
+      content:
+        "export function findUnwiredRunGuardViolations({ allowlist }) {\n" +
+        "  for (const [runner, allowlistReason] of Object.entries(allowlist)) {}\n" +
+        "}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "guard-no-legacy-app-tree cannot report a stale allowlist entry.\n",
+    },
+  ];
+
+  // The findStaleAllowlistViolations capability is NOT shipped in this
+  // fixture set, so its denying phrase must not be reported even though a
+  // sentence naming it is present.
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T215: guard-run-guard-wiring.mjs's own real historical narration of the pre-T211 defect does not trip its own new entry", () => {
+  const real = readRepoFile("scripts/ci/guard-run-guard-wiring.mjs");
+  assert.match(real, /unreachable and\s*\n\/\/ silently\s+ignored, forever/);
+
+  const shippedFiles = [{ path: "scripts/ci/guard-run-guard-wiring.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-run-guard-wiring.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "guard-run-guard-wiring detects stale allowlist entries (stale-missing-runner/stale-wired)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T215: guard-no-legacy-app-tree.mjs's own real historical narration of the pre-T213 defect does not trip its own new entry", () => {
+  const real = readRepoFile("scripts/ci/guard-no-legacy-app-tree.mjs");
+  assert.match(real, /unreachable and silently\s*\n\/\/ ignored, forever/);
+
+  const shippedFiles = [{ path: "scripts/ci/guard-no-legacy-app-tree.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-no-legacy-app-tree.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "guard-no-legacy-app-tree detects stale allowlist entries (findStaleAllowlistViolations)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T215: docs/issues-from-plan.md's own T211/T213 specs (verbatim denying phrasing) are excluded from the denial scan, not marked", () => {
+  const ledger = readRepoFile("docs/issues-from-plan.md");
+  assert.match(ledger, /unreachable and silently ignored/);
+  assert.match(ledger, /cannot report a stale allowlist entry/);
+  assert.doesNotMatch(ledger, /CORRECTED[^.]*unreachable and silently ignored/i);
+
+  // The ledger is tracked and ends in .md, so it would be in scope under
+  // DOCS_PREFIX/DOCS_EXTENSIONS alone -- it is excluded by name.
+  assert.equal(isAppSourcePath("docs/issues-from-plan.md"), false);
+
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-run-guard-wiring.mjs",
+      content: readRepoFile("scripts/ci/guard-run-guard-wiring.mjs"),
+    },
+    {
+      path: "scripts/ci/guard-no-legacy-app-tree.mjs",
+      content: readRepoFile("scripts/ci/guard-no-legacy-app-tree.mjs"),
+    },
+  ];
+  const appFiles = [{ path: "docs/issues-from-plan.md", content: ledger }];
+
+  // findCapabilityDenialViolations itself does not know about isAppSourcePath
+  // -- passing the ledger in directly proves the phrases WOULD match if this
+  // file were ever included, which is exactly why run-guard-capability-
+  // prose.mjs's isAppSourcePath excludes it by name rather than this entry
+  // needing to mark every quotation with a HISTORICAL_QUOTE_MARKERS trigger.
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter((v) =>
+    v.capability.includes("detects stale allowlist entries"),
+  );
+  assert.ok(violations.length > 0);
+});
+
+test("T215: on the real, committed tree, both new entries are shipped and the full denial scan stays clean", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const relevant = [
+    "stale allowlist entries (stale-missing-runner",
+    "stale allowlist entries (findStaleAllowlistViolations",
+  ];
+  const shippedNames = CAPABILITIES.filter((c) =>
+    relevant.some((fragment) => c.name.includes(fragment)),
+  ).map((c) => c.name);
+  assert.equal(shippedNames.length, 2);
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});

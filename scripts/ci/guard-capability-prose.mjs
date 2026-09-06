@@ -224,6 +224,32 @@ const COMPACTION_FILES_MODIFIED_FIELD =
 // the 4m3-4m5s this entry's own numbers describe.
 const FIND_BUILD_ORDER_VIOLATIONS_MEMBER = /\bfunction\s+findBuildOrderViolations\s*\(/;
 
+// T215: T211 (`guard-run-guard-wiring.mjs`) added a dedicated walk over the
+// allowlist's OWN keys — `for (const [runner, allowlistReason] of
+// Object.entries(allowlist))` — to detect a stale entry independently of
+// the main per-runner loop. Unlike `findStaleAllowlistViolations` below,
+// T211 folded its stale-detection walk INTO the existing, pre-T211
+// `findUnwiredRunGuardViolations` rather than naming a new function, and
+// its two new violation kinds (`"stale-missing-runner"`, `"stale-wired"`)
+// are STRING LITERAL VALUES — `stripCommentsAndStrings` erases every string
+// literal's contents to `""` before any declaration check runs (T184's own
+// doc comment explains why: a denying SENTENCE could otherwise
+// self-certify as "shipped" by merely resembling a property value), so
+// neither kind name can be used as a `methodNames` token at all — matching
+// literal text that the guard's own stripping step deletes before this
+// entry ever sees it would make the entry permanently un-shippable, the
+// mirror image of T172's "token that outlives the capability" trap. This
+// `RegExp` instead anchors to the real, structural CODE shape T211 added —
+// the `Object.entries(allowlist)` walk itself — which survives comment-
+// and-string stripping because it is neither. Measured directly across
+// every tracked `packages/*/src`, `apps/*/src`, and `scripts/ci` file:
+// exactly one match, `guard-run-guard-wiring.mjs`'s real T211 loop (line
+// 319 as of this entry's authorship) — a second textual mention inside
+// that same file's own header comment is stripped before matching, so it
+// does not double-count and does not matter either way.
+const STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER =
+  /for\s*\(\s*const\s*\[\s*runner\s*,\s*allowlistReason\s*\]\s*of\s*Object\.entries\(\s*allowlist\s*\)\s*\)/;
+
 /** @type {Capability[]} */
 export const CAPABILITIES = [
   {
@@ -676,6 +702,100 @@ export const CAPABILITIES = [
       /the[\s#]+guard[\s#]+check(?:s|ed)?[\s#]+(?:that[\s#]+)?the[\s#]+build[\s#]+order[\s#]+matches\b/i,
       /this\s+packaging\s+path\s+cannot\s+silently\s+skip\s+the\s+T43A1\s+bundling\s+invariant/i,
       /(?:that\s+)?output\s+is\s+"?comment-free\s+by\s+construction,?\s+since\s+both\s+extractors\s+only\s+ever\s+collect\s+RUN\s+lines\s*\/\s*phase-string\s+bodies/i,
+    ],
+  },
+  {
+    // T215: T211 (`b5e8c7f`) gave `guard-run-guard-wiring.mjs` a dedicated
+    // check for a STALE `ALLOWLISTED_UNWIRED_RUN_GUARDS` entry — one naming
+    // a runner that no longer exists (`kind: "stale-missing-runner"`) or one
+    // a workflow now genuinely wires (`kind: "stale-wired"`) — closing the
+    // "check that cannot fail" shape CLAUDE.md's catalogue names: before
+    // T211, such an entry was consulted only from inside the per-runner
+    // loop, so it was read only when a matching, still-unwired runner
+    // existed, and a stale key just sat there forever.
+    //
+    // This is a FORWARD guard, the same shape as the "transfer
+    // cancellation" entry above (T162): no site anywhere in
+    // `apps/web/src`, `apps/android/src`, `scripts/ci`, `packaging/**`, or
+    // (outside the excluded ledger — see `DOCS_LEDGER_DENIAL_EXCLUSIONS`'s
+    // own doc comment in `run-guard-capability-prose.mjs`) `docs/**` denies
+    // this capability today; `grep`ing all five trees for the phrases below
+    // found nothing. `docs/issues-from-plan.md`'s own T211 and T213 specs
+    // narrate the pre-fix defect in exactly this wording ("unreachable and
+    // silently ignored", "cannot report a stale allowlist entry"), which is
+    // why this entry could look, at a glance, like it would turn the ledger
+    // red — it would not: T197 already excludes that one file from the
+    // denial scan by name, for the identical reason (a task ledger
+    // narrating a past defect in its own voice, without one of
+    // `HISTORICAL_QUOTE_MARKERS`' triggers). See CLAUDE.md's T124 section
+    // for the fuller decision record, including why the two REAL declaring
+    // files' own historical narration ("Two kinds of entry were therefore
+    // unreachable and silently ignored, forever") does not collide with the
+    // phrases below either — proven, not assumed: both files wrap that
+    // exact clause across a `//`-prefixed line break
+    // (`guard-run-guard-wiring.mjs`: "...unreachable and\n// silently
+    // ignored..."; `guard-no-legacy-app-tree.mjs`: "...unreachable and
+    // silently\n// ignored..."), and `flattenProse` only strips a JSDoc `*`
+    // gutter, never a `//` line-comment marker, so the flattened text keeps
+    // a literal `//` sitting inside the phrase and no naive substring match
+    // spans it. This entry's own phrases below are worded to avoid relying
+    // on that fact anyway, on purpose: a comment reflow is a plausible,
+    // meaning-preserving edit that could weld the historical text onto one
+    // line with no warning, and this entry must not depend on nobody ever
+    // doing that.
+    //
+    // `methodNames`: see `STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER`'s own doc
+    // comment above for why a `RegExp` anchored to the real code shape is
+    // required here rather than either kind string (both are string-literal
+    // VALUES, erased by `stripCommentsAndStrings` before any check runs) or
+    // the pre-existing `findUnwiredRunGuardViolations` name (real, but not
+    // uniquely T211's — that function existed, under that exact name,
+    // before T211 added the stale-entry walk to it). Not a group: this
+    // single member is already unique across every tracked shipped file
+    // (measured directly, see that constant's own comment), so there is no
+    // bare-name collision for an AND-group to guard against, unlike T168's
+    // `cancel` or T172's `summary`.
+    name: "guard-run-guard-wiring detects stale allowlist entries (stale-missing-runner/stale-wired)",
+    methodNames: [STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER],
+    denyingPhrases: [
+      /guard-run-guard-wiring(?:\.mjs)? (?:cannot|can'?t|does not) (?:report|detect|catch) a stale allowlist entry/i,
+      /an allowlist entry naming a (?:deleted|renamed|nonexistent|non-existent) run-guard runner (?:cannot be (?:flagged|detected|caught)|is never (?:re-?checked|revisited))/i,
+      /a runner (?:a workflow|that a workflow) now (?:genuinely )?wires can (?:still|also) (?:sit|remain) in the allowlist (?:unnoticed|undetected)/i,
+    ],
+  },
+  {
+    // T215: T213 (`f9b8877`) shipped the mirror-image fix for
+    // `guard-no-legacy-app-tree.mjs`'s `ALLOWLISTED_PATHS` — the same
+    // unreachable-stale-entry shape T211 closed one wave earlier, in a
+    // different guard. Unlike T211, T213 named a genuinely NEW, unique
+    // function for it: `findStaleAllowlistViolations`, declared in exactly
+    // one shipped file (`guard-no-legacy-app-tree.mjs`; its `.test.mjs`
+    // sibling is excluded from `shippedFiles` by construction) and found
+    // nowhere else across every tracked `packages/*/src`, `apps/*/src`, or
+    // `scripts/ci` file — a plain bare-string `methodNames` entry is
+    // therefore sufficient, the same shape as
+    // `findAppIdPackagePairingViolations` and `findLegacySchemaReaderViolations`
+    // above; no `RegExp` shape-anchor and no AND-group are needed for the
+    // reasons T169/T172 required them elsewhere (this name collides with
+    // nothing).
+    //
+    // Also a FORWARD guard — see the entry above for the shared reasoning
+    // (no live denial site outside the excluded ledger; the two real
+    // declaring files' own historical narration does not collide with
+    // these phrases, proven the same way). Kept as a SEPARATE entry from
+    // the one above rather than merged into one capability: they are two
+    // different guards, two different functions, shipped in two different
+    // commits, and their natural denying phrases name the guard they are
+    // about — collapsing them into one shipped-gate token would make an
+    // unrelated guard's fix "ship" this capability's phrase protection
+    // before its own guard actually had it, the same shape CLAUDE.md's "A
+    // shipped-gate token must disappear when the capability does" warns
+    // against one level up.
+    name: "guard-no-legacy-app-tree detects stale allowlist entries (findStaleAllowlistViolations)",
+    methodNames: ["findStaleAllowlistViolations"],
+    denyingPhrases: [
+      /guard-no-legacy-app-tree(?:\.mjs)? (?:cannot|can'?t|does not) (?:report|detect|catch) a stale allowlist entry/i,
+      /an? ALLOWLISTED_PATHS entry naming a (?:deleted|renamed|nonexistent|non-existent) (?:file|path) (?:cannot be (?:flagged|detected|caught)|goes unnoticed)/i,
     ],
   },
 ];

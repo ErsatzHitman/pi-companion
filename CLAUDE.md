@@ -288,3 +288,76 @@ backstop for it:
 `scripts/ci/guard-capability-prose.test.mjs` covers this with `node --test`, including a
 pair of tests proving the historical-quotation handling is real: the exact corrected
 prose passes, and deleting only the "CORRECTED" marker from that same sentence fails.
+
+### T215: does this guard's own "stale allowlist entry" fix belong in `CAPABILITIES`?
+
+T211 (`guard-run-guard-wiring.mjs`) and T213 (`guard-no-legacy-app-tree.mjs`) shipped the
+same capability CLASS one wave apart — a dedicated walk that reports an allowlist entry
+naming something that no longer exists or no longer needs the exemption, closing the
+"check that cannot fail" shape for their own allowlists — and neither task's `Owns:` line
+covered this file, so nothing was registered for either. **Decision: register both,
+as two separate entries, chosen deliberately as FORWARD guards (T162's shape) rather than
+phrase-for-phrase copies of `docs/issues-from-plan.md`'s T211/T213 specs.**
+
+**The `docs/` half of the worry in T215's own brief does not apply, and was checked, not
+assumed.** `run-guard-capability-prose.mjs`'s `isAppSourcePath` (read before writing a
+single phrase, per this file's own "prove the runner can see your case" rule) already
+excludes exactly one file from the denial scan by name:
+`DOCS_LEDGER_DENIAL_EXCLUSIONS = new Set(["docs/issues-from-plan.md"])`, added at T197 for
+the identical reason — the ledger narrates a past wave's already-fixed defect in its own
+voice, almost always without one of `HISTORICAL_QUOTE_MARKERS`' exact triggers immediately
+before the quotation. T211's and T213's spec prose — "unreachable and silently ignored",
+"cannot report a stale allowlist entry" — lives _only_ inside that one excluded file (and
+inside the two real guards' own doc comments, see below); nothing needed marking with
+`CORRECTED`/`this said`/etc. in `docs/issues-from-plan.md` to make the real guard exit 0,
+and doing so anyway would edit a frozen task spec's substance for no reason, which this
+task's own brief rules out.
+
+**The real risk was not the ledger — it was the two guards' own source.** Both
+`guard-run-guard-wiring.mjs` and `guard-no-legacy-app-tree.mjs` correctly narrate the
+pre-fix defect in past tense, in their own header comments, using almost the same wording
+("Two kinds of entry were therefore unreachable and silently ignored, forever") — legitimate
+history, the same shape `guard-capability-prose.mjs`'s own header narrates about itself,
+but _not_ marked with a `HISTORICAL_QUOTE_MARKERS` trigger, and neither file may be touched
+by this task (T215's `Owns:` line is `guard-capability-prose.mjs`, its test, and this
+paragraph — nothing else). A denying phrase built by lifting that exact wording would have
+tripped the guard against its own correct source on the first run, the identical shape
+T179 hit widening to `scripts/ci` for the first time (which is why
+`SELF_REFERENTIAL_DENIAL_EXCLUSIONS` exists) — except here there is no in-scope way to add
+a matching exclusion for someone else's file. **Measured, not assumed: both files happen to
+wrap that exact clause across a `//`-prefixed line break** ("...unreachable and\n// silently
+ignored..." / "...unreachable and silently\n// ignored..."), and `flattenProse` strips a
+JSDoc `*` gutter but never a `//` line-comment marker, so today's flattened text keeps a
+literal `//` sitting inside the phrase and a plain substring match cannot span it — proven
+directly (`node scripts/ci/run-guard-capability-prose.mjs` stays at exit 0 with the two new
+entries registered, and `guard-capability-prose.test.mjs`'s two "own real historical
+narration ... does not trip its own new entry" tests feed each file's actual committed
+content through `findCapabilityDenialViolations` and assert zero matches). This is a fact
+about today's line-wrapping, not a guarantee — a future comment reflow that welds the clause
+onto one line would silently create the exact collision this decision avoided, and nothing
+would notice until that guard's job went red for an unrelated-looking reason. **The two
+entries' `denyingPhrases` are worded to avoid depending on this at all**: neither phrase
+below is lifted verbatim from either file's historical narration, so a future reflow of
+that narration cannot trip them regardless of how the comment wraps.
+
+Both entries are single, non-group members (T168's group shape is not needed for either):
+`STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER` is a `RegExp` anchored to the real
+`for (const [runner, allowlistReason] of Object.entries(allowlist))` code T211 added,
+because the two things T211 actually named (`"stale-missing-runner"`, `"stale-wired"`) are
+string LITERAL VALUES that `stripCommentsAndStrings` erases before any check runs — using
+either as a bare `methodNames` token would make the entry permanently unable to ship, the
+mirror of T172's "token that outlives the capability" trap one level earlier. T213's
+`findStaleAllowlistViolations`, by contrast, is a real, newly-named, five-word function
+declared in exactly one shipped file — a plain bare-string member is enough, the same shape
+as `findBuildOrderViolations`/`findAppIdPackagePairingViolations` above. Kept as two entries
+rather than one merged capability: they are two different guards fixing the same shape
+independently, and a shared token would let either guard's fix "ship" the other's phrase
+protection before its own guard actually had it.
+
+Both were proven able to FIRE before being trusted: a denying sentence (using each entry's
+actual phrasing, never the historical wording above) appended to a real, in-scope tracked
+file (`docs/legacy-retirement.md`, restored afterward from a scratchpad copy — never
+`git checkout --`) made `run-guard-capability-prose.mjs` exit 1 naming the right capability
+each time, and restoring the file returned it to exit 0 with `git status --porcelain`
+showing no diff. `guard-capability-prose.test.mjs` pins the same two firing cases at the
+fixture level, plus the two real-file non-collision cases and a full-tree clean-scan case.
