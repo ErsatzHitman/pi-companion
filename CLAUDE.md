@@ -134,6 +134,21 @@ results or declaring the wave done:
      `git worktree add --detach <scratch-dir> <sha-or-range-tip>` and run every gate
      inside that worktree, or a fresh `git clone`. This is the strongest guarantee:
      nothing uncommitted can possibly be on the path.
+
+     **`<scratch-dir>` must be a literal, absolute path you have just printed — never
+     a bare shell variable (T191).** On 2026-09-06 the P6-W24 merge gate ran
+     `git worktree add --detach "$TMPDIR_X" b34c11c` with the variable unset. Git
+     received an empty path, failed with `fatal: The empty string is not a valid path`,
+     and on that failure recursively deleted the directory it had been "preparing" —
+     which resolved to the repository itself. `.git/` (every commit, `main`, nine
+     stashes), `.github/`, `.gitignore`, `.dockerignore`, `.oxfmtrc.json` and
+     `.oxlintrc.json` were destroyed; only a lock on `.pi/` stopped the enumeration
+     there. History was not recoverable (no remote, no clone, no bundle existed); the
+     tree was re-initialised at `2063eb2` and the deleted files were rebuilt from
+     session transcripts. If you script this step, `set -u` and
+     `[ -n "$DIR" ] || exit 1` before the `git` call, and `mkdir` the directory
+     first so a wrong value fails on `mkdir`, not inside git.
+
    - If testing in place (the working tree you have been editing) is unavoidable,
      `git stash --include-untracked` immediately before running any gate, run every
      gate, then `git stash pop` to restore afterward — never let a gate run see
@@ -141,6 +156,7 @@ results or declaring the wave done:
    - Never run `npm run test`, `vitest run`, `npm run typecheck`, or
      `npm run format:check` in place without first doing one of the above and
      confirming (see step 2) that the tree is clean.
+
 2. **Before reporting ANY gate result — pass or fail — run
    `node scripts/ci/run-guard-clean-working-tree.mjs` from the repository root** (see
    `scripts/ci/guard-clean-working-tree.mjs` for exactly what it checks and what

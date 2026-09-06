@@ -348,6 +348,10 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T185   | Route .dockerignore edits to a CI path filter                                   | phase-8   | tooling          | P6-W24 | T180                                                                  |
 | T186   | Correct the capability-prose CI job's scope prose                               | phase-6   | tooling          | P6-W24 | T179, T183                                                            |
 | T187   | Widen T183's denying phrases, or scope the two remaining sites out              | phase-6   | tooling          | P6-W25 | T184                                                                  |
+| T188   | Reconstruct .github/ after the repository loss (done at recovery)               | phase-8   | tooling          | P6-W24 | T185, T186                                                            |
+| T189   | Recreate the six deleted root dotfiles (done at recovery)                       | phase-8   | tooling          | P6-W24 | T180                                                                  |
+| T190   | Re-initialise version control and keep an off-volume bundle backup              | phase-8   | tooling          | P6-W24 | —                                                                     |
+| T191   | Guard the scratch-dir variable in the T93 worktree step                         | phase-8   | docs             | P6-W24 | —                                                                     |
 | T32S14 | Mount T66's reconnect path and the route-level fetchImpl seam                   | phase-5   | android          | P5-W20 | T66, T32S13                                                           |
 | T69    | Build the share target chooser so features/share/ has an entry point            | phase-5   | android          | P5-W21 | T36F, T32S14                                                          |
 | T70    | Mount the voice feature behind a real entry point or delete it                  | phase-5   | android          | P5-W21 | T36D, T32S14                                                          |
@@ -409,7 +413,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T43A1  | Cut daemon packaging over to the new web app                                    | phase-8   | tooling          | P8-W1  | T11, T18, T31D, T37F                                                  |
 | T43A2  | Verify the bundled UI serves correctly                                          | phase-8   | tooling          | P8-W2  | T43A1                                                                 |
 | T43A3  | Add Docker and Nix packaging paths                                              | phase-8   | tooling          | P8-W3  | T43A2                                                                 |
-| T43B1  | Re-verify provenance and notices                                                | phase-8   | docs             | P8-W4  | T05, T43A3                                                            |
+| T43B1  | Re-verify provenance and notices                                                | phase-8   | docs             | P6-W25 | T05, T43A3                                                            |
 | T43B2a | Retire the legacy install and pass static gates                                 | phase-8   | tooling          | P8-W5  | T43B1                                                                 |
 | T43B2b | Pass browser and device suites as packaging gate                                | phase-8   | tooling          | P8-W6  | T43B2a                                                                |
 | T59    | Deploy the daemon to a public VPS behind TLS                                    | phase-8   | tooling          | P8-W7  | T43A3, T43B2b                                                         |
@@ -485,110 +489,110 @@ Phase 0-4 rows record waves as they were run, up to 10 wide; a wider wave simply
 Phase 5-7 rows are capped at 4 and were generated from the task bodies, so the two tables and
 the task details always agree.
 
-| Wave   | Tasks                                                                | Width |
-| ------ | -------------------------------------------------------------------- | ----- |
-| P0-W1  | T01                                                                  | 1     |
-| P0-W2  | T02, T10                                                             | 2     |
-| P0-W3  | T03, T04                                                             | 2     |
-| P0-W4  | T05, T06A, T06B, T09A                                                | 4     |
-| P0-W5  | T06C, T07A, T09B                                                     | 3     |
-| P0-W6  | T07B                                                                 | 1     |
-| P0-W7  | T07C, T08A                                                           | 2     |
-| P0-W8  | T08B                                                                 | 1     |
-| P0-W9  | T11                                                                  | 1     |
-| P1-W1  | T12A                                                                 | 1     |
-| P1-W2  | T12B, T13, T14, T17A, T18                                            | 5     |
-| P1-W3  | T15, T16                                                             | 2     |
-| P1-W4  | T17B                                                                 | 1     |
-| P2-W1  | T19A, T20A, T21A, T21B, T22, T23                                     | 6     |
-| P2-W2  | T19B, T20B, T21C                                                     | 3     |
-| P2-W3  | T24                                                                  | 1     |
-| P3-W1  | T25A, T26A                                                           | 2     |
-| P3-W2  | T25B, T26B                                                           | 2     |
-| P35-W1 | T13B                                                                 | 1     |
-| P35-W2 | T25C, T26C                                                           | 2     |
-| P35-W3 | T13C                                                                 | 1     |
-| P4-W1  | T27S1, T27S2                                                         | 2     |
-| P4-W2  | T27A1, T28A1, T29A1, T29C1, T30A1                                    | 5     |
-| P4-W3  | T27A2, T27B1, T28A2, T28B1, T29A2, T29R1, T30A2, T30B1               | 8     |
-| P4-W4  | T27A3, T27B2, T28A3, T28B2, T29A3, T30A3, T30B2, T45A1, T46A1, T48A1 | 10    |
-| P4-W5  | T27A4, T27B3, T28A4, T28B3, T29B1, T30B3, T45A2, T46A2               | 8     |
-| P4-W6  | T27A5, T27B4, T28A5, T28B4, T29B2, T30B4, T45A3, T46A3               | 8     |
-| P4-W7  | T27A6, T27B5, T28A6, T28B5, T29B3, T30B5                             | 6     |
-| P4-W8  | T27B6, T28A7, T28B6, T29B4, T30B6                                    | 5     |
-| P4-W9  | T28B7, T29B5, T29R2, T52A1, T53A1                                    | 5     |
-| P4-W10 | T29C2, T31A, T52A2, T53A3, T53A4, T53A5                              | 6     |
-| P4-W11 | T31B1, T31B2, T31B3, T31B4, T31B5, T31B6, T48A2, T52A3               | 8     |
-| P4-W12 | T31C1, T31C2, T31C3, T31C4, T53A2, T54A1, T54A2, T54A3               | 8     |
-| P4-W13 | T31D                                                                 | 1     |
-| P4-W14 | T49, T57                                                             | 2     |
-| P4-W15 | T58                                                                  | 1     |
-| P4-W16 | T58B                                                                 | 1     |
-| P5-W1  | T32S1, T34A1                                                         | 2     |
-| P5-W2  | T32S1B, T34A2, T58C                                                  | 3     |
-| P5-W3  | T32S1C, T34A3                                                        | 2     |
-| P5-W4  | T32A1, T32B1, T33A1, T33B1                                           | 4     |
-| P5-W5  | T32A2, T32B2, T33A2B, T33B2                                          | 4     |
-| P5-W6  | T32A1B, T32B3, T32S2, T33A2, T33B3                                   | 5     |
-| P5-W7  | T32A3, T32B4, T32S3, T33A3, T34A4                                    | 5     |
-| P5-W8  | T32B5, T33B4, T34A5, T34B1, T35A1                                    | 5     |
-| P5-W9  | T32A4, T32P1, T32S4, T32S5, T33A4, T37A                              | 6     |
-| P5-W10 | T32S6, T33B5, T34B2, T35A2, T35B1, T37B                              | 6     |
-| P5-W11 | T32S7, T32A5, T32B6, T34A6, T34B3, T60A, T60B                        | 7     |
-| P5-W12 | T32S8, T33A5, T33B6, T35A3, T35B2                                    | 5     |
-| P5-W13 | T32S9, T32A6, T33A6, T33B7, T34B4, T37C                              | 6     |
-| P5-W14 | T32S10, T35A4, T35B3, T36A, T36C                                     | 5     |
-| P5-W15 | T32C1, T32P2, T36B, T36D, T37D, T60D                                 | 6     |
-| P5-W16 | T32S11, T36E, T37E1, T37E2, T57B, T60C, T61                          | 7     |
-| P5-W17 | T32P3, T37E3, T37E4, T37E5, T60E, T60F, T62                          | 7     |
-| P5-W18 | T32A7, T32A8, T32S12, T36F, T60G, T61B, T63                          | 7     |
-| P5-W19 | T32S13, T64, T65, T66, T67                                           | 5     |
-| P5-W20 | T37E6, T37E7, T37E8, T37E9, T37E10, T68, T32S14                      | 7     |
-| P5-W21 | T37F, T69, T70, T71, T72, T74, T81                                   | 7     |
-| P5-W22 | T32S15, T73, T75, T77, T78, T79, T82                                 | 7     |
-| P5-W23 | T76, T80, T83, T84, T85, T86, T89                                    | 7     |
-| P5-W24 | T87, T88                                                             | 2     |
-| P6-W1  | T38A0, T40A1, T38A1a, T38B0a, T90, T92, T93                          | 7     |
-| P6-W2  | T38A2, T40A2, T38B0b, T47A1a, T96, T97, T98                          | 7     |
-| P6-W3  | T38A3, T40A3, T38A1b, T38B0c, T91, T103, T95                         | 7     |
-| P6-W4  | T38A4, T40A4, T47A2, T47A1b, T101, T105, T107                        | 7     |
-| P6-W5  | T38A5, T40B1, T104, T94, T102, T106, T109                            | 7     |
-| P6-W6  | T39A, T40B2, T38B1a, T110, T112, T115, T116                          | 7     |
-| P6-W7  | T39B, T38B1b, T111, T113, T114, T117, T118                           | 7     |
-| P6-W8  | T38B2, T39C, T119, T121, T122, T123, T127                            | 7     |
-| P6-W9  | T38B3, T120, T124, T125, T126, T128, T129                            | 7     |
-| P6-W10 | T130, T131, T132, T133, T134                                         | 5     |
-| P6-W11 | T135, T136, T137, T51A, T41A1a, T41B1                                | 6     |
-| P6-W12 | T138, T139, T140, T142, T143, T144                                   | 6     |
-| P6-W13 | T146, T147, T99, T100                                                | 4     |
-| P6-W14 | T148, T50, T51B, T41A1b, T41B2                                       | 5     |
-| P6-W15 | T150, T151, T152, T153, T41A2, T41B3                                 | 6     |
-| P6-W16 | T156, T157, T159, T154, T41A3                                        | 5     |
-| P6-W17 | T162, T163, T164, T41A4                                              | 4     |
-| P6-W18 | T165, T166, T168, T43A1                                              | 4     |
-| P6-W19 | T169, T171, T43A2                                                    | 3     |
-| P6-W20 | T172, T173, T43A3                                                    | 3     |
-| P6-W21 | T174, T176, T177                                                     | 3     |
-| P6-W22 | T175, T178, T179                                                     | 3     |
-| P6-W23 | T180, T181, T182, T183                                               | 4     |
-| P6-W24 | T184, T185, T186                                                     | 3     |
-| P6-W25 | T187                                                                 | 1     |
-| P8-W4  | T43B1                                                                | 1     |
-| P7-W1  | T42A1 (blocked: expo-notifications, expo-device)                     | 1     |
-| P7-W2  | T42A2 (blocked behind T42A1)                                         | 1     |
-| P7-W3  | (retired: T42A3 moved to P7-W4 to match its task row)                | 0     |
-| P7-W4  | T42A3 (blocked behind T42A1)                                         | 1     |
-| P7-W5  | T42B1 (blocked behind T42A1)                                         | 1     |
-| P7-W6  | T42B2 (blocked behind T42B1)                                         | 1     |
-| P8-W5  | T43B2a                                                               | 1     |
-| P8-W6  | T43B2b                                                               | 1     |
-| P8-W7  | T59                                                                  | 1     |
-| P9-W1  | T44A1                                                                | 1     |
-| P9-W2  | T44A2                                                                | 1     |
-| P9-W3  | T44A3                                                                | 1     |
-| P9-W4  | T44A4                                                                | 1     |
-| P9-W5  | T44B1                                                                | 1     |
-| P9-W6  | T44B2                                                                | 1     |
+| Wave   | Tasks                                                                    | Width |
+| ------ | ------------------------------------------------------------------------ | ----- |
+| P0-W1  | T01                                                                      | 1     |
+| P0-W2  | T02, T10                                                                 | 2     |
+| P0-W3  | T03, T04                                                                 | 2     |
+| P0-W4  | T05, T06A, T06B, T09A                                                    | 4     |
+| P0-W5  | T06C, T07A, T09B                                                         | 3     |
+| P0-W6  | T07B                                                                     | 1     |
+| P0-W7  | T07C, T08A                                                               | 2     |
+| P0-W8  | T08B                                                                     | 1     |
+| P0-W9  | T11                                                                      | 1     |
+| P1-W1  | T12A                                                                     | 1     |
+| P1-W2  | T12B, T13, T14, T17A, T18                                                | 5     |
+| P1-W3  | T15, T16                                                                 | 2     |
+| P1-W4  | T17B                                                                     | 1     |
+| P2-W1  | T19A, T20A, T21A, T21B, T22, T23                                         | 6     |
+| P2-W2  | T19B, T20B, T21C                                                         | 3     |
+| P2-W3  | T24                                                                      | 1     |
+| P3-W1  | T25A, T26A                                                               | 2     |
+| P3-W2  | T25B, T26B                                                               | 2     |
+| P35-W1 | T13B                                                                     | 1     |
+| P35-W2 | T25C, T26C                                                               | 2     |
+| P35-W3 | T13C                                                                     | 1     |
+| P4-W1  | T27S1, T27S2                                                             | 2     |
+| P4-W2  | T27A1, T28A1, T29A1, T29C1, T30A1                                        | 5     |
+| P4-W3  | T27A2, T27B1, T28A2, T28B1, T29A2, T29R1, T30A2, T30B1                   | 8     |
+| P4-W4  | T27A3, T27B2, T28A3, T28B2, T29A3, T30A3, T30B2, T45A1, T46A1, T48A1     | 10    |
+| P4-W5  | T27A4, T27B3, T28A4, T28B3, T29B1, T30B3, T45A2, T46A2                   | 8     |
+| P4-W6  | T27A5, T27B4, T28A5, T28B4, T29B2, T30B4, T45A3, T46A3                   | 8     |
+| P4-W7  | T27A6, T27B5, T28A6, T28B5, T29B3, T30B5                                 | 6     |
+| P4-W8  | T27B6, T28A7, T28B6, T29B4, T30B6                                        | 5     |
+| P4-W9  | T28B7, T29B5, T29R2, T52A1, T53A1                                        | 5     |
+| P4-W10 | T29C2, T31A, T52A2, T53A3, T53A4, T53A5                                  | 6     |
+| P4-W11 | T31B1, T31B2, T31B3, T31B4, T31B5, T31B6, T48A2, T52A3                   | 8     |
+| P4-W12 | T31C1, T31C2, T31C3, T31C4, T53A2, T54A1, T54A2, T54A3                   | 8     |
+| P4-W13 | T31D                                                                     | 1     |
+| P4-W14 | T49, T57                                                                 | 2     |
+| P4-W15 | T58                                                                      | 1     |
+| P4-W16 | T58B                                                                     | 1     |
+| P5-W1  | T32S1, T34A1                                                             | 2     |
+| P5-W2  | T32S1B, T34A2, T58C                                                      | 3     |
+| P5-W3  | T32S1C, T34A3                                                            | 2     |
+| P5-W4  | T32A1, T32B1, T33A1, T33B1                                               | 4     |
+| P5-W5  | T32A2, T32B2, T33A2B, T33B2                                              | 4     |
+| P5-W6  | T32A1B, T32B3, T32S2, T33A2, T33B3                                       | 5     |
+| P5-W7  | T32A3, T32B4, T32S3, T33A3, T34A4                                        | 5     |
+| P5-W8  | T32B5, T33B4, T34A5, T34B1, T35A1                                        | 5     |
+| P5-W9  | T32A4, T32P1, T32S4, T32S5, T33A4, T37A                                  | 6     |
+| P5-W10 | T32S6, T33B5, T34B2, T35A2, T35B1, T37B                                  | 6     |
+| P5-W11 | T32S7, T32A5, T32B6, T34A6, T34B3, T60A, T60B                            | 7     |
+| P5-W12 | T32S8, T33A5, T33B6, T35A3, T35B2                                        | 5     |
+| P5-W13 | T32S9, T32A6, T33A6, T33B7, T34B4, T37C                                  | 6     |
+| P5-W14 | T32S10, T35A4, T35B3, T36A, T36C                                         | 5     |
+| P5-W15 | T32C1, T32P2, T36B, T36D, T37D, T60D                                     | 6     |
+| P5-W16 | T32S11, T36E, T37E1, T37E2, T57B, T60C, T61                              | 7     |
+| P5-W17 | T32P3, T37E3, T37E4, T37E5, T60E, T60F, T62                              | 7     |
+| P5-W18 | T32A7, T32A8, T32S12, T36F, T60G, T61B, T63                              | 7     |
+| P5-W19 | T32S13, T64, T65, T66, T67                                               | 5     |
+| P5-W20 | T37E6, T37E7, T37E8, T37E9, T37E10, T68, T32S14                          | 7     |
+| P5-W21 | T37F, T69, T70, T71, T72, T74, T81                                       | 7     |
+| P5-W22 | T32S15, T73, T75, T77, T78, T79, T82                                     | 7     |
+| P5-W23 | T76, T80, T83, T84, T85, T86, T89                                        | 7     |
+| P5-W24 | T87, T88                                                                 | 2     |
+| P6-W1  | T38A0, T40A1, T38A1a, T38B0a, T90, T92, T93                              | 7     |
+| P6-W2  | T38A2, T40A2, T38B0b, T47A1a, T96, T97, T98                              | 7     |
+| P6-W3  | T38A3, T40A3, T38A1b, T38B0c, T91, T103, T95                             | 7     |
+| P6-W4  | T38A4, T40A4, T47A2, T47A1b, T101, T105, T107                            | 7     |
+| P6-W5  | T38A5, T40B1, T104, T94, T102, T106, T109                                | 7     |
+| P6-W6  | T39A, T40B2, T38B1a, T110, T112, T115, T116                              | 7     |
+| P6-W7  | T39B, T38B1b, T111, T113, T114, T117, T118                               | 7     |
+| P6-W8  | T38B2, T39C, T119, T121, T122, T123, T127                                | 7     |
+| P6-W9  | T38B3, T120, T124, T125, T126, T128, T129                                | 7     |
+| P6-W10 | T130, T131, T132, T133, T134                                             | 5     |
+| P6-W11 | T135, T136, T137, T51A, T41A1a, T41B1                                    | 6     |
+| P6-W12 | T138, T139, T140, T142, T143, T144                                       | 6     |
+| P6-W13 | T146, T147, T99, T100                                                    | 4     |
+| P6-W14 | T148, T50, T51B, T41A1b, T41B2                                           | 5     |
+| P6-W15 | T150, T151, T152, T153, T41A2, T41B3                                     | 6     |
+| P6-W16 | T156, T157, T159, T154, T41A3                                            | 5     |
+| P6-W17 | T162, T163, T164, T41A4                                                  | 4     |
+| P6-W18 | T165, T166, T168, T43A1                                                  | 4     |
+| P6-W19 | T169, T171, T43A2                                                        | 3     |
+| P6-W20 | T172, T173, T43A3                                                        | 3     |
+| P6-W21 | T174, T176, T177                                                         | 3     |
+| P6-W22 | T175, T178, T179                                                         | 3     |
+| P6-W23 | T180, T181, T182, T183                                                   | 4     |
+| P6-W24 | T184, T185, T186 (+ T188, T189, T190, T191 filed and closed at the gate) | 3     |
+| P6-W25 | T187, T43B1 (moved from P8-W4: independent files, one wave)              | 2     |
+| P8-W4  | (retired: T43B1 moved to P6-W25)                                         | 0     |
+| P7-W1  | T42A1 (blocked: expo-notifications, expo-device)                         | 1     |
+| P7-W2  | T42A2 (blocked behind T42A1)                                             | 1     |
+| P7-W3  | (retired: T42A3 moved to P7-W4 to match its task row)                    | 0     |
+| P7-W4  | T42A3 (blocked behind T42A1)                                             | 1     |
+| P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
+| P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
+| P8-W5  | T43B2a                                                                   | 1     |
+| P8-W6  | T43B2b                                                                   | 1     |
+| P8-W7  | T59                                                                      | 1     |
+| P9-W1  | T44A1                                                                    | 1     |
+| P9-W2  | T44A2                                                                    | 1     |
+| P9-W3  | T44A3                                                                    | 1     |
+| P9-W4  | T44A4                                                                    | 1     |
+| P9-W5  | T44B1                                                                    | 1     |
+| P9-W6  | T44B2                                                                    | 1     |
 
 ---
 
@@ -6620,6 +6624,61 @@ changes once the self-exclusion blindness is gone.
 - [ ] Either the phrases widened with a RED/GREEN proof, or a written decision not to
 - [ ] The P6-W23 qualification updated, its record kept
 
+#### T188 — Reconstruct `.github/` after the repository loss
+
+`labels: phase-8, area: tooling` · `wave: P6-W24` · `depends-on: T185, T186`
+
+**Closed at recovery, 2026-09-06.** The P6-W24 merge gate destroyed `.git/`, `.github/`,
+`.gitignore`, `.dockerignore`, `.oxfmtrc.json` and `.oxlintrc.json` with
+`git worktree add --detach "$UNSET" b34c11c` (see CLAUDE.md, T93 step 1, and T191). All
+three `.github/` files were rebuilt from the session transcripts: `workflows/ci.yml` from a
+full read at blob `1c24d23` plus the nine committed diffs that followed, replayed in order;
+`ci-paths.yml` from its pre-T185 read plus T185's diff; `workflows/android-apk-release.yml`
+(T17B) and `workflows/android-maestro-e2e.yml` (T57) from their last full dumps. The first
+two were checked against the blob ids the lost commits produced — `git hash-object`
+gives `2f25aa6` and `90e194f`, the same ids `git diff` printed for T186's and T185's commits.
+
+- [x] `ci.yml` at blob `2f25aa6`, `ci-paths.yml` at blob `90e194f`
+- [x] `node --test scripts/ci/*.test.mjs` 385/385 and `ci-routing.test.mjs` 11/11 on the restored tree
+- [x] `oxfmt --check .` clean
+
+#### T189 — Recreate the six deleted root dotfiles
+
+`labels: phase-8, area: tooling` · `wave: P6-W24` · `depends-on: T180`
+
+**Closed at recovery, 2026-09-06.** `.gitignore`, `.dockerignore`, `.oxfmtrc.json` and
+`.oxlintrc.json` restored from their last full reads (2026-09-05/06); no Edit or Write to any
+of them appears in a transcript after those reads. `guard-dockerignore-depth` exits 0 against
+the restored `.dockerignore`.
+
+- [x] The four files present at the repository root
+- [x] `node scripts/ci/run-guard-dockerignore-depth.mjs` exits 0
+
+#### T190 — Re-initialise version control and keep an off-volume bundle backup
+
+`labels: phase-8, area: tooling` · `wave: P6-W24`
+
+The "add no git remote" invariant left zero recovery path when `.git/` was deleted: no
+clone, worktree or bundle of this repository existed anywhere on the machine. The owner
+lifted that invariant on 2026-09-06 and named `https://github.com/ErsatzHitman/pi-companion.git`
+as the remote. The tree was re-initialised at `2063eb2` ("Recovered baseline"), the history
+before it is gone, and this ledger is now the only task-by-task record of it.
+
+- [x] `git init` at the surviving tree; baseline commit carries the incident record
+- [x] Remote `origin` added and `main` pushed
+- [x] `git bundle create` of `--all` written to a second volume after every wave (the gate does this)
+
+#### T191 — Guard the scratch-dir variable in the T93 worktree step
+
+`labels: phase-8, area: docs` · `wave: P6-W24`
+
+**Closed at recovery, 2026-09-06.** CLAUDE.md's T93 step 1 now requires `<scratch-dir>` to
+be a literal path that was just printed, never a bare variable, and shows the `set -u` /
+`[ -n ]` / `mkdir`-first pattern. The wave prompt's gate procedure carries the same rule.
+
+- [x] CLAUDE.md updated
+- [x] Wave prompt updated (P6-W25 onward)
+
 #### T32A1 — Build the Android connect form
 
 `labels: phase-5, area: android` · `wave: P5-W4` · `depends-on: T32S1C`
@@ -8661,7 +8720,7 @@ Owns: `packaging/`. No other task in this wave touches those files.
 
 #### T43B1 — Re-verify provenance and notices
 
-`labels: phase-8, area: docs` · `wave: P8-W4` · `depends-on: T05, T43A3`
+`labels: phase-8, area: docs` · `wave: P6-W25` · `depends-on: T05, T43A3`
 
 Re-verify provenance records and confirm no unrecorded reference code drifted in.
 
