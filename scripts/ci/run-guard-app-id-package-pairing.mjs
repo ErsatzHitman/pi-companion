@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 // CLI entry point for the appId/package pairing guard (T207). Run from
-// the repository root (CI runs it via
-// `node scripts/ci/run-guard-app-id-package-pairing.mjs`).
+// the repository root; CI runs it as the `guard-app-id-package-pairing`
+// job in `.github/workflows/ci.yml`.
+//
+// CORRECTED (P8-W11 gate): this said "CI runs it via ..." on the commit
+// that shipped it, when no workflow referenced this file at all — the
+// check reached CI only through `guard-app-id-package-pairing.test.mjs`'s
+// real-tree assertion inside the `changes` job's `node --test
+// scripts/ci/*.test.mjs` step. The job named above closes that gap; T209
+// adds the check that would have caught an unwired runner.
 // See scripts/ci/guard-app-id-package-pairing.mjs for the checked rule
 // and why it needs four real files, not three, to resolve correctly.
 
@@ -9,7 +16,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { extname } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { findAppIdPackagePairingViolations } from "./guard-app-id-package-pairing.mjs";
+import { collectAppIdPackagePairings } from "./guard-app-id-package-pairing.mjs";
 
 const WORKFLOW_PATH = ".github/workflows/android-maestro-e2e.yml";
 const EAS_JSON_PATH = "apps/android/eas.json";
@@ -40,7 +47,7 @@ export function main() {
   const runPlanContent = readFileSync(RUN_PLAN_PATH, "utf8");
   const flowFiles = readFlowFiles();
 
-  const violations = findAppIdPackagePairingViolations({
+  const pairings = collectAppIdPackagePairings({
     workflowContent,
     easJsonContent,
     appConfigContent,
@@ -48,11 +55,31 @@ export function main() {
     shardsJsonContent,
     runPlanContent,
   });
+  const violations = pairings.filter((pairing) => !pairing.ok);
+
+  // A guard that resolves nothing must not report success. Every early
+  // `continue` in the collector — an unparseable `app.config.ts` ternary,
+  // an unknown EAS profile, a job with no recognised flow — silently
+  // removes pairings, and the previous message counted FILES READ, which
+  // stays reassuringly at 15 while zero pairings are evaluated (P8-W11
+  // gate finding F2).
+  if (pairings.length === 0) {
+    console.error("guard-app-id-package-pairing: FAILED");
+    console.error(
+      `  Resolved ZERO job x flow pairings from ${flowFiles.length} flow file(s). This guard ` +
+        `checked nothing, so it cannot be passing. One of ${APP_CONFIG_PATH}'s package ` +
+        `ternary, ${EAS_JSON_PATH}'s profiles, or ${WORKFLOW_PATH}'s jobs no longer has the ` +
+        `shape this guard parses.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
 
   if (violations.length === 0) {
     console.log(
       `guard-app-id-package-pairing: OK — every ${WORKFLOW_PATH} job's resolved EAS package ` +
-        `matches the appId every flow it runs would launch (${flowFiles.length} flow file(s) checked).`,
+        `matches the appId every flow it runs would launch (${pairings.length} job x flow ` +
+        `pairing(s) evaluated across ${flowFiles.length} flow file(s)).`,
     );
     return;
   }

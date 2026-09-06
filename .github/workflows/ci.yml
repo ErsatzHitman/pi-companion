@@ -921,6 +921,32 @@ jobs:
       - name: Fail on a version===1-keyed hosts/drafts/attachments reader under apps/android/src or packages/frontend-core/src
         run: node scripts/ci/run-guard-no-legacy-schema-reader.mjs
 
+  # P8-W11 gate: T207 shipped `run-guard-app-id-package-pairing.mjs` and no
+  # workflow referenced it. Its own module header said "CI runs it via ...",
+  # which was false on that commit — the check reached CI only through
+  # `guard-app-id-package-pairing.test.mjs`'s real-tree assertion inside the
+  # `changes` job's unconditional `node --test scripts/ci/*.test.mjs` step.
+  # That is real protection, but not the protection the file claimed, and a
+  # test asserting "the real tree is clean" is a different contract from a
+  # guard job. This is the third unwired runner in this directory and nothing
+  # noticed any of them; T209 adds the check that would have.
+  #
+  # Unconditional, like the guards above it: the defect it catches is a
+  # workflow file disagreeing with a flow file, and either can change without
+  # touching a path filter's idea of "android".
+  guard-app-id-package-pairing:
+    name: guard / every Maestro job installs the package its flows launch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail when a workflow job's EAS profile resolves to a package no flow it runs can launch
+        run: node scripts/ci/run-guard-app-id-package-pairing.mjs
+
   # T126: unconditional guard, alongside guard-legacy-paths et al. above —
   # `vite build` reports a `node:` builtin reaching apps/web's bundle graph
   # as a "has been externalized for browser compatibility" **warning** and

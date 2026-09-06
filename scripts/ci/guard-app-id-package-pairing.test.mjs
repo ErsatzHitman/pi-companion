@@ -7,6 +7,7 @@ import {
   APP_ID_VARIABLE,
   extractDefaultAppId,
   extractFlowAppId,
+  collectAppIdPackagePairings,
   extractWorkflowJobs,
   findAppIdPackagePairingViolations,
   flattenShardFlowNames,
@@ -347,4 +348,85 @@ test("MUTATION PROOF: removing the real workflow's APP_ID=sh.picompanion overrid
   assert.equal(violations[0].job, "packaged-app-smoke");
   assert.equal(violations[0].launchedAppId, "sh.picompanion.debug");
   assert.equal(violations[0].resolvedPackage, "sh.picompanion");
+});
+
+// ---------------------------------------------------------------------------
+// P8-W11 gate. Two defects this guard shipped with, both now covered.
+// ---------------------------------------------------------------------------
+
+test("P8-W11 F2: the real tree evaluates a non-zero number of job x flow pairings", () => {
+  // The runner's success message used to count FILES READ, which stays at
+  // 15 even when every pairing has been skipped by an early `continue`.
+  // `collectAppIdPackagePairings` returns what was actually evaluated, so
+  // the runner can refuse to report OK on an empty check.
+  const pairings = collectAppIdPackagePairings(readRealInputs());
+
+  assert.ok(pairings.length > 0, "expected the real tree to yield at least one pairing");
+  assert.ok(pairings.every((pairing) => pairing.ok));
+  // Every violation is a pairing that failed, so the two views agree.
+  assert.equal(findAppIdPackagePairingViolations(readRealInputs()).length, 0);
+});
+
+test("P8-W11 F2: an equivalently-spelled package ternary yields ZERO pairings, which is why a zero count must not print OK", () => {
+  // `resolvePackageIds` matches one exact spelling. Reshaping it to a
+  // valid, semantically identical form makes it return null, every job's
+  // profile resolve to null, and every pairing be skipped — the guard then
+  // finds no violations while checking nothing. The runner treats an empty
+  // result as a hard failure precisely because of this; without that, the
+  // original T43B2b defect could be restored under this reshape and the
+  // guard would still print a reassuring OK.
+  const inputs = readRealInputs();
+  const reshaped = inputs.appConfigContent.replace(
+    'package: isDevelopmentClient ? "sh.picompanion.debug" : "sh.picompanion",',
+    'package: isDevelopmentClient === true ? "sh.picompanion.debug" : "sh.picompanion",',
+  );
+
+  assert.notEqual(reshaped, inputs.appConfigContent, "the reshape must actually change the source");
+  assert.equal(resolvePackageIds(reshaped), null);
+  assert.deepEqual(collectAppIdPackagePairings({ ...inputs, appConfigContent: reshaped }), []);
+});
+
+test("P8-W11 F3: a quoted APP_ID override is read, not treated as absent", () => {
+  // `APP_ID="sh.picompanion" npx tsx ...` is idiomatic shell and identical
+  // in meaning to the unquoted form. The original pattern could not match a
+  // quoted value, so the job fell back to the harness default and the guard
+  // reported a violation against a correct workflow.
+  const workflow = `
+jobs:
+  packaged-app-smoke:
+    steps:
+      - run: npx eas build --platform android --profile production-apk --non-interactive
+      - run: |
+          adb install -r "$apk"
+          APP_ID="sh.picompanion" npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+  const jobs = extractWorkflowJobs(workflow);
+
+  assert.equal(jobs[0].appIdOverride, "sh.picompanion");
+});
+
+test("P8-W11 F3: a single-quoted APP_ID override is read too", () => {
+  const workflow = `
+jobs:
+  packaged-app-smoke:
+    steps:
+      - run: npx eas build --platform android --profile production-apk --non-interactive
+      - run: |
+          APP_ID='sh.picompanion' npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+
+  assert.equal(extractWorkflowJobs(workflow)[0].appIdOverride, "sh.picompanion");
+});
+
+test("P8-W11 F3: an unquoted APP_ID override still works — the quote handling is additive", () => {
+  const workflow = `
+jobs:
+  packaged-app-smoke:
+    steps:
+      - run: npx eas build --platform android --profile production-apk --non-interactive
+      - run: |
+          APP_ID=sh.picompanion npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+
+  assert.equal(extractWorkflowJobs(workflow)[0].appIdOverride, "sh.picompanion");
 });

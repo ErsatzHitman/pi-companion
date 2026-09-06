@@ -269,7 +269,7 @@ repository, not in this document).
 - **The Android mobile app.** `apps/android` cannot yet ship a working
   build: `expo-router` is declared in `apps/android/package.json` but was
   never installed (T116, `npm install` for it is refused by this
-  environment's permission classifier) — the 17 `TS2307` typecheck errors
+  environment's permission classifier) — the 18 `TS2307` typecheck errors
   in §2.3's table are that gap surfacing at typecheck time, not a new
   regression. Until that is resolved, any daily mobile use still depends on
   the legacy install's Android app.

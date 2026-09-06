@@ -424,6 +424,8 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T206   | Enforce the "no legacy schema reader" prohibition with a check, not a grep      | phase-8   | ci               | P8-W9  | T42B2                                                                 |
 | T207   | Make the Android flows launchable on the packaged package id, and guard it      | phase-8   | android/tooling  | P8-W11 | T43B2b                                                                |
 | T208   | Owner-gated: configure EXPO_TOKEN and confirm the emulator action boots here    | phase-8   | ci               | owner  | T207                                                                  |
+| T209   | A guard-guard: every run-guard-\*.mjs is wired into a workflow, or allowlisted  | phase-8   | ci               | P8-W12 | T207                                                                  |
+| T210   | Fix legacy-retirement.md ordering: the undo must precede the cutover            | phase-8   | docs             | P8-W12 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -612,7 +614,9 @@ the task details always agree.
 |        | T42A1/T42A2 are owner-blocked, and every P9 task is behind it.) Landed;  |       |
 |        | the gate found the Android half cannot pass and filed T207.              |       |
 | P8-W11 | T207 (filed by the P8-W10 gate: `packaged-app-smoke` cannot pass as      | 1     |
-|        | written, and nothing detects that)                                       |       |
+|        | written, and nothing detects that). Landed; the gate wired the new       |       |
+|        | guard into CI, which T207 shipped unwired, and filed T209.               |       |
+| P8-W12 | T209, T210 (both filed by the P8-W11 gate; disjoint: ci vs docs)         | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7369,6 +7373,52 @@ mismatch T207 exists to fix.
 
 - [ ] `EXPO_TOKEN` is configured, or a written decision records that it will not be
 - [ ] A real dispatched run is read, and its conclusion and run id are recorded here
+
+#### T209 — A guard-guard: every `run-guard-*.mjs` is wired into a workflow, or allowlisted
+
+`labels: phase-8, area: ci` · `wave: P8-W12` · `depends-on: T207`
+
+**T207 shipped the third unwired guard runner in `scripts/ci/`, and nothing noticed any of
+them.** Its own module header said "CI runs it via
+`node scripts/ci/run-guard-app-id-package-pairing.mjs`" while no workflow referenced that file
+at all. The check did reach CI, through its test file's real-tree assertion inside the
+`changes` job's unconditional `node --test scripts/ci/*.test.mjs` step — real protection, but a
+different contract from a guard job, and not the one the file claimed. The P8-W11 gate added
+the missing job; this task adds the check that would have caught it.
+
+Build a guard that enumerates `scripts/ci/run-guard-*.mjs` and fails when one is referenced by
+no workflow under `.github/workflows/`. Two runners are legitimately unwired and belong on an
+explicit allowlist carrying the reason: `run-guard-clean-working-tree.mjs`, which `CLAUDE.md`
+documents as local-only because `actions/checkout` makes it exit 0 by construction, and
+`run-guard-server-test-typecheck-ceiling.mjs`, documented as red. An allowlist entry must
+require a reason string, so adding one is a visible decision rather than a silent skip.
+
+Owns: the new guard and its test under `scripts/ci/`, plus its job in
+`.github/workflows/ci.yml`.
+
+- [ ] The guard fails when a `run-guard-*.mjs` is referenced by no workflow, proven by
+      MUTATION: delete the `guard-app-id-package-pairing` job from `ci.yml` and show it goes red
+- [ ] A comment mentioning a runner does NOT count as wiring it — the P8-W11 gate found exactly
+      two such comments and they were the reason the gap read as covered. Cover this case with
+      a test
+- [ ] The allowlist requires a recorded reason, and the two known entries carry theirs
+- [ ] The guard is itself wired into `ci.yml`, which its own check will confirm
+
+#### T210 — Fix `docs/legacy-retirement.md`'s ordering: the undo must precede the cutover
+
+`labels: phase-8, area: docs` · `wave: P8-W12` · `depends-on: none`
+
+§7 (Undo) sits after §6 (Cutover), so a reader following the document in order performs the
+one-way step before reading the way back. The undo's content is concrete and correct — it names
+both daemons, the port, and "do nothing to `$PASEO_HOME`" — this is purely an ordering defect,
+found by the P8-W11 merge gate against base state, not introduced by any recent wave.
+
+While here, re-read §5 against §2.3: the P8-W11 gate corrected §5's "17 `TS2307`" to 18 to
+match §2.3's table and the measured tree, but the pair drifted apart once and may again. Decide
+whether §5 should quote a number at all, or simply point at §2.3.
+
+- [ ] The undo section precedes the cutover section
+- [ ] No section states a gate figure that another section contradicts
 
 #### T32A1 — Build the Android connect form
 

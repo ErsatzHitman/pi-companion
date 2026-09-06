@@ -2,9 +2,10 @@
 // repository's real source (not just `packages/client/src`) may not
 // coexist with prose in `apps/web/src`, `apps/android/src`, `scripts/ci`,
 // `packaging/**` (T179 widened the denial scan to the latter two), `docs/**`
-// (T197), or `.github/workflows/*.yml`/`apps/android/maestro/*.md` (T207 —
-// `run-guard-capability-prose.mjs`'s `isAppSourcePath` is the scope check)
-// asserting that capability is absent.
+// (T197), or `.github/workflows/*.yml`/`apps/android/maestro/*.md` (T207)
+// asserting that capability is absent. `run-guard-capability-prose.mjs`'s
+// `isAppSourcePath` is the authoritative scope check — read it rather than
+// trusting this list, which cannot watch itself.
 //
 // The history this encodes: at P6-W6, T110 landed as the wave's FIRST
 // commit (adding real `getQueueModes`/`setSteeringMode`/`setFollowUpMode`

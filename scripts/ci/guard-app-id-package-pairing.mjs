@@ -95,7 +95,10 @@
 //   guessed at.
 //
 // Pure, dependency-free check functions only. `run-guard-app-id-package-
-// pairing.mjs` is the CLI entry point CI actually runs; this module stays
+// pairing.mjs` is this module's CLI entry point, wired into CI as the
+// `guard-app-id-package-pairing` job (P8-W11 gate — for the wave in which
+// this guard shipped, that job did not exist and only this file's own test
+// ran the check in CI); the module stays
 // import-safe so `guard-app-id-package-pairing.test.mjs` can seed fixtures
 // without touching the real working tree.
 
@@ -213,8 +216,8 @@ function stripHashComments(content) {
 
 const JOB_HEADER_PATTERN = /^ {2}([a-zA-Z0-9_-]+):\s*$/gm;
 const PROFILE_PATTERN = /--profile\s+([^\s"']+)/;
-const APP_ID_SHELL_PATTERN = /\bAPP_ID=([^\s"']+)/;
-const APP_ID_ENV_BLOCK_PATTERN = /\bAPP_ID:\s*([^\s"'\n]+)/;
+const APP_ID_SHELL_PATTERN = /\bAPP_ID=["']?([^\s"']+)["']?/;
+const APP_ID_ENV_BLOCK_PATTERN = /\bAPP_ID:\s*["']?([^\s"'\n]+)["']?/;
 const EXPLICIT_FLOW_PATTERN = /run-flow\.ts\s+["']?([a-zA-Z][a-zA-Z0-9-]*)["']?/;
 const SHARDS_JSON_MENTION_PATTERN = /shards\.json/;
 
@@ -274,7 +277,7 @@ export function extractWorkflowJobs(workflowContent) {
  * }} inputs
  * @returns {PairingViolation[]}
  */
-export function findAppIdPackagePairingViolations({
+export function collectAppIdPackagePairings({
   workflowContent,
   easJsonContent,
   appConfigContent,
@@ -288,7 +291,7 @@ export function findAppIdPackagePairingViolations({
   const shardFlowNames = flattenShardFlowNames(shardsJsonContent);
   const defaultAppId = extractDefaultAppId(runPlanContent);
 
-  const violations = [];
+  const pairings = [];
 
   for (const job of extractWorkflowJobs(workflowContent)) {
     if (!job.profile) continue;
@@ -311,17 +314,29 @@ export function findAppIdPackagePairingViolations({
       if (declaredAppId === undefined || declaredAppId === null) continue;
 
       const launchedAppId = declaredAppId === APP_ID_VARIABLE ? effectiveAppId : declaredAppId;
-      if (!launchedAppId || launchedAppId !== resolvedPackage) {
-        violations.push({
-          job: job.name,
-          flow: flowName,
-          profile: job.profile,
-          resolvedPackage,
-          launchedAppId: launchedAppId ?? "(unresolvable)",
-        });
-      }
+      pairings.push({
+        job: job.name,
+        flow: flowName,
+        profile: job.profile,
+        resolvedPackage,
+        launchedAppId: launchedAppId ?? "(unresolvable)",
+        ok: Boolean(launchedAppId) && launchedAppId === resolvedPackage,
+      });
     }
   }
 
-  return violations;
+  return pairings;
+}
+
+/**
+ * The violations half of `collectAppIdPackagePairings`, unchanged in shape
+ * from before the P8-W11 gate split the two apart.
+ *
+ * @param {Parameters<typeof collectAppIdPackagePairings>[0]} inputs
+ * @returns {{ job: string, flow: string, profile: string, resolvedPackage: string, launchedAppId: string }[]}
+ */
+export function findAppIdPackagePairingViolations(inputs) {
+  return collectAppIdPackagePairings(inputs)
+    .filter((pairing) => !pairing.ok)
+    .map(({ ok: _ok, ...violation }) => violation);
 }
