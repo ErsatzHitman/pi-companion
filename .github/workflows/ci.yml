@@ -990,3 +990,36 @@ jobs:
 
       - name: Fail if the import-graph orphan count exceeds the committed ceiling
         run: node scripts/ci/run-orphan-modules.mjs
+
+  # T209: T207 shipped `run-guard-app-id-package-pairing.mjs` (the job right
+  # above two guards ago) and no workflow referenced it — its own module
+  # header falsely claimed "CI runs it via ..." while the only two hits
+  # under `.github/` were prose IN COMMENTS, not a `run:` line. The check
+  # still reached CI, only through that runner's own test file's real-tree
+  # assertion inside the `changes` job's `node --test scripts/ci/*.test.mjs`
+  # step above — real protection, but a different, weaker contract than a
+  # guard job, and not the one the file claimed. This is the THIRD unwired
+  # runner shipped in scripts/ci/ and nothing before this job noticed any of
+  # them. This job is the check that would have: it enumerates every
+  # scripts/ci/run-guard-*.mjs and fails when one is referenced by no real
+  # `run:` step in any .github/workflows/*.yml file (a comment mentioning a
+  # runner's filename does not count — see
+  # scripts/ci/guard-run-guard-wiring.mjs's own header for why that
+  # distinction is the entire point of this guard) and has no reasoned entry
+  # in that module's `ALLOWLISTED_UNWIRED_RUN_GUARDS`.
+  #
+  # Unconditional, alongside guard-legacy-paths et al. above — this job's
+  # own `run:` line, in this exact workflow file, is also the neatest
+  # available proof that the guard it runs actually works.
+  guard-run-guard-wiring:
+    name: guard / every run-guard-*.mjs is wired, or allowlisted
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail when a run-guard-*.mjs runner is referenced by no workflow's real run step and is not allowlisted
+        run: node scripts/ci/run-guard-run-guard-wiring.mjs
