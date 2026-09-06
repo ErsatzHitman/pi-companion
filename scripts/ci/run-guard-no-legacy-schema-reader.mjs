@@ -61,7 +61,7 @@ export function main() {
   if (violations.length === 0) {
     console.log(
       `guard-no-legacy-schema-reader: OK — ${scannedPaths.length} file(s) under apps/android/src ` +
-        `and packages/frontend-core/src checked; no version===1-keyed hosts/drafts/attachments ` +
+        `and packages/frontend-core/src checked; no version-1-keyed hosts/drafts/attachments ` +
         `reader found.`,
     );
     return;

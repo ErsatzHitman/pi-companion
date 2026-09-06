@@ -139,6 +139,83 @@ test("fails on a real reader: version===1 discriminant plus a real .hosts dot-ac
   ]);
 });
 
+test("fails on a NEGATED discriminant (version !== 1) — the guard-clause shape a real validating parser writes", () => {
+  // P8-W9 merge gate: the original `={2,3}` pattern was blind to this, and
+  // a working reader spelled this way passed the guard at the gate. Both of
+  // this repository's own committed version discriminants
+  // (paseo-worktree-service.ts:169, worktree-metadata.ts:266) are `!== 2`,
+  // so the negated form is the common one, not the exotic one.
+  const files = [
+    {
+      path: "apps/android/src/platform/offline/legacy-envelope-importer.ts",
+      content: `
+        export function importLegacyEnvelope(raw) {
+          const envelope = JSON.parse(raw);
+          if (envelope.version !== 1) {
+            throw new Error("unsupported legacy envelope version");
+          }
+          for (const host of envelope.hosts) {
+            hostProfileStore.put(host);
+          }
+        }
+      `,
+    },
+  ];
+
+  assert.deepEqual(findLegacySchemaReaderViolations(files), [
+    { path: "apps/android/src/platform/offline/legacy-envelope-importer.ts", fields: ["hosts"] },
+  ]);
+});
+
+test("fails on a switch over .version with a case 1: arm", () => {
+  const files = [
+    {
+      path: "apps/android/src/platform/offline/legacy-envelope-importer.ts",
+      content: `
+        export function importLegacyEnvelope(envelope) {
+          switch (envelope.version) {
+            case 1:
+              break;
+            default:
+              throw new Error("unsupported legacy envelope version");
+          }
+          const { drafts } = envelope;
+          return drafts;
+        }
+      `,
+    },
+  ];
+
+  assert.deepEqual(findLegacySchemaReaderViolations(files), [
+    { path: "apps/android/src/platform/offline/legacy-envelope-importer.ts", fields: ["drafts"] },
+  ]);
+});
+
+test("a bare case 1: in a switch that is NOT over a .version expression does not fire", () => {
+  // The switch pattern is anchored on `switch (<...>.version)`, so an
+  // ordinary numeric switch sitting in a file that also reads .hosts is
+  // not a false positive.
+  const files = [
+    {
+      path: "apps/android/src/platform/offline/retry-policy.ts",
+      content: `
+        export function backoffFor(attempt, session) {
+          switch (attempt) {
+            case 1:
+              return 250;
+            default:
+              return 1000;
+          }
+          const hosts = session.hosts;
+          return hosts;
+        }
+      `,
+    },
+  ];
+
+  assert.deepEqual(findLegacySchemaReaderViolations(files), []);
+});
+
 test("fails on a destructuring read (const { drafts } = ...) rather than a dot-access", () => {
   const files = [
     {

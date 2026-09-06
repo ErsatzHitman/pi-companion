@@ -178,11 +178,23 @@ const FIELD_PATTERNS = ENVELOPE_FIELD_NAMES.map((name) => ({
 // else in this repository's real, committed source does that today
 // (measured: zero occurrences of either form under either scanned
 // directory).
-const VERSION_EQ_ONE = /\bversion\s*={2,3}\s*1\b/;
-const ONE_EQ_VERSION = /\b1\s*={2,3}\s*(?:[\w$]+\.)*version\b/;
+// T206 (P8-W9 merge gate): `[!=]={1,2}` rather than `={2,3}`, so `!==`/`!=`
+// count as discriminants too. The original pattern matched only `==`/`===`
+// and was blind to the single most idiomatic shape a validating parser
+// uses -- an early-return guard clause, `if (envelope.version !== 1) throw`.
+// Proven at the gate: a working reader spelled that way passed the guard.
+const VERSION_EQ_ONE = /\bversion\s*[!=]={1,2}\s*1\b/;
+const ONE_EQ_VERSION = /\b1\s*[!=]={1,2}\s*(?:[\w$]+\.)*version\b/;
+// The other idiomatic spelling a guard clause has: `switch (x.version) {
+// case 1:`. Anchored on a `switch` over a `.version` expression, so a bare
+// `case 1:` in an unrelated switch is not a match.
+const SWITCH_ON_VERSION_CASE_ONE =
+  /\bswitch\s*\(\s*(?:[\w$]+\.)*version\s*\)\s*\{[\s\S]{0,400}?\bcase\s+1\s*:/;
 
 function hasVersionDiscriminant(code) {
-  return VERSION_EQ_ONE.test(code) || ONE_EQ_VERSION.test(code);
+  return (
+    VERSION_EQ_ONE.test(code) || ONE_EQ_VERSION.test(code) || SWITCH_ON_VERSION_CASE_ONE.test(code)
+  );
 }
 
 function fieldsReadFrom(code) {

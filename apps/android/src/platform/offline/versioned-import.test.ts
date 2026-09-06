@@ -39,15 +39,30 @@
  * `node scripts/ci/run-guard-no-legacy-schema-reader.mjs`. It scans every
  * `.ts`/`.tsx` file (test files excluded) under `apps/android/src` and
  * `packages/frontend-core/src` for the co-occurring signature of a real
- * reader — a literal `version === 1` discriminant plus an actual read
- * (dot-access or destructure) of `hosts`/`drafts`/`attachments` out of a
- * value, in the same file — and fails the build if either is ever added.
- * Proven by mutation at T206: a working importer of exactly this shape,
- * added under `apps/android/src/platform/offline/`, makes that guard
- * exit 1; removing it again returns it to exit 0. So a green run of
- * *this* test proves the local claim it always proved, and a green run
- * of the guard now proves the repo-wide claim above — neither one on its
- * own, but together they are exactly what the sentence asserts. See
+ * reader — a literal version-1 discriminant (`=== 1`, `!== 1`, either
+ * operand order, or a `switch` over `.version` with a `case 1:` arm)
+ * plus an actual read (dot-access or destructure) of
+ * `hosts`/`drafts`/`attachments` out of a value, in the same file.
+ * Proven by mutation, three spellings, at the P8-W9 merge gate: a
+ * working importer written each way, added under
+ * `apps/android/src/platform/offline/`, makes that guard exit 1;
+ * removing it returns it to exit 0.
+ *
+ * CORRECTED (P8-W9 merge gate): T206 landed this paragraph saying the
+ * guard catches "a literal `version === 1` discriminant" and "fails the
+ * build if either is ever added". The first half was accurate and the
+ * second overclaimed: the guard was blind to `version !== 1` and to a
+ * `switch`/`case 1:`, which are the two shapes a validating parser
+ * actually writes — and both of this repository's own committed version
+ * discriminants are the negated form. The gate widened the guard and
+ * added fixtures for both. What is still NOT caught is a discriminant
+ * split across variables (`const V = 1; if (e.version === V)`), which
+ * the guard's own header discloses.
+ *
+ * So a green run of *this* test proves the local claim it always proved,
+ * and a green run of the guard proves the repo-wide claim above for
+ * every discriminant spelling the guard covers — together, not either
+ * alone, and not for the split-variable form. See
  * `guard-no-legacy-schema-reader.mjs`'s own header for the full signature
  * rationale and its disclosed, deliberate blind spots. This remains true
  * regardless: `docs/frontend-data-migration.md` §3 still says any future

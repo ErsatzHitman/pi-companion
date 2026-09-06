@@ -879,7 +879,7 @@ jobs:
   # gated on any path filter, since the prohibition it enforces is a
   # standing repository invariant, not something scoped to one changed
   # directory. See scripts/ci/guard-no-legacy-schema-reader.mjs for the
-  # exact signature (a literal `version === 1` discriminant plus a real
+  # exact signature (a literal version-1 discriminant plus a real
   # `hosts`/`drafts`/`attachments` read, co-occurring in one file) and its
   # disclosed, deliberate blind spots — do not restate the signature here;
   # that header comment is the authoritative source and this comment cannot

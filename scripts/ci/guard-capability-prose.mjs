@@ -344,6 +344,31 @@ export const CAPABILITIES = [
     ],
   },
   {
+    // T206 (P8-W9) shipped an executable check for the "no legacy §3
+    // envelope reader" prohibition that, until then, was enforced by
+    // nothing but a grep someone ran once. Added at the P8-W9 merge gate,
+    // which found T206 had shipped the capability without an entry here --
+    // CLAUDE.md's "add a new capability entry the moment you ship one".
+    // Like `joinAdjacentStringLiterals` above, this one ships in
+    // `scripts/ci`, which only T156's widening made visible to this
+    // runner at all; an entry the runner cannot see is a check that
+    // cannot fail.
+    //
+    // The denying phrases are the exact shapes the pre-T206 tree used, and
+    // which the P8-W7 gate itself wrote into `versioned-import.test.ts` on
+    // purpose so that T206 would have to delete them. If one comes back
+    // while the guard ships, the tree is telling a reader the prohibition
+    // is unenforced while it is in fact enforced.
+    name: "executable no-legacy-schema-reader check (findLegacySchemaReaderViolations)",
+    methodNames: ["findLegacySchemaReaderViolations"],
+    denyingPhrases: [
+      /repo-wide half of the claim above rests on a grep/i,
+      /rests on a grep performed when this was written, not on any executable check/i,
+      /enforced by nothing but (?:an? )?(?:author's )?grep/i,
+      /no executable check enforces[^.]*legacy schema reader/i,
+    ],
+  },
+  {
     // T41A3 (`apps/web/src/features/files/use-file-upload.ts`,
     // `use-file-download.ts`) shipped `cancel()` on both `useFileUpload`
     // and `useFileDownload`, a visible Cancel action in
