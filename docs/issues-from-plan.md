@@ -362,6 +362,7 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T199   | Build @picompanion/server before the web-tests Playwright run                   | phase-8   | ci               | P8-W6  | T195                                                                  |
 | T200   | Correct the vendored EXPO_ROUTER_CTX_IGNORE against the real package            | phase-8   | tooling          | P8-W6  | T196                                                                  |
 | T201   | Make expo prebuild able to load app.config.ts without duplicating the allowlist | phase-8   | android          | P8-W6  | T36E, T200                                                            |
+| T202   | Correct an overclaiming test title in guard-capability-prose.test.mjs           | phase-8   | tooling          | P8-W6  | T197                                                                  |
 | T32S14 | Mount T66's reconnect path and the route-level fetchImpl seam                   | phase-5   | android          | P5-W20 | T66, T32S13                                                           |
 | T69    | Build the share target chooser so features/share/ has an entry point            | phase-5   | android          | P5-W21 | T36F, T32S14                                                          |
 | T70    | Mount the voice feature behind a real entry point or delete it                  | phase-5   | android          | P5-W21 | T36D, T32S14                                                          |
@@ -595,8 +596,8 @@ the task details always agree.
 | P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
 | P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
 | P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
-| P8-W6  | T194, T195, T196, T198, T199, T200, T201 (the CI outage)                 | 7     |
-| P8-W7  | T43B2b (moved from P8-W6; needs CI green first), T197                    | 2     |
+| P8-W6  | T194, T195, T196, T198, T199, T200, T201, T197, T202 (gate)              | 9     |
+| P8-W7  | T43B2b (moved from P8-W6; needs CI green first)                          | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7034,6 +7035,42 @@ share-intent-model.ts`'s allowlist declaration only.
 - [ ] `cd apps/android && npx vitest run` — 193 files, no regression on 2485 passed
 - [ ] **`android-tests` is green on a real CI run, INCLUDING the Production prebuild
       smoke step** — quote the run id. Nothing else closes this task
+
+#### T202 — Correct an overclaiming test title in `guard-capability-prose.test.mjs`
+
+`labels: phase-8, area: tooling` · `wave: P8-W6` · `depends-on: T197`
+
+**Closed at the P8-W6 merge gate.** T197 shipped a test at
+`scripts/ci/guard-capability-prose.test.mjs` titled
+
+> the real docs/legacy-retirement.md ... scans clean against the full real
+> CAPABILITIES list **and its own three CORRECTED markers**
+
+Both halves of that clause were false, and I reproduced both before changing anything:
+
+- **The count is four, not three.** `grep -n CORRECTED docs/legacy-retirement.md` →
+  lines 9, 35, 295, 332. The "three" traces to P8-W5's commit subject `bc01cbb`
+  ("scope three overclaiming sentences"), but the sentence is new prose in this wave.
+- **The markers are inert on this file.** Running every `CAPABILITIES` entry's
+  `denyingPhrases` against the real document gives **0 matches**; neutralising every
+  phrase in `HISTORICAL_QUOTE_MARKERS` first also gives **0**. Nothing in the document
+  denies any tracked capability, so the exemption never fires and the assertion proves
+  nothing about it.
+
+This is the P6-W16 class — a check that passes for a different reason than its title
+claims — not a functional gap. Exit 0 is the correct answer for this file, and the
+exemption mechanism _is_ genuinely proven, by the matched pair immediately above it
+(`:2469` marker present → 0 violations; `:2487` delete only the marker → 1 violation).
+
+The fix is the title plus a `CORRECTED (P8-W6 merge gate):` block recording both false
+claims, so the next reader is not misled the same way. No behaviour change.
+
+Owns: the one test title and its comment in `scripts/ci/guard-capability-prose.test.mjs`.
+
+- [x] The title no longer claims the assertion covers the CORRECTED markers
+- [x] The corrected count (four) and the measured inertness (0 with markers, 0 without)
+      are recorded next to the test
+- [x] `node --test scripts/ci/guard-capability-prose.test.mjs` → 115/115
 
 #### T32A1 — Build the Android connect form
 

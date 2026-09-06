@@ -2504,12 +2504,23 @@ test("T197: deleting only the CORRECTED marker from that same docs/ sentence mak
   assert.equal(violations[0].path, "docs/legacy-retirement.md");
 });
 
-test("T197: the real docs/legacy-retirement.md — the file that motivated this task — scans clean against the full real CAPABILITIES list and its own three CORRECTED markers", () => {
+test("T197: the real docs/legacy-retirement.md — the file that motivated this task — scans clean against the full real CAPABILITIES list", () => {
   // Full end-to-end proof against the committed tree: every shipped file
   // this guard would actually read, and the real docs/legacy-retirement.md
   // content (which the P8-W5 merge gate already checked once as a
   // one-off; this pins it as a real regression test). 0 violations
   // expected — T197 is hardening, not a fix for a live defect in this file.
+  //
+  // CORRECTED (P8-W6 merge gate): this title said the file scans clean
+  // "and its own three CORRECTED markers". Both halves were wrong. The
+  // file carries FOUR such markers (lines 9, 35, 295, 332), and they are
+  // inert here: no denyingPhrase in CAPABILITIES matches this document's
+  // text at all, so the count is 0 violations with the markers present
+  // and 0 with every marker neutralised. This assertion proves the file
+  // scans clean; it proves nothing about the historical-quotation
+  // exemption. That mechanism is proved by the matched pair above, which
+  // builds content containing a real matching phrase and shows deleting
+  // only the marker turns 0 violations into 1.
   const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
     .split("\n")
     .filter(Boolean);
