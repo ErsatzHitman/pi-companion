@@ -2,12 +2,20 @@
 
 This document is for the owner. It explains what the legacy Paseo daemon (the
 one still running against `$PASEO_HOME` from the `D:\paseo` reference
-checkout) provided, what in **this** repository now provides each piece, the
-exact steps to cut over, and exactly how to go back if the new install turns
-out to be missing something. The undo is §7, the last procedural section:
-read it before you run §6, because it is the part you will need under
-pressure. CORRECTED (P8-W5 merge gate): this said the undo came "first,
-because it matters more" — it is written last.
+checkout) provided, what in **this** repository now provides each piece, how
+to go back if the new install turns out to be missing something, and the
+exact steps to cut over. The undo is §6, immediately before the cutover
+(§7) — reading this document start to finish means reading the way back
+before you ever run the one-way step. CORRECTED (T210): this document
+previously placed the cutover before the undo (as §6 and §7 respectively),
+so a reader following it in order ran the one-way step before ever reading
+the way back — a defect the P8-W11 merge gate found against base state, not
+introduced by any recent wave. Fixed by swapping the two sections' positions
+and numbers; the undo's own content (both daemons, the port, "do nothing to
+`$PASEO_HOME`") is unchanged. A still-earlier draft (CORRECTED, P8-W5 merge
+gate) separately misstated which section was drafted first — "first,
+because it matters more" — when the undo text was in fact written last;
+both problems are resolved by the ordering now in front of you.
 
 **Read the safety statement in §0 below before running anything in this
 document.**
@@ -23,9 +31,9 @@ actions.
 
 - **`$PASEO_HOME` (default `~/.paseo`, or wherever the owner's `PASEO_HOME`
   environment variable points) is the owner's live data.** No command in
-  §§0—5 writes to it, and no command anywhere in this document moves it or
+  §§0—6 writes to it, and no command anywhere in this document moves it or
   deletes anything under it. The verification procedure in §4 explicitly
-  operates on a **copy**, never the original. **§6's cutover deliberately
+  operates on a **copy**, never the original. **§7's cutover deliberately
   writes to it**, because writing to the same home is what a cutover onto
   the same home means: step 3 starts the new daemon against the real
   directory, `resolvePaseoHome`
@@ -33,8 +41,9 @@ actions.
   on it, and `persisted-config.ts` writes `config.json` under it — exactly as
   the legacy daemon does. Nothing there deletes or moves anything.
   CORRECTED (P8-W5 merge gate): this said "No command in this document
-  writes to it", which §6 step 3 falsifies — and which §7 step 3 already
-  contradicted by name.
+  writes to it", which §7 step 3 falsifies — and which §6 step 3 already
+  contradicted by name. Renumbered at T210, which swapped the cutover and
+  undo sections; the underlying claim is unchanged.
 - **The production daemon on port `6767` is never stopped, rebound, or
   connected to by any step in this document.** Every check T43B2a itself ran
   was performed offline, from the repository, against build output on disk
@@ -258,8 +267,8 @@ It never touches the real `$PASEO_HOME` or the port-`6767` daemon.
 
 If steps 5-6 work as expected against the copy, the new install covers the
 data and daemon behavior the legacy install provides for daily use, and the
-legacy `D:\paseo` daemon can be stopped per §6 below. If anything is
-missing or behaves differently, **do not proceed to §6** — the legacy
+legacy `D:\paseo` daemon can be stopped per §7 below. If anything is
+missing or behaves differently, **do not proceed to §7** — the legacy
 install stays the daily driver; file what broke against the row in §1 it
 maps to (or, if it maps to nothing in §1, that is a real gap in this
 repository, not in this document).
@@ -269,9 +278,13 @@ repository, not in this document).
 - **The Android mobile app.** `apps/android` cannot yet ship a working
   build: `expo-router` is declared in `apps/android/package.json` but was
   never installed (T116, `npm install` for it is refused by this
-  environment's permission classifier) — the 18 `TS2307` typecheck errors
-  in §2.3's table are that gap surfacing at typecheck time, not a new
-  regression. Until that is resolved, any daily mobile use still depends on
+  environment's permission classifier) — the `TS2307` typecheck errors
+  §2.3's table counts are that gap surfacing at typecheck time, not a new
+  regression. This section deliberately does not restate that count: §2.3's
+  table already drifted from a figure quoted here once (17 vs. 18, corrected
+  by the P8-W11 merge gate), so from T210 on there is exactly one place in
+  this document that states it — §2.3 — and this bullet only points at it.
+  Until the gap itself is resolved, any daily mobile use still depends on
   the legacy install's Android app.
 - **The two suites that prove the packaged build under real conditions**:
   the web E2E suite against the packaged, daemon-served UI, and the Android
@@ -286,7 +299,7 @@ repository, not in this document).
   legacy install does not change how the daemon is reached from outside the
   laptop.
 - **`$PASEO_HOME` itself.** Nothing about this task, or about running the
-  cutover in §6, migrates, converts, or deletes any file under
+  cutover in §7, migrates, converts, or deletes any file under
   `$PASEO_HOME`. The new daemon reads the exact same directory the legacy
   daemon reads (`packages/server/src/server/paseo-home.ts`'s resolution
   rule is unchanged from the reference), so there is nothing to migrate.
@@ -295,51 +308,17 @@ repository, not in this document).
   every dependency has a recorded license) — this document does not repeat
   that audit, only cites its result.
 
-## 6. Cutover steps (only after §4 has passed)
-
-Do these in order. Each is reversible, and **§7 below is the undo** — a
-reversal plan for the cutover as a whole, not a step-by-step mirror of this
-list: §7.1 undoes step 3, §7.3 undoes steps 2 and 5, and §7.4 asks you to
-record what broke. CORRECTED (P8-W5 merge gate): this said §7 held "the undo
-of each numbered step here, in the same order" — §6 has five steps and §7
-has four, and they do not correspond one to one.
-
-1. Run the owner verification procedure in §4 in full, and confirm both
-   steps 5 and 6 there worked as expected. Do not proceed if they did not.
-2. Stop relying on the `D:\paseo` daemon for new work: stop starting it for
-   fresh sessions. **Do not delete `D:\paseo`, and do not stop a daemon
-   instance that is mid-session on real work** — let any in-flight agent
-   run finish or be cleanly stopped through its own UI/CLI first, the same
-   way you would with any daemon restart.
-3. Build and start this repository's daemon against the **real**
-   `$PASEO_HOME`, on the **production** port, replacing the legacy process
-   in that role:
-
-   ```bash
-   npm run build:clean --workspace=@picompanion/server
-   npm run build --workspace=@picompanion/cli
-   node packages/cli/bin/paseo daemon start --web-ui
-   # uses $PASEO_HOME (or ~/.paseo) and port 6767 by default — the same
-   # home directory and port the legacy daemon used.
-   ```
-
-4. Point your usual entry point (browser bookmark to `http://localhost:6767`,
-   or the Android app once T43B2b/its own release pipeline exists) at this
-   daemon. Confirm your real session list and agents appear (they will —
-   it is the same `$PASEO_HOME`), and use it for a day before considering
-   the legacy install retired.
-5. Once satisfied, stop starting the legacy `D:\paseo` daemon going forward.
-   Keep the `D:\paseo` checkout on disk — it remains the read-only reference
-   this repository's `CLAUDE.md` says to consult for undocumented behavior,
-   and it is your fallback (§7).
-
-## 7. Undo — how to go back to the legacy install
+## 6. Undo — how to go back to the legacy install
 
 At the same level of detail as the cutover it reverses, because the reader
 most likely to need this is reading it under pressure, with the new daemon
-already misbehaving — so read it before you run §6, not after. CORRECTED
-(P8-W5 merge gate): this said "Written before the cutover steps above", a
-drafting-order claim that read as a placement claim; §7 comes after §6.
+already misbehaving — so it is written, and now placed, before §7, not
+after. CORRECTED (P8-W5 merge gate): this said "Written before the cutover
+steps above", a drafting-order claim that read as a placement claim; at that
+time this section (then §7) in fact came after the cutover (then §6).
+CORRECTED further (T210): the placement claim above is no longer a
+contradiction — this section has been moved so it genuinely precedes the
+cutover. It is §6; the cutover is §7.
 
 **What would tell you that you need this:** the new daemon fails to start
 against your real `$PASEO_HOME`; it starts but a session, agent, or
@@ -377,8 +356,49 @@ To go back:
    this cutover.
 
 The legacy install is not deleted, disabled, or made harder to run by any
-step in §6 above — cutover only changes which daemon you start by habit, and
+step in §7 below — cutover only changes which daemon you start by habit, and
 this undo is exactly "start the other one instead."
+
+## 7. Cutover steps (only after §4 has passed)
+
+Do these in order. Each is reversible, and **§6 above is the undo** — a
+reversal plan for the cutover as a whole, not a step-by-step mirror of this
+list: §6.1 undoes step 3, §6.3 undoes steps 2 and 5, and §6.4 asks you to
+record what broke. CORRECTED (P8-W5 merge gate): this said the undo section
+held "the undo of each numbered step here, in the same order" — this
+section has five steps and the undo has four, and they do not correspond
+one to one. Renumbered at T210, which moved the undo ahead of this section
+(the undo was §7 and this section was §6 at that gate); neither section's
+steps changed.
+
+1. Run the owner verification procedure in §4 in full, and confirm both
+   steps 5 and 6 there worked as expected. Do not proceed if they did not.
+2. Stop relying on the `D:\paseo` daemon for new work: stop starting it for
+   fresh sessions. **Do not delete `D:\paseo`, and do not stop a daemon
+   instance that is mid-session on real work** — let any in-flight agent
+   run finish or be cleanly stopped through its own UI/CLI first, the same
+   way you would with any daemon restart.
+3. Build and start this repository's daemon against the **real**
+   `$PASEO_HOME`, on the **production** port, replacing the legacy process
+   in that role:
+
+   ```bash
+   npm run build:clean --workspace=@picompanion/server
+   npm run build --workspace=@picompanion/cli
+   node packages/cli/bin/paseo daemon start --web-ui
+   # uses $PASEO_HOME (or ~/.paseo) and port 6767 by default — the same
+   # home directory and port the legacy daemon used.
+   ```
+
+4. Point your usual entry point (browser bookmark to `http://localhost:6767`,
+   or the Android app once T43B2b/its own release pipeline exists) at this
+   daemon. Confirm your real session list and agents appear (they will —
+   it is the same `$PASEO_HOME`), and use it for a day before considering
+   the legacy install retired.
+5. Once satisfied, stop starting the legacy `D:\paseo` daemon going forward.
+   Keep the `D:\paseo` checkout on disk — it remains the read-only reference
+   this repository's `CLAUDE.md` says to consult for undocumented behavior,
+   and it is your fallback (§6).
 
 ## 8. Traceability
 
