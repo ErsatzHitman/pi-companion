@@ -420,6 +420,8 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T42B2  | Test versioned-JSON import                                                      | phase-7   | android          | P7-W8  | T42B1                                                                 |
 | T203   | Correct three P7 dependency edges that are scheduling artifacts                 | phase-7   | docs             | P8-W6  | —                                                                     |
 | T204   | Make the local Expo config plugin resolvable on CI, not only on the workstation | phase-8   | android          | P8-W7  | T201                                                                  |
+| T205   | Type-check metro.config.js and babel.config.js, or say in writing why not       | phase-8   | android          | P8-W9  | T204                                                                  |
+| T206   | Enforce the "no legacy schema reader" prohibition with a check, not a grep      | phase-8   | ci               | P8-W9  | T42B2                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -598,10 +600,11 @@ the task details always agree.
 | P7-W5  | (retired: T42B1 moved to P7-W7, T203)                                    | 0     |
 | P7-W6  | (retired: T42B2 moved to P7-W8, T203)                                    | 0     |
 | P7-W7  | T42A3, T42B1 (unblocked by T203; disjoint directories)                   | 2     |
-| P7-W8  | T42B2 (genuinely behind T42B1)                                           | 1     |
+| P7-W8  | (retired: T42B2 ran in P8-W7 alongside T204; disjoint directories)       | 0     |
 | P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
 | P8-W6  | T194, T195, T196, T198, T199, T200, T201, T197, T202 (gate)              | 9     |
-| P8-W7  | T204 (main is red), then T43B2b                                          | 2     |
+| P8-W7  | T204, T42B2 (both landed; gate corrected four prose sites)               | 2     |
+| P8-W9  | T205, T206 (both filed by the P8-W7 gate; disjoint)                      | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7164,8 +7167,20 @@ Do you have node modules installed?
 ```
 
 `apps/android/plugins/with-share-intent-module.ts` is a TypeScript file, and Expo's
-plugin resolver requires it from disk through Node, which cannot load `.ts`. This is the
-same root cause as T201 one level up: `@expo/require-utils` compiles only the entry
+plugin resolver looks for it on disk by probing a fixed list of extensions, and the copy
+CI installs does not accept `.ts`.
+
+**CORRECTED (P8-W7 merge gate):** this brief originally said the resolver "requires it from
+disk through Node, which cannot load `.ts`", and named `@expo/require-utils`'s entry-only
+compilation as the mechanism. That is the wrong stage. `resolveConfigPluginFunctionWithInfo`
+calls the same `loadModuleSync` for any plugin file, so there is no plain-`require()` path;
+and in the failing case no loader ran at all, because the extension probe never found the
+file — CI throws from `resolvePluginForModule` with `PLUGIN_NOT_FOUND`. T204's implementer
+inherited this wrong mechanism from this brief and shipped it in two production doc comments,
+both now corrected. The chosen fix was right regardless, but a brief that misnames the
+mechanism sends its implementer to the wrong file. Retained below for the record: it is the
+same root cause as T201 one level up in the sense that both are `.ts` reaching a stage that
+only handles JavaScript. `@expo/require-utils` compiles only the entry
 config file, so anything Expo resolves _afterwards_ must already be JavaScript.
 
 **Do not trust `gh run watch --exit-status` for this.** On this run it exited **0** while
@@ -7216,6 +7231,69 @@ Nothing else.
 - [ ] No generated `.js` is committed unless direction 2 is chosen and gitignored
 - [ ] **`android-tests` green on a real CI run, INCLUDING Production prebuild smoke** —
       quote the run id and read it with `gh run view --json conclusion`, not `run watch`
+
+#### T205 — Type-check metro.config.js and babel.config.js, or say in writing why not
+
+`labels: phase-8, area: android` · `wave: P8-W9` · `depends-on: T204`
+
+T204 set `allowJs: true` in `apps/android/tsconfig.json` so its plain-JS config plugin could
+be type-checked. That flag also pulled `metro.config.js` and `babel.config.js` into the
+TypeScript program for the first time — they were always in `include`, but `allowJs: false`
+silently dropped them. Neither carries `@ts-check`, and `checkJs` is off, so they are in the
+program and unchecked.
+
+Eight real errors are latent there today. Reproduce by setting `"checkJs": true` in
+`apps/android/tsconfig.json` and running the workspace typecheck: seven in `metro.config.js`
+(three `TS2540` assignments to read-only properties, three implicit-`any` parameters, one
+duplicate identifier) and one `TS7006` in `babel.config.js`. Restore the flag afterwards.
+
+The `TS2540` ones are the interesting ones — assigning to a property the types declare
+read-only is the kind of thing that works until a Metro upgrade decides it should not.
+
+Owns: `apps/android/metro.config.js`, `apps/android/babel.config.js`, and
+`apps/android/tsconfig.json`. Nothing else.
+
+- [ ] Each of the eight errors is either fixed or individually justified in writing
+- [ ] Whichever route is taken, the outcome is enforced: either the files carry `@ts-check`
+      and pass, or a comment in `tsconfig.json` records why they stay unchecked
+- [ ] The android typecheck's error count is stated before and after, and any change to the
+      18 pre-existing `expo-router` `TS2307` errors is explained
+
+#### T206 — Enforce the "no legacy schema reader" prohibition with a check, not a grep
+
+`labels: phase-8, area: ci` · `wave: P8-W9` · `depends-on: T42B2`
+
+`apps/android/src/platform/offline/versioned-import.test.ts` states that no legacy schema
+reader, envelope parser, or `hosts`/`drafts`/`attachments` deserializer keyed to
+`docs/frontend-data-migration.md` §3's envelope shape "exists anywhere under
+`apps/android/src` or `packages/frontend-core/src`". That repo-wide claim is true today and
+enforced by nothing.
+
+The P8-W7 gate established exactly where the boundary sits, and both experiments matter:
+
+- Injecting an envelope-recognising branch into `SqliteStructuredStorage.get` DOES fail the
+  test. It discriminates within its own scope, which is what its title claims.
+- Adding a working importer in a different file under the same directory leaves the suite
+  fully green. Nothing detects it.
+
+T42B2's acceptance criterion is disjunctive ("tested if applicable, **or its absence is
+justified in writing**"), so the wave met it and this is not a defect in T42B2. It is a
+hardening gap: a prohibition worth writing down is worth a guard, or it decays into prose
+that a future reader trusts more than it deserves.
+
+This is the same shape as `guard-capability-prose.mjs` — a narrow, curated check, not a
+generic linter. Read that guard first; it is the model, including its deliberate refusal to
+be general.
+
+Owns: `scripts/ci/` and the doc comment in
+`apps/android/src/platform/offline/versioned-import.test.ts`. Nothing else.
+
+- [ ] A committed check fails when a legacy envelope reader is added anywhere in the scope
+      the prose names, proven by MUTATION: add one, show the guard goes red, remove it
+- [ ] The check does not fire on the decision documents that legitimately describe the
+      envelope shape, nor on the test that proves its absence
+- [ ] The doc comment stops distinguishing "enforced" from "grepped", because the guard
+      makes both halves enforced
 
 #### T32A1 — Build the Android connect form
 

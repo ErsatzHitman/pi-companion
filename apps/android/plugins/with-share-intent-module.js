@@ -36,15 +36,29 @@ const { withMainActivity } = require("expo/config-plugins");
  *
  * **Written as plain CommonJS JavaScript, not TypeScript (T204).** Expo's
  * plugin resolver (`resolvePluginForModule` in
- * `@expo/config-plugins/build/utils/plugin-resolver.js`) requires the
- * resolved plugin file from disk through Node; `@expo/require-utils`'s
- * `loadModuleSync` only transpiles the *entry* config file
- * (`app.config.ts`) — anything Expo resolves afterwards, including a
- * plugin referenced by path, is loaded with a plain `require()` when it
- * detects a CommonJS module, and Node cannot `require()` `.ts` directly.
- * That is invisible on this workstation, where `@expo/config-plugins`
- * resolves from the hoisted root install (57.0.9, which happens to also
- * accept `.ts` files in `resolvePluginForModule`'s extension probe) —
+ * `@expo/config-plugins/build/utils/plugin-resolver.js`) probes a fixed
+ * list of extensions to find the plugin file on disk. It never gets as
+ * far as loading one it cannot find: CI's stack trace throws from
+ * `resolvePluginForModule` itself with `PLUGIN_NOT_FOUND` ("Do you have
+ * node modules installed?"), which is the *resolve* stage, not the
+ * *load* stage.
+ *
+ * CORRECTED (P8-W7 merge gate): this paragraph said `@expo/require-utils`'s
+ * `loadModuleSync` "only transpiles the *entry* config file" and that
+ * "anything Expo resolves afterwards ... is loaded with a plain
+ * `require()`", so Node could not `require()` a `.ts`. That is not what
+ * happens. `resolveConfigPluginFunctionWithInfo` calls the same
+ * `loadModuleSync` for any plugin file, so there is no plain-`require()`
+ * path, and in the failing case no loader ran at all because the probe
+ * never found the file. The mistake came from this task's own written
+ * brief in `docs/issues-from-plan.md`, which has been corrected too. The
+ * fix below is right either way, but a wrong mechanism in a doc comment
+ * is what sends the next reader to the wrong file.
+ *
+ * That difference is invisible on this workstation, where
+ * `@expo/config-plugins` resolves from the hoisted root install —
+ * 57.0.9, whose probe list is
+ * `['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts']` and so accepts `.ts` —
  * but `package-lock.json` pins a *separate, nested*
  * `apps/android/node_modules/@expo/config-plugins` at **54.0.5** for
  * this workspace specifically (`node -e
@@ -55,19 +69,36 @@ const { withMainActivity } = require("expo/config-plugins");
  * module resolution always prefers the nearest `node_modules` over an
  * ancestor's, so the newer, TS-tolerant root copy is shadowed there.
  * `apps/android/node_modules` is empty on this workstation (nothing
- * nested has ever been installed here), which is exactly why `npx expo
- * config --type public` succeeds locally and fails on CI's
- * "Production prebuild smoke" step with `PluginError: Failed to
- * resolve plugin for module "./plugins/with-share-intent-module"` —
- * see this feature's task report for the full install-layout diff.
+ * nested has ever been installed here), which is why CI's
+ * "Production prebuild smoke" step fails with `PluginError: Failed to
+ * resolve plugin for module "./plugins/with-share-intent-module"` and
+ * this machine never saw it — see this feature's task report for the
+ * full install-layout diff.
+ *
+ * CORRECTED (P8-W7 merge gate): this said `npx expo config --type public`
+ * "succeeds locally". It does not, and nobody could have observed that.
+ * Run from `apps/android` it exits 1 on the FIRST plugin in the array,
+ * `expo-router` (the separate, known T200 gap), and never reaches this
+ * one. Do not use it as a reproduction: it fails here for an unrelated,
+ * already-understood reason, which would read as a regression in this
+ * plugin. The install-layout divergence below is the real evidence.
  * Writing this plugin as plain `.js` (the conventional way Expo config
  * plugins are authored) removes the divergence entirely: a `.js` file
  * `require()`s under every `@expo/config-plugins` version this
  * repository has ever pinned, so which copy resolves stops mattering.
  * `@ts-check` plus the JSDoc `@type` annotations below keep this file
  * under real type-checking (see `../tsconfig.json`'s `allowJs`) without
- * needing the whole project's `checkJs` turned on — this file opts in
- * per-file, the same way `../metro.config.js` already does.
+ * needing the whole project's `checkJs` turned on. Proven, not assumed:
+ * changing this file's `return contents;` to `return 42;` raises
+ * `TS2322` on that line.
+ *
+ * CORRECTED (P8-W7 merge gate): this said the file opts in "the same way
+ * `../metro.config.js` already does". `metro.config.js` contains no
+ * `@ts-check` at all — `grep -rn "@ts-check" apps/android --include=*.js`
+ * returns only this file and its test. It carries a bare `@type` JSDoc,
+ * which with `checkJs` off checks nothing. This file is the first in the
+ * workspace to opt in, and `allowJs` newly pulled `metro.config.js` and
+ * `babel.config.js` into the program unchecked — filed as T205.
  *
  * **Unverified in this sandbox**: this task may not run
  * `expo prebuild`, `eas build`, or Gradle (this wave's hard rules), so

@@ -13,10 +13,16 @@ import acceptedFileMimeTypes from "./src/features/share/accepted-file-mime-types
 // what `./plugins/with-share-intent-module.js` exports), so this is not
 // a workaround, just the form the type declares. `with-share-intent-
 // module.js` is plain JavaScript, not TypeScript (T204) — see its own
-// doc comment for why: Expo's plugin resolver `require()`s whatever
-// this string resolves to, and the nested `@expo/config-plugins` a
-// clean `npm ci` installs under `apps/android/node_modules` on CI
-// cannot load `.ts` the way this workstation's hoisted-root copy can.
+// doc comment for why: Expo's plugin resolver probes a fixed extension
+// list to FIND whatever this string resolves to, and the nested
+// `@expo/config-plugins` a clean `npm ci` installs under
+// `apps/android/node_modules` on CI cannot RESOLVE `.ts` the way this
+// workstation's hoisted-root copy can.
+//
+// CORRECTED (P8-W7 merge gate): this said the resolver "cannot load"
+// `.ts`. It is the resolve stage, not the load stage — CI's trace
+// throws from `resolvePluginForModule` with `PLUGIN_NOT_FOUND`, before
+// any loader runs. Same correction as the plugin's own doc comment.
 
 /**
  * Expo app config — plan.md §6, §9.1, §15.3.

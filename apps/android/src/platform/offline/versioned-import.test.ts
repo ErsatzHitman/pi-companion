@@ -24,7 +24,20 @@
  * parser, no `hosts`/`drafts`/`attachments` deserializer keyed to
  * `docs/frontend-data-migration.md` §3's synthetic envelope shape
  * exists anywhere under `apps/android/src` or `packages/frontend-core/
- * src`, and this task does not add one — doing so would contradict the
+ * src`, and this task does not add one.
+ *
+ * **How much of that sentence is enforced, and how much is a grep.** The
+ * test below is scoped exactly as its own title says — *this directory's
+ * own storage*. It genuinely discriminates: injecting an
+ * envelope-recognising branch into `SqliteStructuredStorage.get` makes
+ * it fail (P8-W7 merge gate ran that mutation). What it CANNOT see is an
+ * importer added in some other file — adding one elsewhere leaves this
+ * suite green (P8-W7 verifier ran that one). Both experiments are right;
+ * they answer different questions. So the repo-wide half of the claim
+ * above rests on a grep performed when this was written, not on any
+ * executable check. Filed as T206 if that prohibition is ever to be
+ * enforced rather than asserted. Do not read a green run here as proof
+ * of the repo-wide claim — doing so would contradict the
  * written decision, plan.md §5's legacy-frontend exclusion boundary,
  * and `docs/frontend-data-migration.md` §3's own words: "the export
  * format would be versioned JSON... The utility would live in the
