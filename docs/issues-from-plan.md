@@ -415,9 +415,10 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T41B3  | Bound and stabilise the export                                                  | phase-7   | web              | P7-W3  | T41B2                                                                 |
 | T42A1  | Add Android push and trusted devices                                            | phase-7   | android          | P7-W1  | T10, T37F                                                             |
 | T42A2  | Add device revocation                                                           | phase-7   | android          | P7-W2  | T42A1                                                                 |
-| T42A3  | Build the Android diagnostics screen                                            | phase-7   | android          | P7-W4  | T42A2, T41B3                                                          |
-| T42B1  | Execute the client data migration or reset                                      | phase-7   | android          | P7-W5  | T42A3                                                                 |
-| T42B2  | Test versioned-JSON import                                                      | phase-7   | android          | P7-W6  | T42B1                                                                 |
+| T42A3  | Build the Android diagnostics screen                                            | phase-7   | android          | P7-W7  | T41B3 (T42A2 edge dropped, T203)                                      |
+| T42B1  | Execute the client data migration or reset                                      | phase-7   | android          | P7-W7  | T22 (T42A3 edge dropped, T203)                                        |
+| T42B2  | Test versioned-JSON import                                                      | phase-7   | android          | P7-W8  | T42B1                                                                 |
+| T203   | Correct three P7 dependency edges that are scheduling artifacts                 | phase-7   | docs             | P8-W6  | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -592,9 +593,11 @@ the task details always agree.
 | P7-W1  | T42A1 (blocked: expo-notifications, expo-device)                         | 1     |
 | P7-W2  | T42A2 (blocked behind T42A1)                                             | 1     |
 | P7-W3  | (retired: T42A3 moved to P7-W4 to match its task row)                    | 0     |
-| P7-W4  | T42A3 (blocked behind T42A1)                                             | 1     |
-| P7-W5  | T42B1 (blocked behind T42A1)                                             | 1     |
-| P7-W6  | T42B2 (blocked behind T42B1)                                             | 1     |
+| P7-W4  | (retired: T42A3 moved to P7-W7, T203)                                    | 0     |
+| P7-W5  | (retired: T42B1 moved to P7-W7, T203)                                    | 0     |
+| P7-W6  | (retired: T42B2 moved to P7-W8, T203)                                    | 0     |
+| P7-W7  | T42A3, T42B1 (unblocked by T203; disjoint directories)                   | 2     |
+| P7-W8  | T42B2 (genuinely behind T42B1)                                           | 1     |
 | P8-W5  | T43B2a, T193 (T192 closed at the P6-W25 gate by the orchestrator)        | 2     |
 | P8-W6  | T194, T195, T196, T198, T199, T200, T201, T197, T202 (gate)              | 9     |
 | P8-W7  | T43B2b (moved from P8-W6; needs CI green first)                          | 1     |
@@ -7072,6 +7075,74 @@ Owns: the one test title and its comment in `scripts/ci/guard-capability-prose.t
       are recorded next to the test
 - [x] `node --test scripts/ci/guard-capability-prose.test.mjs` → 115/115
 
+#### T203 — Correct three P7 dependency edges that are scheduling artifacts
+
+`labels: phase-7, area: docs` · `wave: P8-W6` · `depends-on: —`
+
+**Filed and closed by the orchestrator at the P8-W6 gate.**
+
+P7-W1 is blocked: T42A1 needs `npm install expo-notifications expo-device`, which the
+owner has not run and which this repository's tooling refuses. Every later P7 wave was
+recorded as "blocked behind T42A1", which put **three tasks that need neither package**
+behind an install they never use — and, through T44A1's `depends-on: … T42B2`, put the
+whole of Phase 9 behind it too.
+
+Two of those edges do not survive contact with the code. I checked before changing them:
+
+**Edge 1 — `T42A3 depends-on T42A2` (dropped).** T42A3 mirrors the web diagnostics
+screen on Android. That screen's real content is three sections and nothing else:
+
+```
+apps/web/src/features/diagnostics/diagnostics-model.ts
+  id: "connection"   title: "Connection"
+  id: "versions"     title: "Versions"
+  id: "capabilities" title: "Capabilities"
+```
+
+`DiagnosticsScreen.tsx` imports only `ui/primitives`, its own three modules and
+`diagnostics.css`; `diagnostics-model.ts` imports only a `hosts` type from
+`@picompanion/frontend-core` and `ServerInfoStatusPayload` from
+`@picompanion/protocol/messages`. A case-insensitive grep for `trusted|push|device`
+across the non-test files of that directory returns only `Array.prototype.push` calls.
+There is no trusted-device section to mirror, so device revocation (T42A2) is not a
+prerequisite for mirroring it. The real edge is `T41B3` — the export this screen
+exposes — and that is kept.
+
+**Edge 2 — `T42B1 depends-on T42A3` (dropped).** T42B1 and T42B2 own
+`apps/android/src/platform/offline/`; T42A3 owns `apps/android/src/features/
+diagnostics/`. Disjoint directories, and the offline tree is already substantially
+built (`sqlite-structured-storage.ts`, `timeline-cache.ts`, `turn-outbox-owner.ts`,
+`turn-recovery.ts`, `stale-announcement.ts`). Executing the migration decision does not
+require a diagnostics screen to exist first. T42B1's real dependency is T22, which built
+the storage interfaces it verifies.
+
+**Edge 3 — `T42B2 depends-on T42B1` (KEPT).** This one is real: T42B2 tests the import
+path that T42B1's decision either produces or declines to produce. It stays, and the two
+must not run in the same wave because they own the same directory.
+
+**What the decision document already settles.** `docs/frontend-data-migration.md` §2
+records **"Overall Phase 0 decision: RESET / RE-PAIR — no export utility is created"**,
+and §3 opens **"No import: T42 will not add an import path or schema migration for
+legacy drafts/hosts/attachments."** So T42B1 is verification of shipped behaviour
+against a written decision, and T42B2's own first criterion — "or its absence is
+justified in writing" — is the branch this decision selects. Neither task adds a feature,
+and neither touches `expo-notifications`.
+
+**Also recorded, not fixed here.** The per-task `wave:` column in the index table is
+stale for 17 rows relative to the wave table, which records where each task was actually
+run (T41A4 says P7-W5 but ran in P6-W17; T43A1/T43A2/T43A3 say P8-W1/W2/W3 but ran in
+P6-W18/W19/W20; and so on). Every one of the 17 **is** listed in some wave in the wave
+table, so nothing is unscheduled — the wave table is the authority and the column is
+decoration that drifted. Left alone deliberately: mass-editing 17 historical rows would
+churn the file without changing what runs next.
+
+Owns: the dependency and wave columns of T42A3, T42B1 and T42B2, and the P7 rows of the
+wave table.
+
+- [x] Each dropped edge is justified against the code, not against prose
+- [x] The kept edge (T42B2 behind T42B1) is stated and the same-directory conflict noted
+- [x] T42A1 and T42A2 remain blocked; nothing here pretends the install happened
+
 #### T32A1 — Build the Android connect form
 
 `labels: phase-5, area: android` · `wave: P5-W4` · `depends-on: T32S1C`
@@ -9039,7 +9110,7 @@ Owns: `apps/android/src/features/devices/`. No other task in this wave touches t
 
 #### T42A3 — Build the Android diagnostics screen
 
-`labels: phase-7, area: android` · `wave: P7-W3` · `depends-on: T42A2, T41B3`
+`labels: phase-7, area: android` · `wave: P7-W7` · `depends-on: T41B3`
 
 Mirror the web diagnostics content and redaction guarantees.
 
@@ -9051,7 +9122,7 @@ Owns: `apps/android/src/features/diagnostics/`. No other task in this wave touch
 
 #### T42B1 — Execute the client data migration or reset
 
-`labels: phase-7, area: android` · `wave: P7-W4` · `depends-on: T42A3`
+`labels: phase-7, area: android` · `wave: P7-W7` · `depends-on: T22`
 
 Execute the draft and outbox migration or the explicit reset exactly as decided in docs/frontend-data-migration.md. Any export utility lives in the legacy checkout, never here.
 
@@ -9063,7 +9134,7 @@ Owns: `apps/android/src/platform/offline/`. No other task in this wave touches t
 
 #### T42B2 — Test versioned-JSON import
 
-`labels: phase-7, area: android` · `wave: P7-W5` · `depends-on: T42B1`
+`labels: phase-7, area: android` · `wave: P7-W8` · `depends-on: T42B1`
 
 Test the versioned-JSON import path if the decision requires it.
 
