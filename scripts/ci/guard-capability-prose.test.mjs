@@ -350,10 +350,57 @@ test("T147: isShippedSourcePath excludes test files and non-src paths", () => {
   );
 });
 
-test("T147: isAppSourcePath is unchanged — apps/web/src and apps/android/src only, tests included", () => {
+// CORRECTED (T216): this test was titled "T147: isAppSourcePath is
+// unchanged — apps/web/src and apps/android/src only, tests included" —
+// true when T147 wrote it, false since T179 (scripts/ci, packaging/**),
+// T197 (docs/**) and T207 (.github/workflows/*.yml,
+// apps/android/maestro/*.md) each added a tree `isAppSourcePath` scans for
+// DENIAL (see that function's own doc comment in
+// run-guard-capability-prose.mjs). The title claimed a scope the function
+// no longer has; the three assertions below never actually tested that
+// scope at all — they test a narrower, still-true fact that has nothing to
+// do with apps/android/src: `packages/*/src` is `isShippedSourcePath`
+// scope (T147 widened THAT to cover it) but has never been
+// `isAppSourcePath` (denial) scope. Retitled to say exactly that.
+//
+// The six areas' own positive coverage lives beside the task that added
+// each one, not here: apps/web/src (this test, below), apps/android/src
+// (the "T216" test immediately after this one — the one area with no
+// direct `isAppSourcePath(...) === true` assertion anywhere in this file
+// before T216, confirmed by mutation: deleting "apps/android/src/" from
+// `APP_SRC_PREFIXES` left every test in this file green), scripts/ci
+// ("T179: isAppSourcePath now covers scripts/ci/*.mjs..." above),
+// packaging/** ("T179: isAppSourcePath now covers packaging/**..." above),
+// docs/** ("T197: isAppSourcePath now covers docs/*.md..." below),
+// .github/workflows/*.yml and apps/android/maestro/*.md ("T207: ..." below).
+// The two denial-scope exclusions have their own coverage too:
+// SELF_REFERENTIAL_DENIAL_EXCLUSIONS ("T179: guard-capability-prose.mjs,
+// its own test file, and its CLI entry point are excluded..." above) and
+// DOCS_LEDGER_DENIAL_EXCLUSIONS ("T197: isAppSourcePath excludes
+// docs/issues-from-plan.md specifically..." below). Every one of those
+// eight claims (six areas, two exclusions) was proven at T216 by actually
+// deleting the corresponding line from `isAppSourcePath` in a scratch copy
+// of run-guard-capability-prose.mjs, running this file, confirming a named
+// test failed, and restoring byte-identically — never by re-deriving an
+// equivalent regex or trusting that the assertion existed.
+test("T147: packages/*/src counts as shipped-scope (T147's own widening of isShippedSourcePath) but not denial-scope — isAppSourcePath still excludes it, unlike apps/web/src", () => {
   assert.equal(isAppSourcePath("apps/web/src/features/composer/Composer.test.tsx"), true);
   assert.equal(isAppSourcePath("packages/client/src/daemon-client.ts"), false);
   assert.equal(isAppSourcePath("packages/protocol/src/agent-types.ts"), false);
+});
+
+// T216: apps/android/src had NO direct `isAppSourcePath(...) === true`
+// assertion anywhere in this file — every existing android-flavoured case
+// (e.g. "flags every violating file, not just the first" above) exercises
+// `findCapabilityDenialViolations` with an already-filtered `appFiles`
+// list, which proves the pure matching logic but never proves
+// `isAppSourcePath` itself admits an apps/android/src path. Confirmed live:
+// deleting "apps/android/src/" from `APP_SRC_PREFIXES` in
+// run-guard-capability-prose.mjs left all 135 pre-T216 tests in this file
+// passing. This closes that gap directly.
+test("T216: isAppSourcePath admits apps/android/src, tests included — the one area this file never asserted directly", () => {
+  assert.equal(isAppSourcePath("apps/android/src/features/composer/use-queue-modes.ts"), true);
+  assert.equal(isAppSourcePath("apps/android/src/features/composer/Composer.test.tsx"), true);
 });
 
 // === T156: shipped-source scope widened to scripts/ci =====================
