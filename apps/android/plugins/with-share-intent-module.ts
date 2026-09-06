@@ -3,9 +3,12 @@ import { withMainActivity, type ConfigPlugin } from "expo/config-plugins";
 /**
  * Config plugin for T36F's native share module (plan.md §9.3).
  *
- * `android.intentFilters` in `../app.config.ts` (T36E,
- * `buildShareIntentFilters()`) already makes the OS *offer* this app as
- * a share target via Expo's built-in `android.intentFilters` mod — no
+ * `android.intentFilters` in `../app.config.ts` (T36E; built inline from
+ * `../src/features/share/accepted-file-mime-types.json` since T201 —
+ * see that file's doc comment for why it is no longer built by calling
+ * `share-intent-config.ts`'s `buildShareIntentFilters()` directly)
+ * already makes the OS *offer* this app as a share target via Expo's
+ * built-in `android.intentFilters` mod — no
  * plugin needed for that part, and `../modules/share-intent/` needs no
  * `plugins` entry either: `expo-modules-autolinking`'s
  * `nativeModulesDir` option defaults to `<project>/modules` (confirmed
