@@ -45,7 +45,9 @@ const APP_SRC_PREFIXES = ["apps/web/src/", "apps/android/src/"];
 // terminal-ts-loader.mjs` is tracked (since `0cee983`, T04) and
 // `run-orphan-modules.mjs` already names it. Counted at the gate:
 // 1172 `.ts`/`.tsx` non-test files under `packages|apps/*/src`, + 1 (the
-// loader) + 25 non-test `scripts/ci` `.mjs` = the 1198 this runner reports.
+// loader) + 25 non-test `scripts/ci` `.mjs` = 1198, what this runner
+// reported at that gate (P6-W16). It recomputes fresh on every run, so
+// treat that figure as a dated snapshot, not the current count (T218).
 // The inclusion is correct on its merits — the loader IS shipped source, and
 // a capability declared there should count — but the rationale above was
 // not, and "this cannot change anything" is the kind of claim that stops

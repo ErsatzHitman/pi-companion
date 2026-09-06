@@ -563,9 +563,11 @@ export const CAPABILITIES = [
     // reason than T169's disambiguation one: performance, see that
     // constant's own doc comment — a bare string here made the real,
     // 905-appFile denial scan take 6m0.591s instead of ~3m49s, because its
-    // sole declaring file sorts last among the ~1204 shipped files and a
-    // bare-string member is never cached. Confirmed the gate goes quiet
-    // correctly too: deleting `findBuildOrderViolations`'s declaration (the
+    // sole declaring file sorts last among the shipped files (a dated file
+    // count lived here until T218 dropped it — see that constant's own doc
+    // comment above) and a bare-string member is never cached. Confirmed
+    // the gate goes quiet correctly too: deleting
+    // `findBuildOrderViolations`'s declaration (the
     // `export function findBuildOrderViolations(` line) leaves zero
     // declaring files, so a denying phrase inserted afterward is ALLOWED
     // (exit 0) — the token disappears with the capability, per CLAUDE.md's
