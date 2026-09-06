@@ -3,8 +3,11 @@
 This document is for the owner. It explains what the legacy Paseo daemon (the
 one still running against `$PASEO_HOME` from the `D:\paseo` reference
 checkout) provided, what in **this** repository now provides each piece, the
-exact steps to cut over, and — first, because it matters more — exactly how
-to go back if the new install turns out to be missing something.
+exact steps to cut over, and exactly how to go back if the new install turns
+out to be missing something. The undo is §7, the last procedural section:
+read it before you run §6, because it is the part you will need under
+pressure. CORRECTED (P8-W5 merge gate): this said the undo came "first,
+because it matters more" — it is written last.
 
 **Read the safety statement in §0 below before running anything in this
 document.**
@@ -20,9 +23,18 @@ actions.
 
 - **`$PASEO_HOME` (default `~/.paseo`, or wherever the owner's `PASEO_HOME`
   environment variable points) is the owner's live data.** No command in
-  this document writes to it, moves it, or deletes anything under it. The
-  verification procedure in §4 explicitly operates on a **copy**, never the
-  original.
+  §§0—5 writes to it, and no command anywhere in this document moves it or
+  deletes anything under it. The verification procedure in §4 explicitly
+  operates on a **copy**, never the original. **§6's cutover deliberately
+  writes to it**, because writing to the same home is what a cutover onto
+  the same home means: step 3 starts the new daemon against the real
+  directory, `resolvePaseoHome`
+  (`packages/server/src/server/paseo-home.ts`) calls `ensurePrivateDirectory`
+  on it, and `persisted-config.ts` writes `config.json` under it — exactly as
+  the legacy daemon does. Nothing there deletes or moves anything.
+  CORRECTED (P8-W5 merge gate): this said "No command in this document
+  writes to it", which §6 step 3 falsifies — and which §7 step 3 already
+  contradicted by name.
 - **The production daemon on port `6767` is never stopped, rebound, or
   connected to by any step in this document.** Every check T43B2a itself ran
   was performed offline, from the repository, against build output on disk
@@ -277,8 +289,12 @@ repository, not in this document).
 
 ## 6. Cutover steps (only after §4 has passed)
 
-Do these in order. Each is reversible; see §7 (below) for the undo of each
-numbered step here, in the same order.
+Do these in order. Each is reversible, and **§7 below is the undo** — a
+reversal plan for the cutover as a whole, not a step-by-step mirror of this
+list: §7.1 undoes step 3, §7.3 undoes steps 2 and 5, and §7.4 asks you to
+record what broke. CORRECTED (P8-W5 merge gate): this said §7 held "the undo
+of each numbered step here, in the same order" — §6 has five steps and §7
+has four, and they do not correspond one to one.
 
 1. Run the owner verification procedure in §4 in full, and confirm both
    steps 5 and 6 there worked as expected. Do not proceed if they did not.
@@ -311,9 +327,11 @@ numbered step here, in the same order.
 
 ## 7. Undo — how to go back to the legacy install
 
-Written before the cutover steps above, at the same level of detail, because
-the reader most likely to need this is reading it under pressure, with the
-new daemon already misbehaving.
+At the same level of detail as the cutover it reverses, because the reader
+most likely to need this is reading it under pressure, with the new daemon
+already misbehaving — so read it before you run §6, not after. CORRECTED
+(P8-W5 merge gate): this said "Written before the cutover steps above", a
+drafting-order claim that read as a placement claim; §7 comes after §6.
 
 **What would tell you that you need this:** the new daemon fails to start
 against your real `$PASEO_HOME`; it starts but a session, agent, or
