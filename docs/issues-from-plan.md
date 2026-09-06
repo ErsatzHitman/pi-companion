@@ -481,6 +481,8 @@ that recomputation has to be domain-specific:
 | T218   | Date-qualify the drifting shipped-file counts in scripts/ci                     | phase-8   | ci               | P8-W18 | —                                                                     |
 | T219   | Decide what to do with issues-from-plan's hand-incremented tallies              | phase-8   | docs             | P8-W18 | —                                                                     |
 | T221   | guard-capability-prose states two contradictory member rationales               | phase-8   | ci               | P8-W19 | —                                                                     |
+| T222   | CLOSED (T184)'s disambiguation half is live and false                           | phase-8   | ci               | P8-W21 | T223                                                                  |
+| T223   | The findBuildOrderViolations RegExp member is refactor-fragile                  | phase-8   | ci               | P8-W20 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -522,15 +524,16 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**433 tasks** (distinct IDs counted directly from the table above), recounted at the P8-W18
-merge gate — the commit that filed `T221`, one row past the **432** T219 verified at
+**435 tasks** (distinct IDs counted directly from the table above), recounted at the P8-W19
+merge gate — the commit that filed `T222` and `T223`, two rows past the **433** counted at the
+P8-W18 gate and three past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 212 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 214 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 50 (+45), P9 unchanged at 6. See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 52 (+47), P9 unchanged at 6. See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 50, P9 6. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 52, P9 6. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -696,7 +699,10 @@ the task details always agree.
 |        | KEEP, not built; the gate fixed the scope its rationale misstated.       |       |
 | P8-W18 | T218, T219 (both filed by the P8-W17 gate; disjoint: ci vs docs).        | 2     |
 |        | Both KEEP; the gate widened T219's policy from a list to a shape.        |       |
-| P8-W19 | T221 (filed by the P8-W18 gate; pre-existing, not this wave's)           | 1     |
+| P8-W19 | T221 (filed by the P8-W18 gate; pre-existing, not this wave's).          | 1     |
+|        | KEEP; the answer was that NEITHER cited rationale is live.               |       |
+| P8-W20 | T223 (filed by the P8-W19 gate; a real check-cannot-fail shape)          | 1     |
+| P8-W21 | T222 (filed by the P8-W19 gate; runs after T223 owns the member)         | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7760,6 +7766,70 @@ assertion change, no `CAPABILITIES` value change.**
       superseded algorithm
 - [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
       `node scripts/ci/run-guard-capability-prose.mjs` still exits 0
+
+#### T222 — `CLOSED (T184)`'s disambiguation half is live, present tense, and false
+
+`labels: phase-8, area: ci` · `wave: P8-W21` · `depends-on: T223`
+
+`scripts/ci/guard-capability-prose.mjs`'s `CLOSED (T184)` block says "the member being a
+`RegExp` **still matters for the reasons T169 gave** (disambiguating a same-file, same-name
+collision)". T221 established, from the code and by experiment, that it does not: a bare
+`findBuildOrderViolations` collides with nothing in this tree, so T169's reason is not live for
+this member either. The entry T221 rewrote now says exactly that, and points readers INTO this
+block for confirmation — where they meet the opposite claim.
+
+The same block states the run at **0.8s**. Measured at the P8-W19 gate with
+`time node scripts/ci/run-guard-capability-prose.mjs`: **1.203s**. Both the verifier and the
+gate measured ~1.2s independently.
+
+Verified pre-existing at `a21c219` — T221 was explicitly barred from editing this block, and
+correctly did not. It is the surviving half of the contradiction T221 was filed to close.
+
+**Ordered after T223 deliberately.** If T223 changes the member's form, what this block should
+say about it changes with it; writing the history first would mean writing it twice.
+
+Owns: the `CLOSED (T184)` block and the `FIND_BUILD_ORDER_VIOLATIONS_MEMBER` doc comment in
+`scripts/ci/guard-capability-prose.mjs`. **Comments only.**
+
+- [ ] The block no longer claims T169's reason is live for this member, and says which reason (if
+      any) is
+- [ ] The 0.8s figure is re-measured by you in the foreground and either updated with what you
+      observed or removed
+- [ ] A reader following the entry's pointer into this block is not handed a contradiction
+- [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
+      `node scripts/ci/run-guard-capability-prose.mjs` still exits 0
+
+#### T223 — The `findBuildOrderViolations` `RegExp` member is silently refactor-fragile
+
+`labels: phase-8, area: ci` · `wave: P8-W20` · `depends-on: none`
+
+`declarationPatternsFor` recognises **four** declaration shapes for a bare-string member.
+`FIND_BUILD_ORDER_VIOLATIONS_MEMBER` is `/\bfunction\s+findBuildOrderViolations\s*\(/` — only
+the second of them. The bare string is a strict superset, so the `RegExp` form buys nothing and
+loses three shapes.
+
+Proven at the P8-W19 gate against the REAL exported predicate, not by reading the regex: feeding
+`isCapabilityMemberDeclared` a behaviour-preserving refactor of the declaration
+(`export function findBuildOrderViolations(commandText) {` →
+`export const findBuildOrderViolations = (commandText) => {`, still exported, still shipped)
+gives `bare-string member declared: true`, `RegExp member matches: false`. Under the `RegExp`
+member that refactor silently disables the entry: every denying phrase for this capability
+becomes allowed again, exit 0, no signal — a check that cannot fail, arriving by refactor
+rather than by deletion, which the entry's existing proof does not cover.
+
+T221 is what makes this actionable: both rationales that argued for the `RegExp` form are now
+established as dead, so nothing argues for keeping the brittle one. T221 could not do it — it
+requires a `CAPABILITIES` value change, which that task's scope forbade.
+
+Owns: that entry's `methodNames`, the `FIND_BUILD_ORDER_VIOLATIONS_MEMBER` constant, and
+`scripts/ci/guard-capability-prose.test.mjs`. Do not touch the `CLOSED (T184)` block — T222
+owns it, and runs after you.
+
+- [ ] The entry survives the const-arrow refactor of its declaration, proven by a test that FAILS
+      before your change
+- [ ] Whatever form the member ends up in, the reason is stated once and is true today
+- [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
+      `node scripts/ci/run-guard-capability-prose.mjs` still exits 0 with the same group count
 
 #### T32A1 — Build the Android connect form
 
