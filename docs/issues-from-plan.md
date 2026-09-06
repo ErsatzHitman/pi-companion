@@ -7285,8 +7285,15 @@ This is the same shape as `guard-capability-prose.mjs` — a narrow, curated che
 generic linter. Read that guard first; it is the model, including its deliberate refusal to
 be general.
 
-Owns: `scripts/ci/` and the doc comment in
-`apps/android/src/platform/offline/versioned-import.test.ts`. Nothing else.
+Owns: `scripts/ci/`, this guard's own job in `.github/workflows/ci.yml`, and the doc comment
+in `apps/android/src/platform/offline/versioned-import.test.ts`. Nothing else.
+
+**The CI job is part of the task, not a follow-up.** Every guard runner in this repository
+gets its own job (`run-guard-capability-prose.mjs` is at `ci.yml`'s "guard / no prose denies a
+shipped capability"); `node --test scripts/ci/*.test.mjs` runs a guard's TESTS, never the
+guard itself against the real tree. A runner with no job is precisely the "check that cannot
+fail" this task exists to replace. Add the job in the same commit, and do not touch any other
+job.
 
 - [ ] A committed check fails when a legacy envelope reader is added anywhere in the scope
       the prose names, proven by MUTATION: add one, show the guard goes red, remove it
