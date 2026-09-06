@@ -1,0 +1,209 @@
+appId: sh.picompanion.debug
+name: "composer inputs — keyboard entry live; voice, attachment picking, and share intent blocked, named"
+tags:
+  - composer
+---
+# T37E3 (plan.md §14.4 "composing with keyboard, voice, attachment, and
+# share intent"). This wave has no emulator, no device, and no Maestro
+# binary (same as every T37E* flow so far — see ../README.md's own "What
+# T37D proved, and what it did not") — this flow has never been run.
+# `../e2e/flows/composer-inputs.contract.test.ts` is this flow's real
+# proof: every testId/string named below is `readCode()`-matched (full
+# JSX/statement expressions, comment-stripped, anchored to the one
+# top-level component that owns it) against real source, not a bare
+# identifier — see that file's own doc comment.
+#
+# ---------------------------------------------------------------------
+# THREE OF FOUR INPUT MODES STILL CANNOT BE EXERCISED HERE — but P5-W21
+# changed WHY, so the reasons below are restated rather than repeated.
+# Two claims that used to stand here were destroyed in that wave and are
+# now false: T70 wired a real `VoiceCaptureController` into
+# `Composer.tsx`'s mic button (over the same outbox/sessionId/onSubmit a
+# text send uses), and T69 mounted the share receiver at
+# `apps/android/src/app/share.tsx` over `AppCore.shareIntentPort`. What
+# is still true — and what this flow actually asserts — is one layer
+# lower: `createUnavailableVoiceCapturePort()` is the only production
+# `VoiceCapturePort` (no `expo-audio` installed), so pressing the mic
+# reaches the honest "unavailable" notice below rather than a recording;
+# and nothing yet navigates to `/share` automatically (filed against
+# T32S15 by T69), so no share can be reached from here. Attachment
+# *picking* is
+# similarly stubbed: `attachment-source-port.ts`'s own doc comment
+# records that no `expo-image-picker`/`expo-document-picker` dependency
+# is installed in this workspace, so `createUnavailableAttachmentSourcePort`
+# is its only production implementation.
+#
+# So this flow proves what is actually true today, split into two
+# halves:
+#
+#   1. KEYBOARD ENTRY — fully live, exercised below end-to-end,
+#      including composing, sending, and seeing the message reconcile to
+#      a real, named terminal status. This still needs no daemon and no
+#      pairing, but P5-W19 changed *which* status that is, so read on.
+#      P5-W18 correction: that route's `turnService` prop is NO LONGER a
+#      no-op. T63 built a real `TurnService` and T32S12 mounted it via
+#      `useAppCore().createTurnService(agentId)`, so steer/follow-up/abort
+#      now reach a live `DaemonClient` when one is connected.
+#      P5-W19 correction: `onSubmit` is NO LONGER a no-op either. T32S13
+#      wired `session/[agentId]/index.tsx`'s `handleSubmit` to
+#      `AppCore.startTurn` -> T63's `startDaemonTurn`, so a send now
+#      genuinely tries to reach a daemon. On an unpaired run there is
+#      none, `startDaemonTurn` settles `{ status: "failed" }`
+#      ("Not connected to a daemon"), `handleSubmit` re-throws, and
+#      `Composer`'s own `markEntryFailed` path renders the entry as
+#      "Failed" with its text recoverable via Retry. That is what this
+#      flow asserts below — the honest unpaired outcome, never a
+#      delivered turn. Asserting "Sent" here would now be asserting a
+#      state this app cannot reach without a daemon. A paired run that
+#      reaches "Sent" is T59's (real device) to add.
+#      `handleMicPress`/`handleAttachPress` remain local no-ops. The mic and attach
+#      buttons are ALSO live (real, tappable, real testIds) — what's
+#      blocked is only what happens after the OS permission check: real
+#      recording and real file picking. This flow taps both and asserts
+#      their honest "unavailable" fallback, which IS real, shipped
+#      behavior (`permission-recovery.ts`'s `"unavailable"` state,
+#      distinct from a user's own `"denied"` choice) — never a
+#      completed voice capture or a completed pick.
+#   2. SHARE INTENT — cannot be exercised at all, on a device or
+#      otherwise, and this flow does not try to fake one. `Composer`
+#      has no share-intent affordance of its own to begin with (a share
+#      target reaches the app through Android's own share sheet, not
+#      through anything inside the composer); the receiver that would
+#      turn a real `ACTION_SEND` `Intent` into a queued draft
+#      (`features/share/share-intent-receiver.ts`) is real and unit-
+#      tested against a scripted fake port, IS now mounted: T69 (P5-W21)
+#      added `apps/android/src/app/share.tsx`, which wraps
+#      `AppCore.shareIntentPort` in `share-chooser-runtime.ts` and
+#      renders `ShareChooserScreen.tsx`. (`features/share/index.ts` now
+#      says "Mounted as of T69"; its old "Nothing imports this yet" note
+#      this file used to cite no longer exists.) Two gaps remain, neither
+#      this task's `Owns` grant (`../e2e/`, this file):
+#        a. Nothing NAVIGATES to `/share` automatically when a live
+#           share arrives while another screen is on top — T69 filed
+#           that against `T32S15` by name in the route's own doc
+#           comment. `/share` is reachable today only by direct
+#           navigation, or by its own cold-start
+#           `getInitialShareIntent()` read once that route mounts.
+#        b. The native half exists in source (T36F's Expo config plugin
+#           adding the `SEND` intent-filter, plus the Expo Module
+#           reading `Intent.EXTRA_TEXT`/`EXTRA_STREAM`), but
+#           `createNativeShareIntentPort()` falls back to a real,
+#           honest "unavailable" port whenever that native module is not
+#           linked — which it is not in any build this harness can
+#           produce, since linking needs `expo prebuild` + Gradle,
+#           categorically out of reach here (this wave's hard rules).
+#           So no real `ACTION_SEND` intent can be delivered to the app
+#           under test, which is why this flow asserts nothing about it.
+#      What IS true and provable without either: `buildShareIntentFilters()`
+#      (`share-intent-config.ts`) is real and wired into `app.config.ts`
+#      today, so the OS-level "Share to Pi Companion" target registration
+#      itself is not blocked — only the in-app receiving half is. This
+#      flow does not assert anything about that OS-level registration
+#      either, since confirming an app actually appears in Android's
+#      share sheet needs a real installed build, which this wave cannot
+#      produce (`../README.md`'s "Prerequisites").
+#
+# See ../e2e/flows/composer-inputs-contract.ts for the single restated
+# source of every testId/string below.
+#
+# ## Reaching the composer without pairing
+#
+# `cold-start-restore.yaml` (T37E2) already disclosed a real production
+# gap: a successful `ConnectForm` submission never calls `saveHostProfile`
+# and never navigates away from `/connect`, so there is today no in-app,
+# button-driven path from a fresh install to any `/h/:serverId/...`
+# route. That gap is still open (re-verified for this task: `grep -rn
+# saveHostProfile apps/android/src` still finds only its own definition,
+# its test, and its re-export). Rather than block this flow on it too,
+# this flow opens the session route directly with Maestro's `openLink`,
+# using the app's own already-registered `picompanion://` deep-link
+# scheme (`app.config.ts`) and the `"session"` match
+# `deep-link-routing.ts` already defines for `h/<serverId>/session/
+# <agentId>`. This is a real, already-shipped mechanism — Expo Router
+# resolves that URL straight to `session/[agentId]/index.tsx`'s file,
+# independent of any in-app button or of `ConnectForm` ever having run —
+# not a workaround invented for this flow. `serverId`/`agentId` are
+# free-form path segments this route never validates against a real
+# paired host (it only ever uses them as display labels — see
+# `SessionRoute`'s own doc comment), so any non-empty strings work here.
+#
+# `clearState`/`clearKeychain` still start this flow from the same
+# fresh-install state every other flow in this directory does
+# (../README.md's "Flow independence") — this flow depends on no other
+# flow, and the deep link below reaches the composer before onboarding
+# would otherwise gate it (`OnboardingGate` wraps only `/connect`'s
+# `ConnectionShell`, never anything under `h/[serverId]/`, confirmed by
+# reading `_layout.tsx`: no onboarding gate wraps the whole router tree).
+# This flow talks to no daemon at all (no `${DAEMON_HOST}`/`${DAEMON_PORT}`
+# reference below), so it needs no cleanup beyond the app's own fresh
+# `clearState` — nothing it does persists past the run, and nothing it
+# reads depends on state a prior run of itself or of any other flow left
+# behind. That also makes it trivially safe to shard alongside the other
+# `../maestro/*.yaml` flows: distinct package, distinct in-memory
+# per-launch state, no shared daemon, no shared file.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- openLink: "picompanion://h/e2e-host/session/e2e-session"
+
+# --- Composer renders under its default root testId ("composer" —
+# --- session/[agentId]/index.tsx passes no `testId` prop, so
+# --- `Composer.tsx`'s own `testId ?? "composer"` fallback applies).
+- assertVisible:
+    id: "composer"
+
+# --- KEYBOARD ENTRY: type a message and send it. No daemon, no
+# --- pairing. Since T32S13 (P5-W19) `onSubmit` is a real call into
+# --- `AppCore.startTurn`, so with nothing connected the optimistic
+# --- "Sending…" entry reconciles to "Failed"
+# --- (`composer-model.ts`'s `entryStatusLabel("failed")`, mirrored by
+# --- ../e2e/flows/composer-inputs-contract.ts's `entryFailedLabel`) —
+# --- the entry text stays visible and recoverable via Retry. This flow
+# --- still waits on nothing external: the refusal is local and
+# --- immediate.
+- tapOn:
+    id: "composer-input"
+- inputText: "Testing composer keyboard entry"
+- tapOn:
+    id: "composer-send"
+- assertVisible:
+    id: "composer-entries"
+- assertVisible:
+    text: "Testing composer keyboard entry"
+- assertVisible:
+    text: "Failed"
+
+# --- MIC BUTTON: live and tappable; the permission check behind it
+# --- resolves "unavailable" (no `expo-audio` installed —
+# --- ../e2e/flows/composer-inputs-contract.ts). This is voice entry's
+# --- OWN honest state, not a stand-in for a completed recording. T70
+# --- (P5-W21) DID wire T36D's `VoiceCaptureController` into this
+# --- button; what still blocks a real capture is one layer lower —
+# --- `createUnavailableVoiceCapturePort()` is the only production
+# --- `VoiceCapturePort`, and its `getPermissionStatus()` returns
+# --- "unavailable", so `requestStart()` refuses and feeds that same
+# --- state into the notice asserted below (see this file's header).
+- tapOn:
+    id: "composer-mic"
+- assertVisible:
+    id: "composer-mic-permission-notice"
+- assertVisible:
+    text: "Microphone access unavailable. Microphone access isn't available in this build."
+
+# --- ATTACH BUTTON: same shape as mic — live, tappable, honest
+# --- "unavailable" fallback (no `expo-image-picker`/`expo-document-
+# --- picker` installed). Real picking is blocked on those packages
+# --- being installed and a second `AttachmentSourcePort` implementation
+# --- added behind this same seam (`attachment-source-port.ts`'s own "To
+# --- wire a real picker" note) — neither exists this wave.
+- tapOn:
+    id: "composer-attach"
+- assertVisible:
+    id: "composer-attachment-permission-notice"
+- assertVisible:
+    text: "Photo and file access unavailable. Photo and file access isn't available in this build."
+# --- SHARE INTENT: deliberately not exercised here — see this file's
+# --- header comment section 2 for exactly why (no in-app receiver
+# --- mounted, no native module to deliver a real ACTION_SEND intent
+# --- through even if one were). Nothing below this line pretends
+# --- otherwise.

@@ -1,0 +1,126 @@
+appId: sh.picompanion.debug
+name: "pairing — direct host connect, and the relay entry point's honest state"
+tags:
+  - pairing
+---
+# T37E1 (plan.md §14.4 "pair direct and relay hosts").
+#
+# This wave has no emulator, no device, and no Maestro binary — this flow
+# has never been run. It is written and reviewed as text, and every
+# testId/string it names is pinned by `../e2e/flows/pairing.contract.test.ts`
+# (readCode()-matched against real source, not a bare identifier — see
+# that file's own doc comment) so this flow cannot silently rot before
+# anyone with a device first runs it. See
+# `../e2e/flows/pairing-contract.ts` for the single source of the
+# testIds/copy restated inline below.
+#
+# ## Two different code paths, not one flow with a different URL
+#
+# **Direct** pairing (`ConnectForm` -> `DaemonConnectionStore.connect()`
+# -> `daemon-connect-attempt.ts`) opens a plain WebSocket straight at the
+# daemon this run's isolated harness just started
+# (`${DAEMON_HOST}`/`${DAEMON_PORT}`/`${DAEMON_ADDRESS}` — never a
+# hardcoded address or the production daemon's port, per ../README.md's
+# "Isolation" and "Flow independence" rules). That daemon is real, and
+# this half of the flow is written to actually pair against it.
+#
+# **Relay** pairing (`QrPairingPanel` -> `qr-scan-model.ts`'s
+# `handleScannedText` -> `apply-connection-offer.ts` ->
+# `hosts.hostProfileDraftFromConnectionOffer`) is a structurally
+# different pipeline: it needs a *decoded QR payload* (a pairing-offer
+# URL/fragment/base64 blob), never a typed address, and it connects
+# through a relay tunnel, never a direct socket. **This flow cannot
+# complete a real relay pairing, on a device or otherwise, for two
+# independent reasons, and says so rather than faking one:**
+#
+#   1. No camera module is installed in this workspace
+#      (`../../src/features/connect/qr-scanner-port.ts`'s module
+#      docstring), so no QR can be *decoded* here. (P5-W18 correction:
+#      the rest of this item is now out of date. T32A8 added a
+#      manual-paste affordance to `QrPairingPanel.tsx` — an
+#      always-visible "Pairing link" `TextField`
+#      (`${testId}-paste-input`) plus a "Pair" button
+#      (`${testId}-paste-input-pair-button`), both wired to the same
+#      `controller.handleScannedText(...)` a camera decode would call. So
+#      `handleScannedText` IS now reachable from the rendered UI, and a
+#      Maestro `inputText`/`tapOn` pair CAN get a pairing offer into the
+#      app. Reason 2 below still stands on its own and is what keeps this
+#      half of the flow from completing.)
+#   2. Even if there were, this harness's own isolated daemon is started
+#      with `--no-relay` (`../e2e/harness/run-plan.ts`'s `startArgv`) —
+#      by design, so a stray relay credential can never reach a real
+#      relay server from this harness. A relay pairing has nothing to
+#      pair *through* here.
+#
+# What relay pairing needs before it can run for real: (a) an offer to
+# get into the app — DONE as of T32A8 (P5-W18) via the manual-paste
+# field above; a camera module plus a second `CameraScannerPort` (see
+# `qr-scanner-port.ts`'s own "To wire a real camera" note) would be the
+# nicer second route and still does not exist — and (b) a harness daemon
+# variant started *with* a relay (or a scripted relay double), which is
+# `../e2e/harness/`'s call, not this file's, and is still the open
+# blocker.
+#
+# So the second half of this flow proves what **is** true today: the
+# relay entry point exists, is reachable from `ConnectionShell`, and
+# renders its honest `"unavailable"` fallback — never a fake "paired"
+# state. Treat this half as a regression guard on that honesty, not as
+# proof relay pairing works.
+#
+# `clearState`/`clearKeychain` make this flow independent and repeatable
+# (../README.md's "Flow independence"): every run starts from the same
+# fresh-install state, so this flow never depends on `smoke.yaml` or any
+# other flow having run first, and never leaves state behind for another
+# flow to trip on — the only state it touches is this run's own isolated
+# daemon (`../e2e/harness/daemon-endpoint.ts`'s fresh `PASEO_HOME`), which
+# `run-flow.ts` tears down itself after the flow exits, win or lose.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# --- Onboarding: welcome, then the permissions step (camera is always
+# --- "unavailable" in this build, so the permissions step's primary
+# --- action button never renders — see OnboardingGate.tsx's
+# --- `recovery.action !== "dismiss"` gate; only the banner + Continue
+# --- show). Same anchors as ../smoke.yaml, carried one step further.
+- assertVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    text: "Welcome to Pi Companion"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    text: "Camera access isn't available in this build."
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# --- Direct pairing: ConnectionShell + ConnectForm now render.
+- assertVisible:
+    id: "connect-form"
+- assertVisible:
+    text: "Not connected"
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    text: "Connected via direct connection"
+
+# --- Relay entry point: reachable, and honest about not being wired up
+# --- yet (see the header comment above for exactly why). This is a
+# --- regression guard on that honesty, not a completed pairing.
+- tapOn:
+    id: "connection-shell-show-scanner-button"
+- assertVisible:
+    id: "connection-shell-qr-pairing"
+- assertVisible:
+    text: "QR pairing isn't available in this build yet. Enter your host's address manually below instead."
+- assertVisible:
+    id: "connection-shell-qr-pairing-retry-button"
+- tapOn:
+    id: "connection-shell-hide-scanner-button"
+- assertVisible:
+    id: "connect-form"

@@ -1,0 +1,49 @@
+{
+  "name": "@picompanion/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit --incremental false && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit --incremental false",
+    "test": "vitest run",
+    "test:e2e": "playwright test --config=e2e/playwright.config.ts"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/state": "^6.7.2",
+    "@codemirror/view": "^6.43.10",
+    "@picompanion/design-tokens": "0.1.0",
+    "@picompanion/frontend-core": "0.1.0",
+    "@picompanion/highlight": "0.3.0-beta.2",
+    "@picompanion/protocol": "0.3.0-beta.2",
+    "@tanstack/react-router": "^1.170.32",
+    "@tanstack/react-virtual": "^3.14.10",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "jsqr": "^1.4.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@picompanion/client": "0.3.0-beta.2",
+    "@picompanion/protocol": "0.3.0-beta.2",
+    "@picompanion/server": "0.3.0-beta.2",
+    "@playwright/test": "^1.62.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
+    "@types/jest-axe": "^3.5.9",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jest-axe": "^9.0.0",
+    "jsdom": "^30.0.1",
+    "pino": "^10.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.6"
+  }
+}

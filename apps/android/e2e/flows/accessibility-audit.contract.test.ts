@@ -1,0 +1,410 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+import {
+  ATTACH_ACTION_LABEL,
+  COMPOSER_INPUT_LABEL,
+  entryStatusLabel,
+  MIC_ACTION_LABEL,
+} from "../../src/features/composer/composer-model.js";
+import {
+  NEW_PROFILE_ID,
+  validateConnectForm,
+} from "../../src/features/connect/connect-form-model.js";
+import { ACCESSIBILITY_AUDIT_FLOW } from "./accessibility-audit-contract.js";
+import { PRODUCTION_DAEMON_PORT } from "../harness/production-daemon-port.js";
+import { assertVisibleTextsAfterEachTap, parseMaestroSteps } from "./maestro-yaml.js";
+
+/**
+ * T37E10 — proves every testId/string `../../maestro/accessibility-audit.yaml`
+ * names still exists in the real source it targets, and that the 48dp
+ * touch-target and TalkBack-label claims that flow makes are backed by
+ * real, declared style/accessibility props — not merely by a control
+ * being visible. Same rationale and precedent as every sibling
+ * `*.contract.test.ts` (`pairing.contract.test.ts`,
+ * `composer-inputs.contract.test.ts`, `extension-sheets.contract.test.ts`,
+ * `notification-approval.contract.test.ts`): there is no emulator,
+ * device, or Maestro binary in this wave (`../README.md`'s "What T37D
+ * proved, and what it did not"), so this file is the flow's only proof
+ * of life.
+ *
+ * Two proof strategies, chosen per module (identical split to every
+ * sibling contract test):
+ *
+ * - `composer-model.ts` and `connect-form-model.ts` are RN-free, so this
+ *   file imports them directly and calls the real functions.
+ * - `Composer.tsx`, `composer-icon-action.tsx`, `Button.tsx`,
+ *   `TextField.tsx`, `OnboardingGate.tsx`, `ConnectForm.tsx`,
+ *   `connect.tsx`, `session/[agentId]/index.tsx`, and the files-screen
+ *   route reach `react-native` and cannot be imported here, so those are
+ *   read with `readCode()` (comment-stripped) and matched against a full
+ *   JSX/style-object expression — never a bare identifier
+ *   (`CLAUDE.md`'s "SOURCE-TEXT REGEX TESTS ARE ON PROBATION" note).
+ *   `readComponentCode` further anchors each assertion to the one
+ *   top-level function that owns it, closing defect (5) (a sibling
+ *   occurrence of the same call satisfying a whole-file `toMatch`) —
+ *   several of these files declare more than one top-level function
+ *   (`Composer.tsx` alone has three).
+ *
+ * A real render/TalkBack pass on a device would check two things this
+ * file checks statically instead:
+ *   1. **48dp touch target** — a `Pressable`/`TextInput`'s own resolved
+ *      style declares `minHeight`/`minWidth` >= 48 (the "48dp touch targets"
+ *      describe block below), the same per-element contract
+ *      `ui/primitives/touch-targets.test.ts` (T26A/T57B, extended to
+ *      take a path per entry by T81) already proves for `Button`,
+ *      `TextField`, and (as of T81) `composer-icon-action.tsx` itself —
+ *      this file does not re-derive that proof, it points at the same
+ *      source those primitives declare.
+ *   2. **TalkBack label** — the control's `accessibilityLabel` is
+ *      exactly the string `accessibility-audit.yaml` asserts as visible
+ *      Maestro `text:` output. On Android, Maestro's driver matches a
+ *      `text:` selector against an element's visible text **or** its
+ *      `content-desc` (which is what an RN `accessibilityLabel` compiles
+ *      to) — for `composer-mic`/`composer-attach`, whose glyph is
+ *      `accessibilityElementsHidden`, the asserted string exists in the
+ *      UI tree *only* as content-desc, so a passing run genuinely proves
+ *      the TalkBack name, not a coincidental match against visible text.
+ *      This file cannot prove Maestro's matching behaviour itself (no
+ *      Maestro binary this wave — see the flow's own header comment);
+ *      what it proves is that the source really does wire that exact
+ *      string as `accessibilityLabel` on that exact control.
+ */
+
+function readSource(relativePath: string): string {
+  return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
+}
+
+function readCode(relativePath: string): string {
+  return readSource(relativePath)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+/** Slices `readCode(relativePath)` down to one top-level `function`/`export function` declaration, by name — closes defect (5) (a sibling occurrence satisfying a whole-file match). */
+function readComponentCode(relativePath: string, name: string): string {
+  const code = readCode(relativePath);
+  const body = code
+    .split(/^(?:export default |export )?function /m)
+    .map((part) => `function ${part}`)
+    .find((part) => part.startsWith(`function ${name}(`));
+  expect(body, `${relativePath} should declare a top-level function ${name}`).toBeDefined();
+  return body ?? "";
+}
+
+const BUTTON_TSX = "../../src/ui/primitives/Button.tsx";
+const TEXT_FIELD_TSX = "../../src/ui/primitives/TextField.tsx";
+const TOUCH_TARGETS_TEST_TS = "../../src/ui/primitives/touch-targets.test.ts";
+const ICON_ACTION_TSX = "../../src/features/composer/composer-icon-action.tsx";
+const CONNECT_TSX = "../../src/app/connect.tsx";
+const ONBOARDING_GATE_TSX = "../../src/features/connect/OnboardingGate.tsx";
+const CONNECT_FORM_TSX = "../../src/features/connect/ConnectForm.tsx";
+const CONNECTION_SHELL_TSX = "../../src/features/connect/connection-shell.tsx";
+const COMPOSER_TSX = "../../src/features/composer/Composer.tsx";
+const SESSION_ROUTE_TSX = "../../src/app/h/[serverId]/session/[agentId]/index.tsx";
+const FILES_ROUTE_TSX = "../../src/app/h/[serverId]/session/[agentId]/files/[...path].tsx";
+const FILES_SCREEN_TSX = "../../src/features/files/files-screen.tsx";
+const SHARE_ROUTE_TSX = "../../src/app/share.tsx";
+
+describe("accessibility-audit.yaml anchors exist in source", () => {
+  describe("48dp touch targets — declared once per control, inherited by every screen this flow samples", () => {
+    it("Button.tsx's Pressable touchArea is minHeight: 48 — every onboarding/connect-form/composer-send control below renders through this primitive", () => {
+      const code = readCode(BUTTON_TSX);
+      expect(code).toMatch(
+        /touchArea: \{ minHeight: 48, justifyContent: "center", alignItems: "flex-start" \}/,
+      );
+      expect(code).toMatch(/style=\{styles\.touchArea\}/);
+    });
+
+    it("TextField.tsx's TextInput style declares minHeight: 48 — inherited by the connect form's address field", () => {
+      const code = readCode(TEXT_FIELD_TSX);
+      expect(code).toMatch(/input: \{\s*minHeight: 48,/);
+      expect(code).toMatch(/style=\{\[styles\.input, error \? styles\.inputError : null\]\}/);
+    });
+
+    it("PromptBar.tsx's TextInput style declares minHeight: 48 — inherited by the composer's message field", () => {
+      const code = readCode("../../src/ui/recipes/PromptBar.tsx");
+      expect(code).toMatch(/input: \{\s*minHeight: 48,/);
+    });
+
+    it("T81 closed the gap this test used to document: touch-targets.test.ts now audits composer-icon-action.tsx (mic/attach) by path, even though the file lives outside ui/primitives/", () => {
+      // touch-targets.test.ts (T26A/T57B) used to read only
+      // `./${name}.tsx`, relative to its own directory
+      // (ui/primitives/), so a component outside that directory could
+      // never join CRITICAL_INTERACTIVE_PRIMITIVES — this file's own
+      // "the one gap ..." test used to pin that absence shut. T81
+      // (P5-W21) changed the loop to take a path per entry and added
+      // ComposerIconAction pointing at composer-icon-action.tsx; this
+      // now proves the fix's presence instead of the old gap's absence.
+      const suite = readCode(TOUCH_TARGETS_TEST_TS);
+      expect(suite).toMatch(/name: "ComposerIconAction"/);
+      expect(suite).toMatch(/path: "\.\.\/\.\.\/features\/composer\/composer-icon-action\.tsx"/);
+      const list =
+        /const CRITICAL_INTERACTIVE_PRIMITIVES: AuditedComponent\[\] = (\[[\s\S]*?\]);/.exec(
+          suite,
+        )?.[1];
+      expect(list).toBeDefined();
+      expect(list).toMatch(/name: "ComposerIconAction"/);
+
+      const iconAction = readCode(ICON_ACTION_TSX);
+      expect(iconAction).toMatch(/touchArea: \{\s*minWidth: 48,\s*minHeight: 48,/);
+      expect(iconAction).toMatch(/style=\{\(\{ pressed \}\) => \[styles\.touchArea/);
+    });
+  });
+
+  describe("onboarding (OnboardingGate.tsx, mounted by connect.tsx)", () => {
+    it('connect.tsx mounts OnboardingGate under testId="connect-onboarding"', () => {
+      const code = readComponentCode(CONNECT_TSX, "ConnectRoute");
+      expect(code).toMatch(
+        /<OnboardingGate storage=\{core\.keyValueStorage\} testId="connect-onboarding">/,
+      );
+    });
+
+    it('the welcome step renders a real <Button label="Get started"> under `${testId}-welcome-continue`', () => {
+      const code = readComponentCode(ONBOARDING_GATE_TSX, "OnboardingGate");
+      expect(code).toMatch(
+        /<Button\s+kind="primary"\s+label="Get started"\s+onPress=\{\(\) => void controller\.advance\(\)\}\s+testId=\{testId \? `\$\{testId\}-welcome-continue` : undefined\}/,
+      );
+    });
+
+    it('the permissions step renders a real <Button label="Continue"> under `${testId}-permission-continue`', () => {
+      const code = readComponentCode(ONBOARDING_GATE_TSX, "OnboardingGate");
+      expect(code).toMatch(
+        /<Button\s+kind="primary"\s+label="Continue"\s+onPress=\{\(\) => void controller\.complete\(\)\}\s+testId=\{testId \? `\$\{testId\}-permission-continue` : undefined\}/,
+      );
+    });
+  });
+
+  describe("connect form (ConnectForm.tsx, mounted by connection-shell.tsx)", () => {
+    it('connection-shell.tsx mounts ConnectForm under testId="connect-form"', () => {
+      const code = readCode(CONNECTION_SHELL_TSX);
+      // T32S14 (P5-W20, this same wave) now also passes `profiles` — a
+      // saved profile is reconnectable from this same form's "existing"
+      // mode as of this task; the testId this flow drives is unchanged.
+      expect(code).toMatch(
+        /<ConnectForm testId="connect-form" onSubmit=\{handleSubmit\} profiles=\{profileOptions\} \/>/,
+      );
+    });
+
+    it('the address field is a real <TextField label="Host address" required> under `${testId}-address-field`', () => {
+      const code = readComponentCode(CONNECT_FORM_TSX, "ConnectForm");
+      // `[\s\S]{0,400}?` skips over the `placeholder="ws://..."` value
+      // rather than spelling it literally — `readCode()`'s line-comment
+      // stripper (`replace(/\/\/.*$/gm, "")`) does not know a `//` sits
+      // inside a string, so it truncates the rest of that line; this is
+      // the same wildcard-skip precedent `pairing.contract.test.ts` uses
+      // for the identical `ws://` literal.
+      expect(code).toMatch(
+        /<TextField\s+label="Host address"\s+value=\{address\}\s+onChangeText=\{handleAddressChange\}[\s\S]{0,400}?error=\{errors\.address\}\s+required/,
+      );
+      expect(code).toMatch(/testId=\{testId \? `\$\{testId\}-address-field` : undefined\}/);
+    });
+
+    it("TextField.tsx folds a field error into its own accessibilityLabel as `${label}. ${error}` — the field's accessible name changes when the error state does", () => {
+      const code = readCode(TEXT_FIELD_TSX);
+      expect(code).toMatch(/accessibilityLabel=\{error \? `\$\{label\}\. \$\{error\}` : label\}/);
+    });
+
+    it('the submit button is a real <Button label={isNewProfile ? "Add host" : "Use this profile"}> under `${testId}-submit-button`, "Add host" on a fresh install', () => {
+      const code = readComponentCode(CONNECT_FORM_TSX, "ConnectForm");
+      expect(code).toMatch(
+        /<Button\s+kind="primary"\s+label=\{isNewProfile \? "Add host" : "Use this profile"\}\s+onPress=\{handleSubmit\}\s+testId=\{testId \? `\$\{testId\}-submit-button` : undefined\}/,
+      );
+      expect(code).toMatch(
+        /const \[profileId, setProfileId\] = useState<string>\(NEW_PROFILE_ID\);/,
+      );
+    });
+
+    it('validateConnectForm({ address: "" }) really produces ACCESSIBILITY_AUDIT_FLOW.connectFormEmptyAddressError — the same error this flow submits an empty form to trigger', () => {
+      const result = validateConnectForm(
+        { profileId: NEW_PROFILE_ID, profileName: "", address: "" },
+        [],
+      );
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.errors.address).toBe(
+        ACCESSIBILITY_AUDIT_FLOW.connectFormEmptyAddressError,
+      );
+    });
+  });
+
+  describe("composer (Composer.tsx, reached via the same deep link composer-inputs.yaml/T37E3 established)", () => {
+    it("SessionRoute mounts Composer with onMicPress/onAttachPress still wired to local no-ops — real capture/picking stay unmounted, matching composer-inputs.yaml's own disclosure; this flow only samples the buttons' touch target and TalkBack label, never a completed capture or pick", () => {
+      const code = readComponentCode(SESSION_ROUTE_TSX, "SessionRoute");
+      expect(code).toMatch(
+        /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}/,
+      );
+      const wholeFile = readCode(SESSION_ROUTE_TSX);
+      expect(wholeFile).toMatch(/function handleMicPress\(\) \{\}/);
+      expect(wholeFile).toMatch(/function handleAttachPress\(\) \{\}/);
+    });
+
+    it("Composer renders two real <ComposerIconAction> controls: mic (testId `${composerTestId}-mic`) and attach (`${composerTestId}-attach`)", () => {
+      const code = readComponentCode(COMPOSER_TSX, "Composer");
+      expect(code).toMatch(
+        /<ComposerIconAction\s+glyph=\{"\\u\{1F3A4\}"\}\s+accessibleName=\{MIC_ACTION_LABEL\}\s+onPress=\{handleMicPress\}\s+testId=\{`\$\{composerTestId\}-mic`\}/,
+      );
+      expect(code).toMatch(
+        /<ComposerIconAction\s+glyph=\{"\\u\{1F4CE\}"\}\s+accessibleName=\{ATTACH_ACTION_LABEL\}\s+onPress=\{handleAttachPress\}\s+testId=\{`\$\{composerTestId\}-attach`\}/,
+      );
+    });
+
+    it("composer-icon-action.tsx wires accessibleName to the Pressable's own accessibilityLabel and hides the glyph from the accessibility tree — the mechanism ACCESSIBILITY_AUDIT_FLOW's mic/attach labels depend on", () => {
+      const code = readComponentCode(ICON_ACTION_TSX, "ComposerIconAction");
+      expect(code).toMatch(
+        /<Pressable\s+accessibilityRole="button"\s+accessibilityLabel=\{accessibleName\}/,
+      );
+      expect(code).toMatch(
+        /<Text\s+accessibilityElementsHidden\s+importantForAccessibility="no-hide-descendants"/,
+      );
+    });
+
+    it("MIC_ACTION_LABEL, ATTACH_ACTION_LABEL, and COMPOSER_INPUT_LABEL are exactly the strings this flow asserts as Maestro text: selectors", () => {
+      expect(MIC_ACTION_LABEL).toBe(ACCESSIBILITY_AUDIT_FLOW.composerMicLabel);
+      expect(ATTACH_ACTION_LABEL).toBe(ACCESSIBILITY_AUDIT_FLOW.composerAttachLabel);
+      expect(COMPOSER_INPUT_LABEL).toBe(ACCESSIBILITY_AUDIT_FLOW.composerInputLabel);
+    });
+
+    it('PromptBar.tsx labels its TextInput accessibilityLabel={label} and its send Button label="Send"', () => {
+      const code = readCode("../../src/ui/recipes/PromptBar.tsx");
+      expect(code).toMatch(/accessibilityLabel=\{label\}/);
+      expect(code).toMatch(
+        /<Button\s+kind="primary"\s+label="Send"\s+disabled=\{!canSend\}\s+onPress=\{onSend\}\s+testId=\{testId \? `\$\{testId\}-send` : undefined\}/,
+      );
+    });
+
+    it('entryStatusLabel("failed") is exactly "Failed" — the state a keyboard send with no daemon connected reconciles to, and what this flow asserts is announced', () => {
+      expect(entryStatusLabel("failed")).toBe(ACCESSIBILITY_AUDIT_FLOW.entryFailedLabel);
+    });
+
+    it('the composer entries container carries accessibilityLiveRegion="polite", so TalkBack announces the pending -> failed transition without a re-focus', () => {
+      const code = readComponentCode(COMPOSER_TSX, "Composer");
+      expect(code).toMatch(
+        /<View\s+style=\{styles\.entries\}\s+accessibilityRole="none"\s+accessibilityLiveRegion="polite"\s+testID=\{`\$\{composerTestId\}-entries`\}/,
+      );
+    });
+  });
+
+  describe("blocked/unmounted scenarios — named, not sampled, per this flow's own header comment", () => {
+    it("T78 (P5-W22) mounted filePicker/sharing at this exact route, on top of T32S14's fetchImpl — this positive prop-list match went stale in the ordinary, already-established way (see composer-inputs.contract.test.ts's own P5-W18/P5-W19 history) and is updated here, not pinned. SessionFilesRoute now passes a real filePicker, so files-screen.tsx's UploadPanel (T35A4's upload half) renders; the guard itself is unchanged and still short-circuits whenever filePicker is absent.", () => {
+      const routeCode = readComponentCode(FILES_ROUTE_TSX, "SessionFilesRoute");
+      expect(routeCode).toMatch(
+        /<FilesScreen\s+serverId=\{serverId\}\s+agentId=\{agentId\}\s+path=\{path \?\? \[\]\}\s+workspaceRoot=""\s+client=\{core\.fileBrowserClient\}\s+filePicker=\{core\.filePicker\}\s+sharing=\{core\.sharing\}\s+downloadOrigin=\{downloadOrigin\}\s+connectionPath=\{connectionPath\}\s+fetchImpl=\{fetchImpl\}\s*\/>/,
+      );
+
+      const screenCode = readCode(FILES_SCREEN_TSX);
+      expect(screenCode).toMatch(
+        /const uploadController = useMemo\(\(\) => \{\s*if \(!client \|\| !filePicker\) return null;/,
+      );
+    });
+
+    it("T69 (P5-W21) mounted the share-intent receiver: /share wraps the real AppCore.shareIntentPort in ShareChooserRuntime and renders ShareChooserScreen — this positive wiring match replaces the prior 'nothing imports the receiver/port yet' pin, which went stale the ordinary way once the thing it described stopped being unfinished (CLAUDE.md's standing rule)", () => {
+      const shareBarrel = readSource("../../src/features/share/index.ts");
+      expect(shareBarrel).toMatch(/\*\*Mounted as of T69\.\*\*/);
+
+      const routeCode = readCode(SHARE_ROUTE_TSX);
+      expect(routeCode).toMatch(/port: core\.shareIntentPort/);
+      expect(routeCode).toMatch(
+        /import \{\s*ShareChooserScreen,\s*type ShareChooserDestination,\s*\} from "\.\.\/features\/share\/ShareChooserScreen\.js";/,
+      );
+      expect(routeCode).toMatch(/<ShareChooserScreen/);
+
+      // The one disclosed gap this mount still leaves (filed against
+      // T32S15, see /share's own doc comment): nothing yet navigates TO
+      // this route automatically from elsewhere in the app. Named here
+      // rather than silently dropped, per this describe block's own
+      // "named, not sampled" header. Read as prose (readSource, not
+      // readCode): the gap is disclosed in the route's own doc comment.
+      expect(readSource(SHARE_ROUTE_TSX)).toMatch(/T32S15/);
+    });
+
+    it("panel.tsx (T34B4) renders its row actions through a real <Button>, so the same 48dp/label proof above already covers it, but this flow does not sample it live — extension-sheets.yaml (T37E5) already discloses why every Pi UI element kind is unreachable this wave (no navigation to a session without this flow's own deep-link workaround, and no live daemon ever emits a pi_ui_state/pi_ui_delta on this harness's isolated daemon)", () => {
+      const panelCode = readCode("../../src/features/extensions/renderers/panel.tsx");
+      expect(panelCode).toMatch(/<Button\b/);
+      const extensionSheetsFlow = readSource("../../maestro/extension-sheets.yaml");
+      expect(extensionSheetsFlow).toMatch(/KNOWN BLOCKERS/);
+    });
+  });
+
+  it("ACCESSIBILITY_AUDIT_FLOW's constants match the literals accessibility-audit.yaml actually uses", () => {
+    // accessibility-audit.yaml cannot import this module (Maestro has no
+    // module system) — this pins the two copies (constants file, yaml
+    // literal) against each other so they cannot silently drift apart
+    // unnoticed, matching every sibling contract test's final case.
+    expect(ACCESSIBILITY_AUDIT_FLOW.onboardingRoot).toBe("connect-onboarding");
+    expect(ACCESSIBILITY_AUDIT_FLOW.onboardingWelcomeContinueButton).toBe(
+      "connect-onboarding-welcome-continue",
+    );
+    expect(ACCESSIBILITY_AUDIT_FLOW.onboardingWelcomeContinueLabel).toBe("Get started");
+    expect(ACCESSIBILITY_AUDIT_FLOW.onboardingPermissionContinueButton).toBe(
+      "connect-onboarding-permission-continue",
+    );
+    expect(ACCESSIBILITY_AUDIT_FLOW.onboardingPermissionContinueLabel).toBe("Continue");
+    expect(ACCESSIBILITY_AUDIT_FLOW.connectFormSection).toBe("connect-form");
+    expect(ACCESSIBILITY_AUDIT_FLOW.connectFormAddressField).toBe("connect-form-address-field");
+    expect(ACCESSIBILITY_AUDIT_FLOW.connectFormSubmitButton).toBe("connect-form-submit-button");
+    expect(ACCESSIBILITY_AUDIT_FLOW.connectFormSubmitLabel).toBe("Add host");
+    expect(ACCESSIBILITY_AUDIT_FLOW.sessionDeepLink).toBe(
+      "picompanion://h/e2e-host/session/e2e-session",
+    );
+    expect(ACCESSIBILITY_AUDIT_FLOW.composerRoot).toBe("composer");
+    expect(ACCESSIBILITY_AUDIT_FLOW.composerInputField).toBe("composer-input");
+    expect(ACCESSIBILITY_AUDIT_FLOW.composerSendButton).toBe("composer-send");
+    expect(ACCESSIBILITY_AUDIT_FLOW.composerSendLabel).toBe("Send");
+    expect(ACCESSIBILITY_AUDIT_FLOW.composerEntriesContainer).toBe("composer-entries");
+    expect(ACCESSIBILITY_AUDIT_FLOW.composerMicButton).toBe("composer-mic");
+    expect(ACCESSIBILITY_AUDIT_FLOW.composerAttachButton).toBe("composer-attach");
+  });
+
+  // T72: everything above (including the "constants match the literals"
+  // case just above) only ever compares real source against
+  // `accessibility-audit-contract.ts`'s hand-typed restatement — it
+  // never opens `accessibility-audit.yaml` itself. That is the same gap
+  // that let `composer-inputs.yaml` drift into asserting `text: "Sent"`
+  // (see `composer-inputs.contract.test.ts`'s header comment); this
+  // flow asserts the identical `entryStatusLabel("failed")` premise
+  // (line 239 of the yaml today) and was equally exposed. This block
+  // closes that gap the same way `composer-inputs.contract.test.ts`
+  // does, using the same shared parser (`./maestro-yaml.ts`).
+  describe("accessibility-audit.yaml itself, read from disk", () => {
+    const ACCESSIBILITY_AUDIT_YAML = "../../maestro/accessibility-audit.yaml";
+    const yamlText = readSource(ACCESSIBILITY_AUDIT_YAML);
+    const steps = parseMaestroSteps(yamlText);
+
+    it(
+      'asserts entryStatusLabel("failed") after tapping composer-send, and never entryStatusLabel("sent") — the same ' +
+        "unpaired-send premise composer-inputs.yaml (T37E3) shares, proven independently here",
+      () => {
+        const failedLabel = entryStatusLabel("failed");
+        const sentLabel = entryStatusLabel("sent");
+        const perSend = assertVisibleTextsAfterEachTap(
+          steps,
+          ACCESSIBILITY_AUDIT_FLOW.composerSendButton,
+        );
+        expect(
+          perSend.length,
+          "accessibility-audit.yaml should tap composer-send at least once",
+        ).toBeGreaterThan(0);
+        for (const texts of perSend) {
+          expect(
+            texts,
+            `accessibility-audit.yaml: no assertVisible step after tapping "${ACCESSIBILITY_AUDIT_FLOW.composerSendButton}" ` +
+              `asserts entryStatusLabel("failed") ("${failedLabel}")`,
+          ).toContain(failedLabel);
+          expect(
+            texts,
+            `accessibility-audit.yaml: an assertVisible step after tapping "${ACCESSIBILITY_AUDIT_FLOW.composerSendButton}" ` +
+              `asserts entryStatusLabel("sent") ("${sentLabel}") — a state this unpaired flow cannot reach`,
+          ).not.toContain(sentLabel);
+        }
+      },
+    );
+
+    it("never names the production daemon's port, in any form including comments", () => {
+      expect(
+        yamlText.includes(String(PRODUCTION_DAEMON_PORT)),
+        `accessibility-audit.yaml must never name the production daemon port ${PRODUCTION_DAEMON_PORT}, in any form`,
+      ).toBe(false);
+    });
+  });
+});

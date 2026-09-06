@@ -1,0 +1,200 @@
+appId: sh.picompanion.debug
+name: "network path switch — a genuine unreachable-to-direct recovery, an honestly-unavailable relay switch, and the session list's own visible connection path"
+tags:
+  - network-switch
+---
+# T37E7 (plan.md §14.4 "switch network path"). This wave has no
+# emulator, no device, and no Maestro binary (same as every T37E* flow
+# so far — see ../README.md's own "What T37D proved, and what it did
+# not") — this flow has never been run. Every testId/string it names is
+# pinned by `../e2e/flows/network-switch.contract.test.ts`
+# (readCode()-matched against real source, never a bare identifier —
+# see that file's own doc comment). See
+# `../e2e/flows/network-switch-contract.ts` for the single source of
+# the testIds/copy restated inline below (it reuses `pairing-
+# contract.ts`'s already-proven onboarding/relay constants rather than
+# retyping them).
+#
+# ---------------------------------------------------------------------
+# WHAT "NETWORK PATH SWITCH" CAN ACTUALLY MEAN HERE, AND WHY
+#
+# `T32B5` (plan.md §7.4) named three kinds of path switch: Wi-Fi <->
+# cellular, relay, and (per this task's own brief) "network loss".
+# Checked against what this harness and this build can actually
+# produce, not assumed:
+#
+#   1. **Wi-Fi <-> cellular — cannot be produced, on any emulator, full
+#      stop.** `platform/network-reachability.ts`'s own "Disclosed
+#      limits" note: the polling probe this app ships can only ever
+#      report `kind: "unknown"` (online) or `"none"` (offline) — never
+#      `"wifi"`/`"cellular"` — because that needs real interface
+#      metadata (`@react-native-community/netinfo`), which is not
+#      installed and which no task in this phase may install
+#      (`../../../CLAUDE.md`). `T32B5`'s own module doc
+#      (`../src/features/sessions/session-list-network-sync.ts`) already
+#      proves the *reconciliation* logic for a `wifi -> cellular`
+#      transition against directly-injected `NetworkStatus` values
+#      (`session-list-network-sync.test.ts`) — this flow does not
+#      re-prove that; it is unit-level, already real, and does not need
+#      a device. What this flow could add on top — an actual observed
+#      kind change — it cannot, for the reason above. **This task does
+#      not work around that inside `features/sessions/` (outside this
+#      task's `Owns` grant besides `../e2e/flows/network-switch*`
+#      regardless) and does not claim a real Wi-Fi <-> cellular switch
+#      was observed.** Closing this needs the `netinfo` install plus
+#      `platform/native-network-reachability.ts`'s construction-site
+#      swap — T32P1/T60C's grant, not this one's.
+#
+#   2. **Relay — cannot be produced either, for the identical reason
+#      `pairing.yaml` (T37E1) already discloses in detail: this
+#      harness's isolated daemon is started with `--no-relay`
+#      (`../e2e/harness/run-plan.ts`), so there is no relay to switch
+#      *to* even once a pairing offer is in hand.** Rather than
+#      re-deriving that disclosure, this flow reuses `pairing.yaml`'s
+#      own proven relay-entry-point steps verbatim (same testIds/copy,
+#      via `network-switch-contract.ts`'s import of `pairing-
+#      contract.ts`) as its own regression guard on the identical
+#      honesty: the relay entry point is reachable and renders
+#      `"unavailable"`, never a fake paired state.
+#
+#   3. **Network loss/recovery — the one kind this flow CAN produce for
+#      real, on any emulator, with no Maestro network-toggle command
+#      and no in-flow daemon-kill affordance (neither exists — daemon
+#      lifecycle is `run-flow.ts`'s (T37D's) to own, not a flow's, and
+#      this task searched Maestro's command set for a network/airplane-
+#      mode primitive and found none it could confirm without a real
+#      Maestro install to check `maestro --help` against — rather than
+#      guess at a command name that might not exist, this flow does not
+#      use one).** A real WebSocket connect attempt at an address
+#      nothing answers on this run's own emulator-host alias
+#      (`${DAEMON_HOST}`, never a hardcoded address or the production
+#      daemon's port) genuinely fails at the OS level (connection
+#      refused) exactly the way a real network-loss attempt would, and
+#      `daemon-connection-error.ts` classifies it as `"unreachable"` —
+#      this is real production error-handling code observing a real
+#      failure, not a scripted fake. Recovering from it — retyping this
+#      run's real isolated-daemon address and reconnecting — is the
+#      genuine "path switch" this flow proves: from no reachable path to
+#      a live direct one.
+#
+# ---------------------------------------------------------------------
+# ORDERING NOTE, DISCLOSED FOR WHOEVER NEXT TOUCHES `pairing.yaml`
+# (T37E1's `Owns`, not this task's — not fixed here):
+#
+# `connection-shell.tsx`'s `handleSubmit` — since T32A8 (P5-W18) — saves
+# the profile and calls `router.replace(outcome.href)` the moment a
+# direct connect succeeds (`../e2e/flows/network-switch.contract.test.ts`
+# pins this exact call chain). `pairing.yaml` currently asserts
+# `text: "Connected via direct connection"` and *then* keeps interacting
+# with the same `ConnectionShell` screen (tapping
+# `connection-shell-show-scanner-button`) for its relay-entry-point
+# check — but a real successful connect navigates that screen away
+# almost immediately afterward, so that ordering rests on a transient
+# render surviving long enough for the next few Maestro steps to still
+# find it, which is not guaranteed. This flow avoids the same trap by
+# doing its relay-entry-point check *before* attempting any connect at
+# all (steps below), and by never asserting the transient "Connected via
+# direct connection" text as a final state — only the stable, post-
+# navigation arrival at the sessions screen. Whoever next runs
+# `pairing.yaml` on a real device should watch for this.
+# ---------------------------------------------------------------------
+#
+# `clearState`/`clearKeychain` make this flow independent and repeatable
+# (../README.md's "Flow independence"): every run starts from the same
+# fresh-install state, so this flow never depends on any other flow
+# having run first, and never leaves state behind for another flow to
+# trip on — the only state it touches is this run's own isolated daemon
+# (`../e2e/harness/daemon-endpoint.ts`'s fresh `PASEO_HOME`), which
+# `run-flow.ts` tears down itself after the flow exits, win or lose.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# --- Onboarding (mirrors ../pairing.yaml's welcome + permissions
+# steps — camera is always "unavailable" in this build, so only the
+# banner + Continue show).
+- assertVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    text: "Welcome to Pi Companion"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# --- Relay path switch: honestly unavailable (see "WHAT ... CAN
+# --- ACTUALLY MEAN" item 2 above). Done first, while ConnectionShell is
+# --- still guaranteed on screen — nothing has connected yet.
+- assertVisible:
+    id: "connect-form"
+- tapOn:
+    id: "connection-shell-show-scanner-button"
+- assertVisible:
+    id: "connection-shell-qr-pairing"
+- assertVisible:
+    text: "QR pairing isn't available in this build yet. Enter your host's address manually below instead."
+- assertVisible:
+    id: "connection-shell-qr-pairing-retry-button"
+- tapOn:
+    id: "connection-shell-hide-scanner-button"
+- assertVisible:
+    id: "connect-form"
+
+# --- Network loss: a real connect attempt at an address nothing
+# --- answers on this run's own emulator-host alias (see item 3 above).
+# --- Port 1 is a privileged, essentially-never-bound port on any
+# --- reasonable host, so the OS refuses the connection quickly — a
+# --- real failure, not a timeout this flow has to wait out.
+- assertVisible:
+    text: "Not connected"
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_HOST}:1"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    id: "connection-shell-error-banner"
+- assertVisible:
+    text: "Could not reach the daemon. Check the address and try again."
+- assertVisible:
+    text: "Not connected"
+
+# --- Recovery: the genuine path switch, from no reachable path to a
+# --- live direct one. Clears the failed address first (Maestro's
+# --- `inputText` types into whatever is already in the focused field
+# --- rather than replacing it) and retypes this run's own real,
+# --- isolated daemon address — never the production daemon's port.
+- tapOn:
+    id: "connect-form-address-field"
+- eraseText: 64
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+
+# --- Stable end state: a real production navigation
+# --- (`router.replace(sessionListHref(profile.id))`, T32A8), not the
+# --- transient "Connected via direct connection" status text — see the
+# --- "ORDERING NOTE" above for exactly why this flow does not assert
+# --- that text as a final state. `serverId` is the connected profile's
+# --- own id (`draft.parsed.endpoint`), unknown until run time, so this
+# --- matches with a wildcard exactly like ../cold-start-restore.yaml
+# --- and ../extension-sheets.yaml already do for the same reason.
+- assertVisible:
+    id: "sessions-screen-.*"
+
+# --- The active connection path is visible (T32B5's third criterion,
+# --- T32B6 item 3) — real, live UI (`network={core.network}` at the
+# --- route, `../e2e/flows/network-switch.contract.test.ts` pins the
+# --- wiring), honestly "Unknown" rather than a guessed "Wi-Fi": this
+# --- adapter has no `kind` source beyond "unknown"/"none" (item 1
+# --- above), and this run's own probe target (the real isolated
+# --- daemon) stays reachable for the rest of the flow, so the status
+# --- never changes from `PollingNetworkReachability`'s own
+# --- `{ online: true, kind: "unknown" }` starting value — see that
+# --- module's `UNKNOWN_ONLINE_STATUS` doc comment.
+- assertVisible:
+    id: "sessions-screen-.*-connection-path"
+- assertVisible:
+    text: "Connection: Unknown"

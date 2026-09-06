@@ -1,0 +1,484 @@
+/**
+ * File browser feature styles (T30B1). Every value below is a
+ * `var(--...)` design token (plan.md §10.2); rows reuse the same
+ * dashed-hairline-divider, 1px-ring, small-type-scale language as the
+ * `ui/primitives`/`ui/recipes` layers instead of introducing a new
+ * visual treatment.
+ */
+
+.pc-file-browser__breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-1);
+  margin: 0 0 var(--spacing-3);
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-3);
+}
+
+.pc-file-browser__breadcrumbs li {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.pc-file-browser__breadcrumbs li:not(:last-child)::after {
+  content: "/";
+  color: var(--color-ink-3);
+}
+
+.pc-file-browser__breadcrumbs [aria-current="page"] {
+  color: var(--color-ink);
+  font-weight: var(--font-weight-medium);
+}
+
+.pc-file-browser__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  overflow: hidden;
+}
+
+.pc-file-browser__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-bottom: 1px dashed var(--color-line);
+  color: var(--color-ink);
+  text-decoration: none;
+  background-color: var(--color-surface);
+}
+
+.pc-file-browser__row--file {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  color: var(--color-ink-2);
+}
+
+.pc-file-browser__list li:last-child .pc-file-browser__row {
+  border-bottom: none;
+}
+
+a.pc-file-browser__row--directory:hover,
+a.pc-file-browser__row--file:hover {
+  background-color: var(--color-hover);
+}
+
+a.pc-file-browser__row--directory:focus-visible,
+a.pc-file-browser__row--file:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.pc-file-browser__row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-base);
+}
+
+.pc-file-browser__row-kind {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.pc-file-browser__row-meta {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  white-space: nowrap;
+}
+
+.pc-file-browser__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+}
+
+/**
+ * Read-only file content view (T30B2). `.pc-code-block` (from
+ * `ui/primitives/primitives.css`) supplies the monospace background,
+ * padding, and hairline framing; the rules below only add this view's
+ * metadata strip and per-line wrapping on top of it.
+ */
+
+.pc-file-content__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-3);
+  margin: 0 0 var(--spacing-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+.pc-file-content__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-mono);
+  color: var(--color-ink);
+}
+
+.pc-file-content__meta-item {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pc-file-content__line {
+  display: inline;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/**
+ * Syntax token colours (T30B2, `file-syntax-highlight.ts#syntaxClassName`).
+ * One class per published `--syntax-*` design token; tokens with no
+ * recognized style keep the surrounding `.pc-code-block` foreground
+ * instead of getting a class.
+ */
+.pc-syntax-keyword {
+  color: var(--syntax-keyword);
+}
+
+.pc-syntax-string {
+  color: var(--syntax-string);
+}
+
+.pc-syntax-comment {
+  color: var(--syntax-comment);
+}
+
+.pc-syntax-number {
+  color: var(--syntax-number);
+}
+
+.pc-syntax-function {
+  color: var(--syntax-function);
+}
+
+.pc-syntax-type {
+  color: var(--syntax-type);
+}
+
+.pc-syntax-variable {
+  color: var(--syntax-variable);
+}
+
+.pc-syntax-operator {
+  color: var(--syntax-operator);
+}
+
+.pc-syntax-punctuation {
+  color: var(--syntax-punctuation);
+}
+
+/**
+ * File edit/save panel (T30B3). `.pc-file-editor__code` frames the
+ * lazily-mounted CodeMirror instance with the same monospace
+ * background/hairline language as `.pc-code-block`; CodeMirror's own
+ * `.cm-*` classes are only touched where needed to match that language
+ * (1px ring focus outline, no blur shadow, tabular-figure line numbers)
+ * rather than adopting its default theme.
+ */
+
+.pc-file-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.pc-file-editor__actions {
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+.pc-file-editor__code {
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  overflow: hidden;
+}
+
+.pc-file-editor__code .cm-editor {
+  background-color: var(--code-code-background);
+  color: var(--code-code-foreground);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  font-variant-numeric: tabular-nums;
+  height: 60vh;
+  max-height: 640px;
+}
+
+.pc-file-editor__code .cm-scroller {
+  overflow: auto;
+}
+
+.pc-file-editor__code .cm-gutters {
+  background-color: var(--code-code-background);
+  color: var(--color-ink-3);
+  border-right: 1px dashed var(--color-line);
+}
+
+.pc-file-editor__code .cm-activeLine,
+.pc-file-editor__code .cm-activeLineGutter {
+  background-color: var(--color-hover);
+}
+
+.pc-file-editor__code .cm-editor.cm-focused {
+  outline: none;
+}
+
+.pc-file-editor__code:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/**
+ * Upload panel (T30B4). Sits above the breadcrumbs so it is available
+ * from every browser state (directory or open file).
+ */
+
+.pc-file-upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3);
+  margin-bottom: var(--spacing-3);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+}
+
+.pc-file-upload__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.pc-file-upload__selection {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-2);
+}
+
+.pc-file-upload__hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+.pc-file-upload__progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.pc-file-upload__progress-row > :first-child {
+  flex: 1;
+}
+
+.pc-file-upload__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+}
+
+/**
+ * File search panel (T30B5). Sits above the breadcrumbs, next to the
+ * upload panel, so it is available from every browser state; results
+ * reuse `.pc-file-browser__row` (defined above) so a hit reads exactly
+ * like a listing row.
+ */
+
+.pc-file-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-3);
+}
+
+.pc-file-search__results {
+  margin: 0;
+}
+
+.pc-file-search__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+}
+
+/**
+ * Per-file download action (T30B4). Used inline in the entry list (one
+ * per file row) and in the open-file editor panel's actions row.
+ */
+
+.pc-file-download {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+}
+
+.pc-file-browser__row--file + .pc-file-download {
+  padding: 0 var(--spacing-3) var(--spacing-2);
+}
+
+.pc-file-download__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+}
+
+.pc-file-download__progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  width: 100%;
+}
+
+.pc-file-download__progress-row > :first-child {
+  flex: 1;
+}
+
+/**
+ * File diff view (T30B6). Shown in place of `.pc-file-editor__code`
+ * while `FileEditorPanel`'s "Show changes" toggle is on. Line
+ * background/foreground colours are the same `--code-diff-*` tokens
+ * `DiffSummary` (`ui/recipes`) already uses for its added/removed/
+ * modified counts; every line also carries a visible `+`/`-`/` `
+ * marker column so the change kind is never colour-only (plan.md
+ * §10.5).
+ */
+
+.pc-file-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.pc-file-diff__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-3);
+  font-size: var(--font-size-xs);
+}
+
+.pc-file-diff__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-mono);
+  color: var(--color-ink);
+}
+
+.pc-file-diff__stat {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-file-diff__stat--added {
+  color: var(--code-diff-added-foreground);
+}
+
+.pc-file-diff__stat--removed {
+  color: var(--code-diff-removed-foreground);
+}
+
+.pc-file-diff__empty {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-3);
+}
+
+.pc-file-diff__body {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  overflow: hidden;
+  background-color: var(--code-code-background);
+  color: var(--code-code-foreground);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-file-diff__chunk:not(:first-child) {
+  border-top: 1px dashed var(--color-line);
+}
+
+.pc-file-diff__skip {
+  padding: var(--spacing-1) var(--spacing-3);
+  color: var(--color-ink-3);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-xs);
+  background-color: var(--color-inset);
+}
+
+.pc-file-diff__line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  padding: 0 var(--spacing-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pc-file-diff__line--add {
+  background-color: var(--code-diff-added-background);
+  color: var(--code-diff-added-foreground);
+}
+
+.pc-file-diff__line--remove {
+  background-color: var(--code-diff-removed-background);
+  color: var(--code-diff-removed-foreground);
+}
+
+.pc-file-diff__gutter {
+  display: inline-flex;
+  flex: none;
+  gap: var(--spacing-2);
+  width: 4.5rem;
+  color: var(--color-ink-3);
+  user-select: none;
+}
+
+.pc-file-diff__gutter-old,
+.pc-file-diff__gutter-new {
+  display: inline-block;
+  width: 2rem;
+  text-align: right;
+}
+
+.pc-file-diff__marker {
+  flex: none;
+  width: 1ch;
+  user-select: none;
+}
+
+.pc-file-diff__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}

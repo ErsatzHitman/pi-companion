@@ -1,0 +1,51 @@
+{
+  "scenario": "corrected-message-end",
+  "description": "The live row is finalized once by an optimistic message_end while streaming stalls, then Pi emits a second, authoritative message_end for the same response with corrected content. The projection must replace the live row's content with the final correction rather than appending a duplicate.",
+  "planBullets": ["corrected message_end"],
+  "sessionId": "synthetic-session-correction-0001",
+  "events": [
+    {
+      "type": "message_start",
+      "message": {
+        "role": "assistant",
+        "content": [],
+        "provider": "synthetic-provider",
+        "model": "synthetic-model-1",
+        "responseId": "resp-synthetic-0003"
+      }
+    },
+    {
+      "type": "message_update",
+      "message": { "role": "assistant", "content": [] },
+      "assistantMessageEvent": {
+        "type": "text_delta",
+        "delta": "Draft answer for /synthetic/workspace/demo-repo"
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "assistant",
+        "content": [{ "type": "text", "text": "Draft answer for /synthetic/workspace/demo-repo" }],
+        "provider": "synthetic-provider",
+        "model": "synthetic-model-1",
+        "responseId": "resp-synthetic-0003",
+        "stopReason": "streaming_interrupted"
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "assistant",
+        "content": [
+          { "type": "text", "text": "Final answer for /synthetic/workspace/demo-repo/README.md." }
+        ],
+        "provider": "synthetic-provider",
+        "model": "synthetic-model-1",
+        "responseId": "resp-synthetic-0003",
+        "responseModel": "synthetic-model-1",
+        "stopReason": "end_turn"
+      }
+    }
+  ]
+}

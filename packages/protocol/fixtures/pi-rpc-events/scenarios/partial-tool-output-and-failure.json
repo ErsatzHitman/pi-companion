@@ -1,0 +1,45 @@
+{
+  "scenario": "partial-tool-output-and-failure",
+  "description": "A long-running search tool that streams partial output and then fails.",
+  "planBullets": ["partial tool output and failure"],
+  "sessionId": "synthetic-session-tools-0002",
+  "events": [
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "call-synthetic-0003",
+      "toolName": "grep_search",
+      "args": {
+        "pattern": "SYNTHETIC_TOKEN",
+        "path": "/synthetic/workspace/demo-repo"
+      }
+    },
+    {
+      "type": "tool_execution_update",
+      "toolCallId": "call-synthetic-0003",
+      "toolName": "grep_search",
+      "partialResult": {
+        "matches": ["/synthetic/workspace/demo-repo/src/config.ts:12"]
+      }
+    },
+    {
+      "type": "tool_execution_update",
+      "toolCallId": "call-synthetic-0003",
+      "toolName": "grep_search",
+      "partialResult": {
+        "matches": [
+          "/synthetic/workspace/demo-repo/src/config.ts:12",
+          "/synthetic/workspace/demo-repo/src/secrets.ts:4"
+        ]
+      }
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "call-synthetic-0003",
+      "toolName": "grep_search",
+      "result": {
+        "errorMessage": "permission denied reading /synthetic/workspace/demo-repo/src/secrets.ts (synthetic failure)"
+      },
+      "isError": true
+    }
+  ]
+}

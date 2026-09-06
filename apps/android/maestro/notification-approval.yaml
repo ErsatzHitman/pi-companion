@@ -1,0 +1,193 @@
+appId: sh.picompanion.debug
+name: "notification approval — respond to a permission request, in-app and (once wired) from a system notification"
+tags:
+  - notification-approval
+---
+# T37E4 (plan.md §14.4 "respond to an approval from a system
+# notification"). This wave has no emulator, no device, and no Maestro
+# binary — this flow has never been run (see ../README.md's "What T37D
+# proved"). Every testId/string it names is pinned by
+# `../e2e/flows/notification-approval.contract.test.ts`
+# (readCode()-matched against real source, never a bare identifier —
+# see that file's own doc comment), and that file also encodes T36B's
+# security model directly against the real `permission-notification-
+# model.ts`, in-memory, since the notification half below cannot run
+# yet. See `../e2e/flows/notification-approval-contract.ts` for the
+# single source of the approvals testIds restated inline below.
+#
+# ## This is the most blocked flow in the wave — two independent gaps,
+# ## not one
+#
+# **Gap A — no system notification is ever posted.** T36A's
+# `PushRegistrationController` and T36B's
+# `createPermissionNotificationController` (`../src/features/
+# notifications/permission-notification-model.ts`) have no importer
+# anywhere in `apps/android/src` outside their own feature directory and
+# tests (`grep -rln createPermissionNotificationController apps/android/
+# src` finds only `features/notifications/index.ts`, its own defining
+# module, `push-registration-model.ts`, and a doc-comment mention in
+# `features/voice/voice-model.ts` — no `app-shell/core.ts` construction,
+# no route mount). This is expected, not a regression: `expo-
+# notifications`/`expo-device` are not installed
+# (`../src/features/notifications/push-registration-port.ts`'s doc
+# comment gives the exact command —
+# `npm install --workspace=@picompanion/android expo-notifications@~0.32.17 expo-device@~8.0.10`
+# — this task may not run it, T60C holds that grant), so
+# `createUnavailablePushRegistrationPort` is the only implementation
+# that exists, and nothing constructs a `PermissionNotificationController`
+# from it. **A Maestro flow cannot tap a notification that is never
+# posted — there is no `tapOnNotification`/equivalent step below because
+# there is nothing for it to target.** Closing this gap needs: the
+# `npm install` above (T60C), a real `PushRegistrationPort` backed by
+# `expo-notifications` (a task under T36A/T36B's family, not this one),
+# and a construction site in `app-shell/core.ts` wiring it to the same
+# live `PermissionsController` the session route's `SessionApprovals`
+# uses (T32S12 — `app/`/`app-shell/` are unowned this wave; see this
+# task's report for exactly what that construction site needs to do).
+#
+# **Gap B — even the in-app approval half has no live request to
+# answer, on any emulator, today.** The approvals surface itself *is*
+# mounted and live (`SessionApprovals` in `../src/app/h/[serverId]/
+# session/[agentId]/index.tsx`, proven by that file's own
+# `index.test.ts`) — this is real progress from T32S7 that this flow
+# exercises below as far as it can. But reaching it and getting a real
+# `agent_permission_request` to answer needs, in order:
+#   1. A path from a fresh install past `/connect` at all. `ConnectForm`'s
+#      successful submit only calls `DaemonConnectionStore.connect()`
+#      (`../src/features/connect/connection-shell.tsx`'s `handleSubmit`);
+#      nothing calls `credential-store.ts`'s `saveHostProfile` and
+#      nothing navigates to `/h/:serverId/sessions` — the same gap (1)
+#      `cold-start-restore.yaml`'s header comment already discloses in
+#      detail. Not this task's `Owns` grant to fix.
+#   2. CLOSED by T32S12 — see `cold-start-restore.yaml`'s own "CLOSED by
+#      T32S12" note for the exact wiring. This paragraph used to say
+#      `app/h/[serverId]/(tabs)/sessions.tsx` passed `SessionsScreen` no
+#      `state`/`onSessionCreated`; the route now passes both, so a real
+#      session row exists to open. Not this task's `Owns` grant either
+#      way — recorded here only because item (3) below still blocks this
+#      flow regardless.
+#   3. **New to this flow, beyond what T37E2 found**: even with a
+#      session open, nothing in the app can cause the daemon to send a
+#      real `agent_permission_request` at all. `SessionRoute` wires its
+#      `Composer` to a fixed `NO_OP_TURN_SERVICE` with `turnRunning={false}`
+#      (`../src/app/h/[serverId]/session/[agentId]/index.tsx`'s own doc
+#      comment: "there is no live daemon this wave to run a real turn
+#      against") — there is no live-turn path to submit a prompt an
+#      agent could act on. And even once one exists, a real permission
+#      request needs a real agent provider actually running
+#      (`packages/server/src/server/daemon-e2e/agent-configs.ts`'s
+#      `pi` provider config) with real credentials this harness's
+#      isolated, `--no-relay` daemon never provisions (`../e2e/harness/
+#      run-plan.ts`) — the same reasoning `pairing.yaml`'s header gives
+#      for why relay pairing has nothing to pair *through* here, applied
+#      to turns instead of connections. This is a live-agent-turn gap,
+#      not a device gap: a real emulator would not change it. Closing
+#      it is a live-turn task's `Owns` grant plus, ultimately, T59's
+#      real-device/real-credentials proof — not this flow's.
+#
+# ## What this flow actually proves
+#
+# Steps 1-7 below (through "Connected via direct connection") are the
+# same real, already-wired onboarding + direct-pairing path
+# `pairing.yaml` proves, reused here rather than re-derived, since
+# `notification-approval.yaml` needs the identical prefix before its own
+# scenario can begin. They are expected to pass once a device is
+# available and are not blocked by Gap B.
+#
+# Steps 8+ are written against the intended design — `SessionApprovals`
+# already renders `ApprovalsHost`'s `Sheet` (testId
+# "approvals-dialog") with an `ApprovalForm` (testId
+# "approvals-dialog-form", Approve/Deny buttons at
+# "approvals-dialog-form-approve"/"-deny") the moment `agent_permission_
+# request` reaches the wired `PermissionsController` — and will start
+# passing once whichever task closes Gap B item 3 lands a live-turn path
+# with a real provider. They must not be deleted or "fixed" to route
+# around the gap; see `cold-start-restore.yaml` for the identical
+# precedent this flow follows.
+#
+# `clearState`/`clearKeychain` make this flow independent and repeatable
+# (../README.md's "Flow independence"): it pairs its own host and never
+# depends on any other flow having run first.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# --- Onboarding (mirrors smoke.yaml/pairing.yaml's welcome + permissions
+# steps — camera is always "unavailable" in this build, so only the
+# banner + Continue show).
+- assertVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    text: "Welcome to Pi Companion"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# --- Direct pairing against this run's own isolated daemon (never
+# production — see ../README.md's "Isolation" section, and never a
+# hardcoded address).
+- assertVisible:
+    id: "connect-form"
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    text: "Connected via direct connection"
+
+# ---------------------------------------------------------------------
+# Everything below is written against the intended design and is BLOCKED
+# by Gap B above (items 1-3) — see this file's header comment. It is
+# not this task's `Owns` grant to unblock, and it is left in rather than
+# deleted so the next task that closes Gap B has an exact, already-
+# reviewed scenario to run instead of writing one from scratch.
+# ---------------------------------------------------------------------
+
+# --- Reach the session screen (blocked on Gap B items 1-2) and let a
+# real agent_permission_request arrive from the daemon (blocked on Gap B
+# item 3 — needs a live turn + a real provider, neither available here).
+- assertVisible:
+    id: "sessions-screen-.*"
+- tapOn:
+    id: "sessions-screen-.*-row-.*"
+
+# --- The approval sheet: SessionApprovals' ApprovalsContainer renders
+# ApprovalsHost's Sheet under the fixed testId "approvals-dialog" the
+# moment PermissionsController has a pending request for this agent
+# (../e2e/flows/notification-approval-contract.ts's
+# NOTIFICATION_APPROVAL_FLOW.sheetTestId/sheetTitle).
+- assertVisible:
+    id: "approvals-dialog"
+- assertVisible:
+    text: "Approval needed"
+- assertVisible:
+    id: "approvals-dialog-form"
+
+# --- Deny first: sends AgentPermissionResponse{behavior:"deny"} through
+# sendPermissionAnswer -> daemon.respondToPermission (the real daemon
+# round trip, once a live client + request exist) and closes the sheet.
+- tapOn:
+    id: "approvals-dialog-form-deny"
+- assertNotVisible:
+    id: "approvals-dialog"
+
+# --- A second request, this time Approve: exercises the other half of
+# T36B's binary action pair through the identical real round trip.
+- assertVisible:
+    id: "approvals-dialog"
+- tapOn:
+    id: "approvals-dialog-form-approve"
+- assertNotVisible:
+    id: "approvals-dialog"
+# ---------------------------------------------------------------------
+# Notification half (Gap A above): genuinely cannot be scripted at all
+# today, on any emulator — there is no OS notification to tap. No steps
+# are written for it; see this file's header comment for exactly what
+# has to land first (the npm install, a real PushRegistrationPort, and
+# T32S12's construction site) before a `tapOnNotification`-style step
+# could even be added here.
+# ---------------------------------------------------------------------

@@ -1,0 +1,134 @@
+{
+  "scenario": "session-new",
+  "description": "Client creates a brand-new Pi session. The daemon acknowledges with an agent_update upsert (directory snapshot) followed by a status(agent_created) acknowledgement carrying the full agent payload.",
+  "planRef": "plan.md §14.2 (new session)",
+  "frames": [
+    {
+      "id": "create-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(create_agent_request)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "create_agent_request",
+          "config": {
+            "provider": "pi",
+            "cwd": "/synthetic/workspace/demo-repo",
+            "modeId": "default",
+            "model": "fixture-model-large",
+            "thinkingOptionId": "medium"
+          },
+          "workspaceId": "ws_fixture_0001",
+          "initialPrompt": "Summarize the open issues in this repository.",
+          "clientMessageId": "cmid_fixture_0001",
+          "labels": {},
+          "requestId": "req_fixture_create_0001"
+        }
+      }
+    },
+    {
+      "id": "agent-update-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_update)",
+      "note": "Directory snapshot broadcast so every subscribed client sees the new agent appear.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_update",
+          "payload": {
+            "kind": "upsert",
+            "agent": {
+              "id": "agt_fixture_0001",
+              "provider": "pi",
+              "cwd": "/synthetic/workspace/demo-repo",
+              "workspaceId": "ws_fixture_0001",
+              "model": "fixture-model-large",
+              "thinkingOptionId": "medium",
+              "effectiveThinkingOptionId": "medium",
+              "createdAt": "2026-08-31T10:00:00.000Z",
+              "updatedAt": "2026-08-31T10:00:00.000Z",
+              "lastUserMessageAt": "2026-08-31T10:00:00.000Z",
+              "status": "initializing",
+              "activeTurn": null,
+              "capabilities": {
+                "supportsStreaming": true,
+                "supportsSessionPersistence": true,
+                "supportsSessionListing": true,
+                "supportsDynamicModes": true,
+                "supportsMcpServers": true,
+                "supportsReasoningStream": true,
+                "supportsToolInvocations": true,
+                "supportsRewindConversation": true,
+                "supportsRewindFiles": true,
+                "supportsRewindBoth": true
+              },
+              "currentModeId": "default",
+              "availableModes": [
+                { "id": "default", "label": "Default" },
+                { "id": "plan", "label": "Plan" }
+              ],
+              "pendingPermissions": [],
+              "persistence": null,
+              "title": null,
+              "labels": {}
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "status-agent-created-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(status:agent_created)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "status",
+          "payload": {
+            "status": "agent_created",
+            "agentId": "agt_fixture_0001",
+            "requestId": "req_fixture_create_0001",
+            "agent": {
+              "id": "agt_fixture_0001",
+              "provider": "pi",
+              "cwd": "/synthetic/workspace/demo-repo",
+              "workspaceId": "ws_fixture_0001",
+              "model": "fixture-model-large",
+              "thinkingOptionId": "medium",
+              "effectiveThinkingOptionId": "medium",
+              "createdAt": "2026-08-31T10:00:00.000Z",
+              "updatedAt": "2026-08-31T10:00:00.000Z",
+              "lastUserMessageAt": "2026-08-31T10:00:00.000Z",
+              "status": "running",
+              "activeTurn": null,
+              "capabilities": {
+                "supportsStreaming": true,
+                "supportsSessionPersistence": true,
+                "supportsSessionListing": true,
+                "supportsDynamicModes": true,
+                "supportsMcpServers": true,
+                "supportsReasoningStream": true,
+                "supportsToolInvocations": true,
+                "supportsRewindConversation": true,
+                "supportsRewindFiles": true,
+                "supportsRewindBoth": true
+              },
+              "currentModeId": "default",
+              "availableModes": [
+                { "id": "default", "label": "Default" },
+                { "id": "plan", "label": "Plan" }
+              ],
+              "pendingPermissions": [],
+              "persistence": {
+                "provider": "pi",
+                "sessionId": "pi-sess-fixture-0001"
+              },
+              "title": "Summarize the open issues",
+              "labels": {}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

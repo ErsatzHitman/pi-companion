@@ -1,0 +1,81 @@
+/**
+ * `PiExtensionRail` / `RailElementCard` styles (plan.md §8.3, §10.1, §11.5;
+ * T29R1). Colocated with the components the way `ui/shell.css` sits next to
+ * `ui/shell.tsx` and `ui/primitives/primitives.css` sits next to the
+ * primitives it styles. Every value below is a design token: no raw hex,
+ * pixel spacing, or duration literal.
+ */
+
+.pi-extension-rail__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pi-extension-rail__item {
+  display: block;
+}
+
+.pi-extension-rail__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.pi-extension-rail__card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+}
+
+.pi-extension-rail__card-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+.pi-extension-rail__card-summary {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--color-ink-2);
+}
+
+/*
+ * The raw-payload disclosure (signature trait: dashed hairline divider
+ * above it, the same way `pc-section__title` separates from its heading).
+ * Native `<details>`/`<summary>` is keyboard-operable out of the box —
+ * focusable via Tab, toggled with Enter/Space — with no bespoke script.
+ */
+.pi-extension-rail__details {
+  border-top: 1px dashed var(--color-line);
+  padding-top: var(--spacing-2);
+}
+
+.pi-extension-rail__details summary {
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-3);
+  transition: color var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+.pi-extension-rail__details summary:hover {
+  color: var(--color-ink-2);
+}
+
+.pi-extension-rail__details summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pi-extension-rail__details[open] summary {
+  color: var(--color-ink);
+}
+
+.pi-extension-rail__details pre {
+  margin-top: var(--spacing-2);
+}

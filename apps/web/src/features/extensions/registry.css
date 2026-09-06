@@ -1,0 +1,45 @@
+/**
+ * Web Pi UI Bridge renderer registry styles (plan.md §10.2, §11.4; T29A1).
+ *
+ * Same rule as `ui/primitives/primitives.css` and `ui/recipes/recipes.css`:
+ * every value is a `var(--...)` custom property from
+ * `@picompanion/design-tokens` — no raw hex, pixel spacing literal, or
+ * motion duration. This file only styles the registry's own diagnostic
+ * chrome (unknown-kind / oversized-payload notices, the per-element
+ * wrapper, and the dev-mode revision badge); registered kind renderers
+ * (T29A2 onward) own their own stylesheets.
+ */
+
+.pc-extension-element {
+  position: relative;
+}
+
+.pc-extension-diagnostic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) 0;
+  border-top: 1px dashed var(--color-line);
+}
+.pc-extension-diagnostic:first-child {
+  border-top: none;
+}
+.pc-extension-diagnostic__source {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* Dev-only revision badge: a small, low-emphasis mono readout so a stale
+   element is visibly distinguishable while debugging (plan.md §11.4
+   "revision and stale-state display in development"). Never rendered in a
+   production build (`import.meta.env.DEV` is compile-time `false`). */
+.pc-extension-element__rev {
+  display: inline-block;
+  margin-top: var(--spacing-1);
+  color: var(--color-ink-3);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}

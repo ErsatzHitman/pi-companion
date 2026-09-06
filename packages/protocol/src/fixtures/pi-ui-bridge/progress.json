@@ -1,0 +1,72 @@
+{
+  "kind": "progress",
+  "description": "Determinate or indeterminate work indicator. Example: the workflows extension reporting step progress.",
+  "planRef": "plan.md §11.3 (progress), §11.7 (workflows)",
+  "frames": [
+    {
+      "id": "progress-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:08:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 4,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "deploy-workflow",
+                  "ns": "workflows",
+                  "kind": "progress",
+                  "placement": "status",
+                  "title": "Deploy workflow — step 2 of 5",
+                  "durable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "progress-delta-2",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "note": "Subsequent upsert with the same id/ns replaces the element in place as the workflow advances.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:08:30.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 5,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "deploy-workflow",
+                  "ns": "workflows",
+                  "kind": "progress",
+                  "placement": "status",
+                  "title": "Deploy workflow — step 3 of 5",
+                  "durable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

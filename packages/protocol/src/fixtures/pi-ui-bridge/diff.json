@@ -1,0 +1,42 @@
+{
+  "kind": "diff",
+  "description": "Unified diff view of proposed changes. Example: a review-style extension surfacing a proposed patch before it lands.",
+  "planRef": "plan.md §11.3 (diff)",
+  "frames": [
+    {
+      "id": "diff-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:12:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 9,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "hotfix-patch",
+                  "ns": "review",
+                  "kind": "diff",
+                  "placement": "inline",
+                  "title": "Proposed patch: apply hotfix to src/index.ts",
+                  "actions": [
+                    { "id": "apply", "label": "Apply", "variant": "primary" },
+                    { "id": "discard", "label": "Discard", "variant": "secondary" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

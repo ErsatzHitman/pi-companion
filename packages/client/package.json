@@ -1,0 +1,49 @@
+{
+  "name": "@picompanion/client",
+  "version": "0.3.0-beta.2",
+  "description": "Pi Companion client SDK package",
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./internal/daemon-client": {
+      "types": "./dist/daemon-client.d.ts",
+      "default": "./dist/daemon-client.js"
+    },
+    "./internal/daemon-client-transport-types": {
+      "types": "./dist/daemon-client-transport-types.d.ts",
+      "default": "./dist/daemon-client-transport-types.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "node ../../scripts/clean-package-dist.mjs",
+    "build": "npm run build --workspace=@picompanion/protocol && npm run build --workspace=@picompanion/relay && tsc -p tsconfig.json --incremental false",
+    "build:clean": "npm run clean && npm run build",
+    "prepack": "npm run build:clean",
+    "typecheck": "tsgo --noEmit",
+    "typecheck:examples": "tsgo -p tsconfig.examples.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@picompanion/protocol": "0.3.0-beta.2",
+    "@picompanion/relay": "0.3.0-beta.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@types/ws": "^8.5.8",
+    "typescript": "^5.2.2",
+    "vitest": "^4.1.6",
+    "ws": "^8.14.2"
+  }
+}

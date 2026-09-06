@@ -1,0 +1,37 @@
+{
+  "scenario": "compaction-and-retries",
+  "description": "A threshold compaction that succeeds, followed by an auto-retry after a transient provider error, and a summarization retry sequence.",
+  "planBullets": ["compaction and retries"],
+  "sessionId": "synthetic-session-compaction-0001",
+  "events": [
+    { "type": "compaction_start", "reason": "threshold" },
+    {
+      "type": "compaction_end",
+      "reason": "threshold",
+      "aborted": false,
+      "willRetry": false,
+      "result": { "summarizedMessageCount": 42 }
+    },
+    {
+      "type": "auto_retry_start",
+      "attempt": 1,
+      "maxAttempts": 3,
+      "delayMs": 500,
+      "errorMessage": "synthetic transient 503 from provider"
+    },
+    { "type": "auto_retry_end", "success": true, "attempt": 1 },
+    {
+      "type": "summarization_retry_scheduled",
+      "attempt": 1,
+      "maxAttempts": 2,
+      "delayMs": 1000,
+      "errorMessage": "synthetic summarization timeout"
+    },
+    {
+      "type": "summarization_retry_attempt_start",
+      "source": "compaction",
+      "reason": "synthetic summarization timeout"
+    },
+    { "type": "summarization_retry_finished" }
+  ]
+}

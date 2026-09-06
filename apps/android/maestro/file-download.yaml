@@ -1,0 +1,189 @@
+appId: sh.picompanion.debug
+name: "file download — real pairing, real round trip, the honest reachable state"
+tags:
+  - file-download
+---
+# T77 (docs/issues-from-plan.md). T32S14 wired the route-level `fetchImpl`
+# seam, making `DownloadPanel` and T66's named relay-download refusal
+# reachable and the download panel visible for the first time — and no
+# Maestro flow covered either. `../e2e/flows/files-and-terminal.contract.
+# test.ts` (T37E9) predates T32S14 and only asserts `-upload` is absent;
+# it never touches download at all.
+#
+# This wave still has no emulator, no device, and no Maestro binary — this
+# flow has never been run. It is written and reviewed as text, and every
+# testId/string it names is pinned by
+# `../e2e/flows/file-download.contract.test.ts` (readCode()-matched
+# against real source, and this flow's own literal steps are parsed and
+# checked against real source too — see that file's own doc comment and
+# `../e2e/flows/maestro-yaml.ts`, T72) so this flow cannot silently rot
+# before anyone with a device first runs it.
+#
+# ---------------------------------------------------------------------
+# NOT one of the ten §14.4 flows T37E1-T37E10 own, and deliberately not
+# added to ../maestro/shards.json / the T37F sharded exit gate.
+# ---------------------------------------------------------------------
+# This is an eleventh flow, added after that set closed. `../e2e/harness/
+# shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` excludes `file-download`
+# from `listExitGateFlowNames()` for the same reason it already excludes
+# `smoke` (T37D's own harness-proof flow) — so `shard-plan.test.ts`'s "the
+# real shards.json covers exactly the ten real flows" assertion stays
+# true unchanged, and `flow-independence.test.ts`'s ten-flow loop is
+# unaffected. This flow still runs the same one documented way any flow
+# does: `npx tsx apps/android/e2e/run-flow.ts file-download` (../README.md).
+#
+# ---------------------------------------------------------------------
+# KNOWN BLOCKER, discovered by this task — read before "fixing" anything
+# below that looks incomplete.
+# ---------------------------------------------------------------------
+# `app/h/[serverId]/session/[agentId]/files/[...path].tsx` (the shipped
+# route this flow's deep link opens) hardcodes `workspaceRoot=""` — its
+# own doc comment says why: resolving a session's REAL workspace root
+# depends on `packages/frontend-core/src/sessions/index.ts`'s Phase 1
+# stub, "outside both that file's and this route's scope", and names
+# whichever task replaces that stub as the owner of fixing it for both
+# platforms. `files-model.ts` passes `workspaceRoot` straight through as
+# the daemon's `cwd` parameter with no transformation
+# (`createFilesBrowserController`'s own `workspaceRoot` field, read
+# verbatim by `listDirectoryWithTimeout`), and the daemon's own
+# `WorkspaceFilesSession.handleFileExplorerRequest`
+# (`packages/server/src/server/session/files/workspace-files-session.ts`)
+# rejects an empty `cwd` unconditionally with `"cwd is required"` —
+# BEFORE it ever touches a real filesystem path, session, or agent.
+#
+# This means: **no directory listing can ever succeed through this
+# shipped route, no matter how real or healthy the connection is.**
+# `file-browser-client.ts`'s `explainFileBrowserError` already has a
+# dedicated, honest mapping for this exact daemon message — title "No
+# workspace selected" (not a generic error, not a crash) — because this
+# was already an anticipated failure shape; nothing between T32S4 and
+# T32S14 ever wired a real workspace root into this route, so it is the
+# state a real device reaches on EVERY visit to this route today. Because
+# no listing ever produces a row, no file can ever be pressed, so
+# `selectedEntry` never becomes non-null, so `downloadController` stays
+# `null` (`files-screen.tsx`'s own `useMemo` guard), so `DownloadPanel`
+# never renders — regardless of `fetchImpl`/`downloadOrigin`/
+# `connectionPath` all being genuinely wired now (T32S14). **T32S14's own
+# claim that "DownloadPanel is reachable now" is true only in the narrow
+# sense that its prop-plumbing guard no longer short-circuits — the UI
+# path to it is still blocked, by this separate, until-now-undisclosed
+# cause.** Filed here, not fixed here (this task Owns only the download
+# flow and its contract test, never the route's workspace-root
+# resolution) — the owner is exactly the task named in the route file's
+# own doc comment.
+#
+# ---------------------------------------------------------------------
+# What this flow DOES prove for real, once a device is available:
+# ---------------------------------------------------------------------
+#   - Direct pairing against this run's own isolated daemon (never the
+#     production daemon's port — see ../README.md's "Isolation") really
+#     succeeds, giving this session a real, non-null `daemonAddress` and
+#     therefore a real `downloadOrigin` (`SessionFilesRoute`'s own
+#     `buildDaemonHttpOrigin(daemonAddress)` — never fabricated, and
+#     never asserted directly by this flow since Maestro cannot read
+#     internal state, only what's on screen).
+#   - The files route genuinely engages that connection: `${testId}-
+#     not-connected` (rendered only when `!client`) never shows, proving
+#     this reached the real, paired `fileBrowserClient` adapter, not a
+#     trivial no-client fallback.
+#   - The resulting failure is the exact, named, honest "No workspace
+#     selected" state (`${testId}-error`) — a REAL round trip to a REAL
+#     daemon over a REAL connection, landing on the daemon's real refusal
+#     message, mapped to real, user-facing copy — never a crash, never a
+#     blank screen, never a silently-stuck loading spinner.
+#   - `DownloadPanel` (`${testId}-file-download`, once a file is opened)
+#     is consequently never reached — the honest, disclosed limit above,
+#     asserted absent rather than skipped.
+#   - Leaving the route is safe: the screen unmounts and the app is still
+#     alive.
+#
+# What this flow does NOT and cannot prove on this harness: an actual
+# completed download (blocked on a real workspace root — the gap above)
+# and T66's named RELAY refusal specifically (blocked on a real relay
+# pairing, which `pairing.yaml`'s own header already establishes is
+# impossible on this harness: no camera module, and this harness's daemon
+# is started `--no-relay` by design). Both the real download mechanics
+# (a real file selection, a real HTTP origin, a real chunked byte stream)
+# and T66's exact named relay refusal are instead proven directly against
+# the real, production `createFileDownloadController`/`buildFileDownloadUrl`
+# functions in `../e2e/flows/file-download.contract.test.ts` — never a
+# device, but never a reimplementation either. See that file's own doc
+# comment for exactly what those tests prove and how.
+#
+# ---------------------------------------------------------------------
+# Independence and sharding (../README.md's "Flow independence")
+# ---------------------------------------------------------------------
+# `launchApp: { clearState: true, clearKeychain: true }` starts this flow
+# from the same fresh-install state every other flow in this directory
+# does. This flow pairs its own host against this run's own isolated
+# daemon (`${DAEMON_HOST}`/`${DAEMON_PORT}`/`${DAEMON_ADDRESS}`, a fresh
+# `mkdtemp` `PASEO_HOME`, never the production daemon's port), creates no
+# session, and `run-flow.ts` tears that daemon down itself, win or lose,
+# once this run exits — nothing here persists past the run, and nothing
+# here reads state left behind by any other flow, so it can run before,
+# after, or interleaved with any sibling flow in this directory, any
+# number of times, on any shard (though, per the header above, it is not
+# assigned to one).
+
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# --- Onboarding (mirrors ../smoke.yaml's welcome step, then finishes the
+# permissions step too, exactly like ../files-and-terminal.yaml and
+# ../cold-start-restore.yaml do).
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# --- Pair with this run's isolated daemon (never production; see
+# ../README.md's "Isolation" section). Same block every sibling flow that
+# pairs directly already proves out.
+- assertVisible:
+    id: "connect-form"
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    text: "Connected via direct connection"
+
+# =====================================================================
+# FILES — reached by deep link; see this file's header for exactly why
+# (same "no in-app control pushes here yet" gap `files-and-terminal.yaml`
+# already discloses, T79's to close). `files-screen-e2e-host-e2e-
+# download-agent` is `FILE_DOWNLOAD_FLOW.filesTestId("e2e-host",
+# "e2e-download-agent")`.
+# =====================================================================
+- openLink: "picompanion://h/e2e-host/session/e2e-download-agent/files"
+- assertVisible:
+    id: "files-screen-e2e-host-e2e-download-agent"
+# --- Real connection wired (the earlier pairing succeeded): the trivial
+# --- no-client fallback never shows.
+- assertNotVisible:
+    id: "files-screen-e2e-host-e2e-download-agent-not-connected"
+# --- The real, honest, named state this route's own workspaceRoot="" gap
+# --- (this flow's header comment) makes the only one reachable today —
+# --- never a crash, never a silent stall.
+- assertVisible:
+    id: "files-screen-e2e-host-e2e-download-agent-error"
+- assertVisible:
+    text: "No workspace selected"
+- assertVisible:
+    text: "This session does not have a workspace folder to browse yet."
+# --- KNOWN BLOCKER above: no row was ever listed, so no file was ever
+# --- selected, so the file view (and DownloadPanel inside it) never
+# --- renders. Asserted absent rather than skipped, so a future task that
+# --- closes the workspace-root gap has one place that starts failing
+# --- instead of one more thing nobody watches.
+- assertNotVisible:
+    id: "files-screen-e2e-host-e2e-download-agent-file"
+- back
+- assertNotVisible:
+    id: "files-screen-e2e-host-e2e-download-agent"

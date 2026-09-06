@@ -1,0 +1,36 @@
+{
+  "scenario": "agent-lifecycle",
+  "description": "Baseline agent/turn lifecycle envelope that wraps every Pi RPC session. Captures the five lifecycle event types that bracket all other activity.",
+  "planBullets": [],
+  "notes": "Not an explicit plan §14.2 bullet on its own; captured for full 21-type coverage since every other scenario's events occur between agent_start/agent_end.",
+  "sessionId": "synthetic-session-lifecycle-0001",
+  "events": [
+    { "type": "agent_start" },
+    { "type": "turn_start" },
+    {
+      "type": "turn_end",
+      "message": {
+        "role": "assistant",
+        "content": [{ "type": "text", "text": "Synthetic turn complete." }],
+        "provider": "synthetic-provider",
+        "model": "synthetic-model-1",
+        "responseId": "resp-synthetic-0001",
+        "stopReason": "end_turn"
+      },
+      "toolResults": []
+    },
+    {
+      "type": "agent_end",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": [{ "type": "text", "text": "Synthetic turn complete." }],
+          "provider": "synthetic-provider",
+          "model": "synthetic-model-1"
+        }
+      ],
+      "willRetry": false
+    },
+    { "type": "agent_settled" }
+  ]
+}

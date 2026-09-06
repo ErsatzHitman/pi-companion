@@ -1,0 +1,42 @@
+/**
+ * TerminalView styles (plan.md §8.4/§10.2, T30A2).
+ *
+ * Every value is a `var(--...)` design-token custom property — no raw
+ * hex color, pixel spacing literal, or motion duration (repository
+ * invariant). Composes the `Card` primitive's own surface/shadow; this
+ * file only adds the terminal-specific header row and mount surface.
+ */
+
+.pc-terminal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3);
+}
+
+.pc-terminal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  padding-bottom: var(--spacing-2);
+  border-bottom: 1px dashed var(--color-line);
+}
+
+.pc-terminal__surface {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  background-color: var(--code-code-background);
+  padding: var(--spacing-2);
+  /* xterm sizes its own canvas/rows to this box via FitAddon; give it a
+   * sane minimum so the mount point is never a zero-height flash while
+   * xterm's chunk is still loading. */
+  min-height: 16rem;
+  overflow: hidden;
+}
+
+.pc-terminal__surface:focus-within {
+  box-shadow:
+    var(--shadow-hairline),
+    0 0 0 2px var(--color-accent);
+}

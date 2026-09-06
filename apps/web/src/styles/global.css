@@ -1,0 +1,95 @@
+/**
+ * App chrome styles that sit outside `ui/primitives` and `ui/recipes`
+ * (plan.md §10.1 "standing consistency rule": components with no
+ * Beautiful UI counterpart — the connection badge, route placeholders —
+ * must still read as though they came from the same library: same
+ * surface stack, hairline rings/dashed dividers, small type scale).
+ *
+ * `Shell` (`.shell`, `.shell__*`) styles moved to `ui/shell.css` (T27S1),
+ * colocated with `ui/shell.tsx` the way `primitives.css`/`recipes.css`
+ * sit next to their components.
+ *
+ * T25C (docs/beautiful-ui-reference.md): every colour below now comes
+ * from a `var(--...)` design token; no raw hex literal remains in this
+ * file (was the unmet Phase 3 exit criterion — `docs/issues-from-plan.md`
+ * T25C).
+ */
+
+:root {
+  color-scheme: light dark;
+  font-family: var(--font-family-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--color-page);
+  color: var(--color-ink);
+}
+
+.component-lab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  max-width: 60rem;
+}
+
+.component-lab__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  align-items: center;
+}
+
+.component-lab__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+}
+
+.connection-status__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-ink-3);
+}
+
+.connection-status[data-state="connected"] .connection-status__dot {
+  background: var(--status-success-icon);
+}
+
+.connection-status[data-state="connecting"] .connection-status__dot {
+  background: var(--status-warning-icon);
+}
+
+.connection-status[data-state="disconnected"] .connection-status__dot {
+  background: var(--status-danger-icon);
+}
+
+.connection-status__target {
+  color: var(--color-ink-3);
+}
+
+.route-placeholder__params dt {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+}
+
+.route-placeholder__params dd {
+  margin: 0 0 var(--spacing-2);
+  font-size: var(--font-size-base);
+  color: var(--color-ink-2);
+}

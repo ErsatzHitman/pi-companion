@@ -1,0 +1,36 @@
+{
+  "scenario": "session-archive",
+  "description": "Client archives a session. The daemon archives it and confirms with a dedicated agent_archived message.",
+  "planRef": "plan.md §14.2 (archive)",
+  "frames": [
+    {
+      "id": "archive-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(archive_agent_request)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "archive_agent_request",
+          "agentId": "agt_fixture_0001",
+          "requestId": "req_fixture_archive_0001"
+        }
+      }
+    },
+    {
+      "id": "agent-archived-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_archived)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_archived",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "archivedAt": "2026-08-31T12:00:00.000Z",
+            "requestId": "req_fixture_archive_0001"
+          }
+        }
+      }
+    }
+  ]
+}

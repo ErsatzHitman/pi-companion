@@ -1,0 +1,102 @@
+/**
+ * `Shell` styles (plan.md §8.3, §10.1 "standing consistency rule": no
+ * Beautiful UI component ships a three-region workspace, so this reads
+ * the same language by hand — dashed hairline dividers between regions,
+ * the same surface/spacing/radius tokens as `ui/primitives`, no raw hex,
+ * pixel spacing, or duration literal).
+ *
+ * Colocated with `shell.tsx` (T27S1 owns both, matching the
+ * `primitives.css`/`recipes.css` convention of a stylesheet living next
+ * to the components it styles).
+ */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-page);
+}
+
+.shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  padding: var(--spacing-3) var(--spacing-4);
+  background-color: var(--color-canvas);
+  border-bottom: 1px dashed var(--color-line);
+}
+
+.shell__brand {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  text-decoration: none;
+  color: var(--color-ink);
+}
+
+/*
+ * Compact fallback (plan §8.3 applies the three-region layout "on wide
+ * screens"; below that this stacks to a single column so the app stays
+ * usable on a narrow browser window). Source order is preserved between
+ * breakpoints (session rail, then the centre column, then the extension
+ * rail) so visual and reading/tab order never diverge.
+ */
+.shell__regions {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "session"
+    "center"
+    "extension";
+}
+
+.shell__rail {
+  grid-area: session;
+  padding: var(--spacing-4);
+  background-color: var(--color-canvas);
+  overflow-y: auto;
+}
+
+.shell__rail--session {
+  grid-area: session;
+  border-bottom: 1px dashed var(--color-line);
+}
+
+.shell__rail--extension {
+  grid-area: extension;
+  border-top: 1px dashed var(--color-line);
+}
+
+.shell__center {
+  grid-area: center;
+  min-width: 0;
+  padding: var(--spacing-4);
+  overflow-y: auto;
+}
+
+/*
+ * `--breakpoint-wide` (see `@picompanion/design-tokens`' `web.ts`) is a
+ * CSS custom property and cannot be read inside a media *condition*, so
+ * the pixel figure below is a literal that must track
+ * `breakpoints.wide` — `shell.test.tsx` asserts the two stay equal so
+ * this can never silently drift from the token.
+ */
+@media (min-width: 720px) {
+  .shell__regions {
+    grid-template-columns: minmax(14rem, 18vw) minmax(0, 1fr) minmax(14rem, 18vw);
+    grid-template-areas: "session center extension";
+  }
+
+  .shell__rail--session {
+    border-bottom: none;
+    border-inline-end: 1px dashed var(--color-line);
+  }
+
+  .shell__rail--extension {
+    border-top: none;
+    border-inline-start: 1px dashed var(--color-line);
+  }
+}

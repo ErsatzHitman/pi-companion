@@ -1,0 +1,52 @@
+/**
+ * Approvals surface styles (plan.md §8.3, §10.1, §12.3; T28B7). Colocated
+ * with the components, the way `ui/shell.css` sits next to `ui/shell.tsx`
+ * and `features/rail/pi-extension-rail.css` sits next to its own
+ * components. Every value below is a design token: no raw hex, pixel
+ * spacing, or duration literal (plan.md §10). The dialog *card* itself
+ * reuses `ui/recipes/recipes.css`'s `.pc-approval*` classes as-is
+ * (`PermissionDialog.tsx`'s own doc comment explains why) — this file
+ * only adds what those classes do not already cover: the modal panel's
+ * own width/stacking, question-field layout, and the "more requests are
+ * waiting" note.
+ */
+
+.pc-approvals-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  width: 100%;
+  max-width: 30rem;
+}
+
+.pc-approvals-panel__waiting {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-2);
+  margin: 0;
+  text-align: right;
+}
+
+.pc-approvals-question__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  margin: var(--spacing-2) 0 var(--spacing-3);
+}
+
+.pc-approvals-question__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+/**
+ * T47A2 outcome-notice message: deliberately plain prose (unlike
+ * `.pc-approval__detail`'s monospace tool-call styling above it in
+ * `recipes.css`) since this is a full sentence explaining a contested or
+ * superseded request outcome, not a code-shaped value.
+ */
+.pc-approvals-notice__message {
+  font-size: var(--font-size-base);
+  color: var(--color-ink-2);
+  margin: var(--spacing-2) 0 var(--spacing-3);
+}

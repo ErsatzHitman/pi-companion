@@ -1,0 +1,142 @@
+appId: sh.picompanion.debug
+name: "cold start restores the last opened session"
+tags:
+  - cold-start
+---
+# T37E2 (plan.md §14.4). Proves the P5-W9..P5-W15 cold-start restore path
+# T32S2/T32S3/T32B3 built: pair with a host, open a session (which
+# T32B3's sessions-model.ts persists as
+# `sessions/last-opened-session-id` via `writeLastOpenedSessionId`), force
+# the app's process to end, then relaunch it *without* clearing storage —
+# a true cold start, not a foreground resume — and assert the same
+# session reopens on its own, carrying the `openState.stale` marker
+# `SessionsScreen` renders while `T46A2`'s `ResumeController` reconciles
+# it against the daemon (`../src/features/sessions/sessions-screen.tsx`'s
+# `${testId}-open-stale` banner).
+#
+# See `README.md`'s "Flow independence" section: this flow pairs its own
+# host and creates its own session (never depends on `pairing.yaml` or
+# any other flow having already run), and `launchApp: { clearState: true,
+# clearKeychain: true }` below starts it from the same fresh-install state
+# every other flow in this directory does.
+#
+# ---------------------------------------------------------------------
+# FORMER KNOWN BLOCKER — BOTH GAPS CLOSED IN P5-W18. This header used to
+# say this flow could not pass on any emulator because of two
+# production-wiring gaps outside T37E2's `Owns`. Both were closed by
+# siblings in wave P5-W18, neither of which could edit this file; the
+# P5-W18 merge gate corrected the text. What actually holds now:
+#
+#   1. CLOSED by T32A8. `connection-shell.tsx`'s `handleSubmit` now
+#      awaits `DaemonConnectionStore.connect()`, derives an outcome via
+#      `deriveConnectSubmitOutcome`, and on `"connected"` writes through
+#      `credential-store.ts`'s real `saveHostProfile` before navigating
+#      with `router.replace(outcome.href)`; `handlePaired` does the same
+#      for the relay path. `grep -rn saveHostProfile apps/android/src`
+#      now finds two real call sites, not just the definition — do not
+#      trust the old instruction above, which said it would find none.
+#      `app/index.tsx`'s cold-start redirect and `AppCoreProvider`'s
+#      `listHostProfiles()` gate therefore have something to read.
+#   2. CLOSED by T32S12. `app/h/[serverId]/(tabs)/sessions.tsx` now
+#      passes `SessionsScreen` both `state` (local `SessionListState`)
+#      and `onSessionCreated` (wired to `app-shell/session-list-append.ts`'s
+#      `appendCreatedSession`), so a session created through this flow's
+#      "New session" form does appear as a tappable row.
+#
+# STILL UNVERIFIED, and the reason this flow's pass is still a claim
+# rather than a fact: nothing in this repository has run it. There is no
+# emulator, device, or Maestro binary in these waves, so
+# `../e2e/flows/cold-start-restore-model.test.ts` remains this file's
+# only proof of life — it pins the source anchors, not the behaviour.
+# Note also that `sessions.tsx` only appends locally-created sessions; it
+# still does not fetch the existing list on mount, so step 8+ depends on
+# `session-list-network-sync.ts`'s resync path, which no task has yet
+# claimed for an initial load.
+#
+# Steps 1-7 below (through "Connected via direct connection") exercise
+# real, already-wired code and are expected to pass once a device is
+# available. Steps 8+ are written against the intended design (T32B3's
+# restore path, already unit-proven — see
+# `../e2e/flows/cold-start-restore-model.test.ts`) and will start passing
+# once whichever task closes gap (1) and gap (2) above lands; they should
+# not be deleted or "fixed" to route around the gap.
+# ---------------------------------------------------------------------
+
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# --- Onboarding (mirrors smoke.yaml's welcome step, then finishes the
+# permissions step too — smoke.yaml deliberately stops before this).
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# --- Pair with this run's isolated daemon (never production; see
+# README.md's "Isolation" section). `${DAEMON_ADDRESS}` is
+# `run-flow.ts`'s env var for the emulator-reachable host:port of the
+# daemon this run started just for this flow.
+- assertVisible:
+    text: "Pi Companion"
+- tapOn:
+    id: "connect-form-name-field"
+- inputText: "Cold start restore host"
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    text: "Connected.*"
+
+# --- Blocked on gap (1) above: nothing navigates here today. Once it
+# does, this assertion is the arrival at `/h/:serverId/sessions`.
+- assertVisible:
+    id: "sessions-screen-.*"
+
+# --- Create a session, then open it — the tap that
+# `sessions-screen.tsx`'s `handleOpenSession` persists as
+# `sessions/last-opened-session-id` (blocked on gap (2) above: the row
+# this taps on never appears without it).
+- tapOn:
+    id: "sessions-screen-.*-create-cwd"
+- inputText: "/tmp/picompanion-cold-start-restore"
+- tapOn:
+    id: "sessions-screen-.*-create-submit"
+- tapOn:
+    id: "sessions-screen-.*-row-.*"
+- assertVisible:
+    id: "sessions-screen-.*-row-.*"
+- assertNotVisible:
+    id: "sessions-screen-.*-open-error"
+
+# --- The cold start: end the process entirely (not a mere backgrounding
+# — `stopApp` kills it) and relaunch *without* `clearState`, so every
+# `KeyValueStorage` write above (the host profile, the last-opened
+# session id) survives into the new process the way a real device reboot
+# or task-kill would leave it.
+- stopApp: sh.picompanion.debug
+- launchApp:
+    clearState: false
+    clearKeychain: false
+
+# --- T32S3's cold-start gate reads the stored profile and redirects
+# straight past `/connect`; T32B3's restore effect
+# (`sessions-screen.tsx`) then reopens the last-opened session on its
+# own, rendering it `stale` (T46A2's `ResumeController` has not yet
+# reconciled it against the daemon) until that reconcile lands — see
+# `../e2e/flows/cold-start-restore-model.test.ts` for this exact
+# transition proven against real values.
+- assertNotVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    id: "sessions-screen-.*"
+- assertVisible:
+    id: "sessions-screen-.*-row-.*"
+- assertNotVisible:
+    id: "sessions-screen-.*-open-error"

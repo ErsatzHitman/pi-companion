@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.dev/
+.tmp/
+*.log
+*.tsbuildinfo
+
+# Playwright E2E run artifacts (apps/web/e2e; T31A) — traces, screenshots,
+# and the HTML report the harness never serves.
+test-results/
+playwright-report/
+blob-report/
+
+# Generated protocol validators (gitignored in reference)
+packages/protocol/src/generated/validation/*.aot.ts
+
+# Expo/Android native prebuild and tooling output (apps/android; T16)
+apps/android/.expo/
+apps/android/android/
+apps/android/ios/
+.metro-health-check*
+
+# Workflow agent scratch (worktrees, run state)
+.pi/

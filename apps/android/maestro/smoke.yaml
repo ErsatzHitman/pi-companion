@@ -1,0 +1,30 @@
+appId: sh.picompanion.debug
+name: "smoke — the app launches to onboarding"
+tags:
+  - smoke
+---
+# T37D's one smoke flow (plan.md §6, §14.4). Proves the app installs and
+# renders on a fresh install — nothing more. It deliberately never talks
+# to a daemon: pairing is T37E1's flow, not this one.
+#
+# `clearState`/`clearKeychain` make this flow independent and repeatable
+# (see ../e2e/README.md and README.md's "flow independence" section) —
+# every run starts from the same fresh-install state a real first launch
+# would see, regardless of what an earlier flow run left behind.
+#
+# Anchors on apps/android/src/app/connect.tsx's `OnboardingGate`
+# (testId="connect-onboarding"): on a fresh install its snapshot phase
+# starts at "welcome", so the welcome copy and its "Get started" button
+# (testId="connect-onboarding-welcome-continue") must be visible before
+# advancing to the permissions step, which reuses the same root testId.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- assertVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    text: "Welcome to Pi Companion"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"

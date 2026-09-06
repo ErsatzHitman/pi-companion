@@ -1,0 +1,83 @@
+/**
+ * Self-hosted `@font-face` declarations for Inter and Geist Mono (T13C,
+ * docs/issues-from-plan.md "Bundle Inter/Geist Mono and complete
+ * light-theme values"; docs/beautiful-ui-reference.md "Fonts").
+ *
+ * Both faces are vendored as woff2 assets under `../assets/fonts/` (SIL
+ * Open Font License 1.1 — see `THIRD_PARTY_NOTICES.md` and the `OFL.txt`
+ * file next to each family's assets) and loaded from this app's own
+ * bundle. Nothing here references a CDN (Google Fonts or otherwise): the
+ * app must keep working fully offline against a local daemon.
+ *
+ * `font-display: swap` avoids invisible text while the (small, self-hosted)
+ * files load, and each declaration's `font-weight` lets a single
+ * `font-family: "Inter"`/`"Geist Mono"` (see `--font-family-sans`/`--mono`
+ * in the generated theme CSS) resolve to the correct weight file — the
+ * bundled files are the *primary* path; `typography.fontFamily`'s system
+ * fallbacks in `@picompanion/design-tokens` remain for the (unbundled)
+ * case a face fails to load.
+ */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/inter/Inter-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../assets/fonts/geist-mono/GeistMono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../assets/fonts/geist-mono/GeistMono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../assets/fonts/geist-mono/GeistMono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../assets/fonts/geist-mono/GeistMono-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

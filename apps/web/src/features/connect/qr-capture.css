@@ -1,0 +1,18 @@
+/**
+ * QrCaptureSheet styles (plan.md §10.2, T27A4).
+ *
+ * Every value is a `var(--...)` design-token custom property — no raw
+ * hex colour, pixel literal, or motion duration (repository invariant).
+ * This file only adds the camera-preview surface; the sheet chrome
+ * itself is the `Sheet` primitive's.
+ */
+
+.pc-qr-capture__video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  background-color: var(--code-code-background);
+  object-fit: cover;
+}

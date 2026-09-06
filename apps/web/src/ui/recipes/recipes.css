@@ -1,0 +1,615 @@
+/**
+ * §10.4 product recipe styles (plan.md §10.2, §10.4).
+ *
+ * Same rule as `primitives.css`: every value is a `var(--...)` custom
+ * property from `@picompanion/design-tokens` — no raw hex, pixel
+ * spacing literal, or motion duration. One approved visual treatment per
+ * recipe (plan.md §10.2). Fixed marker/box dimensions are the same
+ * documented exception as `primitives.css`.
+ *
+ * T25C (plan §10.2, docs/beautiful-ui-reference.md) restyled this file to
+ * Beautiful UI's visual language — see `primitives.css`'s header comment
+ * for the full list of what changed and why no `THIRD_PARTY_NOTICES.md`
+ * row is required (purely visual conformance, no code copied).
+ */
+
+/* ThinkingSection ------------------------------------------------------- */
+
+.pc-thinking {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  background-color: var(--color-surface);
+}
+.pc-thinking__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  width: 100%;
+  padding: var(--spacing-2) var(--spacing-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  color: var(--color-ink-2);
+  text-align: left;
+  transition: transform var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.pc-thinking__trigger:active {
+  transform: scale(0.96);
+}
+.pc-thinking__chevron {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--motion-duration-fast) var(--motion-easing-standard);
+  flex: none;
+}
+.pc-thinking__chevron--open {
+  transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-thinking__chevron {
+    transition: none;
+  }
+}
+.pc-thinking__summary {
+  flex: 1;
+  font-style: italic;
+}
+/* The elapsed-time readout: Geist Mono + tabular figures, matching
+   docs/beautiful-ui-reference.md's "mono elapsed-time readout beside it"
+   (signature trait 4, pixel-grid loader). */
+.pc-thinking__duration {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pc-thinking__body {
+  padding: 0 var(--spacing-3) var(--spacing-3);
+  color: var(--color-ink-2);
+  font-size: var(--font-size-base);
+  border-top: 1px dashed var(--color-line);
+  margin-top: var(--spacing-1);
+  padding-top: var(--spacing-2);
+  /* T28A3 acceptance: "long reasoning is bounded rather than
+     unbounded" — the feature layer already caps the rendered text
+     length (`thinking-row.tsx`'s `MAX_BODY_CHARS`); this bounds the box
+     itself too, for a body that is merely long rather than over that
+     cap, with a scrollbar rather than an ever-growing transcript row. */
+  max-height: 24rem;
+  overflow-y: auto;
+}
+.pc-thinking__body p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+/* Still-thinking summary text gets the same shimmer-gradient live-state
+   treatment as `StreamingMessage`'s in-flight text (T28A3, plan.md
+   §10.2 "one approved treatment per component"; §10.4). */
+.pc-thinking__summary--live {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-ink-3) 35%,
+    var(--color-ink) 50%,
+    var(--color-ink-3) 65%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: pc-message-shimmer calc(var(--motion-duration-slower) * 3.5) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-thinking__summary--live {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+/* StreamingMessage -------------------------------------------------------- */
+
+.pc-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  max-width: 32rem;
+  padding: var(--spacing-3);
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-hairline);
+}
+.pc-message--user {
+  background-color: var(--color-hover);
+  align-self: flex-end;
+}
+.pc-message__speaker {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink-3);
+}
+.pc-message__text {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+}
+/* Still-streaming text gets the shimmer-gradient live-state treatment
+   (docs/beautiful-ui-reference.md, signature trait 3), matched via the
+   sibling cursor rather than a class so the component's markup/testids
+   stay untouched. */
+.pc-message__text:has(.pc-message__cursor) {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-ink-3) 35%,
+    var(--color-ink) 50%,
+    var(--color-ink-3) 65%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: pc-message-shimmer calc(var(--motion-duration-slower) * 3.5) linear infinite;
+}
+@keyframes pc-message-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-message__text:has(.pc-message__cursor) {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+.pc-message__cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.15em;
+  background-color: var(--color-accent);
+  vertical-align: text-bottom;
+  animation: pc-message-cursor-blink var(--motion-duration-slower) steps(1) infinite;
+}
+@keyframes pc-message-cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-message__cursor {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* ApprovalForm ------------------------------------------------------------ */
+
+.pc-approval {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  padding: var(--spacing-4);
+  margin: 0;
+  background-color: var(--color-surface);
+}
+.pc-approval--dangerous {
+  box-shadow: 0 0 0 1px var(--status-danger-border);
+}
+.pc-approval__legend {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+  padding: 0 var(--spacing-1);
+}
+.pc-approval__detail {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-base);
+  color: var(--color-ink-2);
+  margin: var(--spacing-2) 0;
+  padding-bottom: var(--spacing-2);
+  border-bottom: 1px dashed var(--color-line);
+}
+.pc-approval__warning {
+  font-size: var(--font-size-xs);
+  color: var(--status-danger-foreground);
+  margin: 0 0 var(--spacing-3);
+}
+.pc-approval__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+}
+
+/* ToolChips ---------------------------------------------------------------- */
+
+.pc-tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pc-tool-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-chip);
+  border: none;
+  font-size: var(--font-size-xs);
+}
+.pc-tool-chip--success {
+  color: var(--status-success-foreground);
+  background-color: var(--status-success-background);
+  box-shadow: 0 0 0 1px var(--status-success-border);
+}
+.pc-tool-chip--warning {
+  color: var(--status-warning-foreground);
+  background-color: var(--status-warning-background);
+  box-shadow: 0 0 0 1px var(--status-warning-border);
+}
+.pc-tool-chip--danger {
+  color: var(--status-danger-foreground);
+  background-color: var(--status-danger-background);
+  box-shadow: 0 0 0 1px var(--status-danger-border);
+}
+.pc-tool-chip--info {
+  color: var(--status-info-foreground);
+  background-color: var(--status-info-background);
+  box-shadow: 0 0 0 1px var(--status-info-border);
+}
+.pc-tool-chip--neutral {
+  color: var(--status-neutral-foreground);
+  background-color: var(--status-neutral-background);
+  box-shadow: 0 0 0 1px var(--status-neutral-border);
+}
+.pc-tool-chip__label {
+  font-weight: var(--font-weight-medium);
+}
+.pc-tool-chip__status {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* TaskRows ------------------------------------------------------------------ */
+
+.pc-task-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pc-task-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  background-color: var(--color-surface);
+}
+.pc-task-row__main {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.pc-task-row__marker {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-line-strong);
+  flex: none;
+}
+.pc-task-row--done .pc-task-row__marker {
+  background-color: var(--status-success-icon);
+  border-color: var(--status-success-icon);
+}
+.pc-task-row--in-progress .pc-task-row__marker {
+  background-color: var(--status-info-icon);
+  border-color: var(--status-info-icon);
+}
+.pc-task-row--blocked .pc-task-row__marker {
+  background-color: var(--status-warning-icon);
+  border-color: var(--status-warning-icon);
+}
+.pc-task-row--failed .pc-task-row__marker {
+  background-color: var(--status-danger-icon);
+  border-color: var(--status-danger-icon);
+}
+.pc-task-row__title {
+  flex: 1;
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+}
+.pc-task-row--done .pc-task-row__title {
+  color: var(--color-ink-2);
+  text-decoration: line-through;
+}
+.pc-task-row__status {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+.pc-task-row__detail {
+  margin: 0;
+  padding-left: calc(0.625rem + var(--spacing-2));
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+.pc-task-row__progress {
+  padding-left: calc(0.625rem + var(--spacing-2));
+}
+.pc-task-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding-left: calc(0.625rem + var(--spacing-2));
+}
+.pc-task-row__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.pc-task-row__action-state {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+
+/* PromptBar ------------------------------------------------------------------ */
+
+.pc-prompt-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  padding: var(--spacing-3);
+  background-color: var(--color-field);
+  max-width: 36rem;
+}
+.pc-prompt-bar__input {
+  border: none;
+  outline: none;
+  resize: vertical;
+  min-height: 3rem;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+  background: transparent;
+}
+.pc-prompt-bar__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pc-prompt-bar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--spacing-2);
+  border-top: 1px dashed var(--color-line);
+}
+/* Queued-message counter: a numeral readout, Geist Mono + tabular
+   figures. */
+.pc-prompt-bar__queued {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* DiffSummary ---------------------------------------------------------------- */
+
+.pc-diff-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+}
+.pc-diff-summary__path {
+  color: var(--color-ink);
+}
+.pc-diff-summary__stat {
+  font-variant-numeric: tabular-nums;
+}
+.pc-diff-summary__stat--added {
+  color: var(--code-diff-added-foreground);
+}
+.pc-diff-summary__stat--removed {
+  color: var(--code-diff-removed-foreground);
+}
+.pc-diff-summary__stat--modified {
+  color: var(--code-diff-modified-foreground);
+}
+
+/* CommandSearch --------------------------------------------------------------- */
+
+.pc-command-search {
+  position: relative;
+  max-width: 24rem;
+}
+.pc-command-search__input {
+  width: 100%;
+  height: 1.75rem;
+  padding: 0 var(--spacing-3);
+  border: none;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  background-color: var(--color-field);
+  color: var(--color-ink);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  transition: box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.pc-command-search__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pc-command-search__list {
+  position: absolute;
+  top: calc(100% + var(--spacing-1));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: var(--spacing-1);
+  list-style: none;
+  background-color: var(--color-canvas);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-overlay);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.pc-command-search__option {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-2);
+  border-radius: var(--radius-chip);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.pc-command-search__option--active {
+  background-color: var(--color-accent-tint);
+}
+.pc-command-search__option-label {
+  font-family: var(--font-family-mono);
+  color: var(--color-ink);
+}
+.pc-command-search__option-hint {
+  color: var(--color-ink-3);
+}
+.pc-command-search__empty {
+  padding: var(--spacing-2);
+  font-size: var(--font-size-base);
+  color: var(--color-ink-3);
+}
+
+/* WorkflowSteps ----------------------------------------------------------------- */
+
+.pc-workflow-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pc-workflow-step {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.pc-workflow-step__marker {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-line-strong);
+  flex: none;
+}
+.pc-workflow-step--complete .pc-workflow-step__marker {
+  background-color: var(--status-success-icon);
+  border-color: var(--status-success-icon);
+}
+.pc-workflow-step--active .pc-workflow-step__marker {
+  border-color: var(--color-accent);
+}
+.pc-workflow-step--error .pc-workflow-step__marker {
+  background-color: var(--status-danger-icon);
+  border-color: var(--status-danger-icon);
+}
+.pc-workflow-step__label {
+  flex: 1;
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+}
+.pc-workflow-step--upcoming .pc-workflow-step__label {
+  color: var(--color-ink-3);
+}
+.pc-workflow-step__status {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+/* CodeListing -------------------------------------------------------------------- */
+
+.pc-code-listing {
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  overflow: hidden;
+}
+.pc-code-listing__header {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-2) var(--spacing-3);
+  background-color: var(--color-inset);
+  border-bottom: 1px dashed var(--color-line);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-2);
+}
+.pc-code-listing__path {
+  font-family: var(--font-family-mono);
+}
+.pc-code-listing__body {
+  margin: 0;
+  padding: var(--spacing-2) 0;
+  background-color: var(--code-code-background);
+  color: var(--code-code-foreground);
+  overflow-x: auto;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  font-variant-numeric: tabular-nums;
+}
+.pc-code-listing__line {
+  display: block;
+  padding: 0 var(--spacing-3);
+  border-left: 2px solid transparent;
+}
+.pc-code-listing__line--highlighted {
+  border-left-color: var(--color-accent);
+  background-color: var(--color-accent-tint);
+}
+.pc-code-listing__line-number {
+  display: inline-block;
+  width: 2rem;
+  color: var(--color-ink-3);
+  user-select: none;
+}
+
+/* SelectionActions ------------------------------------------------------------------ */
+
+.pc-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-control);
+  background-color: var(--color-canvas);
+  box-shadow: var(--shadow-overlay);
+  width: fit-content;
+}
+.pc-selection-actions__summary {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-2);
+}
+.pc-selection-actions__buttons {
+  display: flex;
+  gap: var(--spacing-1);
+}

@@ -1,0 +1,40 @@
+{
+  "kind": "widget",
+  "description": "Persistent summary pinned near the composer. Example: the todo extension's pinned task widget.",
+  "planRef": "plan.md §11.3 (widget), §11.7 (todo)",
+  "frames": [
+    {
+      "id": "widget-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:06:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 2,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "tasks",
+                  "ns": "todo",
+                  "kind": "widget",
+                  "placement": "pinned",
+                  "title": "3 of 7 tasks complete",
+                  "actions": [{ "id": "expand", "label": "Expand" }],
+                  "durable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

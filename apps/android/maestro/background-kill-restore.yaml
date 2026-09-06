@@ -1,0 +1,216 @@
+appId: sh.picompanion.debug
+name: "background and kill during a turn attempt, then restore — reconciles to Failed before backgrounding is possible; kill loses the local record (no persistence, no outbox mount); restore comes back clean, empty, and usable"
+tags:
+  - background-kill-restore
+---
+# T37E6 (plan.md §14.4 "backgrounding and killing the app during an
+# active turn, then restoring"). This wave has no emulator, no device,
+# and no Maestro binary (same as every T37E* flow so far — see
+# ../README.md's own "What T37D proved, and what it did not") — this
+# flow has never been run. ../e2e/flows/background-kill-restore-contract.ts
+# is the single restated source of every testId/string below;
+# ../e2e/flows/background-kill-restore.contract.test.ts is this flow's
+# real proof of life — every anchor is `readCode()`-matched (full
+# JSX/statement expressions, comment-stripped, anchored to the one
+# top-level component/function that owns it) against real source, not a
+# bare identifier.
+#
+# ---------------------------------------------------------------------
+# THREE PREMISES, NAMED EXPLICITLY (per this task's own instruction:
+# "say in your flow's comments which premise each assertion rests on,
+# and name the task that owns that premise"). Each is re-verified with
+# grep for this task, not assumed from a sibling flow's say-so.
+#
+# PREMISE 1 — an unpaired "turn attempt" reconciles to Failed, not
+# Sent, and does so before any Maestro step can interleave with it.
+# OWNER: T32S13 (P5-W19), which wired `handleSubmit`
+# (`session/[agentId]/index.tsx`) to `AppCore.startTurn` ->
+# `startDaemonTurn` (`features/sessions/turn-service.ts`, T63). This
+# flow never pairs a real host (see "Reaching the composer" below), so
+# `app-shell/core.ts`'s `getTurnTransport().sendMessage` rejects
+# *synchronously* with "Not connected to a daemon" the instant it is
+# called. The whole chain — `Composer.tsx`'s `handleSend`
+# (`Promise.resolve().then(() => onSubmit(entryText))`) -> the route's
+# `handleSubmit` (`await core.startTurn(...)`) -> `startDaemonTurn`'s
+# `try/await/catch` -> back to `handleSend`'s own `.catch(() => {
+# setState((current) => markEntryFailed(current, entryId)); })` —
+# settles within a handful of microtask ticks: real wall-clock time far
+# below what a single Maestro step (UI Automator round-trip over ADB)
+# ever takes. `composer-inputs.yaml` (T37E3) named and proved this
+# exact mechanism first for keyboard entry; this flow relies on the
+# identical wiring but is its own independent proof (see this
+# directory's `README.md` — no flow may depend on another's file), and
+# `../e2e/flows/background-kill-restore.contract.test.ts` re-derives the
+# same source anchors from scratch rather than importing T37E3's.
+#   CONSEQUENCE: there is no way to background the app while a network
+#   send is still genuinely outstanding — attempting to assert that
+#   window would assert an unreachable interleaving, exactly the defect
+#   this task's own brief names ("the P5-W19 gate had to fix by hand in
+#   maestro/composer-inputs.yaml"). This flow instead treats "during the
+#   turn" as "as soon as the app has locally committed to the attempt" —
+#   background and kill happen the step immediately after tapping Send,
+#   which is the earliest point any Maestro step can physically run,
+#   and (per this premise) is already at or past the point of local
+#   reconciliation. A genuine multi-second in-flight window needs a real
+#   paired daemon actually thinking, which needs a real device — T59's
+#   to add.
+#
+# PREMISE 2 — Composer state is not persisted, so a real process kill
+# always loses the local record of the attempt ("Failed" chip and
+# entry text both), and restore starts from a genuinely empty composer,
+# not a recovered one.
+# OWNER: T33B1/T33B2 (the composer feature itself; unchanged by this
+# task). Verified with grep, not assumed: `Composer.tsx` holds its
+# state in `const [state, setState] = useState(EMPTY_COMPOSER_STATE)`
+# and nothing else — no `AsyncStorage`/`KeyValueStorage` write anywhere
+# in that file, and no caller (`session/[agentId]/index.tsx` included)
+# passes a persisted initial value in. `platform/offline/index.ts`'s
+# own doc comment independently confirms there is no persistence layer
+# upstream of it either ("Nothing in this repository constructs an
+# `OfflineCache` or `OutboxController` over this adapter yet").
+#
+# PREMISE 3 — T37C's real, unit-tested recovery pass
+# (`platform/offline/turn-recovery.ts`'s `recoverInFlightTurns`) is
+# UNMOUNTED, so this flow can prove only that a kill mid-attempt does
+# not corrupt or crash the app on restore — never that anything was
+# *recovered*, because nothing calls the function that would recover
+# it. T37C's own checkbox reads "T37E6 owns the on-device proof of this
+# exact scenario" — that promise cannot be kept in full here, and this
+# comment says so plainly rather than asserting around the gap.
+# STATUS (checked fresh for this task, not carried over stale): T68 —
+# a same-wave (P5-W20) sibling — gave the neighbouring `OfflineCache`
+# half of `platform/offline/` a real lifecycle owner
+# (`createOfflineCacheOwner`), closing twelve merge gates' worth of
+# "nothing constructs one" for that half. `platform/offline/index.ts`'s
+# own doc comment is explicit that this did NOT extend to the half this
+# premise actually depends on: "`createTurnOutbox`/`recoverInFlightTurns`
+# ... still have no production construction site — that remains this
+# repository's disclosed gap, unrelated to `OfflineCacheOwner`, which
+# owns only the `OfflineCache` half." Re-verified with grep for this
+# task past that doc comment, not trusting prose alone:
+# `recoverInFlightTurns`, `createTurnOutbox`, and `OutboxController` do
+# not appear anywhere under `apps/android/src/app-shell/` or
+# `apps/android/src/app/`. OWNER of actually mounting it: unclaimed as
+# of this task — T68's own doc comment names `app-shell/core.ts`
+# ("this wave's router-root owner's — T32S14"), but T32S14's own
+# section in `docs/issues-from-plan.md` (also P5-W20) is scoped to
+# T66's reconnect path and the route-level `fetchImpl` seam, and says
+# nothing about `OutboxController`/turn recovery — that attribution
+# does not actually hold today, and this task does not attempt to
+# settle it, only to record it plainly rather than assert an owner it
+# cannot confirm. Whichever task next mounts it should also install
+# `expo-sqlite` first (`./sqlite-driver.ts`'s pinned-version doc
+# comment), on this repository's known-uninstallable list (CLAUDE.md's
+# hard rules) and outside every android task's own reach — the same
+# blocker `OfflineCacheOwner` itself is `"degraded"` under today. The
+# assertions below are written to hold whether or not that mount ever
+# lands (restore must not crash, must not show a stuck or duplicated
+# entry either way) — they will keep passing once recovery is real;
+# they simply cannot yet prove recovery *happened*.
+# ---------------------------------------------------------------------
+#
+# ## Reaching the composer without pairing
+#
+# Same deep-link bypass `composer-inputs.yaml` (T37E3) documents and
+# uses, for the identical still-open reason: `cold-start-restore.yaml`
+# (T37E2)'s header records that P5-W18 closed the *pairing* navigation
+# gap (`ConnectForm` -> `saveHostProfile` -> `/h/:serverId/sessions`),
+# but reaching one *specific session* route still requires creating a
+# session in-app first. The deep link is a faster, equally-real way to
+# land on the exact same file (`session/[agentId]/index.tsx`) via the
+# app's own already-registered `picompanion://` scheme (`app.config.ts`)
+# and the `"session"` match `deep-link-routing.ts` already defines —
+# not a workaround invented for this flow. `serverId`/`agentId` are
+# free-form path segments this route never validates against a real
+# paired host (see `SessionRoute`'s own doc comment), so any non-empty
+# strings work here, including across the restart below.
+#
+# Used TWICE in this flow: once to reach the composer initially, and
+# again after `stopApp` — a real process kill discards Expo Router's
+# in-memory navigation stack along with everything else, and this flow
+# never pairs a real host, so `app/index.tsx`'s cold-start redirect (a
+# real, already-shipped `useColdStartProfile()` check) has no stored
+# profile to read and would otherwise land on `/connect`, not back on
+# this session. Re-verified for this task: `grep -rn saveHostProfile
+# apps/android/src` finds no call this flow ever exercises.
+#
+# `clearState`/`clearKeychain` on the FIRST `launchApp` only — matching
+# `README.md`'s "Flow independence": this flow starts from the same
+# fresh-install state every other flow in this directory does, and
+# depends on no other flow having run first. The SECOND `launchApp`
+# (after the kill) deliberately omits both: a real kill/restore leaves
+# on-disk state alone, and PREMISE 2/3 above are exactly about what
+# that surviving state does and does not include. This flow talks to no
+# daemon at all (no `${DAEMON_HOST}`/`${DAEMON_PORT}` reference below),
+# so it needs no other cleanup and is trivially safe to shard alongside
+# the other `../maestro/*.yaml` flows.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- openLink: "picompanion://h/e2e-host/session/e2e-session"
+
+- assertVisible:
+    id: "composer"
+
+# --- Compose and send: `submitDraft` (composer-model.ts) appends the
+# --- entry with status "pending" synchronously, before `onSubmit` is
+# --- even invoked, so the entry is locally committed the instant
+# --- `composer-send` is tapped — PREMISE 1's "local commitment" moment
+# --- background/kill below happens right after.
+- tapOn:
+    id: "composer-input"
+- inputText: "Testing background-kill-restore during a turn"
+- tapOn:
+    id: "composer-send"
+
+# --- PREMISE 1: by the time this step can even run, the unpaired send
+# --- has already reconciled to Failed (never Sent) — the entry text and
+# --- its status chip are both still visible and readable, proving a
+# --- real turn attempt actually happened, not a skipped step.
+- assertVisible:
+    id: "composer-entries"
+- assertVisible:
+    text: "Testing background-kill-restore during a turn"
+- assertVisible:
+    text: "Failed"
+
+# --- Background the app (process stays alive) — the earliest point
+# --- after the turn attempt any Maestro step can physically run.
+- pressKey: Home
+
+# --- Kill the process entirely — a real process death, not merely a
+# --- background. Same mechanism `cold-start-restore.yaml` (T37E2) uses
+# --- for its own cold-start proof.
+- stopApp: sh.picompanion.debug
+
+# --- Restore: relaunch without clearing storage (PREMISE 2/3 above are
+# --- exactly about what surviving on-disk state does and does not
+# --- include) and re-open the same session route the same way this flow
+# --- first reached it.
+- launchApp:
+    clearState: false
+    clearKeychain: false
+- openLink: "picompanion://h/e2e-host/session/e2e-session"
+
+# --- PREMISE 2/3: the composer comes back — no crash, no stuck screen —
+# --- but genuinely EMPTY, not with the failed entry preserved or
+# --- "recovered". Process memory does not survive a real kill, and
+# --- nothing persisted it or reconciled it on the way back in.
+- assertVisible:
+    id: "composer"
+- assertNotVisible:
+    text: "Testing background-kill-restore during a turn"
+- assertNotVisible:
+    text: "Failed"
+
+# --- The composer is live and usable after restore, not merely
+# --- rendered inert: a fresh send is accepted and appears, proving the
+# --- kill was survived cleanly rather than leaving the screen in a
+# --- half-working state.
+- tapOn:
+    id: "composer-input"
+- inputText: "Composer still works after restore"
+- tapOn:
+    id: "composer-send"
+- assertVisible:
+    text: "Composer still works after restore"

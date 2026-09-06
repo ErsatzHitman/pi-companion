@@ -1,0 +1,31 @@
+{
+  "name": "pi-companion",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "format": "oxfmt .",
+    "format:files": "oxfmt",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "typecheck": "tsc --noEmit",
+    "dev:server": "npm run dev --workspace=@picompanion/server",
+    "dev:web": "npm run dev --workspace=@picompanion/web",
+    "dev:android": "npm run dev --workspace=@picompanion/android",
+    "build:client": "npm run build --workspace=@picompanion/client",
+    "build:design-tokens": "npm run build --workspace=@picompanion/design-tokens",
+    "build:daemon-web-ui": "node scripts/build-daemon-web-ui.mjs"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20260423.1",
+    "knip": "^5.82.1",
+    "oxfmt": "0.46.0",
+    "oxlint": "1.61.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
+  }
+}

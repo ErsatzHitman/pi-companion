@@ -1,0 +1,12 @@
+/**
+ * `DangerousActionConfirmDialog` styles (plan.md §10.2; T29B5). Same rule
+ * as every other stylesheet in this app: every value is a `var(--...)`
+ * custom property from `@picompanion/design-tokens` — no raw hex, pixel
+ * literal, or motion duration.
+ */
+
+.pc-dangerous-action-confirm__target {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}

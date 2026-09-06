@@ -1,0 +1,78 @@
+{
+  "scenario": "session-import-terminal",
+  "description": "Client imports a Pi session that was originally started from a bare terminal (outside the daemon) so it becomes a managed agent. Uses the same status(agent_resumed) acknowledgement as a daemon-native resume.",
+  "planRef": "plan.md §14.2 (imported terminal session)",
+  "frames": [
+    {
+      "id": "import-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(import_agent_request)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "import_agent_request",
+          "provider": "pi",
+          "providerHandleId": "pi-terminal-fixture-handle-0002",
+          "sessionId": "pi-sess-fixture-0002",
+          "cwd": "/synthetic/workspace/terminal-project",
+          "workspaceId": "ws_fixture_0002",
+          "labels": { "source": "terminal-import" },
+          "requestId": "req_fixture_import_0001"
+        }
+      }
+    },
+    {
+      "id": "status-agent-resumed-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(status:agent_resumed)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "status",
+          "payload": {
+            "status": "agent_resumed",
+            "agentId": "agt_fixture_0002",
+            "requestId": "req_fixture_import_0001",
+            "timelineSize": 4,
+            "agent": {
+              "id": "agt_fixture_0002",
+              "provider": "pi",
+              "cwd": "/synthetic/workspace/terminal-project",
+              "workspaceId": "ws_fixture_0002",
+              "model": "fixture-model-large",
+              "thinkingOptionId": "medium",
+              "effectiveThinkingOptionId": "medium",
+              "createdAt": "2026-08-30T09:00:00.000Z",
+              "updatedAt": "2026-08-31T09:05:00.000Z",
+              "lastUserMessageAt": "2026-08-31T09:04:00.000Z",
+              "status": "idle",
+              "activeTurn": null,
+              "capabilities": {
+                "supportsStreaming": true,
+                "supportsSessionPersistence": true,
+                "supportsSessionListing": true,
+                "supportsDynamicModes": true,
+                "supportsMcpServers": true,
+                "supportsReasoningStream": true,
+                "supportsToolInvocations": true,
+                "supportsRewindConversation": false,
+                "supportsRewindFiles": false,
+                "supportsRewindBoth": false
+              },
+              "currentModeId": "default",
+              "availableModes": [{ "id": "default", "label": "Default" }],
+              "pendingPermissions": [],
+              "persistence": {
+                "provider": "pi",
+                "sessionId": "pi-sess-fixture-0002"
+              },
+              "title": "Imported terminal session",
+              "labels": { "source": "terminal-import" },
+              "archivedAt": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}

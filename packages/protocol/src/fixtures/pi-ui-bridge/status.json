@@ -1,0 +1,39 @@
+{
+  "kind": "status",
+  "description": "Glanceable state shown in the session header/status strip. Example: the plan-mode extension reporting its current mode.",
+  "planRef": "plan.md §11.3 (status), §11.7 (plan-mode)",
+  "frames": [
+    {
+      "id": "status-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:05:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 1,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "mode",
+                  "ns": "plan-mode",
+                  "kind": "status",
+                  "placement": "status",
+                  "title": "Plan mode: reviewing changes",
+                  "durable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+# Repo-root Docker build context exclusions (packaging/docker/Dockerfile,
+# T43A3). Keep every workspace package.json, package-lock.json, and every
+# package/app's src/ — the build stage runs `npm ci` and the full workspace
+# build chain from this context.
+#
+# Docker's ignore-pattern matcher anchors a pattern to the CONTEXT ROOT
+# unless it starts with `**/`: `node_modules/` (no leading `**/`) excludes
+# only `./node_modules`, never `apps/web/node_modules` or any other
+# workspace's own copy. This is an npm-workspaces repo, so `node_modules`,
+# `dist`, `*.log` and `*.tsbuildinfo` are all produced inside every
+# package and app directory, not only at the root — T177 gave those four
+# patterns the `**/` prefix they need, after finding they had silently
+# stayed root-only since T43A3 first wrote this file (`docs/issues-from-
+# plan.md` T177 has the re-measurement: at the time of that fix six
+# nested workspace `node_modules` directories, ten nested `dist`
+# directories and two nested `.tsbuildinfo` files were entering the build
+# context unexcluded — none of them carrying a native `.node` binary; all
+# 15 in this tree live under the root `node_modules`, which
+# `**/node_modules/` still excludes, so the fix was about context
+# accuracy and size, not a broken image). Everything below is either a
+# build artifact the image rebuilds from scratch, host-platform-specific
+# `node_modules` that must never be copied into the Linux build stage at
+# ANY depth (see packaging/docker/Dockerfile's stage-1 comment on native
+# module platform/arch resolution), or scratch/tooling output the image
+# has no use for.
+
+**/node_modules/
+**/dist/
+.git/
+# T180: `.github/` is NOT root-only "by construction" as this file's T177
+# commit message claimed — `packages/expo-two-way-audio/.github/workflows/`
+# is a real, tracked, nested `.github` directory (leftover CI config from
+# the AGPL-ported upstream package; scripts/ci/guard-dockerignore-depth.mjs
+# found it as real on-disk evidence, not the built-artifact kind). `**/`
+# added so this actually excludes it too.
+**/.github/
+.dev/
+.tmp/
+.pi/
+.expo/
+**/*.log
+**/*.tsbuildinfo
+
+# Playwright E2E run artifacts. Playwright's default `outputDir`/report
+# locations are relative to its config file, not the repo root, so these
+# land under apps/web/e2e/ (T31A) — same root-anchoring pitfall as above,
+# so these need `**/` too.
+**/test-results/
+**/playwright-report/
+**/blob-report/
+
+# Expo/Android native prebuild output (apps/android; T16) — Android is not
+# part of the daemon image.
+apps/android/.expo/
+apps/android/android/
+apps/android/ios/
+# Metro writes its health-check file into the Expo project root
+# (apps/android/), not the repo root, so this also needs `**/`.
+**/.metro-health-check*
+
+# Agent scratch and handoff documents not needed to build the daemon image.
+HANDOFF.md
+claude-code-handoff.md
+memory.md

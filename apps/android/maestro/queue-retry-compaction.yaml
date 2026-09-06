@@ -1,0 +1,96 @@
+appId: sh.picompanion.debug
+name: "queue mode picker shows a truthful unavailable state; retry/compaction banner disclosed as unreachable this wave"
+tags:
+  - composer
+---
+# T39C (plan.md §11.1's "queues and automation" / "compaction and
+# summarization retry" RPC groups). Same standing constraint as every
+# flow in this directory (see ../e2e/README.md): no emulator, no device,
+# no Maestro binary in this environment — this flow has never been run.
+# ../e2e/flows/queue-retry-compaction.contract.test.ts is this flow's
+# real proof: every testId/string named below is `readCode()`-matched
+# against real source (comment-stripped, anchored to the one top-level
+# component that owns it), not a bare identifier, and this file's own
+# steps are additionally parsed and checked against those same real
+# values (see that test file's own doc comment for why — the same
+# "yaml itself, read from disk" gap `composer-inputs.yaml` used to have,
+# closed the same way here from the start).
+#
+# ---------------------------------------------------------------------
+# WHY THIS FLOW ASSERTS ONLY AN UNAVAILABLE STATE — no round trip, no
+# retry, no compaction banner:
+#
+# T132 (P6-W10) wired `queueModeClient`/`turnStatusClient` into
+# `session/[agentId]/index.tsx`'s `<Composer>` mount, resolved off the
+# real `AppCore.connection`'s active lifecycle (see
+# `../src/app/h/[serverId]/session/[agentId]/session-route-daemon-clients.ts`)
+# — confirmed by reading that file: its element now lists
+# `queueModeClient={queueModeClient}` and
+# `turnStatusClient={turnStatusClient}` alongside `sessionId`,
+# `onSubmit`, `onMicPress`, `onAttachPress`, `turnRunning`,
+# `turnService`, `outbox`. This environment still has no emulator, no
+# device, no Maestro binary, and no live daemon connection, so both
+# still resolve to `undefined` here, same as before this task landed —
+# only the REASON changed, from "no route passes the prop at all" to
+# "the prop resolves to undefined with no active connection". So the
+# one production route this harness can reach still renders:
+#
+#   - `QueueModePicker` in its "no-client" unavailable state — a
+#     truthful sentence (`describeQueueModesUnavailable("no-client")`),
+#     never an enabled Select pair that would only fail. THIS is what
+#     this flow actually asserts below.
+#   - `TurnStatusBanner` renders nothing at all (its default
+#     `alwaysShowUnavailable={false}`, and `Composer.tsx` passes no such
+#     prop) — no testId, no text, nothing to assert. This flow does not
+#     try to fake one.
+#
+# Proving an actual round trip, a retry banner, or a compaction banner
+# over Maestro still needs a live daemon connection — an emulator or
+# device this wave has never had — so that stays disclosed as a
+# standing gap against whichever task first gets emulator/device
+# access, not against T132.
+# `queue-mode-model.test.ts`/`turn-status-model.test.ts` (this task's
+# own directory) already prove the round trip, the retry/compaction
+# reducer, and the live-update wiring against a counting fake, at the
+# controller level — this flow is only about what a real screen shows
+# with the client resolving to undefined (no live connection), which is
+# the truthful-unavailable acceptance criterion this task itself owns.
+#
+# ## Reaching the composer without pairing
+#
+# Same mechanism `composer-inputs.yaml` (T37E3) established: the
+# `picompanion://h/<serverId>/session/<agentId>` deep link resolves
+# straight to `session/[agentId]/index.tsx`, independent of any in-app
+# button or of `ConnectForm` ever having run. `serverId`/`agentId` are
+# free-form path segments this route never validates against a real
+# paired host, so any non-empty strings work here.
+#
+# `clearState`/`clearKeychain` start this flow from the same fresh-
+# install state every other flow in this directory does. This flow
+# talks to no daemon at all (no `${DAEMON_HOST}`/`${DAEMON_PORT}`
+# reference below), so it needs no cleanup beyond the app's own fresh
+# `clearState`.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- openLink: "picompanion://h/e2e-host/session/e2e-session"
+
+# --- Composer renders under its default root testId ("composer" —
+# --- session/[agentId]/index.tsx passes no `testId` prop).
+- assertVisible:
+    id: "composer"
+
+# --- QUEUE MODE: no client wired in at this route, so the picker
+# --- renders its truthful "no-client" unavailable sentence rather than
+# --- an enabled Select pair that could only fail.
+- assertVisible:
+    id: "composer-queue-mode"
+- assertVisible:
+    id: "composer-queue-mode-unavailable"
+- assertVisible:
+    text: "Connect to a daemon to change the steer/follow-up mode."
+# --- RETRY / COMPACTION: deliberately not exercised here — see this
+# --- file's header comment for exactly why (no `turnStatusClient`
+# --- wired at this route, so `TurnStatusBanner` renders nothing at all,
+# --- with no testId to assert against). Nothing below this line
+# --- pretends otherwise.

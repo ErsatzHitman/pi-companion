@@ -1,0 +1,203 @@
+appId: sh.picompanion.debug
+name: "extension sheets — roster, form, and panel"
+tags:
+  - extension-sheets
+---
+# T37E5 (plan.md §14.4 "roster, form, and panel sheets"). This wave has no
+# emulator, no device, and no Maestro binary — this flow has never been
+# run. It is written and reviewed as text, and every testId/string it
+# names is pinned by `../e2e/flows/extension-sheets.contract.test.ts`
+# (readCode()-matched against real source, anchored to the one top-level
+# function each assertion names, never a bare identifier or a whole-file
+# match — see that file's own doc comment) so this flow cannot silently
+# rot before anyone with a device first runs it. See
+# `../e2e/flows/extension-sheets-contract.ts` for the single source of
+# the testIds/copy restated inline below.
+#
+# `features/extensions/` is live and mounted: `session/[agentId]/index.tsx`
+# renders `SessionLiveExtension` -> `PinnedLiveExtensionArea`
+# (`features/extensions/registry-index.ts`'s re-export), which is the
+# app's one live consumer of the Pi UI element store. `roster.tsx`,
+# `form.tsx`, and `panel.tsx` are all registered against it through
+# `renderers/index.ts`'s side-effecting import (pulled in by that same
+# barrel) — this is not speculative wiring, it is what actually renders
+# whatever element the store holds.
+#
+# ---------------------------------------------------------------------
+# KNOWN BLOCKERS — this flow cannot pass yet, on any emulator, and none
+# of the three gaps below are this task's to fix (`Owns:` is exactly
+# this file plus `../e2e/flows/extension-sheets*`; every gap named here
+# lives in `apps/android/src/app/` / `app-shell/`, unowned this wave,
+# owned by T32S12 in P5-W18, or is `packages/client`'s, owned by T62):
+#
+#   1. **Same pairing/session gap `../cold-start-restore.yaml` already
+#      disclosed (T37E2, P5-W16), still open.** A successful `ConnectForm`
+#      submission never persists a host profile and nothing navigates
+#      past `/connect` (`grep -rn saveHostProfile apps/android/src`
+#      still finds only its own definition/test/re-export), and the
+#      sessions screen route passes `SessionsScreen` no way to create or
+#      list a real session. There is today no in-app path from a fresh
+#      install to an open `/h/:serverId/session/:agentId` screen at all
+#      — the one screen `SessionLiveExtension` mounts on. This flow
+#      inherits that gap rather than re-disclosing new bugs for it.
+#
+#   2. **Even once (1) closes, nothing makes a real daemon emit a
+#      `pi_ui_state`/`pi_ui_delta` carrying a `roster`/`form`/`panel`
+#      element.** That requires a live Pi agent process actually running
+#      an extension (`subagents`, `switchboard`, or `ask-user`, per
+#      `docs/pi-extension-compatibility.md`) — not something a Maestro
+#      flow can synthesize by tapping the UI, and this harness's isolated
+#      daemon (`../e2e/harness/`) starts no such agent. The outbound half
+#      has the matching, already-disclosed gap too:
+#      `registry-index.ts`'s own doc comment records that
+#      `@picompanion/client`'s `DaemonClient` has no method that sends a
+#      `pi.ui.action.request` yet (`packages/client`, T62's grant, not
+#      this task's) — so even a dispatched action here would sit
+#      `"pending"` until it times out.
+#
+#   3. **`panel`'s `element.placement === "sheet"` path has NO live mount
+#      point today, independent of (1) and (2), and this is a structural
+#      gap this task found and files precisely (see the wave report's
+#      "seam filed against T32S12" section):** `PinnedLiveExtensionArea`
+#      is the app's only live consumer of the Pi UI element store, and
+#      `pinned-model.ts`'s `selectPinnedElements` admits only elements
+#      whose `placement` is exactly `"pinned"`. `panel.tsx` only opens its
+#      `Sheet` when `element.placement === "sheet"` — one element cannot
+#      carry both placement values at once, so a panel element can never
+#      reach the live app with `placement: "sheet"` and still be selected
+#      into the one area that renders it. `panel`'s sheet steps below
+#      therefore exercise its **inline-card** path instead (reachable:
+#      `placement: "pinned"`), and its sheet-open/dismiss behavior is
+#      left to whichever task adds a second mount point for `sheet`/
+#      `screen`-placement elements (T32S12's grant, `app/`/`app-shell/`).
+#
+# So every step below is written against real, already-registered
+# rendering code (this is this flow's actual contribution — see this
+# task's report for why it is the least blocked of the three P5-W17 flow
+# tasks) but is expected to stay red until (1) and (2) both close.
+# ---------------------------------------------------------------------
+#
+# Independence and sharding (../README.md's "Flow independence"):
+# `launchApp: { clearState: true, clearKeychain: true }` starts this flow
+# from the same fresh-install state every other flow in this directory
+# does — it never depends on `pairing.yaml`, `cold-start-restore.yaml`,
+# or any prior run of itself having happened first. This flow pairs its
+# own host against this run's own isolated daemon
+# (`${DAEMON_HOST}`/`${DAEMON_PORT}`/`${DAEMON_ADDRESS}`, a fresh
+# `mkdtemp` `PASEO_HOME`, never the production daemon's port — see
+# ../README.md's "Isolation"), and `run-flow.ts` tears that daemon down
+# itself, win or lose, once this run exits — there is no state left
+# behind for a sibling flow to trip on, so this flow can run before,
+# after, or interleaved with `pairing.yaml`/`cold-start-restore.yaml` in
+# any order, any number of times, on any shard.
+
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# --- Onboarding (mirrors ../smoke.yaml's welcome step, then finishes the
+# permissions step too, exactly like ../cold-start-restore.yaml does).
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# --- Pair with this run's isolated daemon (never production; see
+# ../README.md's "Isolation" section).
+- assertVisible:
+    id: "connect-form"
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    text: "Connected via direct connection"
+
+# --- Blocked on KNOWN BLOCKER (1) above: nothing navigates from here to
+# a session screen today. Once it does, this is the arrival at
+# `/h/:serverId/session/:agentId` — `session/[agentId]/index.tsx`'s own
+# transcript root, testId="session-transcript" — where
+# `SessionLiveExtension` mounts `PinnedLiveExtensionArea` alongside it.
+- assertVisible:
+    id: "session-transcript"
+
+# =====================================================================
+# Roster (`roster.tsx`'s `RosterRenderer`/`RosterRow`, T34B1) — a
+# `pinned`-placement `roster` element (e.g. `subagents:fleet`) renders as
+# an inline Card; every row is its own `accessible` group carrying label,
+# state, model, elapsed time, and actions in one utterance (see the wave
+# report's "touch targets" section for why each row's action Button needs
+# no separate touch-target proof here: it is `ui/primitives/Button.tsx`,
+# already covered by `../src/ui/primitives/touch-targets.test.ts`'s
+# per-element 48dp check).
+# Blocked on KNOWN BLOCKER (2) above: nothing here makes the daemon emit
+# a real roster element yet. `pi-roster-subagents-fleet` below is the
+# `RosterRenderer`'s own Card testID for a `{ns: "subagents", id:
+# "fleet"}` element, exactly as `ROSTER_FLOW.cardTestId` computes it.
+# =====================================================================
+- assertVisible:
+    id: "pi-roster-subagents-fleet"
+- assertVisible:
+    id: "pi-roster-row-.*"
+- tapOn:
+    id: "pi-roster-row-.*-action-.*"
+
+# =====================================================================
+# Form (`form.tsx`'s `FormRenderer`, T34B2) — always opens as a `Sheet`
+# regardless of the element's own `placement` (see this flow's header
+# comment on KNOWN BLOCKER (3): this is exactly what makes form the one
+# of the three kinds whose sheet path *is* structurally reachable through
+# `PinnedLiveExtensionArea` today, once (1)/(2) close — a `pinned`-
+# placement `form` element still renders inside `Sheet`, because
+# `form.tsx` never reads `element.placement` at all).
+# `pi-form-ask-user-confirm` is `FORM_FLOW.sheetTestId("ask-user",
+# "confirm")`. Submitting with a required field left empty must surface
+# that field's own error and the one-field summary line
+# (`FORM_FLOW.oneFieldErrorSummary`, proven with concrete values in
+# `extension-sheets.contract.test.ts`'s `resolveFormSubmitGate` case)
+# rather than dispatching — accessibility-relevant per this flow's header
+# comment: `Sheet`'s focus-trap-on-open and Android-back-closes contract
+# is `Sheet.test.ts`'s (T32S5), not re-proven here.
+# =====================================================================
+- assertVisible:
+    id: "pi-form-ask-user-confirm"
+- tapOn:
+    id: "pi-form-ask-user-confirm-action-.*"
+- assertVisible:
+    text: "Fix 1 field before submitting."
+- tapOn:
+    id: "pi-form-ask-user-confirm-field-.*"
+- inputText: "10.0.2.2"
+- tapOn:
+    id: "pi-form-ask-user-confirm-action-.*"
+# Sheet dismissal: tapping the scrim (Sheet.tsx's `Pressable` wrapping
+# the panel) calls `onClose`, which — for a `form` element with no
+# cancel/close action in `element.actions` — is a no-op per
+# `resolveFormCloseAction`'s own contract; this flow does not assert a
+# dismiss here for that reason, leaving `Sheet.test.ts`'s own dismiss/
+# focus-return proof as the one this behavior already has.
+
+# =====================================================================
+# Panel (`panel.tsx`'s `PanelRenderer`, T34B4) — the reachable path today
+# is the **inline card** (KNOWN BLOCKER (3) above: `placement: "sheet"`
+# has no live mount). `pi-panel-loop-loop` is
+# `PANEL_FLOW.cardTestId("loop", "loop")`; each section renders inside
+# `${testId}-sections` at `${testId}-section-${sectionId}`
+# (`PANEL_FLOW.sectionsTestId`/`sectionTestId`). Fault isolation — one
+# section still unresolved (`"no-renderer"`) never blocks a sibling
+# section from rendering `"ok"`, proven with concrete decision values in
+# `extension-sheets.contract.test.ts`'s "panel dismissed mid-load" case —
+# means this assertion holds even if one section's extension has not
+# registered a renderer yet.
+# =====================================================================
+- assertVisible:
+    id: "pi-panel-loop-loop"
+- assertVisible:
+    id: "pi-panel-loop-loop-sections"
+- assertVisible:
+    id: "pi-panel-loop-loop-section-.*"

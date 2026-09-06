@@ -1,0 +1,87 @@
+{
+  "scenario": "permission-dialog",
+  "description": "The Pi provider requests permission to run a tool. The daemon forwards the request to the client, the client answers, and the daemon confirms the resolution, naming which client answered (T111).",
+  "planRef": "plan.md §14.2 (permission ... dialog)",
+  "frames": [
+    {
+      "id": "permission-request-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_permission_request)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_permission_request",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "request": {
+              "id": "perm_fixture_0001",
+              "provider": "pi",
+              "name": "bash",
+              "kind": "tool",
+              "title": "Run shell command",
+              "description": "rm -rf ./build",
+              "input": {
+                "command": "rm -rf ./build",
+                "cwd": "/synthetic/workspace/demo-repo"
+              },
+              "actions": [
+                {
+                  "id": "allow_once",
+                  "label": "Allow once",
+                  "behavior": "allow",
+                  "variant": "primary"
+                },
+                {
+                  "id": "allow_always",
+                  "label": "Always allow",
+                  "behavior": "allow",
+                  "variant": "secondary"
+                },
+                { "id": "deny", "label": "Deny", "behavior": "deny", "variant": "danger" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "permission-response-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(agent_permission_response)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_permission_response",
+          "agentId": "agt_fixture_0001",
+          "requestId": "perm_fixture_0001",
+          "response": {
+            "behavior": "allow",
+            "selectedActionId": "allow_once"
+          }
+        }
+      }
+    },
+    {
+      "id": "permission-resolved-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_permission_resolved)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_permission_resolved",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "requestId": "perm_fixture_0001",
+            "resolution": {
+              "behavior": "allow",
+              "selectedActionId": "allow_once"
+            },
+            "answeredBy": {
+              "clientId": "clid_fixture_0002"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

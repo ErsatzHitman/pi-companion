@@ -1,0 +1,1277 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Linking, StyleSheet, Text, View } from "react-native";
+
+import type { Clock, StructuredStorage } from "@picompanion/frontend-core";
+import { composer as coreComposer } from "@picompanion/frontend-core";
+
+import {
+  Button,
+  Chip,
+  Section,
+  Select,
+  StatusIndicator,
+  type ChipTone,
+  type StatusTone,
+} from "../../ui/primitives";
+import { PromptBar } from "../../ui/recipes";
+import { useTheme } from "../../ui/theme/theme-context";
+import {
+  DEFAULT_ATTACHMENT_LIMITS,
+  EMPTY_ATTACHMENTS_STATE,
+  attachmentStatusLabel,
+  clearAttachments,
+  describeAttachmentLimits,
+  evaluateAttachmentCandidate,
+  hasPendingUploads as attachmentsHavePendingUploads,
+  markAttachmentError,
+  markAttachmentUploaded,
+  removeAttachment,
+  stageAttachment,
+  uploadedAttachmentRefs,
+  type AttachmentLimits,
+  type AttachmentUploadClient,
+  type AttachmentsState,
+  type ComposerUploadedAttachment,
+  type StagedAttachment,
+} from "./attachment-model";
+import {
+  createUnavailableAttachmentSourcePort,
+  type AttachmentSourcePort,
+  type PickedAttachmentFile,
+} from "./attachment-source-port";
+import { ComposerIconAction } from "./composer-icon-action";
+import { createInMemoryStructuredStorage, createSystemClock } from "./in-memory-outbox-runtime";
+import { runMicPress } from "./mic-press-model";
+import {
+  INITIAL_MODEL_THINKING_STATE,
+  createModelThinkingController,
+  type DaemonModelThinkingSource,
+} from "./model-thinking-model";
+import { ModelThinkingPicker } from "./ModelThinkingPicker";
+import { PermissionRecoveryNotice } from "./PermissionRecoveryNotice";
+import { resolvePermission, type PermissionState } from "./permission-recovery";
+import {
+  INITIAL_QUEUE_MODES_STATE,
+  createQueueModesController,
+  type DaemonQueueModeSource,
+  type QueueMode,
+} from "./queue-mode-model";
+import { QueueModePicker } from "./QueueModePicker";
+import {
+  INITIAL_TURN_STATUS_STATE,
+  createTurnStatusController,
+  type DaemonTurnStatusSource,
+} from "./turn-status-model";
+import { TurnStatusBanner } from "./TurnStatusBanner";
+import {
+  createUnavailableVoiceCapturePort,
+  createVoiceCaptureController,
+  IDLE_VOICE_STATE,
+  type VoiceCaptureController,
+  type VoiceCancelOutcome,
+  type VoiceCapturePort,
+  type VoiceState,
+  type VoiceStopOutcome,
+} from "../voice";
+import {
+  ABORT_ACTION_LABEL,
+  ATTACH_ACTION_LABEL,
+  COMPOSER_ACCESSIBILITY_LABEL,
+  COMPOSER_INPUT_LABEL,
+  EMPTY_COMPOSER_STATE,
+  FOLLOW_UP_ACTION_LABEL,
+  MIC_ACTION_LABEL,
+  QUEUE_MODE_LABEL,
+  STEER_ACTION_LABEL,
+  abortTurn,
+  canAbort,
+  canFollowUpDraft,
+  canSteerDraft,
+  canSubmitDraft,
+  describeQueueStatus,
+  dispatchModeLabel,
+  entryStatusLabel,
+  finishTurn,
+  markEntryFailed,
+  markEntrySent,
+  markFollowUpFailed,
+  markFollowUpSent,
+  markSteerFailed,
+  markSteerSent,
+  pendingCount,
+  queueDepth,
+  queueDepthLabel,
+  recoverFailedDraft,
+  revertDispatchMode,
+  setDispatchMode,
+  startTurn,
+  submitDraft,
+  submitFollowUp,
+  submitSteer,
+  type ComposerEntry,
+  type ComposerEntryStatus,
+  type ComposerState,
+  type QueueDispatchMode,
+  type TurnService,
+} from "./composer-model";
+
+const DISPATCH_MODE_OPTIONS: ReadonlyArray<{ value: QueueDispatchMode; label: string }> = [
+  { value: "steer", label: dispatchModeLabel("steer") },
+  { value: "follow-up", label: dispatchModeLabel("follow-up") },
+];
+
+export interface ComposerProps {
+  /**
+   * Hands the trimmed text of a submitted prompt to the host. Always an
+   * injected callback, so this component never decides how a prompt is
+   * delivered: resolving it (or returning normally) marks the optimistic
+   * entry `sent`; throwing/rejecting marks it `failed` and leaves its
+   * text recoverable via the entry's Retry action.
+   *
+   * Live since T32S13 (P5-W19): the session route
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`) passes a
+   * `handleSubmit` that calls `AppCore.startTurn` → T63's
+   * `startDaemonTurn` over the live `DaemonClient`, and re-throws a
+   * `{ status: "failed" }` result so the `markEntryFailed` path above
+   * is what surfaces it. With no daemon connected, that failure is
+   * "Not connected to a daemon" — a sent prompt is marked `failed`,
+   * not `sent`.
+   */
+  onSubmit: (text: string) => void | Promise<void>;
+  /**
+   * Fires immediately whenever the microphone icon is pressed — kept
+   * exactly as before (T33B1) so an existing caller's contract is
+   * unchanged. The permission gate, recovery affordance, and actual
+   * recording toggle that run alongside this call live behind
+   * `voiceCapture` below (T33B7's original precheck and T70's recorder
+   * were unified onto that one port by T83 — see `mic-press-model.ts`).
+   */
+  onMicPress: () => void;
+  /**
+   * Fires immediately whenever the attachment icon is pressed — kept
+   * exactly as before (T33B1) so an existing caller's contract is
+   * unchanged. The actual pick/upload flow (T33B7) runs alongside this
+   * call — see `attachmentSource`/`uploadClient` below.
+   */
+  onAttachPress: () => void;
+  /**
+   * Whether a Pi turn is currently running. Host-controlled — `Composer`
+   * does not decide this for itself. Drives which controls are shown
+   * (plain Send is disabled while running; Steer/Follow up/Abort appear)
+   * — see `composer-model.ts`'s doc comment for what each one means.
+   *
+   * Live since T32S13 (P5-W19): the session route passes
+   * `submitting || signalRunning`, where `submitting` covers the window
+   * between a Send tap and the daemon's first push, and `signalRunning`
+   * is T64's real `createTurnRunningSignal` over `agent_stream`
+   * (`features/sessions/turn-running-signal.ts`).
+   */
+  turnRunning: boolean;
+  /**
+   * Steer / follow-up / abort transport for the running turn, injected
+   * for the same "no live client yet" reason as `onSubmit`. T32A1B
+   * (P5-W6) provides a real implementation.
+   */
+  turnService: TurnService;
+  /**
+   * T33B7: picker + OS-permission port for attachments. Optional and
+   * defaults to `createUnavailableAttachmentSourcePort()` — no photo/
+   * document picker is installed in this workspace yet (see that
+   * module's doc comment). Passing a real implementation is what turns
+   * the attach action from an honest "unavailable" notice into a real
+   * pick/upload flow; nothing else about this component changes.
+   */
+  attachmentSource?: AttachmentSourcePort;
+  /**
+   * T33B7: transport for uploading a picked file (mirrors
+   * `packages/client/src/daemon-client.ts`'s `uploadFile`, and
+   * `apps/web/src/features/composer/agent-turn-client.ts`'s optional
+   * `uploadFile` seam). Omitted or missing `uploadFile` leaves every
+   * staged attachment in an explained `"error"` state rather than
+   * throwing — the same "no live client yet" seam `turnService` above
+   * already uses.
+   */
+  uploadClient?: AttachmentUploadClient;
+  /**
+   * T33B7: local, pre-network ceilings on attachment count/size,
+   * surfaced *before* the picker opens (`describeAttachmentLimits`).
+   * Defaults to `DEFAULT_ATTACHMENT_LIMITS`.
+   */
+  attachmentLimits?: AttachmentLimits;
+  /**
+   * T70: the actual recorder behind the mic action — T33B7 deliberately
+   * left "recording itself" for a later task; this is that task. When
+   * granted, pressing the mic toggles a real `VoiceCaptureController`
+   * (`../voice/voice-model.ts`) built over the SAME `outbox`/
+   * `sessionId`/`onSubmit` a text send already uses (below), so a voice
+   * transcript reaches the identical durable outbox entry, not a second
+   * queue — see `../voice/voice-model.ts`'s header on why that mattered.
+   * Optional, defaults to `createUnavailableVoiceCapturePort()` — no
+   * audio-recording dependency is installed in this workspace (see that
+   * module's doc comment for the exact install command).
+   *
+   * This is now the ONLY OS-permission port the mic action resolves
+   * through (T83, `mic-press-model.ts`): `VoiceCapturePort` already
+   * extends the same `PermissionPort` shape T33B7's now-removed
+   * `MicPermissionPort` prop used, so a denied or unavailable microphone
+   * renders through `PermissionRecoveryNotice kind="microphone"` from
+   * this ONE port's own `requestStart()`/`requestPermission()` calls —
+   * see `mic-press-model.ts`'s header for the double-prompt bug this
+   * closed (T70 had filed it as a seam here; T83 is the fix, not just
+   * the same object passed to two props, which would still have
+   * resolved permission twice).
+   */
+  voiceCapture?: VoiceCapturePort;
+  /**
+   * T33B7: the durable outbox every send is recorded through (plan.md
+   * §7.1/§12.5). T75: this used to be reached only by an
+   * attachment-bearing send — a text-only send, the most common send in
+   * the app, bypassed the real `OutboxController` entirely; `handleSend`
+   * now routes every send, text-only or not, through `sendWithOutbox`.
+   * Defaults to a private `coreComposer.OutboxController` constructed
+   * from `structuredStorage`/`clock` below when omitted.
+   */
+  outbox?: InstanceType<typeof coreComposer.OutboxController>;
+  /**
+   * T33B7: backing store for the default `outbox` above. Defaults to
+   * `createInMemoryStructuredStorage()` (not durable across an app
+   * restart — see `in-memory-outbox-runtime.ts`'s doc comment) when
+   * neither this nor `outbox` is supplied. Ignored when `outbox` is
+   * supplied directly.
+   */
+  structuredStorage?: StructuredStorage;
+  /** T33B7: clock for the default `outbox` above. Defaults to `createSystemClock()`. Ignored when `outbox` is supplied directly. */
+  clock?: Clock;
+  /**
+   * T33B7: the session/agent id outbox entries are scoped to (every
+   * send, since T75 — see `ComposerProps.outbox`'s doc comment).
+   * Defaults to `"local"` only when omitted; the session
+   * route (`app/h/[serverId]/session/[agentId]/index.tsx`) passes its
+   * own `agentId`, so real sends are scoped per agent rather than
+   * colliding under one shared key. T33B7 filed that as a seam for
+   * `app/` and the P5-W13 merge gate took it, since T33B7's commit
+   * landed after T32S9's and neither could reach the other's file.
+   */
+  sessionId?: string;
+  /**
+   * T39B: model/thinking-level transport, mirrors
+   * `packages/client/src/daemon-client.ts`'s real `fetchAgent`/
+   * `listProviderModels`/`setAgentModel`/`setAgentThinkingOption` — see
+   * `model-thinking-model.ts`'s module doc for exactly why those are
+   * the right names (not `listAgentModels`/`listAgentThinkingOptions`,
+   * which do not exist on `DaemonClient`). Optional, and still
+   * unwired at every mount — which is NOT the same claim as "no
+   * Android route wires a live `DaemonClient` into this feature
+   * yet". That was true when T39B wrote it and T132 falsified it:
+   * the production session route
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`) now passes
+   * `queueModeClient`/`turnStatusClient` off a live
+   * `AppCore.connection`-derived `DaemonClient` (see those props'
+   * doc comments). It simply has no `modelThinkingClient` on its
+   * `<Composer .../>` yet, so omitted stays today's only real shape
+   * and renders `ModelThinkingPicker`'s truthful "Connect to a
+   * daemon…" unavailable state instead of an enabled control that
+   * can only fail. Wiring it means proving a real `DaemonClient`
+   * satisfies `DaemonModelThinkingSource`, the way
+   * `app-shell/session-route-daemon-clients.ts` proved it for the
+   * other two; nobody has done that yet.
+   */
+  modelThinkingClient?: DaemonModelThinkingSource;
+  /**
+   * T39C: session-wide steer/follow-up queue-mode transport, mirrors
+   * `packages/client/src/daemon-client.ts`'s real `getQueueModes`/
+   * `setSteeringMode`/`setFollowUpMode` — see `queue-mode-model.ts`'s
+   * module doc for exactly why those are the right names, and for how
+   * this differs from `composer-model.ts`'s own per-message
+   * `QueueDispatchMode`. Optional — still the right shape for a test
+   * harness or a build with no connection, in which case omitting this
+   * renders `QueueModePicker`'s truthful "Connect to a daemon…"
+   * unavailable state instead of an enabled control that can only fail.
+   * **T132**: the production session route
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`, via that
+   * `app-shell/session-route-daemon-clients.ts`) now supplies the
+   * real `AppCore.connection`-derived `DaemonClient` here, so this is no
+   * longer the "no live client yet" seam it used to be — see that
+   * route's own "T132 mount" doc comment.
+   */
+  queueModeClient?: DaemonQueueModeSource;
+  /**
+   * T39C: retry/compaction live-status transport, mirrors
+   * `packages/client/src/daemon-client.ts`'s real
+   * `on("agent_stream", handler)` — see `turn-status-model.ts`'s module
+   * doc for why this reads the raw stream directly rather than going
+   * through `frontend-core`'s timeline domain (which drops `pi_retry`
+   * silently today). Optional, same shape as `queueModeClient` above:
+   * omitted renders nothing at all (see `TurnStatusBanner.tsx`'s own
+   * "renders nothing when there is nothing to say" doc comment) rather
+   * than a banner that can never receive a real event. **T132** wires
+   * the same real client through as `queueModeClient` above — see that
+   * prop's own doc comment.
+   */
+  turnStatusClient?: DaemonTurnStatusSource;
+  placeholder?: string;
+  testId?: string;
+}
+
+const TONE_BY_STATUS: Record<ComposerEntryStatus, ChipTone> = {
+  pending: "info",
+  sent: "success",
+  failed: "danger",
+};
+
+/**
+ * T70: visible text (plan.md §10.5 — status is never colour alone) for
+ * the last `requestStop()`/`requestCancel()` result. `null` for the one
+ * outcome that means "nothing changed": `"not-recording"`, the button
+ * pressed while already idle. (`"already-recording"` is deliberately NOT
+ * handled here — it belongs to `VoiceStartOutcome`, which this function
+ * does not accept; `handleMicPress` routes a start outcome separately.)
+ */
+function voiceOutcomeDisplay(
+  outcome: VoiceStopOutcome | VoiceCancelOutcome,
+): { text: string; tone: StatusTone } | null {
+  switch (outcome.outcome) {
+    case "queued":
+      return { text: "Voice message sent", tone: "success" };
+    case "send-failed":
+      return { text: `Voice message failed: ${outcome.message}`, tone: "danger" };
+    case "empty-transcript":
+      return { text: "No speech detected", tone: "neutral" };
+    case "raw-audio-unsupported":
+      return { text: "Voice transcription isn't available yet", tone: "neutral" };
+    case "cancelled":
+      return { text: "Recording cancelled", tone: "neutral" };
+    case "not-recording":
+      return null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The Android bottom composer (plan.md §9.2; T33B1; steer/follow-up/
+ * abort T33B2) — built on the shared `PromptBar` recipe plus the
+ * microphone/attachment actions §9.2 calls out as "prominent". All state
+ * shaping (the optimistic pending -> sent -> failed lifecycle, draft
+ * recovery on failure, the steer/follow-up queue transitions, abort)
+ * lives in `composer-model.ts` and is unit tested there; this component
+ * is a thin view that wires that model to `useState` and to the
+ * primitives.
+ *
+ * Optimistic appearance: `handleSend`/`handleSteer`/`handleFollowUp`/
+ * `handleAbort` all call their `composer-model.ts` "submit"/"abort"
+ * function synchronously first — the new entry (or the stopped-turn
+ * state) is reflected immediately, before the injected `onSubmit`/
+ * `turnService` call is even invoked, let alone before it resolves.
+ * Resolving or rejecting only ever *reconciles* that already-visible
+ * state, via `markEntrySent`/`markEntryFailed` (plain send) or
+ * `markSteerSent`/`markSteerFailed`/`markFollowUpSent`/
+ * `markFollowUpFailed` (steer/follow-up).
+ *
+ * While `turnRunning` is true, plain `PromptBar` `Send` is disabled
+ * (`canSend={... && !state.turnRunning}`) — during a turn, sending is
+ * ambiguous, so the user must choose explicitly between the "Redirect
+ * current response" (steer), "Queue follow-up message" (follow-up), and
+ * "Stop current response" (abort) controls that appear in their place.
+ * See `composer-model.ts`'s doc comment for the product distinction
+ * between the three.
+ *
+ * TalkBack: `Section` gives the whole control a `"header"`-role name
+ * ("Message composer") without collapsing its interactive children into
+ * one node (see that primitive's own note on why plain
+ * `accessible`/`accessibilityLabel` grouping doesn't work here); the
+ * text field's accessible name comes from `PromptBar`'s own `label`
+ * prop; the microphone/attachment controls are real 48dp `Pressable`
+ * buttons with mandatory accessible names (`composer-icon-action.tsx`).
+ * Each outgoing entry renders its text plus a status `Chip` whose label
+ * is always visible text (`entryStatusLabel` — "Sending…"/"Sent"/
+ * "Failed", never colour alone, plan.md §10.5) and, only once failed, a
+ * separate, individually focusable "Retry" `Button` — deliberately kept
+ * out of any collapsing `accessible` wrapper so TalkBack can still reach
+ * that button on its own rather than only hearing a merged row summary.
+ * The entries list carries `accessibilityLiveRegion="polite"` so a
+ * status change (or a new optimistic entry appearing) is announced
+ * without moving focus.
+ *
+ * Keyboard ownership (plan.md §9.3; T33B4): this component renders no
+ * `Modal` or bottom sheet of its own — just plain `View`/`Pressable`
+ * siblings around `PromptBar`'s `TextInput` — so nothing here competes
+ * for keyboard ownership with an extension sheet mounted elsewhere in
+ * the tree. The plan rule itself ("the composer must retain keyboard
+ * ownership when an extension sheet opens") is encoded as an RN-free
+ * decision in `composer-focus-model.ts` (`resolveFocusOwner` and its
+ * open/close/rotate transitions — see that module's tests) rather than
+ * here, because there is nothing this component can itself observe or
+ * decide today: `PromptBar`'s `TextInput` exposes no `onFocus`/`onBlur`
+ * for this component to read real focus state from (a gap in a `ui/
+ * recipes/` file this task does not own), and the sheet primitive that
+ * would need to cooperate (`ui/primitives/Sheet.tsx`) currently renders
+ * its panel inside React Native's `Modal` — which opens a separate
+ * native Android window and *would* take IME focus away from whatever
+ * `TextInput` was focused underneath it, the exact failure plan.md
+ * §9.3's "use Portal rather than a detached Modal" is warning against
+ * (also not owned by this task; see this task's report).
+ *
+ * What this component *does* control, and does here: its root container
+ * (below) never shrinks (`flexShrink: 0`), so it cannot be compressed
+ * out of view to make room for a sheet or the IME — the
+ * `reservesOwnHeight` half of `composer-focus-model.ts`'s
+ * `COMPOSER_LAYOUT_CONTRACT`. The other half, `consumesKeyboardInset`,
+ * is Android's own `windowSoftInputMode="adjustResize"` resizing the
+ * window around the IME rather than drawing under it — real on-screen
+ * non-overlap with the IME, and real focus retention through a live
+ * `Modal`/`Portal` sheet, remain for T37 (Maestro) and T59 (real
+ * device) to prove; this component does not claim either.
+ */
+export function Composer({
+  onSubmit,
+  onMicPress,
+  onAttachPress,
+  turnRunning,
+  turnService,
+  attachmentSource,
+  uploadClient,
+  attachmentLimits,
+  voiceCapture,
+  outbox: outboxProp,
+  structuredStorage: structuredStorageProp,
+  clock: clockProp,
+  sessionId,
+  modelThinkingClient,
+  queueModeClient,
+  turnStatusClient,
+  placeholder,
+  testId,
+}: ComposerProps) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const [state, setState] = useState(EMPTY_COMPOSER_STATE);
+  const sequenceRef = useRef(0);
+
+  // --- T33B7: attachments + mic permission -------------------------------
+  const resolvedAttachmentSource = useMemo(
+    () => attachmentSource ?? createUnavailableAttachmentSourcePort(),
+    [attachmentSource],
+  );
+  const resolvedVoiceCapture = useMemo(
+    () => voiceCapture ?? createUnavailableVoiceCapturePort(),
+    [voiceCapture],
+  );
+  const limits = attachmentLimits ?? DEFAULT_ATTACHMENT_LIMITS;
+  const resolvedSessionId = sessionId ?? "local";
+
+  // --- T39B: model/thinking-level selection -------------------------------
+  // One controller per (client, agentId) identity, same rationale as
+  // `voiceController`'s own `useMemo` above. `load()` re-fetches the
+  // authoritative snapshot on mount and whenever either changes; every
+  // subsequent read of the controller's state goes through
+  // `modelThinkingState`, mirrored from `controller.getState()` after
+  // each call — see `model-thinking-model.ts`'s module doc for why the
+  // controller itself holds no React state of its own.
+  const modelThinkingController = useMemo(
+    () =>
+      createModelThinkingController({ agentId: resolvedSessionId, client: modelThinkingClient }),
+    [modelThinkingClient, resolvedSessionId],
+  );
+  const [modelThinkingState, setModelThinkingState] = useState(INITIAL_MODEL_THINKING_STATE);
+  useEffect(() => {
+    let cancelled = false;
+    void modelThinkingController.load().then(() => {
+      if (!cancelled) setModelThinkingState(modelThinkingController.getState());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [modelThinkingController]);
+  const handleSelectModel = useCallback(
+    (modelId: string) => {
+      void modelThinkingController
+        .setModel(modelId)
+        .then(() => setModelThinkingState(modelThinkingController.getState()));
+    },
+    [modelThinkingController],
+  );
+  const handleSelectThinking = useCallback(
+    (thinkingOptionId: string | null) => {
+      void modelThinkingController
+        .setThinkingOption(thinkingOptionId)
+        .then(() => setModelThinkingState(modelThinkingController.getState()));
+    },
+    [modelThinkingController],
+  );
+
+  // --- T39C: session-wide steer/follow-up queue mode ----------------------
+  // Same one-controller-per-(client, agentId)-identity shape as
+  // `modelThinkingController` above — see `queue-mode-model.ts`'s module
+  // doc for why this is a *different* setting from `mode`/`setMode`
+  // (the per-message `QueueDispatchMode` chip) below.
+  const queueModesController = useMemo(
+    () => createQueueModesController({ agentId: resolvedSessionId, client: queueModeClient }),
+    [queueModeClient, resolvedSessionId],
+  );
+  const [queueModesState, setQueueModesState] = useState(INITIAL_QUEUE_MODES_STATE);
+  useEffect(() => {
+    let cancelled = false;
+    void queueModesController.load().then(() => {
+      if (!cancelled) setQueueModesState(queueModesController.getState());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [queueModesController]);
+  const handleSelectSteeringMode = useCallback(
+    (mode: QueueMode) => {
+      void queueModesController
+        .setSteeringMode(mode)
+        .then(() => setQueueModesState(queueModesController.getState()));
+    },
+    [queueModesController],
+  );
+  const handleSelectFollowUpMode = useCallback(
+    (mode: QueueMode) => {
+      void queueModesController
+        .setFollowUpMode(mode)
+        .then(() => setQueueModesState(queueModesController.getState()));
+    },
+    [queueModesController],
+  );
+
+  // --- T39C: retry/compaction live status ---------------------------------
+  // Unlike the two controllers above, this one is a pure subscription:
+  // `subscribe()` synchronously flips `availability` and (when supported)
+  // registers the live handler; every event after that mutates the
+  // controller's own state, mirrored into `turnStatusState` by re-reading
+  // `getState()` inside the handler passed to `subscribe()` — there is no
+  // request/response to `.then()` off, so this polls the controller's
+  // state via a dedicated re-render trigger instead (`turnStatusTick`).
+  const turnStatusController = useMemo(
+    () => createTurnStatusController({ agentId: resolvedSessionId, client: turnStatusClient }),
+    [turnStatusClient, resolvedSessionId],
+  );
+  const [turnStatusState, setTurnStatusState] = useState(INITIAL_TURN_STATUS_STATE);
+  useEffect(() => {
+    turnStatusController.subscribe(() => setTurnStatusState(turnStatusController.getState()));
+    setTurnStatusState(turnStatusController.getState());
+    return () => {
+      turnStatusController.unsubscribe();
+    };
+  }, [turnStatusController]);
+
+  // One outbox per (outboxProp | structuredStorage, clock) identity —
+  // same rationale as `apps/web/src/features/composer/use-composer.ts`'s
+  // own `useMemo` around `coreComposer.OutboxController`. When no real
+  // `structuredStorage`/`clock` is injected, both default to the
+  // in-memory adapters in `in-memory-outbox-runtime.ts` — see
+  // `ComposerProps.outbox`'s doc comment for what that means.
+  const structuredStorage = useMemo(
+    () => structuredStorageProp ?? createInMemoryStructuredStorage(),
+    [structuredStorageProp],
+  );
+  const clockImpl = useMemo(() => clockProp ?? createSystemClock(), [clockProp]);
+  const outbox = useMemo(
+    () => outboxProp ?? new coreComposer.OutboxController(structuredStorage, clockImpl),
+    [outboxProp, structuredStorage, clockImpl],
+  );
+
+  // T75: composer entry id -> outbox entry id, for an entry whose send
+  // is currently recorded in the durable outbox. Populated by
+  // `sendWithOutbox` on enqueue; cleared once that entry is confirmed
+  // `sent` (already removed from the outbox by `outbox.markSent`) or
+  // once `handleRetry` has reconciled a failed entry's record via
+  // `outbox.remove` — see that callback below.
+  const outboxEntryIdRef = useRef<Map<string, string>>(new Map());
+
+  // --- T70: voice entry --------------------------------------------------
+  // One controller per (port, outbox, sessionId, onSubmit) identity — the
+  // same `outbox` a text send routes through above, not a second one (see
+  // `voiceCapture`'s doc comment). `submitPrompt` is `onSubmit` itself:
+  // resolving marks the voice-produced outbox entry sent, exactly
+  // `ComposerProps.onSubmit`'s own contract.
+  const voiceController = useMemo<VoiceCaptureController>(
+    () =>
+      createVoiceCaptureController({
+        port: resolvedVoiceCapture,
+        outbox,
+        sessionId: resolvedSessionId,
+        submitPrompt: onSubmit,
+      }),
+    [resolvedVoiceCapture, outbox, resolvedSessionId, onSubmit],
+  );
+  const [voiceState, setVoiceState] = useState<VoiceState>(IDLE_VOICE_STATE);
+  const [voiceOutcome, setVoiceOutcome] = useState<VoiceStopOutcome | VoiceCancelOutcome | null>(
+    null,
+  );
+
+  const [attachmentsState, setAttachmentsState] =
+    useState<AttachmentsState>(EMPTY_ATTACHMENTS_STATE);
+  const attachmentsStateRef = useRef(attachmentsState);
+  useEffect(() => {
+    attachmentsStateRef.current = attachmentsState;
+  }, [attachmentsState]);
+  const attachmentSequenceRef = useRef(0);
+  const generateAttachmentId = useCallback((): string => {
+    attachmentSequenceRef.current += 1;
+    return `composer-attachment-${Date.now().toString(36)}-${attachmentSequenceRef.current}`;
+  }, []);
+
+  const [attachmentPermissionState, setAttachmentPermissionState] =
+    useState<PermissionState | null>(null);
+  const [micPermissionState, setMicPermissionState] = useState<PermissionState | null>(null);
+
+  // `turnRunning` is host-controlled (since T32S13 it is fed by a live
+  // signal — see `ComposerProps.turnRunning`'s doc comment). Mirror it into
+  // the model on change rather than reading it directly, since
+  // `abortTurn`/`submitSteer`/`submitFollowUp` all key off
+  // `state.turnRunning`. A normal (non-abort) transition to `false`
+  // goes through `finishTurn`, which deliberately never clears a queued
+  // follow-up — see that function's doc comment.
+  useEffect(() => {
+    setState((current) =>
+      current.turnRunning === turnRunning
+        ? current
+        : turnRunning
+          ? startTurn(current)
+          : finishTurn(current),
+    );
+  }, [turnRunning]);
+
+  const generateId = useCallback(() => {
+    sequenceRef.current += 1;
+    return `composer-entry-${Date.now().toString(36)}-${sequenceRef.current}`;
+  }, []);
+
+  const handleValueChange = useCallback((value: string) => {
+    setState((current) => ({ ...current, draft: value }));
+  }, []);
+
+  // Uploads one already-picked file. `uploadClient?.uploadFile` is
+  // optional — see `ComposerProps.uploadClient`'s doc comment — so a
+  // missing/omitted transport lands the staged entry in an explained
+  // `"error"` state rather than throwing, mirroring
+  // `apps/web/src/features/composer/use-attachments.ts`'s `upload`.
+  const uploadPickedFile = useCallback(
+    async (id: string, file: PickedAttachmentFile): Promise<void> => {
+      if (!uploadClient?.uploadFile) {
+        setAttachmentsState((current) =>
+          markAttachmentError(current, id, "Attachments are unavailable: no live connection."),
+        );
+        return;
+      }
+      try {
+        const bytes = await file.readAsBytes();
+        const uploaded = await uploadClient.uploadFile({
+          fileName: file.name,
+          mimeType: file.mimeType || "application/octet-stream",
+          bytes,
+        });
+        setAttachmentsState((current) => markAttachmentUploaded(current, id, uploaded));
+      } catch (error) {
+        setAttachmentsState((current) =>
+          markAttachmentError(current, id, error instanceof Error ? error.message : String(error)),
+        );
+      }
+    },
+    [uploadClient],
+  );
+
+  // Fires `onAttachPress` immediately (unchanged T33B1 contract — see
+  // `ComposerProps.onAttachPress`'s doc comment), then runs the T33B7
+  // permission + pick + stage + upload flow. `resolvePermission` mirrors
+  // `../connect/qr-scan-model.ts`'s "read; prompt only if undetermined;
+  // never re-prompt a denial" rule, so a user who already declined sees
+  // `PermissionRecoveryNotice` immediately rather than a repeated OS
+  // dialog. Every candidate is checked against `limits` — surfaced to
+  // the user up front via `describeAttachmentLimits`'s caption below —
+  // *before* it is staged, so an over-limit file becomes a visible,
+  // explained `"error"` entry rather than a silent drop or a failure
+  // only discovered after upload.
+  const handleAttachPress = useCallback(() => {
+    onAttachPress();
+    void (async () => {
+      const status = await resolvePermission(resolvedAttachmentSource);
+      setAttachmentPermissionState(status);
+      if (status !== "granted") return;
+
+      const picked = await resolvedAttachmentSource.pickFiles({ multiple: true });
+      if (picked.length === 0) return;
+
+      let working = attachmentsStateRef.current;
+      const toUpload: Array<{ id: string; file: PickedAttachmentFile }> = [];
+      for (const file of picked) {
+        const mimeType = file.mimeType || "application/octet-stream";
+        const size = file.size ?? 0;
+        const id = generateAttachmentId();
+        const acceptance = evaluateAttachmentCandidate(
+          working,
+          { name: file.name, mimeType, size },
+          limits,
+        );
+        working = stageAttachment(working, id, { name: file.name, mimeType, size });
+        if (acceptance.accepted) {
+          toUpload.push({ id, file });
+        } else {
+          working = markAttachmentError(working, id, acceptance.message);
+        }
+      }
+      attachmentsStateRef.current = working;
+      setAttachmentsState(working);
+      for (const { id, file } of toUpload) {
+        void uploadPickedFile(id, file);
+      }
+    })();
+  }, [onAttachPress, resolvedAttachmentSource, limits, generateAttachmentId, uploadPickedFile]);
+
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachmentsState((current) => removeAttachment(current, id));
+  }, []);
+
+  const handleRequestAttachmentPermission = useCallback(() => {
+    void (async () => {
+      const status = await resolvedAttachmentSource.requestPermission();
+      setAttachmentPermissionState(status);
+    })();
+  }, [resolvedAttachmentSource]);
+
+  const handleDismissAttachmentNotice = useCallback(() => {
+    setAttachmentPermissionState(null);
+  }, []);
+
+  // Fires `onMicPress` immediately (unchanged T33B1 contract — see
+  // `ComposerProps.onMicPress`'s doc comment). Then delegates the whole
+  // start/stop decision to `runMicPress` (`mic-press-model.ts`, T83): it
+  // starts a new recording when idle, or stops (transcribes + enqueues
+  // + submits) one already running, over the real `voiceController` —
+  // toggling on the controller's OWN state, never a flag tracked here.
+  // T83 closed the double-prompt bug this used to have: permission is
+  // now resolved EXACTLY ONCE per press, entirely inside
+  // `voiceController.requestStart()` (over `resolvedVoiceCapture` —
+  // see `mic-press-model.ts`'s header for the removed second call, and
+  // that file's test for the counting-fake proof).
+  const handleMicPress = useCallback(() => {
+    onMicPress();
+    void (async () => {
+      const result = await runMicPress(voiceController);
+      setVoiceState(result.voiceState);
+      if (result.voiceOutcome !== null) {
+        setVoiceOutcome(result.voiceOutcome);
+      }
+      if (result.micPermissionState !== null) {
+        setMicPermissionState(result.micPermissionState);
+      }
+    })();
+  }, [onMicPress, voiceController]);
+
+  // Cancels a running recording, discarding it — only reachable while
+  // `voiceState.status === "recording"` below (never while `"processing"`,
+  // to avoid racing an in-flight `requestStop()`).
+  const handleVoiceCancel = useCallback(() => {
+    void (async () => {
+      const outcome = await voiceController.requestCancel();
+      setVoiceState(voiceController.getState());
+      setVoiceOutcome(outcome);
+    })();
+  }, [voiceController]);
+
+  // "Try again" from the mic notice — resolves through the SAME
+  // (only) port `runMicPress` above uses, T83's whole point: no second,
+  // separate `MicPermissionPort` to keep in sync with this one.
+  const handleRequestMicPermission = useCallback(() => {
+    void (async () => {
+      const status = await resolvedVoiceCapture.requestPermission();
+      setMicPermissionState(status);
+    })();
+  }, [resolvedVoiceCapture]);
+
+  const handleDismissMicNotice = useCallback(() => {
+    setMicPermissionState(null);
+  }, []);
+
+  const openSystemSettings = useCallback(() => {
+    void Linking.openSettings();
+  }, []);
+
+  // Records the send in the durable outbox (plan.md §7.1/§12.5) before
+  // calling `onSubmit`, and reconciles afterwards — this is the "flows
+  // through the core outbox" half of this task's brief. T75: every send
+  // reaches this now, text-only or not — `attachmentsToSend` is simply
+  // `[]` for a plain text send. (Before T75, this was reached only when
+  // `attachmentsToSend` was non-empty, so a text-only send — the most
+  // common send in the app — bypassed the real `OutboxController`
+  // entirely; see `ComposerProps.outbox`'s doc comment.)
+  const sendWithOutbox = useCallback(
+    async (
+      entryId: string,
+      text: string,
+      attachmentsToSend: readonly ComposerUploadedAttachment[],
+    ): Promise<void> => {
+      let outboxEntryId: string | undefined;
+      try {
+        const outboxEntry = await outbox.enqueue({
+          sessionId: resolvedSessionId,
+          kind: "prompt",
+          payload: { text, attachments: attachmentsToSend },
+        });
+        outboxEntryId = outboxEntry.id;
+        outboxEntryIdRef.current.set(entryId, outboxEntryId);
+        await outbox.markSending(outboxEntry.id);
+        await onSubmit(text);
+        await outbox.markSent(outboxEntry.id);
+        outboxEntryIdRef.current.delete(entryId);
+        setState((current) => markEntrySent(current, entryId));
+      } catch (error) {
+        if (outboxEntryId) {
+          const message = error instanceof Error ? error.message : String(error);
+          await outbox.markFailed(outboxEntryId, message).catch(() => undefined);
+        }
+        setState((current) => markEntryFailed(current, entryId));
+      }
+    },
+    [outbox, resolvedSessionId, onSubmit],
+  );
+
+  const handleSend = useCallback(() => {
+    const result = submitDraft(state, { generateId, now: Date.now });
+    if (!result.entry) return;
+
+    // T75: every send — text-only or attachment-bearing — is recorded
+    // through the real outbox via `sendWithOutbox`. A send with at
+    // least one uploaded attachment additionally gains the attachment
+    // refs on its entry and clears the staged attachments once handed
+    // off; a text-only send leaves `entry`/`nextState` exactly as
+    // `submitDraft` produced them and passes an empty attachments list.
+    const attachmentsToSend = uploadedAttachmentRefs(attachmentsStateRef.current);
+    let entry: ComposerEntry = result.entry;
+    let nextState: ComposerState = result.state;
+    if (attachmentsToSend.length > 0) {
+      entry = { ...result.entry, attachments: attachmentsToSend };
+      nextState = {
+        ...result.state,
+        entries: result.state.entries.map((candidate) =>
+          candidate.id === entry.id ? entry : candidate,
+        ),
+      };
+      attachmentsStateRef.current = clearAttachments();
+      setAttachmentsState(attachmentsStateRef.current);
+    }
+    setState(nextState);
+    void sendWithOutbox(entry.id, entry.text, attachmentsToSend);
+  }, [state, generateId, sendWithOutbox]);
+
+  const handleSteer = useCallback(() => {
+    const result = submitSteer(state, { generateId, now: Date.now });
+    if (!result.entry) return;
+    setState(result.state);
+    const entryId = result.entry.id;
+    const entryText = result.entry.text;
+
+    Promise.resolve()
+      .then(() => turnService.steer(entryText))
+      .then(() => {
+        setState((current) => markSteerSent(current, entryId));
+      })
+      .catch(() => {
+        setState((current) => markSteerFailed(current, entryId));
+      });
+  }, [state, generateId, turnService]);
+
+  const handleFollowUp = useCallback(() => {
+    const result = submitFollowUp(state, { generateId, now: Date.now });
+    if (!result.entry) return;
+    setState(result.state);
+    const entryId = result.entry.id;
+    const entryText = result.entry.text;
+
+    Promise.resolve()
+      .then(() => turnService.followUp(entryText))
+      .then(() => {
+        setState((current) => markFollowUpSent(current, entryId));
+      })
+      .catch(() => {
+        setState((current) => markFollowUpFailed(current, entryId));
+      });
+  }, [state, generateId, turnService]);
+
+  const handleAbort = useCallback(() => {
+    // Optimistic, like `handleSend`/`handleSteer`/`handleFollowUp`:
+    // `abortTurn` flips `turnRunning` and drops any queued follow-up (and
+    // steer) immediately, before `turnService.abort()` is even awaited —
+    // see `abortTurn`'s doc comment for why a late resolution of an
+    // already-dropped queue entry can never resurrect it.
+    const result = abortTurn(state);
+    if (!result.aborted) return;
+    setState(result.state);
+    Promise.resolve()
+      .then(() => turnService.abort())
+      .catch(() => {
+        // Best-effort: the daemon may not have actually stopped the
+        // turn. There is no live client yet to reconcile this against
+        // (plan.md §12.4), so this is left as a no-op rather than
+        // guessing at recovery here.
+      });
+  }, [state, turnService]);
+
+  // T75: reconciles the failed entry's outbox-side record — when this
+  // send actually reached `sendWithOutbox` (every send, since T75) that
+  // record is parked `awaiting-confirmation` (`outbox.markFailed`'s
+  // default) and nothing else in this component's call graph ever
+  // reaches it again. Tapping Retry IS the user's explicit confirmation
+  // (plan.md §12.5: "the user confirms uncertain sends"), so this
+  // removes that record before restoring the entry's text to the draft
+  // — the resend that follows (`handleSend` -> `sendWithOutbox`) mints a
+  // fresh outbox entry, and the original is gone rather than orphaned.
+  // `outboxEntryIdRef` has no entry for an id this component never sent
+  // through the outbox (there is none today, since T75), so the lookup
+  // is a safe no-op in that case.
+  const handleRetry = useCallback(
+    (id: string) => {
+      const outboxEntryId = outboxEntryIdRef.current.get(id);
+      if (outboxEntryId !== undefined) {
+        outboxEntryIdRef.current.delete(id);
+        void outbox.remove(outboxEntryId).catch(() => undefined);
+      }
+      setState((current) => recoverFailedDraft(current, id).state);
+    },
+    [outbox],
+  );
+
+  // Optimistic, like `handleSend`/`handleSteer`/`handleFollowUp`/
+  // `handleAbort`: `setDispatchMode` flips `state.mode` immediately,
+  // before `turnService.setMode` is even awaited. A rejection reverts to
+  // whatever mode was in effect before this call (`previousMode`) rather
+  // than leaving the model stuck on the requested mode — see
+  // `revertDispatchMode`'s doc comment.
+  const handleModeChange = useCallback(
+    (mode: QueueDispatchMode) => {
+      const result = setDispatchMode(state, mode);
+      if (!result.changed) return;
+      setState(result.state);
+      const previousMode = result.previousMode;
+      Promise.resolve()
+        .then(() => turnService.setMode(mode))
+        .catch(() => {
+          setState((current) => revertDispatchMode(current, previousMode));
+        });
+    },
+    [state, turnService],
+  );
+
+  // T70: what the voice status row (below) shows, or `null` to render
+  // nothing — computed once here rather than three times inline in JSX.
+  const voiceStatusDisplay: { text: string; tone: StatusTone } | null =
+    voiceState.status === "recording"
+      ? { text: "Recording…", tone: "info" }
+      : voiceState.status === "processing"
+        ? { text: "Processing…", tone: "info" }
+        : voiceOutcome !== null
+          ? voiceOutcomeDisplay(voiceOutcome)
+          : null;
+
+  const composerTestId = testId ?? "composer";
+
+  return (
+    <View style={styles.root} testID={`${composerTestId}-root`}>
+      <Section title={COMPOSER_ACCESSIBILITY_LABEL} testId={composerTestId}>
+        {state.entries.length > 0 ? (
+          <View
+            style={styles.entries}
+            accessibilityRole="none"
+            accessibilityLiveRegion="polite"
+            testID={`${composerTestId}-entries`}
+          >
+            {state.entries.map((entry) => (
+              <ComposerEntryRow
+                key={entry.id}
+                entry={entry}
+                onRetry={handleRetry}
+                testId={`${composerTestId}-entry-${entry.id}`}
+              />
+            ))}
+          </View>
+        ) : null}
+        {attachmentsState.entries.length > 0 ? (
+          <View
+            style={styles.entries}
+            accessibilityLiveRegion="polite"
+            testID={`${composerTestId}-attachments`}
+          >
+            {attachmentsState.entries.map((attachment) => (
+              <StagedAttachmentRow
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={handleRemoveAttachment}
+                testId={`${composerTestId}-attachment-${attachment.id}`}
+              />
+            ))}
+          </View>
+        ) : null}
+        <View style={styles.actionsRow}>
+          <ComposerIconAction
+            glyph={"\u{1F3A4}"}
+            accessibleName={MIC_ACTION_LABEL}
+            onPress={handleMicPress}
+            testId={`${composerTestId}-mic`}
+          />
+          <ComposerIconAction
+            glyph={"\u{1F4CE}"}
+            accessibleName={ATTACH_ACTION_LABEL}
+            onPress={handleAttachPress}
+            testId={`${composerTestId}-attach`}
+          />
+          <Text style={styles.attachmentLimits} testID={`${composerTestId}-attachment-limits`}>
+            {describeAttachmentLimits(limits)}
+          </Text>
+        </View>
+        <ModelThinkingPicker
+          state={modelThinkingState}
+          onSelectModel={handleSelectModel}
+          onSelectThinking={handleSelectThinking}
+          testId={`${composerTestId}-model-thinking`}
+        />
+        <QueueModePicker
+          state={queueModesState}
+          onSelectSteeringMode={handleSelectSteeringMode}
+          onSelectFollowUpMode={handleSelectFollowUpMode}
+          testId={`${composerTestId}-queue-mode`}
+        />
+        <TurnStatusBanner state={turnStatusState} testId={`${composerTestId}-turn-status`} />
+        {attachmentPermissionState !== null ? (
+          <PermissionRecoveryNotice
+            kind="photos"
+            state={attachmentPermissionState}
+            onRequest={handleRequestAttachmentPermission}
+            onOpenSettings={openSystemSettings}
+            onDismiss={handleDismissAttachmentNotice}
+            testId={`${composerTestId}-attachment-permission-notice`}
+          />
+        ) : null}
+        {micPermissionState !== null ? (
+          <PermissionRecoveryNotice
+            kind="microphone"
+            state={micPermissionState}
+            onRequest={handleRequestMicPermission}
+            onOpenSettings={openSystemSettings}
+            onDismiss={handleDismissMicNotice}
+            testId={`${composerTestId}-mic-permission-notice`}
+          />
+        ) : null}
+        {/* T70: a value of the voice-entry kind — this row is the only
+            place a capture-in-progress or its outcome ever becomes
+            visible, so it renders whenever there is anything to say and
+            stays gone otherwise (no clutter on an app that never
+            presses the mic). */}
+        {voiceStatusDisplay !== null ? (
+          <View style={styles.turnControlsRow} testID={`${composerTestId}-voice-status`}>
+            <StatusIndicator
+              label="Voice"
+              tone={voiceStatusDisplay.tone}
+              statusText={voiceStatusDisplay.text}
+              testId={`${composerTestId}-voice-status-indicator`}
+            />
+            {voiceState.status === "recording" ? (
+              <Button
+                kind="danger"
+                label="Cancel recording"
+                onPress={handleVoiceCancel}
+                testId={`${composerTestId}-voice-cancel`}
+              />
+            ) : null}
+          </View>
+        ) : null}
+        {state.turnRunning ? (
+          <>
+            <View
+              style={styles.queueStatusRow}
+              testID={`${composerTestId}-queue-status`}
+              accessibilityLiveRegion="polite"
+              accessibilityLabel={describeQueueStatus(state)}
+            >
+              <StatusIndicator
+                label="Queue"
+                tone={queueDepth(state).total > 0 ? "info" : "neutral"}
+                statusText={queueDepthLabel(queueDepth(state))}
+                testId={`${composerTestId}-queue-depth`}
+              />
+              <Select
+                label={QUEUE_MODE_LABEL}
+                options={DISPATCH_MODE_OPTIONS}
+                value={state.mode}
+                onValueChange={(value) => handleModeChange(value as QueueDispatchMode)}
+                testId={`${composerTestId}-queue-mode`}
+              />
+            </View>
+            <View style={styles.turnControlsRow} testID={`${composerTestId}-turn-controls`}>
+              <Button
+                kind="secondary"
+                label={STEER_ACTION_LABEL}
+                disabled={!canSteerDraft(state)}
+                onPress={handleSteer}
+                testId={`${composerTestId}-steer`}
+              />
+              <Button
+                kind="secondary"
+                label={FOLLOW_UP_ACTION_LABEL}
+                disabled={!canFollowUpDraft(state)}
+                onPress={handleFollowUp}
+                testId={`${composerTestId}-follow-up`}
+              />
+              <Button
+                kind="danger"
+                label={ABORT_ACTION_LABEL}
+                disabled={!canAbort(state)}
+                onPress={handleAbort}
+                testId={`${composerTestId}-abort`}
+              />
+            </View>
+          </>
+        ) : null}
+        <PromptBar
+          label={COMPOSER_INPUT_LABEL}
+          placeholder={placeholder ?? "Message"}
+          value={state.draft}
+          canSend={
+            canSubmitDraft(state.draft) &&
+            !state.turnRunning &&
+            !attachmentsHavePendingUploads(attachmentsState)
+          }
+          queuedCount={pendingCount(state)}
+          onValueChange={handleValueChange}
+          onSend={handleSend}
+          testId={composerTestId}
+        />
+      </Section>
+    </View>
+  );
+}
+
+function ComposerEntryRow({
+  entry,
+  onRetry,
+  testId,
+}: {
+  entry: ComposerEntry;
+  onRetry: (id: string) => void;
+  testId: string;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Deliberately not wrapped in an `accessible` View: that would collapse
+  // every child (including the failed-state Retry button) into a single
+  // TalkBack node, making the button unreachable on its own. Each piece
+  // below is its own accessible element instead.
+  return (
+    <View style={styles.entryRow} testID={testId}>
+      <View style={styles.entryTextColumn}>
+        <Text style={styles.entryText} numberOfLines={2}>
+          {entry.text}
+        </Text>
+        {/* T33B7: "An attachment uploads and appears on the message" — every attachment carried by this entry (`handleSend`'s `submitDraft` + attach step) is named here, next to the entry's own text. */}
+        {entry.attachments && entry.attachments.length > 0 ? (
+          <Text style={styles.entryAttachments} testID={`${testId}-attachments`}>
+            {entry.attachments.map((attachment) => attachment.fileName).join(", ")}
+          </Text>
+        ) : null}
+      </View>
+      <Chip label={entryStatusLabel(entry.status)} tone={TONE_BY_STATUS[entry.status]} />
+      {entry.status === "failed" ? (
+        <Button
+          kind="secondary"
+          label="Retry"
+          onPress={() => onRetry(entry.id)}
+          testId={`${testId}-retry`}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function StagedAttachmentRow({
+  attachment,
+  onRemove,
+  testId,
+}: {
+  attachment: StagedAttachment;
+  onRemove: (id: string) => void;
+  testId: string;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const tone: ChipTone =
+    attachment.status === "uploaded"
+      ? "success"
+      : attachment.status === "error"
+        ? "danger"
+        : "info";
+
+  return (
+    <View style={styles.entryRow} testID={testId}>
+      <View style={styles.entryTextColumn}>
+        <Text style={styles.entryText} numberOfLines={1}>
+          {attachment.name}
+        </Text>
+        {attachment.status === "error" && attachment.error ? (
+          <Text style={styles.entryAttachments}>{attachment.error}</Text>
+        ) : null}
+      </View>
+      <Chip label={attachmentStatusLabel(attachment.status)} tone={tone} />
+      <Button
+        kind="secondary"
+        label="Remove"
+        onPress={() => onRemove(attachment.id)}
+        testId={`${testId}-remove`}
+      />
+    </View>
+  );
+}
+
+function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+  return StyleSheet.create({
+    // T33B4 / plan.md §9.3: never shrink to make room for a sheet or the
+    // IME — see `composer-focus-model.ts`'s `COMPOSER_LAYOUT_CONTRACT`
+    // (`reservesOwnHeight`) and this file's doc comment.
+    root: { flexShrink: 0 },
+    entries: { gap: theme.spacing[2], marginBottom: theme.spacing[2] },
+    entryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing[2],
+      paddingVertical: theme.spacing[1],
+    },
+    entryTextColumn: { flex: 1, gap: theme.spacing[1] },
+    entryText: {
+      color: theme.colors.ink,
+      fontSize: theme.typography.variant.bodySmall.fontSize,
+    },
+    entryAttachments: {
+      color: theme.colors["ink-2"],
+      fontSize: theme.typography.variant.caption.fontSize,
+    },
+    actionsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: theme.spacing[2],
+      marginBottom: theme.spacing[2],
+    },
+    attachmentLimits: {
+      color: theme.colors["ink-2"],
+      fontSize: theme.typography.variant.caption.fontSize,
+    },
+    turnControlsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: theme.spacing[2],
+      marginBottom: theme.spacing[2],
+    },
+    queueStatusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: theme.spacing[2],
+      marginBottom: theme.spacing[2],
+    },
+  });
+}
+
+export default Composer;

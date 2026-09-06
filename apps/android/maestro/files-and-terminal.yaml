@@ -1,0 +1,245 @@
+appId: sh.picompanion.debug
+name: "files and terminal — open both routes, verify terminal teardown"
+tags:
+  - files-and-terminal
+---
+# T37E9 (plan.md §14.4 "open files and terminal"). This wave has no
+# emulator, no device, and no Maestro binary — this flow has never been
+# run. It is written and reviewed as text, and every testId/string it
+# names is pinned by `../e2e/flows/files-and-terminal.contract.test.ts`
+# (readCode()-matched against real source, anchored to the one top-level
+# function/component each assertion names, never a bare identifier or a
+# whole-file match — see that file's own doc comment) so this flow
+# cannot silently rot before anyone with a device first runs it. See
+# `../e2e/flows/files-and-terminal-contract.ts` for the single restated
+# source of every testId/deep-link/copy string below.
+#
+# ---------------------------------------------------------------------
+# FORMERLY A KNOWN BLOCKER — reaching Files/Terminal used to need a deep
+# link, not a tap. CORRECTED BY T79 (P5-W22): `session/[agentId]/
+# index.tsx` now mounts `app-shell/session-nav-actions.tsx`'s
+# `SessionNavActions` (two 48dp `Button`s, "Files"/"Terminal") as a
+# sibling of `TranscriptHeader` inside that route's own `header` slot,
+# pushing this session's own `serverId`/`agentId` through
+# `session-nav-actions-model.ts`'s `pressSessionFiles`/
+# `pressSessionTerminal` — the same `destinationHref`/
+# `navigationIntentToPath` conversion this flow's own deep links resolve
+# to (`session-nav-actions-model.test.ts` proves the two agree exactly).
+# T79's own acceptance criterion is proven at the model layer (a fake
+# router standing in for the mounted screen, per this repository's
+# RN-in-vitest limitation — see that test file's doc comment), not by a
+# Maestro tap: this wave still has no emulator, no device, and no
+# Maestro binary to run one against.
+#
+# This flow itself still opens both routes by deep link below, on
+# purpose, not because the gap above still stands: `composer-inputs.yaml`
+# (T37E3) already established the fix this flow reuses rather than
+# re-deriving — both routes are real, already-shipped Expo Router files,
+# reachable through the app's own `picompanion://` deep-link scheme
+# (`app.config.ts`) independent of any in-app button —
+# `deep-link-routing.ts`'s `matchDeepLinkPath` already classifies both
+# paths this flow opens. Neither route validates `serverId`/`agentId`
+# against a real paired host or a real created session (see
+# `files-and-terminal.contract.test.ts`'s pin on both route files for
+# proof — they only ever use those params as display labels), so this
+# flow's own literal ids (`../e2e/flows/files-and-terminal-contract.ts`'s
+# `FILES_TERMINAL_FLOW`) reach the exact same component tree a real
+# navigation would. A device-proven tap-through from the new buttons
+# (asserting `session-nav-actions-files`/`session-nav-actions-terminal`
+# are visible and tapping each) is still open work for whichever task
+# next gets a real device or emulator — this flow was never rewritten to
+# add it, so as not to touch T37E9's/T77's own step sequencing without a
+# device to prove the replacement against.
+#
+# Unlike `composer-inputs.yaml`, this flow DOES pair with the isolated
+# daemon first: `AppCore` (`app-shell/core.ts`) is one process-lifetime
+# singleton independent of the route tree, so `core.fileBrowserClient`
+# and `core.createTerminalTransport` reflect this run's real connection
+# no matter what literal `serverId` the deep link below names. Pairing
+# first is what makes T35A1's "All access goes through daemon RPC" and
+# T35B2's binary-channel requirement actually exercised by this run,
+# rather than asserting only the disconnected fallback.
+#
+# ---------------------------------------------------------------------
+# KNOWN BLOCKER — upload is omitted, and the terminal is always
+# "unavailable", and both are already-disclosed, unowned-by-this-task
+# gaps this flow asserts as their own honest current state rather than
+# pretending otherwise:
+# ---------------------------------------------------------------------
+#   1. CLOSED AT THE P5-W22 MERGE GATE. This paragraph used to say the
+#      route passes `FilesScreen` no `filePicker` and no `sharing`, so
+#      `files-screen.tsx`'s `uploadController` stayed `null` and
+#      `UploadPanel` never rendered — and the step below asserted that
+#      testId was NOT visible, precisely so "a future task wiring those
+#      props in has one place that starts failing." `T78`, earlier in
+#      this same wave, is that task: the route now passes
+#      `filePicker={core.filePicker}` and `sharing={core.sharing}`, so
+#      `uploadController` is non-null and `UploadPanel` renders. The
+#      step below is therefore flipped to `assertVisible` — the check
+#      did its job, and pinning it shut would now assert something false
+#      on the first real device run.
+#
+#      Still honest about what that panel can DO: `AppCore.filePicker` is
+#      `createUnavailableFilePicker()` (no `expo-document-picker`/
+#      `expo-image-picker` install exists in this workspace), so pressing
+#      "Choose file" settles a named, visible `FILE_PICKER_UNAVAILABLE`
+#      refusal rather than opening a picker. This flow asserts the panel
+#      is present, not that a pick succeeds.
+#
+#      CORRECTED AT THE P5-W20 MERGE GATE: this paragraph used to say
+#      the route passes no `fetchImpl` either, and quoted that claim from
+#      the route file's own doc comment. `T32S14` — three commits later
+#      in this same wave — wired `fetchImpl` at that route and rewrote
+#      the sentence quoted here, so both the claim and the quotation were
+#      false by the time the wave closed. Download is therefore NOT
+#      omitted any more; `DownloadPanel` and T66's named relay/no-origin
+#      refusals are reachable. This flow still adds no download step: a
+#      device proof of that path needs a real file selection and a real
+#      HTTP origin, which is a scenario this flow was never scoped for —
+#      see the OWNERLESS list in this wave's merge-gate report for the
+#      task that should own it. Nothing below asserted download either
+#      way, so no step in this flow was falsified — only this comment.
+#   2. PARTIALLY CLOSED BY T80 (P5-W23). This paragraph used to say the
+#      terminal was unavailable for two independent reasons: no
+#      `react-native-webview` install, AND
+#      `app/h/[serverId]/session/[agentId]/terminal/[terminalId].tsx`
+#      passing `TerminalScreen` a real `transport` but no `webview` prop
+#      at all. T80 closed the second reason: the route now passes
+#      `webview={core.terminalWebview}` (`app-shell/core.ts`'s
+#      `AppCore["terminalWebview"]`), the same "read the field straight
+#      off `AppCore`" shape `transport` already used. The visible outcome
+#      below is UNCHANGED — `apps/android/package.json` still declares no
+#      `react-native-webview` (this task's `CLAUDE.md` lists it as
+#      known-uninstallable — no install grant exists in this wave), so
+#      `core.terminalWebview` is still `createUnavailableTerminalWebViewPort()`
+#      and the terminal screen still renders its own honest "Terminal
+#      unavailable" `EmptyState`. This flow asserts exactly that real,
+#      shipped fallback state, matching `terminal-screen.tsx`'s own
+#      "silent, honest 'nothing to draw' rather than a fake terminal"
+#      contract — never a live keystroke round-trip, which is T59's (real
+#      device, real WebView, and the `react-native-webview` install) to
+#      add once that remaining gap closes; no further route or screen
+#      wiring is needed once it does.
+#
+# ---------------------------------------------------------------------
+# What this flow DOES prove for real, once a device is available:
+# ---------------------------------------------------------------------
+#   - Pairing with an isolated daemon (never the production daemon's
+#     port — see ../README.md's "Isolation") succeeds.
+#   - Both routes mount without crashing and render their real,
+#     already-shipped bodies — `FilesScreen`'s connected browsing state
+#     (not its disconnected fallback) and `TerminalScreen`'s honest
+#     unavailable state.
+#   - Leaving the terminal route unmounts `TerminalScreen`, whose own
+#     cleanup effect calls `controller.dispose()`
+#     (`terminal-session-controller.ts`), which cascades into
+#     `transport.dispose?.()` — `app-shell/terminal-transport-adapter.ts`'s
+#     real `createDaemonTerminalBinaryTransport` (T65, applied at the
+#     P5-W19 merge gate), not the no-op it used to be. Maestro itself has
+#     no way to inspect daemon-side session state from outside the app,
+#     so the actual proof that this teardown reaches a real, closed
+#     daemon-side session is
+#     `files-and-terminal.contract.test.ts`'s own integration test,
+#     which builds the *real* `createDaemonTerminalBinaryTransport` and
+#     the *real* `TerminalSessionController` together (never a fake
+#     transport standing in for either) against a scripted fake daemon
+#     client, and proves the fake session's `close()` is actually called
+#     when the controller is disposed the same way `TerminalScreen`'s
+#     unmount effect disposes it. This flow's own steps below only cover
+#     what a device can show: the screen is gone and the app is still
+#     alive afterward, not a crash or a hang.
+#
+# ---------------------------------------------------------------------
+# Independence and sharding (../README.md's "Flow independence")
+# ---------------------------------------------------------------------
+# `launchApp: { clearState: true, clearKeychain: true }` starts this flow
+# from the same fresh-install state every other flow in this directory
+# does. This flow pairs its own host against this run's own isolated
+# daemon (`${DAEMON_HOST}`/`${DAEMON_PORT}`/`${DAEMON_ADDRESS}`, a fresh
+# `mkdtemp` `PASEO_HOME`, never the production daemon's port), creates no
+# session, and `run-flow.ts` tears that daemon down itself, win or lose,
+# once this run exits — nothing here persists past the run, and nothing
+# here reads state left behind by any other flow, so it can run before,
+# after, or interleaved with any sibling flow in this directory, any
+# number of times, on any shard.
+
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# --- Onboarding (mirrors ../smoke.yaml's welcome step, then finishes the
+# permissions step too, exactly like ../cold-start-restore.yaml and
+# ../extension-sheets.yaml do).
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+- assertVisible:
+    id: "connect-onboarding"
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# --- Pair with this run's isolated daemon (never production; see
+# ../README.md's "Isolation" section). Same block ../extension-sheets.yaml
+# already proved out.
+- assertVisible:
+    id: "connect-form"
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    text: "Connected via direct connection"
+
+# =====================================================================
+# FILES — reached by deep link; see this file's header for exactly why.
+# `files-screen-e2e-host-e2e-files-agent` is
+# `FILES_TERMINAL_FLOW.filesTestId("e2e-host", "e2e-files-agent")`.
+# =====================================================================
+- openLink: "picompanion://h/e2e-host/session/e2e-files-agent/files"
+- assertVisible:
+    id: "files-screen-e2e-host-e2e-files-agent"
+- assertVisible:
+    id: "files-screen-e2e-host-e2e-files-agent-breadcrumbs"
+# --- Real connection wired (the earlier pairing succeeded): the
+# --- disconnected fallback never shows.
+- assertNotVisible:
+    id: "files-screen-e2e-host-e2e-files-agent-not-connected"
+# --- KNOWN BLOCKER (1) above, now CLOSED by T78 (P5-W22): a real
+# --- filePicker is wired into this route, so uploadController is
+# --- non-null and UploadPanel renders. Its "Choose file" button still
+# --- settles a named FILE_PICKER_UNAVAILABLE refusal (no picker package
+# --- is installed) — this asserts the panel is present, not that a pick
+# --- succeeds.
+- assertVisible:
+    id: "files-screen-e2e-host-e2e-files-agent-upload"
+- back
+
+# =====================================================================
+# TERMINAL — same deep-link mechanism.
+# `FILES_TERMINAL_FLOW.terminalDeepLink("e2e-host", "e2e-terminal-agent",
+# "e2e-terminal-1")`.
+# =====================================================================
+- openLink: "picompanion://h/e2e-host/session/e2e-terminal-agent/terminal/e2e-terminal-1"
+- assertVisible:
+    id: "terminal-screen"
+# --- KNOWN BLOCKER (2) above: no react-native-webview installed. The
+# --- route DOES now pass a real `webview` prop (T80, P5-W23) — this is
+# --- the screen's own honest fallback for a genuinely-unavailable port,
+# --- not a crash, not a blank screen, and not a missing prop.
+- assertVisible:
+    id: "terminal-unavailable"
+- assertVisible:
+    text: "Terminal unavailable"
+- assertVisible:
+    text: "This build has no embedded terminal renderer installed yet. Your session and its output are unaffected."
+
+# --- Leave the terminal route: unmounts TerminalScreen, whose cleanup
+# --- effect disposes the real transport this run's pairing opened a
+# --- daemon-side session through — see this file's header for exactly
+# --- what is, and is not, provable from inside this flow versus
+# --- `files-and-terminal.contract.test.ts`'s own integration proof.
+- back
+- assertNotVisible:
+    id: "terminal-screen"

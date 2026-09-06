@@ -1,0 +1,102 @@
+{
+  "kind": "form",
+  "description": "Structured question form. Example: the ask-user extension's rich form with search, descriptions, multi-select, and an optional comment.",
+  "planRef": "plan.md §11.3 (form), §11.7 (ask-user)",
+  "frames": [
+    {
+      "id": "form-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:13:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 10,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "pick-approach",
+                  "ns": "ask-user",
+                  "kind": "form",
+                  "placement": "sheet",
+                  "title": "How should we proceed?",
+                  "actions": [
+                    { "id": "submit", "label": "Submit", "variant": "primary" },
+                    { "id": "cancel", "label": "Cancel", "variant": "secondary" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "action-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(pi.ui.action.request)",
+      "note": "The client-side form widget collects the user's multi-select answer and optional comment locally, then submits them as the action payload.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.request",
+          "agentId": "agt_fixture_0001",
+          "actionId": "submit",
+          "elementId": "pick-approach",
+          "payload": {
+            "selectedOptionIds": ["rewrite", "add-tests"],
+            "comment": "Prefer the smaller diff if both are viable."
+          },
+          "requestId": "req_fixture_action_0003"
+        }
+      }
+    },
+    {
+      "id": "action-response-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(pi.ui.action.response)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.response",
+          "payload": {
+            "requestId": "req_fixture_action_0003",
+            "ok": true,
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "id": "action-result-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_action_result)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:13:04.000Z",
+            "event": {
+              "type": "pi_ui_action_result",
+              "provider": "pi",
+              "result": {
+                "actionId": "submit",
+                "elementId": "pick-approach",
+                "ok": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

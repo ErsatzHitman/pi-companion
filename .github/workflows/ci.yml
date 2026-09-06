@@ -1,0 +1,897 @@
+name: CI
+
+# T17A: authored from scratch for this repository's own workspace layout
+# (plan.md §15.4). The reference `D:\paseo` workflow (`Paseo v0.3.0-beta.2`,
+# AGPL-3.0-or-later) was consulted only as behavioral documentation of the
+# required job list and path-filter approach — no reference workflow content
+# was copied.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  # --- Routing -----------------------------------------------------------
+
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      # Pushes to main, the merge queue, and manual dispatch always run every
+      # contract. On pull requests, a change to the routing/workspace/CI
+      # definitions themselves also forces a full run, so no contract can be
+      # silently un-checked by editing its own filter.
+      full: ${{ github.event_name != 'pull_request' || steps.filter.outputs.routing == 'true' || steps.filter.outputs.workspace == 'true' || steps.filter.outputs.ci == 'true' }}
+      protocol: ${{ steps.filter.outputs.protocol }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend-core: ${{ steps.filter.outputs.frontend-core }}
+      web: ${{ steps.filter.outputs.web }}
+      android: ${{ steps.filter.outputs.android }}
+      packaging: ${{ steps.filter.outputs.packaging }}
+      docker: ${{ steps.filter.outputs.docker }}
+      nix: ${{ steps.filter.outputs.nix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: .github/ci-paths.yml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Validate CI guard scripts
+        run: node --test scripts/ci/*.test.mjs
+
+  # --- Legacy/repo-invariant guards (always run, unconditional) ----------
+  #
+  # These check invariants that must hold at every commit regardless of what
+  # changed, so they are not gated by the `changes` filters.
+
+  guard-legacy-paths:
+    name: guard / no packages/app or legacy import
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on any packages/app path or legacy @getpaseo/import import
+        run: node scripts/ci/run-guard-no-legacy-app-tree.mjs
+
+  guard-android-no-web-files:
+    name: guard / apps/android has no .web.* files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on any apps/android/**/*.web.* file
+        run: node scripts/ci/run-guard-no-android-web-files.mjs
+
+  guard-android-no-duplicate-permission-state:
+    name: guard / apps/android has one permission-recovery vocabulary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # T60D: apps/android/src/features/composer/permission-recovery.ts is the
+      # sole permission-state ("denied-permanently" et al.) vocabulary this
+      # app may declare — fails if a second one reappears.
+      - name: Fail on a second private permission-state union under apps/android/src
+        run: node scripts/ci/run-guard-no-duplicate-permission-state.mjs
+
+  guard-maestro-no-production-daemon-port:
+    name: guard / apps/android/maestro never names port 6767
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # T37D: no apps/android/maestro/*.yaml flow or config file may name
+      # the production daemon port 6767, in any form (see
+      # apps/android/maestro/README.md's "Isolation" section).
+      - name: Fail on any apps/android/maestro/*.yaml file naming the production daemon port
+        run: node scripts/ci/run-guard-no-production-daemon-port.mjs
+
+  # T92: T89 built scripts/ci/run-guard-no-wave-self-revert.mjs and
+  # deliberately left it unwired -- over the repository's ENTIRE history it
+  # reports 43 findings across 13 files, all legacy (oxfmt reformats, old
+  # T27A1/T30B/T31B fix-ups) that a whole-history scan would wrongly fail
+  # every run on. The range-scoped form is already clean
+  # (`24db6bb..HEAD` -> OK), so this job scopes every run to ONLY the
+  # commits this run itself introduces -- never full history, and never a
+  # suppression list (a suppression list would also hide a real future
+  # finding). That range is computed as `merge-base(base, HEAD)..HEAD`:
+  #   - pull_request / merge_group: base is the target branch tip recorded
+  #     on the event, so the range is exactly the PR's/queue entry's own
+  #     commits.
+  #   - push (a direct push or a merge landing on main): base is
+  #     `github.event.before`, the branch tip immediately before this push,
+  #     so the range is exactly the commits this push introduced -- this is
+  #     what makes the job meaningful (and provably green) on `main` too,
+  #     not just on pull requests.
+  #   - anything else (workflow_dispatch, or a base SHA this checkout can't
+  #     resolve -- e.g. a force-push's stale `before`): falls back to just
+  #     this run's own tip commit (`HEAD^..HEAD`) rather than full history.
+  # This would have been the only automated catch for P5-W22's silent
+  # revert (docs/issues-from-plan.md's T92, proven against `acacff2^..9ac1184`).
+  guard-no-wave-self-revert:
+    name: guard / no wave self-revert (this run's own range)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # The guard walks commit-by-commit diffs over the resolved range,
+          # and the range's base commit must be present locally for
+          # `git merge-base` to resolve it -- a shallow checkout would make
+          # every base SHA unreachable and silently collapse every range to
+          # the HEAD^..HEAD fallback below.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Resolve this run's own commit range
+        id: range
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request)
+              base_ref="${{ github.event.pull_request.base.sha }}"
+              ;;
+            merge_group)
+              base_ref="${{ github.event.merge_group.base_sha }}"
+              ;;
+            push)
+              base_ref="${{ github.event.before }}"
+              ;;
+            *)
+              base_ref=""
+              ;;
+          esac
+
+          if [ -n "$base_ref" ] && git cat-file -e "${base_ref}^{commit}" 2>/dev/null; then
+            merge_base="$(git merge-base "$base_ref" HEAD)"
+          else
+            # No usable base (workflow_dispatch, a branch's very first push,
+            # or a force-push whose recorded `before` is no longer
+            # reachable): scope to just this run's own tip commit instead
+            # of falling back to full history, which would resurface the 43
+            # pre-existing legacy findings documented above the job.
+            merge_base="HEAD^"
+          fi
+
+          echo "range=${merge_base}..HEAD" >> "$GITHUB_OUTPUT"
+          echo "Resolved range: ${merge_base}..HEAD"
+
+      - name: Fail if a commit in this run's own range reintroduces text an earlier commit in that range deleted from the same file
+        run: node scripts/ci/run-guard-no-wave-self-revert.mjs "${{ steps.range.outputs.range }}"
+
+  # T137: a tip-only `format:check` cannot see a commit that is format-red in
+  # the MIDDLE of a range when a later commit in that same range happens to
+  # reformat the same file back to green without saying so -- exactly what
+  # happened at the real P6-W10 gate (`4a23d89` red, `9b01176` silently fixed
+  # it, `d89058c` tip green; every wave-end gate that ran `format:check` at
+  # the tip passed throughout). This job re-checks EVERY commit this run
+  # itself introduces against its own post-commit content, using the SAME
+  # `merge-base(base, HEAD)..HEAD` range-resolution recipe as
+  # `guard-no-wave-self-revert` above (same rationale: never full history,
+  # which would rerun oxfmt over historical commits forever and eventually
+  # resurface legacy findings nobody in this run can fix -- see
+  # scripts/ci/guard-format-check-per-commit.mjs's module header for the
+  # full cost/bound writeup and the wall-clock measured against the real
+  # 68f899f..d89058c reproduction).
+  guard-format-check-per-commit:
+    name: guard / format:check per commit (this run's own range)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Same reason as guard-no-wave-self-revert above: the range's base
+          # commit must be reachable for `git merge-base` to resolve it.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      # The guard needs the PINNED oxfmt binary on disk (node_modules/oxfmt) --
+      # it deliberately refuses to fall back to an unpinned `npx oxfmt`, so
+      # node_modules must actually be installed before it runs.
+      - run: npm ci
+
+      - name: Resolve this run's own commit range
+        id: range
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request)
+              base_ref="${{ github.event.pull_request.base.sha }}"
+              ;;
+            merge_group)
+              base_ref="${{ github.event.merge_group.base_sha }}"
+              ;;
+            push)
+              base_ref="${{ github.event.before }}"
+              ;;
+            *)
+              base_ref=""
+              ;;
+          esac
+
+          if [ -n "$base_ref" ] && git cat-file -e "${base_ref}^{commit}" 2>/dev/null; then
+            merge_base="$(git merge-base "$base_ref" HEAD)"
+          else
+            # No usable base (workflow_dispatch, a branch's very first push,
+            # or a force-push whose recorded `before` is no longer
+            # reachable): scope to just this run's own tip commit instead of
+            # falling back to full history.
+            merge_base="HEAD^"
+          fi
+
+          echo "range=${merge_base}..HEAD" >> "$GITHUB_OUTPUT"
+          echo "Resolved range: ${merge_base}..HEAD"
+
+      - name: Fail if any commit in this run's own range is format-red as of its own content
+        run: node scripts/ci/run-guard-format-check-per-commit.mjs "${{ steps.range.outputs.range }}"
+
+  # --- Format / lint / typecheck (cheap, always run) ----------------------
+
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+      - name: Check formatting
+        run: npm run format:check
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+      - name: Lint lockfile
+        run: npx --yes lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-integrity
+      - name: Verify dependency signatures
+        run: npm audit signatures
+      - name: Lint
+        run: npm run lint
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      # T60B: apps/android and apps/web must declare, in their OWN
+      # package.json, every `@picompanion/*` workspace package their source
+      # actually imports as a value — npm workspace hoisting resolves the
+      # import either way, so this catches drift before it becomes the kind
+      # of near-miss recorded in this guard's own header comment, rather than
+      # after a build-ordering or lockfile change stops masking it. Runs here
+      # (not in the unconditional guard-* jobs above) because it needs `npm
+      # ci` to have already produced a lockfile-consistent tree to audit
+      # against, and this job already pays that cost unconditionally.
+      - name: Guard / apps declare every workspace package they import
+        run: node scripts/ci/run-guard-declared-workspace-deps.mjs
+
+      # Backend packages resolve each other through built `dist/*.d.ts`
+      # output (package.json `exports.types`), not source, so the dependency
+      # chain must be built before typechecking downstream packages.
+      - name: Build backend dependency chain (protocol -> relay -> highlight -> client -> server -> cli)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/relay
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/client
+          npm run build --workspace=@picompanion/server
+          npm run build --workspace=@picompanion/cli
+          npm run build --workspace=@picompanion/bridge
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck --workspaces --if-present
+
+      # T171: this step's @picompanion/server pack deliberately asserts only
+      # that `npm pack` itself succeeds, NOT that the tarball carries the
+      # bundled web UI (`dist/server/web-ui/`) — this job's own "Build
+      # backend dependency chain" step above never builds `apps/web` or runs
+      # `scripts/build-daemon-web-ui.mjs`, so that tarball never contains a
+      # web-ui bundle, real or otherwise, and asserting its presence here
+      # would fail on every run regardless of whether the real packaging
+      # path (below) is healthy. That real assertion — run after `apps/web`
+      # IS built and bundled in — is `guard-daemon-web-ui-bundled` in the
+      # `daemon-package-dry-run` job below; see
+      # scripts/ci/guard-daemon-web-ui-bundled.mjs for what it checks and
+      # why.
+      - name: Verify public package contents
+        run: |
+          npm pack --dry-run --ignore-scripts --workspace=@picompanion/protocol
+          npm pack --dry-run --ignore-scripts --workspace=@picompanion/client
+          npm pack --dry-run --ignore-scripts --workspace=@picompanion/server
+          npm pack --dry-run --ignore-scripts --workspace=@picompanion/highlight
+          npm pack --dry-run --ignore-scripts --workspace=@picompanion/cli
+
+  # --- protocol/client build and tests ------------------------------------
+
+  protocol-client-tests:
+    name: protocol-client-tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.protocol == 'true' || needs.changes.outputs.backend == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Build client dependency chain
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/relay
+          npm run build --workspace=@picompanion/client
+
+      - name: Run protocol tests
+        run: npm run test --workspace=@picompanion/protocol
+
+      - name: Run client tests
+        run: npm run test --workspace=@picompanion/client
+
+      - name: Run highlight tests
+        run: npm run test --workspace=@picompanion/highlight
+
+  # --- frontend-core unit and contract tests ------------------------------
+
+  frontend-core-tests:
+    name: frontend-core-tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.frontend-core == 'true') }}
+    runs-on: ubuntu-latest
+    steps: &frontend_core_test_steps
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Build protocol (frontend-core's shared wire contract)
+        run: npm run build --workspace=@picompanion/protocol
+
+      - name: Typecheck frontend-core
+        run: npm run typecheck --workspace=@picompanion/frontend-core
+
+      - name: Run frontend-core unit and contract tests
+        run: npm run test --workspace=@picompanion/frontend-core
+
+  # T49: frontend-core's suite on Windows -- our daemon's primary host
+  # (plan.md §15.4) but frontend-core had no Windows coverage at all before
+  # this, so a path-separator or line-ending bug here could ship silently.
+  # Same YAML-anchor pattern as server-tests-ubuntu/server-tests-windows.
+  frontend-core-tests-windows:
+    name: frontend-core-tests (windows-latest)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.frontend-core == 'true') }}
+    runs-on: windows-latest
+    steps: *frontend_core_test_steps
+
+  # --- design-tokens tests -------------------------------------------------
+  #
+  # T49: design-tokens had no test job on any platform before this, so
+  # contrast.test.ts (T54A1's WCAG AA guard, added after a real-browser axe
+  # run found the palette failing WCAG AA) gated nothing in CI. The package
+  # has no workspace dependencies and its `test` script runs straight
+  # against source (no build step required first). One platform is enough
+  # per the task's acceptance criteria -- the assertions are pure color-math,
+  # not platform-sensitive -- so this runs on ubuntu-latest only.
+
+  design-tokens-tests:
+    name: design-tokens-tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.frontend-core == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Run design-tokens tests
+        run: npm run test --workspace=@picompanion/design-tokens
+
+  # --- web typecheck, browser components, and Playwright E2E --------------
+  #
+  # apps/web is filled by T15 (blank shell) and T25A/T31 (components,
+  # Playwright suite, plan.md §14.5 performance budgets). The Playwright
+  # steps below are not yet sharded -- see the T31D note further down for
+  # why they were never actually running until now.
+
+  web-tests:
+    name: web-tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.web == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      # apps/web also depends on @picompanion/highlight (T30B2's read-only
+      # syntax tokenizing via the `./lezer-only` export, T30B3's lazily
+      # imported CodeMirror highlight style off the main entry point), and
+      # both resolve through the package's built `dist/`, so it must be
+      # built here too or apps/web's typecheck cannot see either entry.
+      - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/frontend-core
+
+      # T122: apps/web also resolves @picompanion/client through its built
+      # `dist/` (package.json `exports`), same as highlight above -- it is
+      # imported as a VALUE (not just types) by production code
+      # (daemon-client-context.tsx) and by fixture tests
+      # (daemon-agent-turn-client.fixture.test.ts among others). Before this
+      # step existed, this job never built that package at all: on a truly
+      # clean checkout `dist/` does not exist (it is gitignored), so those
+      # imports fail to resolve outright; and on any checkout where a stale
+      # `dist/` happened to already be present, tests ran against whatever
+      # code that stale `dist/` contained, not the commit under test -- proven
+      # at P6-W6 when mutating `DaemonClient.setFollowUpMode` to hardcode its
+      # mode left `daemon-agent-turn-client.fixture.test.ts` passing against a
+      # stale `dist/` and failing once it was rebuilt (see T122's report and
+      # the doc comment on `DaemonTurnClient`'s queue-mode trio in
+      # `daemon-agent-turn-client.ts` for the exact repro). Building the same
+      # protocol -> relay -> highlight -> client chain the mandatory
+      # `typecheck` job already builds removes both failure modes: a fresh
+      # checkout always gets a `dist/` built from the commit under test.
+      - name: Build @picompanion/client (protocol -> relay -> client chain)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/relay
+          npm run build --workspace=@picompanion/client
+
+      - name: Typecheck apps/web
+        run: npm run typecheck --workspace=@picompanion/web
+
+      - name: Run apps/web unit and component tests
+        run: npm run test --workspace=@picompanion/web
+
+      - name: Build apps/web
+        run: npm run build --workspace=@picompanion/web
+
+      # T31D: these two steps used to be guarded on
+      # `hashFiles('apps/web/playwright.config.ts') != ''`, but the config
+      # has always lived at `apps/web/e2e/playwright.config.ts` -- that
+      # guard evaluated false on every run since T31 landed, so neither
+      # step had ever actually executed. Unguarded now: the config (and
+      # the `test:e2e` script it backs, `apps/web/package.json`) always
+      # exists in this repository, so there is nothing left to gate on.
+      # `npm run test:e2e` runs every `apps/web/e2e/**/*.spec.ts` file,
+      # including `performance-budgets.spec.ts` (plan.md §14.5's CI gate).
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E
+        run: npm run test:e2e --workspace=@picompanion/web
+
+  # T49: apps/web's unit/component suite on Windows -- our daemon's primary
+  # host (plan.md §15.4) but this suite had no Windows coverage at all
+  # before this. Deliberately narrower than web-tests above: only the
+  # jsdom unit/component run, not typecheck/build/Playwright, which stay
+  # Linux-only (owned by web-tests, T31D) to keep the added wall time down.
+  web-unit-tests-windows:
+    name: web-unit-tests (windows-latest)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.web == 'true') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      # Same reasoning as web-tests above: apps/web resolves
+      # @picompanion/{protocol,design-tokens,highlight,frontend-core}
+      # through their built `dist/`, so the unit suite needs them built
+      # here too even though it skips apps/web's own typecheck/build.
+      - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/frontend-core
+
+      # T122: same reasoning as web-tests' matching step above -- this
+      # suite imports @picompanion/client as a value (not just types), and
+      # this job never built it before, so it ran against whatever `dist/`
+      # (stale, or absent) happened to already sit on the runner's checkout
+      # rather than the commit under test.
+      - name: Build @picompanion/client (protocol -> relay -> client chain)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/relay
+          npm run build --workspace=@picompanion/client
+
+      - name: Run apps/web unit and component tests
+        run: npm run test --workspace=@picompanion/web
+
+  # --- Android typecheck and production prebuild smoke --------------------
+  #
+  # apps/android is filled by T16 (Expo shell) and later android tasks. The
+  # prebuild smoke step runs T16's `build` script, which chains the
+  # no-web-artifacts guard and `expo prebuild --platform android --no-install`.
+
+  android-tests:
+    name: android-tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.android == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      # apps/android resolves each of these through built `dist/*.d.ts` /
+      # `dist/*.js` (their package.json `exports`), never source, so they must
+      # be built before apps/android is typechecked or tested. `highlight` was
+      # added by the P5-W10 merge gate: T35A2's
+      # `features/files/file-syntax-highlight.ts` is the first Android importer
+      # of `@picompanion/highlight`(`/lezer-only`), and without this line both
+      # steps below fail on a clean checkout with
+      # "TS2307: Cannot find module '@picompanion/highlight'" /
+      # "Cannot find package '@picompanion/highlight/lezer-only'". It passed
+      # locally only because developer trees already had a stale
+      # `packages/highlight/dist`.
+      - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/frontend-core
+
+      - name: Typecheck apps/android
+        run: npm run typecheck --workspace=@picompanion/android
+
+      - name: Run apps/android unit tests
+        run: npm run test --workspace=@picompanion/android
+
+      - name: Production prebuild smoke
+        if: ${{ hashFiles('apps/android/app.json', 'apps/android/app.config.ts', 'apps/android/app.config.js') != '' }}
+        run: npm run build --workspace=@picompanion/android
+
+  # --- Targeted server tests on Linux and Windows -------------------------
+
+  server-tests-ubuntu:
+    name: server-tests (ubuntu-latest)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true') }}
+    runs-on: ubuntu-latest
+    steps: &server_test_steps
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Build server dependency chain
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/relay
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/client
+          npm run build --workspace=@picompanion/server
+
+      - name: Run targeted server tests
+        run: npm run test:unit --workspace=@picompanion/server
+
+  server-tests-windows:
+    name: server-tests (windows-latest)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true') }}
+    runs-on: windows-latest
+    steps: *server_test_steps
+
+  # --- Daemon package dry-run with bundled new web UI ----------------------
+  #
+  # Depends on T18's `scripts/build-daemon-web-ui.mjs` and T15's real
+  # `apps/web/dist` output. Guarded on the bundling script existing so this
+  # job is defined from Phase 1 onward (plan.md §15.4) without hard-failing
+  # before those siblings land; once merged, every push exercises it via
+  # `full`/`backend`/`web`.
+
+  daemon-package-dry-run:
+    name: daemon-package-dry-run
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.web == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Build web UI bundling prerequisites and dry-run daemon packaging
+        if: ${{ hashFiles('scripts/build-daemon-web-ui.mjs') != '' }}
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/frontend-core
+          npm run build --workspace=@picompanion/web
+          node scripts/build-daemon-web-ui.mjs
+          npm pack --dry-run --ignore-scripts --workspace=@picompanion/server
+
+      # T171: the step above only PRINTS the pack listing — nothing read it,
+      # so an `apps/web/dist` that built successfully but produced an empty
+      # (or near-empty) `dist/server/web-ui/` bundle was invisible: `npm
+      # pack` still exits 0 either way. This asserts the actual tarball
+      # contents: a real `index.html` plus enough files and bytes under
+      # `dist/server/web-ui/` that the daemon this tarball ships would
+      # genuinely serve a web UI. See
+      # scripts/ci/guard-daemon-web-ui-bundled.mjs for the thresholds and
+      # the calibration they are set against.
+      - name: Guard / packed tarball actually carries the built web UI
+        if: ${{ hashFiles('scripts/build-daemon-web-ui.mjs') != '' }}
+        run: node scripts/ci/run-guard-daemon-web-ui-bundled.mjs
+
+      - name: Skip (build-daemon-web-ui.mjs not present yet, see T18)
+        if: ${{ hashFiles('scripts/build-daemon-web-ui.mjs') == '' }}
+        run: echo "scripts/build-daemon-web-ui.mjs not present yet (T18); skipping dry-run."
+
+  # --- Docker and Nix checks when their paths change -----------------------
+  #
+  # T43A3 added the real packaging inputs, under `packaging/docker/` and
+  # `packaging/nix/` rather than the repository-root paths the `docker`/`nix`
+  # filters below were written for — so those two filters still match
+  # nothing, and `docker-checks`/`nix-checks` below (real `docker build`/`nix
+  # build`; neither toolchain runs anywhere else in this workflow) stay
+  # dormant. That is a distinct, still-open gap: pointing `docker`/`nix` in
+  # .github/ci-paths.yml at `packaging/docker/**`/`packaging/nix/**` so these
+  # two jobs actually run. It is not this section's `guard-docker-packaging-
+  # paths` job below, which T176 wires against the new `packaging` filter —
+  # see packaging/README.md's disclosure for the exact seam.
+  #
+  # guard-docker-packaging-paths (T176) runs the static packaging guard
+  # (scripts/ci/run-guard-docker-packaging-paths.mjs, T43A3/T174) — it reads
+  # packaging/docker/Dockerfile and packaging/nix/flake.nix as plain text and
+  # checks them without a Docker or Nix toolchain; see that script's own
+  # header for exactly what it does and does not prove.
+
+  guard-docker-packaging-paths:
+    name: guard-docker-packaging-paths
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.packaging == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run the packaging guard (packaging/docker, packaging/nix)
+        run: node scripts/ci/run-guard-docker-packaging-paths.mjs
+
+  # guard-packaging-entrypoints (T175) checks the ONE thing
+  # guard-docker-packaging-paths.mjs's header claims but its
+  # `extractDockerCopySources` never covers: that the Dockerfile's
+  # `ENTRYPOINT`/`CMD` and the Nix flake's `installPhase` launcher path
+  # each resolve to something that actually exists — either an
+  # already-built `dist/` file, or (meaningful on a clean checkout, where
+  # `dist/` is gitignored and absent) the TypeScript source file this
+  # repository's own build convention would compile into that path. See
+  # scripts/ci/guard-packaging-entrypoints.mjs's header for the exact
+  # resolution rule and its disclosed limits. Runs on the same `packaging`
+  # filter as guard-docker-packaging-paths above, for the same reason
+  # (packaging inputs changing, or the guard's own source changing).
+  guard-packaging-entrypoints:
+    name: guard-packaging-entrypoints
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.packaging == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run the packaging entrypoint-paths guard (packaging/docker, packaging/nix)
+        run: node scripts/ci/run-guard-packaging-entrypoints.mjs
+
+  # guard-dockerignore-depth (T180) checks that every `.dockerignore` bare
+  # pattern (`node_modules/`, `dist/`, `*.tsbuildinfo`, ...) that names
+  # something this npm-workspaces repo's own tooling produces at MORE THAN
+  # ONE depth carries the `**/` prefix Docker's ignore matcher requires to
+  # exclude it at every depth, not just the build context root — see
+  # scripts/ci/guard-dockerignore-depth.mjs's header for the four
+  # tool-convention families it derives this from and the disclosed `*.log`
+  # gap. T177 fixed this exact defect for eight patterns; nothing caught a
+  # future edit dropping the prefix again until this guard.
+  #
+  # Wired under the existing `packaging` filter (covers `packaging/**` AND
+  # `scripts/ci/**`, T176) rather than a new filter, matching T175's own
+  # precedent in the job just above.
+  #
+  # CORRECTED (T185): this comment used to say the guard's actual input, the
+  # repo-root `.dockerignore` file, was "not itself under `packaging/**` or
+  # `scripts/ci/**`" so "a pull request that edits ONLY `.dockerignore` will
+  # not flip the `packaging` output true and so will not run this job" — and
+  # filed that gap for whoever owned `.github/ci-paths.yml` next. That is no
+  # longer true: T185 added `.dockerignore` as an exact-file entry under the
+  # `packaging` filter in `.github/ci-paths.yml`, so an edit to only that
+  # file now flips `packaging` true and runs this job. This still does not
+  # route `docker-checks` (that job gates on the separate, deliberately
+  # dormant `docker` filter — see that filter's own reserved-for-T43A/
+  # phase-8 comment in `.github/ci-paths.yml`), which remains a disclosed,
+  # out-of-scope gap, not one this correction closes.
+  guard-dockerignore-depth:
+    name: guard-dockerignore-depth
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.packaging == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run the .dockerignore depth-agnostic-pattern guard
+        run: node scripts/ci/run-guard-dockerignore-depth.mjs
+
+  docker-checks:
+    name: docker-checks
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docker == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t picompanion-ci-check .
+
+  nix-checks:
+    name: nix-checks
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.nix == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+      - name: Evaluate flake
+        run: nix flake check
+
+  # T124 (scope corrected T186 — this comment, the job name, and the step
+  # name below said "packages/client/src" ships and "apps/web/src or
+  # apps/android/src" denies from T147 onward; three widenings since
+  # (T147, T156, T179) made that false without anyone updating this file,
+  # because `.github/**` is deliberately outside both of the guard's own
+  # scans and can never trip on its own stale prose): a capability shipped
+  # ANYWHERE this guard treats as shipped source must never coexist with
+  # prose denying it, ANYWHERE this guard scans for denials. Seeded with
+  # the queue-mode trio; see scripts/ci/guard-capability-prose.mjs's header
+  # comment for the full P6-W6-through-T179 history this closes off.
+  #
+  # Do not restate the scope as a tree list or a count here — both have
+  # gone stale before and this comment cannot watch itself. The
+  # authoritative scope is `run-guard-capability-prose.mjs`'s own exported
+  # `isShippedSourcePath` (what counts as "shipped") and `isAppSourcePath`
+  # (where a denial is looked for); read those two functions, or the
+  # guard's own summary line printed on every run, rather than trusting
+  # this comment to have kept up with the next widening.
+  guard-capability-prose:
+    name: guard / no prose denies a shipped capability
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on a shipped capability that this guard's own scope finds denied in prose
+        run: node scripts/ci/run-guard-capability-prose.mjs
+
+  # T126: unconditional guard, alongside guard-legacy-paths et al. above —
+  # `vite build` reports a `node:` builtin reaching apps/web's bundle graph
+  # as a "has been externalized for browser compatibility" **warning** and
+  # still exits 0 (P6-W5's `eb9fa55` fixed one by hand), so nothing before
+  # this guard stopped a future production import from putting `node:fs`
+  # back. Walks the real import graph from apps/web/src/main.tsx; see
+  # scripts/ci/guard-no-node-builtin-in-web-bundle.mjs's header comment for
+  # the resolution traps handled (ESM .js specifiers resolving to .ts/.tsx
+  # source, doc comments that merely quote an import statement, barrel
+  # re-exports, test-only files remaining allowed).
+  guard-no-node-builtin-in-web-bundle:
+    name: "guard / no node: builtin reachable from apps/web's production entry"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: "Fail on a node: builtin reachable from apps/web/src/main.tsx"
+        run: node scripts/ci/run-guard-no-node-builtin-in-web-bundle.mjs
+
+  # T125: unconditional guard, alongside guard-legacy-paths et al. above —
+  # enforces a committed ceiling on scripts/ci/orphan-modules.mjs's
+  # import-graph orphan count (27 at last measurement, see
+  # run-orphan-modules.mjs's own comment for the audited per-file
+  # reasoning) so the count can only ever be lowered by a real fix, never
+  # silently grow. Deliberately a ceiling, not an exact-equality check —
+  # see that script's header comment for why a bare "must equal N" gate is
+  # a trap for the next task that legitimately adds a file.
+  guard-orphan-modules:
+    name: guard / import-graph orphan count ceiling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail if the import-graph orphan count exceeds the committed ceiling
+        run: node scripts/ci/run-orphan-modules.mjs

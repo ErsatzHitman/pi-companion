@@ -1,0 +1,60 @@
+{
+  "scenario": "new-helper-new-client",
+  "description": "A piUiPayloadV2 Pi UI helper emits a canonical typed payload and the client also negotiated piUiPayloadV2, so the daemon passes the payload through untouched: the steady-state shape once the compatibility window ends.",
+  "planRef": "plan.md §4.2 step 7",
+  "helperVersion": "new",
+  "clientCapability": "new",
+  "elements": [
+    {
+      "kind": "log",
+      "helperInput": {
+        "id": "activity",
+        "ns": "advisor",
+        "kind": "log",
+        "placement": "inline",
+        "title": "Advisor",
+        "payload": { "kind": "log", "lines": ["one", "two"], "tail": 50 }
+      },
+      "expectedNormalizedElement": {
+        "id": "activity",
+        "ns": "advisor",
+        "kind": "log",
+        "placement": "inline",
+        "title": "Advisor",
+        "payload": { "kind": "log", "lines": ["one", "two"], "tail": 50 }
+      },
+      "expectedClientElement": {
+        "id": "activity",
+        "ns": "advisor",
+        "kind": "log",
+        "placement": "inline",
+        "title": "Advisor",
+        "payload": { "kind": "log", "lines": ["one", "two"], "tail": 50 }
+      }
+    },
+    {
+      "kind": "diff",
+      "helperInput": {
+        "id": "d",
+        "ns": "review",
+        "kind": "diff",
+        "placement": "inline",
+        "payload": { "kind": "diff", "unifiedDiff": "--- a\n+++ b\n", "filePath": "src/a.ts" }
+      },
+      "expectedNormalizedElement": {
+        "id": "d",
+        "ns": "review",
+        "kind": "diff",
+        "placement": "inline",
+        "payload": { "kind": "diff", "unifiedDiff": "--- a\n+++ b\n", "filePath": "src/a.ts" }
+      },
+      "expectedClientElement": {
+        "id": "d",
+        "ns": "review",
+        "kind": "diff",
+        "placement": "inline",
+        "payload": { "kind": "diff", "unifiedDiff": "--- a\n+++ b\n", "filePath": "src/a.ts" }
+      }
+    }
+  ]
+}

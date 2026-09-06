@@ -1,0 +1,81 @@
+{
+  "scenario": "session-resume",
+  "description": "Client resumes a previously archived/persisted Pi session from its persistence handle. The daemon rehydrates the timeline and acknowledges with status(agent_resumed).",
+  "planRef": "plan.md §14.2 (resume)",
+  "frames": [
+    {
+      "id": "resume-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(resume_agent_request)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "resume_agent_request",
+          "handle": {
+            "provider": "pi",
+            "sessionId": "pi-sess-fixture-0001",
+            "nativeHandle": "fixture-native-handle-0001"
+          },
+          "requestId": "req_fixture_resume_0001"
+        }
+      }
+    },
+    {
+      "id": "status-agent-resumed-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(status:agent_resumed)",
+      "note": "Same status kind used for both resume and terminal import; timelineSize reflects the rehydrated timeline length.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "status",
+          "payload": {
+            "status": "agent_resumed",
+            "agentId": "agt_fixture_0001",
+            "requestId": "req_fixture_resume_0001",
+            "timelineSize": 12,
+            "agent": {
+              "id": "agt_fixture_0001",
+              "provider": "pi",
+              "cwd": "/synthetic/workspace/demo-repo",
+              "workspaceId": "ws_fixture_0001",
+              "model": "fixture-model-large",
+              "thinkingOptionId": "medium",
+              "effectiveThinkingOptionId": "medium",
+              "createdAt": "2026-08-31T10:00:00.000Z",
+              "updatedAt": "2026-08-31T11:30:00.000Z",
+              "lastUserMessageAt": "2026-08-31T11:29:00.000Z",
+              "status": "idle",
+              "activeTurn": null,
+              "capabilities": {
+                "supportsStreaming": true,
+                "supportsSessionPersistence": true,
+                "supportsSessionListing": true,
+                "supportsDynamicModes": true,
+                "supportsMcpServers": true,
+                "supportsReasoningStream": true,
+                "supportsToolInvocations": true,
+                "supportsRewindConversation": true,
+                "supportsRewindFiles": true,
+                "supportsRewindBoth": true
+              },
+              "currentModeId": "default",
+              "availableModes": [
+                { "id": "default", "label": "Default" },
+                { "id": "plan", "label": "Plan" }
+              ],
+              "pendingPermissions": [],
+              "persistence": {
+                "provider": "pi",
+                "sessionId": "pi-sess-fixture-0001"
+              },
+              "title": "Summarize the open issues",
+              "labels": {},
+              "archivedAt": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}

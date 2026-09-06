@@ -1,0 +1,46 @@
+{
+  "scenario": "bash-execution",
+  "description": "A shell command streams partial output via bash_execution_update while running, then settles as a bashExecution message.",
+  "planBullets": [],
+  "notes": "bash_execution_update is named explicitly in plan.md's 21-type list (line ~712) but is not yet declared as a literal in packages/server/.../pi/rpc-types.ts, which currently only models the settled result as a `role: \"bashExecution\"` message emitted via message_start/message_end. This fixture captures the streaming update shape (mirrored from the settled message fields: command, output, exitCode, cancelled, timestamp) so the union can be extended without losing data. Flag for whoever wires bash_execution_update into rpc-types.ts (outside this task's scope).",
+  "sessionId": "synthetic-session-bash-0001",
+  "events": [
+    {
+      "type": "bash_execution_update",
+      "toolCallId": "call-synthetic-0050",
+      "command": "npm test -- packages/synthetic --run",
+      "output": "",
+      "exitCode": null,
+      "cancelled": false,
+      "timestamp": 1700000000000
+    },
+    {
+      "type": "bash_execution_update",
+      "toolCallId": "call-synthetic-0050",
+      "command": "npm test -- packages/synthetic --run",
+      "output": "PASS /synthetic/workspace/demo-repo/packages/synthetic/example.test.ts\n",
+      "exitCode": null,
+      "cancelled": false,
+      "timestamp": 1700000000500
+    },
+    {
+      "type": "message_start",
+      "message": {
+        "role": "bashExecution",
+        "command": "npm test -- packages/synthetic --run",
+        "timestamp": 1700000000000
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "bashExecution",
+        "command": "npm test -- packages/synthetic --run",
+        "output": "PASS /synthetic/workspace/demo-repo/packages/synthetic/example.test.ts\n\n1 passed, 0 failed\n",
+        "exitCode": 0,
+        "cancelled": false,
+        "timestamp": 1700000000900
+      }
+    }
+  ]
+}

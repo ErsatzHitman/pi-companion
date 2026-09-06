@@ -1,0 +1,73 @@
+{
+  "scenario": "tool-calls-single-and-multi-edit",
+  "description": "A single-file edit tool call followed by a multi-edit tool call touching two synthetic files in the same turn.",
+  "planBullets": ["single and multi-edit tool calls"],
+  "sessionId": "synthetic-session-tools-0001",
+  "events": [
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "call-synthetic-0001",
+      "toolName": "edit_file",
+      "args": {
+        "path": "/synthetic/workspace/demo-repo/src/example.ts",
+        "oldText": "export const value = 1;",
+        "newText": "export const value = 2;"
+      }
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "call-synthetic-0001",
+      "toolName": "edit_file",
+      "result": {
+        "path": "/synthetic/workspace/demo-repo/src/example.ts",
+        "diff": "-export const value = 1;\n+export const value = 2;"
+      },
+      "isError": false
+    },
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "call-synthetic-0002",
+      "toolName": "multi_edit_file",
+      "args": {
+        "edits": [
+          {
+            "path": "/synthetic/workspace/demo-repo/src/a.ts",
+            "oldText": "const a = 1;",
+            "newText": "const a = 2;"
+          },
+          {
+            "path": "/synthetic/workspace/demo-repo/src/b.ts",
+            "oldText": "const b = 1;",
+            "newText": "const b = 2;"
+          }
+        ]
+      }
+    },
+    {
+      "type": "tool_execution_update",
+      "toolCallId": "call-synthetic-0002",
+      "toolName": "multi_edit_file",
+      "args": {
+        "edits": [
+          { "path": "/synthetic/workspace/demo-repo/src/a.ts" },
+          { "path": "/synthetic/workspace/demo-repo/src/b.ts" }
+        ]
+      },
+      "partialResult": {
+        "applied": ["/synthetic/workspace/demo-repo/src/a.ts"]
+      }
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "call-synthetic-0002",
+      "toolName": "multi_edit_file",
+      "result": {
+        "applied": [
+          "/synthetic/workspace/demo-repo/src/a.ts",
+          "/synthetic/workspace/demo-repo/src/b.ts"
+        ]
+      },
+      "isError": false
+    }
+  ]
+}

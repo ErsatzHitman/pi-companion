@@ -1,0 +1,68 @@
+/* Transcript feature (T28A2, extended T28A6 for virtualization, T28A7
+ * for the compact-width layout; plan.md §8.3 centre column).
+ *
+ * All spacing comes from `@picompanion/design-tokens` (repository
+ * invariant: no raw colour, space, or radius under `apps/web`). No new
+ * colour, radius, or shadow is introduced here — each row's own recipe
+ * (`StreamingMessage`, `ThinkingSection`, tool-call `Card`, T28A7's
+ * `Banner`-based compaction marker) already carries the Beautiful UI
+ * surface treatment (plan.md §10.1); this file only lays rows out in a
+ * scrollable, virtualized column.
+ *
+ * `.pc-transcript` is the scroll container the virtualizer measures and
+ * writes `scrollTop` on directly (`transcript.tsx`'s `instantScrollTo`).
+ * `.pc-transcript__sizer` reserves the virtualizer's full computed
+ * height so native scrollbar affordances (size, thumb position) are
+ * correct even though only a bounded window of `.pc-transcript__row`s is
+ * ever mounted inside it; each row is absolutely positioned at its
+ * measured offset via `transform: translateY(...)`, one GPU-composited
+ * property instead of a layout-triggering `top`.
+ *
+ * **Compact layout (T28A7, plan.md §8.3, §10.2 "compact and wide
+ * breakpoints").** Below `@picompanion/design-tokens`' `breakpoints.wide`
+ * (720px — the same value `shell.css`'s stacked-column fallback is
+ * pinned to, and `transcript.test.tsx` asserts the two never drift
+ * apart), every row already reflows without a hard-coded pixel width: no
+ * row recipe sets more than a `rem`-based `max-width` cap
+ * (`recipes.css`'s `.pc-message`/`.pc-thinking`, `tool-call-row.css`'s
+ * `.pc-tool-call`), and `CodeBlock`'s `<pre>` scrolls horizontally on
+ * its own rather than forcing the whole transcript wider. What *does*
+ * change at compact widths is this container's own padding: the default
+ * below is the mobile-first, compact-width value (tighter horizontally,
+ * so a narrow phone-width viewport spends its limited width on
+ * message content, not on inset), and the `min-width: 720px` media query
+ * below restores the roomier wide-layout padding once the shell has
+ * space for its three-region grid (`shell.css`) to spare.
+ */
+.pc-transcript {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 60vh;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--spacing-3) var(--spacing-2);
+}
+
+@media (min-width: 720px) {
+  .pc-transcript {
+    padding: var(--spacing-4);
+  }
+}
+
+.pc-transcript__sizer {
+  position: relative;
+  width: 100%;
+}
+
+.pc-transcript__row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  /* Folds the previous flex `gap: var(--spacing-3)` between rows into
+   * each row's own measured height, since sizing here comes from the
+   * virtualizer's per-row measurement rather than a flex container. */
+  padding-bottom: var(--spacing-3);
+}

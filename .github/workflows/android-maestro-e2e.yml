@@ -1,0 +1,198 @@
+name: Android Maestro E2E
+
+# T37F (plan.md §14.4, §15.4; docs/issues-from-plan.md T37F) — the Phase 5
+# exit gate: runs all ten §14.4 Maestro flows (apps/android/maestro/*.yaml,
+# written by T37E1-T37E10) together, sharded, against a real emulator.
+# This workflow owns shard scheduling and CI wiring only -- it writes no
+# flow file and adds no second way to run one; every shard job below
+# calls the exact same single-flow command T37D already built and
+# documented (apps/android/maestro/README.md's "The one documented
+# command"), once per flow the shard names in apps/android/maestro/
+# shards.json (apps/android/e2e/harness/shard-plan.ts reads and validates
+# that file; shard-plan.test.ts and flow-independence.test.ts prove the
+# shard assignment and flow-order-independence claims below without a
+# device).
+#
+# NOT PROVEN BY THIS FILE, and disclosed rather than hidden: this
+# workflow has never executed end-to-end. It needs two pieces of
+# infrastructure this repository does not have configured yet:
+#   1. an EAS development build of sh.picompanion.debug -- the same
+#      EXPO_TOKEN gate android-apk-release.yml already uses, and
+#      currently unconfigured for the same reason (see that workflow's
+#      own header and docs/frontend-data-migration.md §4.2-4.6);
+#   2. a booted Android emulator with Maestro installed
+#      (apps/android/maestro/README.md's "Prerequisites" -- something the
+#      harness has never provided and this workflow is the first attempt
+#      at providing via reactivecircus/android-emulator-runner, itself
+#      unverified here: GitHub-hosted Linux runners' KVM support for that
+#      action has not been confirmed in this repository).
+# Until both exist, every shard job below no-ops with a logged notice
+# instead of failing -- exactly like android-apk-release.yml's own
+# EXPO_TOKEN gate -- so this workflow is dry-run-safe today and starts
+# actually running the suite the moment both are wired up. This is a
+# manual (workflow_dispatch) workflow, not part of the push/pull_request
+# `ci.yml` gate: plan.md §15.4's "Required jobs from Phase 1 onward" list
+# does not include an emulator-backed Maestro run, and nothing in this
+# repository's CI has ever booted an Android emulator before.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: android-maestro-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  # Reads apps/android/maestro/shards.json once so the matrix below is
+  # driven by the same file shard-plan.test.ts validates, rather than a
+  # shard list typed a second time into this workflow.
+  shard-matrix:
+    name: shard-matrix
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.read.outputs.shards }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Read shard names from apps/android/maestro/shards.json
+        id: read
+        shell: bash
+        run: |
+          set -euo pipefail
+          names="$(node -e "console.log(JSON.stringify(require('./apps/android/maestro/shards.json').shards.map(s => s.name)))")"
+          echo "shards=$names" >> "$GITHUB_OUTPUT"
+
+  maestro-e2e:
+    name: maestro-e2e (${{ matrix.shard }})
+    needs: shard-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.shard-matrix.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/frontend-core
+
+      - name: Check EAS credentials are configured
+        id: eas-secrets
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Expo and EAS
+        if: steps.eas-secrets.outputs.configured == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # Same shape as android-apk-release.yml's "Build Android APK on EAS"
+      # step, but the `development` profile (sh.picompanion.debug, the
+      # package apps/android/maestro/README.md's prerequisites require)
+      # rather than `production-apk`.
+      - name: Build development APK on EAS
+        id: eas_build
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          build_json="$(npx eas build --platform android --profile development --non-interactive --wait --json)"
+          echo "$build_json" > "$RUNNER_TEMP/eas-build.json"
+
+          build_id="$(jq -r 'if type == "array" then .[0].id // empty else .id // empty end' "$RUNNER_TEMP/eas-build.json")"
+          if [ -z "$build_id" ]; then
+            echo "Failed to determine EAS build ID."
+            cat "$RUNNER_TEMP/eas-build.json"
+            exit 1
+          fi
+
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve and download the debug APK artifact
+        id: artifact
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          build_view_json="$(npx eas build:view '${{ steps.eas_build.outputs.build_id }}' --json)"
+          echo "$build_view_json" > "$RUNNER_TEMP/eas-build-view.json"
+
+          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/eas-build-view.json")"
+          if [ -z "$artifact_url" ]; then
+            echo "Failed to determine APK artifact URL."
+            cat "$RUNNER_TEMP/eas-build-view.json"
+            exit 1
+          fi
+
+          apk_path="$RUNNER_TEMP/picompanion-debug.apk"
+          curl --fail --location --output "$apk_path" "$artifact_url"
+          echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
+
+      - name: Install Maestro CLI
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # apps/android/maestro/README.md's "Prerequisites" section, provided
+      # here rather than by the harness (run-flow.ts never boots or
+      # configures an emulator itself -- see that README's own "What T37D
+      # proved, and what it did not"). One flow at a time, in the order
+      # apps/android/maestro/shards.json lists for this shard --
+      # shard-plan.test.ts proves that order never matters (every flow
+      # starts with its own clearState: true launchApp), so this loop
+      # could run its flows in any order and reach the same result.
+      - name: Boot emulator, install the APK, and run this shard's flows
+        if: steps.eas-secrets.outputs.configured == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_8
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb install -r "${{ steps.artifact.outputs.apk_path }}"
+            flows="$(node -e "
+              const cfg = require('./apps/android/maestro/shards.json');
+              const shard = cfg.shards.find((s) => s.name === '${{ matrix.shard }}');
+              if (!shard) { console.error('unknown shard: ${{ matrix.shard }}'); process.exit(1); }
+              console.log(shard.flows.join(' '));
+            ")"
+            for flow in $flows; do
+              echo "::group::flow: $flow"
+              npx tsx apps/android/e2e/run-flow.ts "$flow"
+              echo "::endgroup::"
+            done
+
+      - name: Dry run (EXPO_TOKEN not configured)
+        if: steps.eas-secrets.outputs.configured == 'false'
+        run: |
+          echo "::notice::EXPO_TOKEN secret is not configured on this repository yet (see android-apk-release.yml)."
+          echo "::notice::Skipping this shard's emulator run; matrix shard ${{ matrix.shard }} is a dry run."
+          echo "::notice::This workflow has never executed end-to-end -- see its own header comment."

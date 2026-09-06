@@ -1,0 +1,128 @@
+# T17A: CI path filters (plan.md §15.4).
+#
+# T181: ADDING, REMOVING, OR RENAMING A TOP-LEVEL FILTER KEY BELOW (e.g. the
+# "packaging:" key)? scripts/ci/ci-routing.test.mjs's
+# "parseCiPathFilters reads the real .github/ci-paths.yml" test pins the
+# exact, alphabetically-sorted list of filter names — update that array in
+# the same commit. That test also runs as a step of ci.yml's `changes` job
+# itself (unconditional on every event), so an out-of-sync pin does not just
+# fail one test: it fails the job every other job depends on via
+# `needs.changes.outputs.*`, i.e. all of CI. This happened for real at
+# P6-W21 (commit 442ada2) when T176 added the "packaging" filter here and
+# left that array stale.
+#
+# Consumed by `dorny/paths-filter` in `.github/workflows/ci.yml`'s `changes`
+# job. Pull-request checks are routed by the area whose behavior a change
+# proves; pushes to `main`, the merge queue, and manual dispatch always run
+# every contract (see the `full` output in ci.yml) so nothing merges unverified.
+#
+# `packages/protocol` is the shared wire contract every other workspace
+# depends on (directly today: client, server, cli; transitively once T14/T15/
+# T16 land: frontend-core, web, android). A protocol-only change is therefore
+# listed under every downstream filter below, not just its own — so a
+# contract change never "skips" the consumers' tests that would catch a
+# breaking change. Same principle for `frontend-core` and `design-tokens`,
+# which both `web` and `android` will depend on once T14/T15/T16 land.
+
+# Changes to the routing/workspace/CI definitions themselves always force a
+# full run (see the `full` output in ci.yml), so no contract can silently stop
+# being checked by editing its own filter.
+routing:
+  - ".github/ci-paths.yml"
+
+workspace:
+  - "package.json"
+  - "package-lock.json"
+  - "tsconfig.json"
+  - "tsconfig.base.json"
+  - "vitest.config.ts"
+  - "knip.json"
+  - ".oxlintrc.json"
+  - ".oxfmtrc.json"
+  - "scripts/**"
+
+ci:
+  - ".github/workflows/**"
+
+# Shared wire contract. Any package that speaks the daemon protocol depends on
+# this, so it is folded into backend/frontend-core/web/android below too.
+protocol:
+  - "packages/protocol/**"
+
+# Backend/daemon-side packages: server, its transport (relay), the SDK it and
+# the CLI embed (client), syntax highlighting shared by server and CLI
+# (highlight), the Pi extension bridge helper, and the native audio module.
+backend:
+  - "packages/server/**"
+  - "packages/relay/**"
+  - "packages/client/**"
+  - "packages/cli/**"
+  - "packages/pi-bridge/**"
+  - "packages/highlight/**"
+  - "packages/expo-two-way-audio/**"
+  - "packages/protocol/**"
+
+# Platform-agnostic frontend state/logic shared by web and android (T14).
+frontend-core:
+  - "packages/frontend-core/**"
+  - "packages/design-tokens/**"
+  - "packages/protocol/**"
+
+web:
+  - "apps/web/**"
+  - "packages/frontend-core/**"
+  - "packages/design-tokens/**"
+  - "packages/protocol/**"
+
+android:
+  - "apps/android/**"
+  - "packages/frontend-core/**"
+  - "packages/design-tokens/**"
+  - "packages/protocol/**"
+
+# T176: the packaging guard (scripts/ci/run-guard-docker-packaging-paths.mjs,
+# T43A3) runs whenever the packaging inputs it reads change, or when the
+# guard's own source changes — the guard changing what it asserts is exactly
+# when you want it re-run against the files it checks.
+#
+# T185: `.dockerignore` added here too, matched as an exact repo-root file
+# (it has no top-level directory of its own to fold under `packaging/**`).
+# It is `guard-dockerignore-depth`'s (T180) actual input — that job is gated
+# on this very `packaging` output (ci.yml) — and previously matched no
+# filter at all, so a PR editing only `.dockerignore` ran neither that guard
+# nor `docker-checks`. This closes the guard side; `docker-checks` still
+# gates on the separate, deliberately dormant `docker` filter below (T175's
+# disclosure, restated there) and is unaffected by this change — routing
+# `docker-checks` itself to real `.dockerignore`/packaging inputs remains
+# out of scope here, same as it was for T180.
+packaging:
+  - "packaging/**"
+  - "scripts/ci/**"
+  - ".dockerignore"
+
+# Reserved for T43A/phase-8 (Docker/Nix packaging "where those deployment
+# paths are wanted", plan.md §15.4 and §17). These patterns match the
+# repository-root Dockerfile/flake.nix conventions they were written for;
+# T43A3 instead put the real packaging inputs under `packaging/docker/` and
+# `packaging/nix/` (see `packaging` above), so `docker`/`nix` below still
+# match nothing today — they stay reserved for a possible future root-level
+# Docker/Nix path, not for the packaging that already exists. Do not read
+# `docker`/`nix` being `false` as "no Docker/Nix packaging exists"; the static
+# guard for the real paths is wired through `packaging` above, and
+# `docker-checks`/`nix-checks` in ci.yml (real `docker build`/`nix build`)
+# remain gated on these two outputs, so they stay dormant until a separate
+# task points them at `packaging/docker/**` / `packaging/nix/**` — see
+# ci.yml's "Docker and Nix checks" section comment and packaging/README.md's
+# disclosure for the exact seam.
+docker:
+  - "Dockerfile"
+  - "Dockerfile.*"
+  - "docker/**"
+  - "docker-compose*.yml"
+  - ".github/workflows/docker.yml"
+
+nix:
+  - "flake.nix"
+  - "flake.lock"
+  - "nix/**"
+  - ".github/workflows/nix.yml"

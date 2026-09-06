@@ -1,0 +1,494 @@
+/**
+ * Styles for the `status`/`widget`/`progress` Pi UI Bridge kind renderers
+ * (plan.md §10.2, §11.3; T29A2). Same rule as every other stylesheet in
+ * this app: every value is a `var(--...)` custom property from
+ * `@picompanion/design-tokens` — no raw hex, pixel literal, or motion
+ * duration — and dividers are the dashed hairline used across the app,
+ * never a drop shadow.
+ */
+
+/* status --------------------------------------------------------------- */
+
+.pc-pi-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+.pc-pi-status__detail {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+
+/* widget ----------------------------------------------------------------- */
+
+.pc-pi-widget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-pi-widget__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-widget__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin: 0;
+}
+.pc-pi-widget__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  padding-top: var(--spacing-1);
+  border-top: 1px dashed var(--color-line);
+}
+.pc-pi-widget__row:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+.pc-pi-widget__row-label {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-widget__row-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+  text-align: right;
+}
+.pc-pi-widget__row-detail {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+.pc-pi-widget__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin: 0;
+  padding-left: var(--spacing-4);
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-widget__text {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-widget__empty {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+
+/* elapsed time (status + widget; T114) -------------------------------------- */
+
+/* Live "Ns"/"Nm Ss"/"Nh Nm" label rendered from `payload.startedAt` by both
+   `status.tsx` and `widget.tsx` (`useElapsedSince`, `elapsed-time.tsx`). */
+.pc-pi-elapsed {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* progress ----------------------------------------------------------------- */
+
+.pc-pi-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+.pc-pi-progress__fraction {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-size: var(--font-size-xs);
+}
+/* A numeral: Geist Mono + tabular figures, matching the Progress primitive's
+   own percentage readout (docs/beautiful-ui-reference.md). */
+.pc-pi-progress__fraction-value {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pc-pi-progress__detail {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+
+/* log --------------------------------------------------------------------- */
+
+.pc-pi-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+.pc-pi-log__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-log__truncated {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+/* Bounded + scrollable: a fixed max-height region rather than an
+   ever-growing block, per plan.md's "log output is bounded and scrollable". */
+.pc-pi-log__scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+}
+.pc-pi-log__scroll .pc-code-block {
+  margin: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.pc-pi-log__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin: 0;
+  padding: var(--spacing-3);
+  list-style: none;
+  background-color: var(--color-inset);
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-log__empty {
+  margin: 0;
+  padding: var(--spacing-3);
+  background-color: var(--color-inset);
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+
+/* markdown ------------------------------------------------------------------ */
+
+.pc-pi-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-pi-markdown__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-markdown__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+.pc-pi-markdown__body > *:first-child {
+  margin-top: 0;
+}
+.pc-pi-markdown__heading {
+  margin: 0;
+  color: var(--color-ink);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-markdown__paragraph {
+  margin: 0;
+}
+.pc-pi-markdown__list {
+  margin: 0;
+  padding-left: var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+.pc-pi-markdown__blockquote {
+  margin: 0;
+  padding-left: var(--spacing-3);
+  border-left: 1px dashed var(--color-line-strong);
+  color: var(--color-ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-pi-markdown__hr {
+  margin: 0;
+  border: none;
+  border-top: 1px dashed var(--color-line);
+}
+.pc-pi-markdown__code {
+  padding: 0 var(--spacing-1);
+  border-radius: var(--radius-control);
+  background-color: var(--code-code-background);
+  color: var(--code-code-foreground);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* composer ------------------------------------------------------------------ */
+
+.pc-pi-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-pi-composer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+}
+.pc-pi-composer__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-composer__proposed {
+  margin: 0;
+  padding: var(--spacing-2);
+  border-radius: var(--radius-control);
+  background-color: var(--color-inset);
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+}
+.pc-pi-composer__previous {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+.pc-pi-composer__previous summary {
+  cursor: pointer;
+  color: var(--color-ink-2);
+}
+.pc-pi-composer__previous p {
+  margin: var(--spacing-1) 0 0;
+  white-space: pre-wrap;
+}
+
+/* roster ------------------------------------------------------------------- */
+
+.pc-pi-roster {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-pi-roster__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-roster__empty {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+
+/* form --------------------------------------------------------------------- */
+
+.pc-pi-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+.pc-pi-form__fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+.pc-pi-form__title {
+  padding: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-form__description {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-form__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+.pc-pi-form__toggle-field,
+.pc-pi-form__select-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+.pc-pi-form__field-description {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+.pc-pi-form__empty {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.pc-pi-form__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.pc-pi-form__action-state {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+
+/* diff ---------------------------------------------------------------------- */
+
+.pc-pi-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-pi-diff__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-diff__truncated {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+.pc-pi-diff__empty {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+/* Bounded + scrollable, same treatment as the `log` kind's own region. */
+.pc-pi-diff__scroll {
+  max-height: 360px;
+  overflow-y: auto;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+}
+.pc-pi-diff__scroll .pc-code-block {
+  margin: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.pc-pi-diff__line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  width: 100%;
+  padding: 0 var(--spacing-2);
+}
+.pc-pi-diff__marker {
+  flex: 0 0 auto;
+  min-width: 1ch;
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-3);
+}
+.pc-pi-diff__text {
+  flex: 1 1 auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pc-pi-diff__line--add {
+  background-color: var(--code-diff-added-background);
+}
+.pc-pi-diff__line--add .pc-pi-diff__marker {
+  color: var(--code-diff-added-foreground);
+}
+.pc-pi-diff__line--remove {
+  background-color: var(--code-diff-removed-background);
+}
+.pc-pi-diff__line--remove .pc-pi-diff__marker {
+  color: var(--code-diff-removed-foreground);
+}
+.pc-pi-diff__line--hunk {
+  color: var(--color-ink-3);
+  font-style: italic;
+}
+.pc-pi-diff__line--meta {
+  color: var(--color-ink-3);
+}
+
+/* panel ----------------------------------------------------------------- */
+
+.pc-pi-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-pi-panel__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+.pc-pi-panel__text {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-panel__empty {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+.pc-pi-panel__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+.pc-pi-panel__section {
+  padding-top: var(--spacing-3);
+  border-top: 1px dashed var(--color-line);
+}
+.pc-pi-panel__section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+.pc-pi-panel__section--diagnostic {
+  padding-top: var(--spacing-2);
+}
+
+/* shared element-level action row ------------------------------------------ */
+
+.pc-pi-element-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-1);
+}
+.pc-pi-element-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.pc-pi-element-action__state {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}

@@ -1,0 +1,139 @@
+{
+  "scenario": "reconnect-with-gap",
+  "description": "A client reconnects after a daemon restart. The hello is resumed for the same clientId, but the client's last known timeline cursor references an epoch the daemon no longer has, so the timeline response reports a gap and forces a full reset. The reset window includes a pi_ui_snapshot entry so Pi UI Bridge elements are fully replayed rather than incrementally patched.",
+  "planRef": "plan.md §14.2 (reconnect with timeline gap and Pi UI full replay)",
+  "frames": [
+    {
+      "id": "hello-resumed-1",
+      "direction": "client_to_daemon",
+      "wireType": "hello",
+      "note": "Same clientId as a prior connection; the daemon treats this as a resumed hello rather than a brand-new session.",
+      "message": {
+        "type": "hello",
+        "clientId": "clid_fixture_web_0001",
+        "clientType": "browser",
+        "protocolVersion": 1,
+        "appVersion": "0.1.0-fixture",
+        "capabilities": {
+          "selective_agent_timeline": true,
+          "pi_ui_bridge": true
+        }
+      }
+    },
+    {
+      "id": "server-info-resumed-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(status:server_info)",
+      "note": "The daemon always answers hello with server_info, whether or not the clientId is resumed.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "status",
+          "payload": {
+            "status": "server_info",
+            "serverId": "srv_fixture_0001",
+            "hostname": "fixture-daemon",
+            "version": "0.1.0-fixture",
+            "features": { "piUiBridge": true, "selectiveAgentTimeline": true }
+          }
+        }
+      }
+    },
+    {
+      "id": "fetch-timeline-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(fetch_agent_timeline_request)",
+      "note": "Client asks to resume from its last known cursor {epoch, seq} captured before the disconnect.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "fetch_agent_timeline_request",
+          "agentId": "agt_fixture_0001",
+          "requestId": "req_fixture_timeline_0001",
+          "direction": "after",
+          "cursor": { "epoch": "epoch-before-restart-0001", "seq": 41 },
+          "limit": 200,
+          "projection": "projected"
+        }
+      }
+    },
+    {
+      "id": "fetch-timeline-response-gap-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(fetch_agent_timeline_response)",
+      "note": "epoch changed across the daemon restart, so the requested cursor is unreadable: gap=true and reset=true force the client to discard its cached timeline and Pi UI state and replay the returned window in full.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "fetch_agent_timeline_response",
+          "payload": {
+            "requestId": "req_fixture_timeline_0001",
+            "agentId": "agt_fixture_0001",
+            "agent": null,
+            "direction": "tail",
+            "projection": "projected",
+            "epoch": "epoch-after-restart-0002",
+            "reset": true,
+            "staleCursor": true,
+            "gap": true,
+            "window": { "minSeq": 0, "maxSeq": 6, "nextSeq": 7 },
+            "startCursor": { "epoch": "epoch-after-restart-0002", "seq": 0 },
+            "endCursor": { "epoch": "epoch-after-restart-0002", "seq": 6 },
+            "hasOlder": false,
+            "hasNewer": false,
+            "entries": [
+              {
+                "provider": "pi",
+                "item": {
+                  "type": "assistant_message",
+                  "text": "Restored session after daemon restart.",
+                  "messageId": "msg_fixture_0006"
+                },
+                "timestamp": "2026-08-31T13:00:00.000Z",
+                "seqStart": 5,
+                "seqEnd": 5,
+                "sourceSeqRanges": [{ "startSeq": 5, "endSeq": 5 }],
+                "collapsed": []
+              },
+              {
+                "provider": "pi",
+                "item": {
+                  "type": "pi_ui_snapshot",
+                  "state": {
+                    "agentId": "agt_fixture_0001",
+                    "revision": 9,
+                    "updatedAt": "2026-08-31T13:00:01.000Z",
+                    "elements": [
+                      {
+                        "id": "fleet",
+                        "ns": "subagents",
+                        "kind": "roster",
+                        "placement": "pinned",
+                        "title": "Subagent fleet",
+                        "durable": true
+                      },
+                      {
+                        "id": "tasks",
+                        "ns": "todo",
+                        "kind": "widget",
+                        "placement": "pinned",
+                        "title": "3 of 7 tasks complete",
+                        "durable": true
+                      }
+                    ]
+                  }
+                },
+                "timestamp": "2026-08-31T13:00:01.000Z",
+                "seqStart": 6,
+                "seqEnd": 6,
+                "sourceSeqRanges": [{ "startSeq": 6, "endSeq": 6 }],
+                "collapsed": []
+              }
+            ],
+            "error": null
+          }
+        }
+      }
+    }
+  ]
+}

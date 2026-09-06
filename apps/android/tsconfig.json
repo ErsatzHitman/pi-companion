@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2023"],
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": [
+    "src/**/*",
+    "e2e/**/*",
+    "app.config.ts",
+    "metro.config.js",
+    "babel.config.js",
+    "expo-env.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", ".expo", "android", "ios"]
+}

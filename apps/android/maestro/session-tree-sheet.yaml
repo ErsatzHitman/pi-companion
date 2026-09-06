@@ -1,0 +1,119 @@
+appId: sh.picompanion.debug
+name: "session tree sheet — the real tree renders, selection reaches a fake, and fork/clone/rename show a truthful state"
+tags:
+  - sessions
+---
+# T39A (plan.md §11.1 "session tree, fork, clone, resume, and naming").
+# Same standing limitation as every flow in this directory (`../README.md`'s
+# "What T37D proved, and what it did not"): this wave has no emulator, no
+# device, and no Maestro binary, so this flow has never been run.
+# `../e2e/flows/session-tree-sheet.contract.test.ts` is the real,
+# gate-able proof — it parses this file's own steps
+# (`../e2e/flows/maestro-yaml.ts`'s `parseMaestroSteps`) and checks every
+# id/text below against real, unmocked source, the same discipline
+# `composer-inputs.contract.test.ts` established (T72) and
+# `recovered-turn-banner.contract.test.ts` (T106) already follows for a
+# dev-only lab route.
+#
+# ---------------------------------------------------------------------
+# WHY THIS FLOW OPENS A DEV-ONLY LAB ROUTE, NOT A REAL SESSION SCREEN.
+#
+# `SessionTreeSheet` (`../src/features/sessions/session-tree-sheet.tsx`,
+# T39A) has no mount point in any real, currently-owned screen this wave
+# — that wiring is a disclosed gap for whichever future task first owns
+# both a real session screen and a reason to open this sheet from it
+# (see this task's own report for the exact call site that would close
+# it). `../src/dev/session-tree-lab.tsx` (content) plus `../src/app/dev/
+# session-tree-lab.tsx` (route wrapper) mount the REAL component against
+# a real tree built with `@picompanion/frontend-core`'s own
+# `createRootSession`/`forkSession`/`cloneSession`, closing the
+# reachability gap for the VIEW layer specifically, without pretending a
+# real session list or a real `DaemonClient` fork/clone/rename wire is
+# reachable (neither is — see the lab's own doc comment).
+#
+# `clearState`/`clearKeychain` starts fresh, same as every flow here;
+# this flow pairs no host and talks to no daemon at all (same shape as
+# `offline-cache-outbox.yaml`/`recovered-turn-banner.yaml`), so it needs
+# no daemon host/port and no cleanup beyond the app's own fresh
+# `clearState`.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- openLink: "picompanion://dev/session-tree-lab"
+
+# --- The lab's own ScrollView root and status text.
+- assertVisible:
+    id: "session-tree-lab"
+- assertVisible:
+    id: "session-tree-lab-status"
+- assertVisible:
+    text: "Last action: none"
+
+# ---------------------------------------------------------------------
+# THE REAL TREE RENDERS: root + its fork (branch) nested under it, plus
+# the clone as its own second top-level entry, each with the sheet's own
+# testId pattern (`session-tree-sheet.tsx`:
+# `${testId}-item-${row.node.agentId}`, testId "session-tree-lab-sheet").
+- assertVisible:
+    id: "session-tree-lab-sheet-item-lab-root"
+- assertVisible:
+    id: "session-tree-lab-sheet-item-lab-branch"
+- assertVisible:
+    id: "session-tree-lab-sheet-item-lab-copy"
+- assertVisible:
+    text: "fork"
+- assertVisible:
+    text: "clone"
+- assertVisible:
+    text: "cloned from Root session"
+
+# ---------------------------------------------------------------------
+# SELECTION REACHES A FAKE — "a value arriving at a fake, not an import
+# resolving" (this task's own acceptance criterion). Tapping the branch
+# row calls the lab's onSelectSession, which writes the tapped agentId
+# into the observable status text.
+- tapOn:
+    id: "session-tree-lab-sheet-item-lab-branch"
+- assertVisible:
+    text: "Last action: selected lab-branch"
+- assertVisible:
+    id: "session-tree-lab-sheet-actions"
+
+# ---------------------------------------------------------------------
+# NO CLIENT PORT SUPPLIED YET — fork/clone/rename all show the model's
+# real, truthful unavailable text and their Buttons are disabled
+# (Maestro cannot assert `disabled` directly, so the observable proof is
+# the unavailable caption text actually rendering).
+- assertVisible:
+    id: "session-tree-lab-sheet-action-fork-unavailable"
+- assertVisible:
+    id: "session-tree-lab-sheet-action-clone-unavailable"
+- assertVisible:
+    id: "session-tree-lab-sheet-action-rename-unavailable"
+- assertVisible:
+    text: "Forking a session isn't available yet — this build has no client connection for it."
+
+# ---------------------------------------------------------------------
+# ENABLING THE FAKE CLIENT — the unavailable captions disappear and the
+# actions become real, dispatching to the lab's own recording fake port
+# (never a real DaemonClient — T110's real wire method does not exist
+# yet, see the lab's own doc comment) and reporting the exact result
+# that arrived back.
+- tapOn:
+    id: "session-tree-lab-enable-client"
+- assertNotVisible:
+    id: "session-tree-lab-sheet-action-fork-unavailable"
+- assertNotVisible:
+    id: "session-tree-lab-sheet-action-clone-unavailable"
+- assertNotVisible:
+    id: "session-tree-lab-sheet-action-rename-unavailable"
+
+- tapOn:
+    id: "session-tree-lab-sheet-action-fork"
+- assertVisible:
+    text: "Last action: fork succeeded: lab-branch-forked"
+
+- tapOn:
+    id: "session-tree-lab-sheet-action-clone"
+- assertVisible:
+    text: "Last action: clone succeeded: lab-branch-cloned"

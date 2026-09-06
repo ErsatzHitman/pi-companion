@@ -1,0 +1,44 @@
+{
+  "scenario": "hidden-custom-message",
+  "description": "An extension emits a custom message with display:false carrying a synthetic secret. The timeline projection must keep it out of the rendered transcript while still applying any side effects.",
+  "planBullets": ["hidden custom message"],
+  "sessionId": "synthetic-session-hidden-0001",
+  "notes": "SYNTHETIC-API-KEY below is a fake value for fixture purposes only; it is not a real credential.",
+  "events": [
+    {
+      "type": "message_start",
+      "message": {
+        "role": "custom",
+        "display": false,
+        "content": "extension:auth-sync token=sk-synthetic-0000000000000000 path=/synthetic/workspace/demo-repo/.env"
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "display": false,
+        "content": "extension:auth-sync token=sk-synthetic-0000000000000000 path=/synthetic/workspace/demo-repo/.env"
+      }
+    },
+    {
+      "type": "message_start",
+      "message": {
+        "role": "assistant",
+        "content": [{ "type": "text", "text": "Synced synthetic credentials." }],
+        "provider": "synthetic-provider",
+        "model": "synthetic-model-1"
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "assistant",
+        "content": [{ "type": "text", "text": "Synced synthetic credentials." }],
+        "provider": "synthetic-provider",
+        "model": "synthetic-model-1",
+        "stopReason": "end_turn"
+      }
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+/**
+ * `Composer` layout (plan.md §8.3, §10.1; T28B2). Colocated with the
+ * component, the way `ui/shell.css` sits next to `ui/shell.tsx`. Every
+ * value below is a design token: no raw hex, pixel spacing, or duration
+ * literal (plan.md §10).
+ */
+
+.pc-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  max-width: 36rem;
+}
+
+.pc-composer__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+/* Slash-command completion (T28B4): `CommandSearch` already positions its
+ * own dropdown (`.pc-command-search__list`) absolutely relative to itself,
+ * so this wrapper only needs to sit in normal flow directly under the
+ * prompt bar. */
+.pc-composer__slash-commands {
+  position: relative;
+}
+
+/* Model/thinking pickers (T28B5): two `Select` fields side by side on a
+ * row wide enough for both, wrapping to stacked on a narrow composer
+ * (`max-width: 36rem` above already keeps this component narrow even on
+ * a wide viewport). */
+.pc-composer__model-thinking {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-3);
+}
+
+/* Steer/follow-up mode control (T38B1a): the explanatory paragraph sits
+ * above both selects (never colour alone, and always visible without
+ * opening anything), which then lay out the same side-by-side/wrap
+ * pattern the model/thinking pickers above already use. */
+.pc-composer__queue-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-3);
+}
+
+.pc-composer__queue-modes-help {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Staged attachments (T28B6): the `ChipGroup` wraps onto multiple lines
+ * as attachments stack up, and each attachment's own wrapper keeps its
+ * chip and (when present) "Retry" button next to each other rather than
+ * letting the group's wrap put them on separate lines. */
+.pc-composer__attachments {
+  display: flex;
+}
+
+.pc-composer__attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}

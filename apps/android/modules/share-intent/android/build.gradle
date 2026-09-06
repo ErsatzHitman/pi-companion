@@ -1,0 +1,42 @@
+// Local Expo module (T36F, plan.md §9.3) — the native half of
+// `../../../src/features/share/`'s `ShareIntentPort`. Autolinked by
+// default: `expo-modules-autolinking`'s `nativeModulesDir` option
+// defaults to `<project>/modules` (confirmed by reading this app's own
+// installed `expo-modules-autolinking@3.0.30`'s
+// `build/commands/autolinkingOptions.js`), so this directory needs no
+// `package.json` entry to be picked up by `expo prebuild` — this repo's
+// rules forbid editing `package.json` anyway.
+//
+// Shape follows Expo's documented "create a local module" template
+// (https://docs.expo.dev/modules/get-started/) exactly: an
+// `android-library` Gradle module that applies
+// `expo-modules-core`'s shared Gradle plugin so it inherits the same
+// Kotlin/AGP/compileSdk versions as every other autolinked Expo module,
+// rather than pinning a second, possibly-drifting copy of those
+// versions here.
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'sh.picompanion.shareintent'
+version = '1.0.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+
+android {
+  namespace "sh.picompanion.shareintent"
+
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+}

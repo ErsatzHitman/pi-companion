@@ -1,0 +1,40 @@
+/**
+ * `ContextMeter` styles (plan.md §8.3, §10.1, §10.5; T29C2). Colocated with
+ * `context-meter.tsx` the way `pi-extension-rail.css` sits beside
+ * `pi-extension-rail.tsx`. Every value below is a design token: no raw
+ * hex, pixel spacing, or duration literal.
+ */
+
+.context-meter__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.context-meter__group + .context-meter__group {
+  margin-top: var(--spacing-3);
+  padding-top: var(--spacing-3);
+  border-top: 1px dashed var(--color-line);
+}
+
+.context-meter__group-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink-2);
+}
+
+.context-meter__readout {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-2);
+}
+
+/* Numerals: Geist Mono + tabular figures, matching the Progress
+   primitive's own percentage readout (docs/beautiful-ui-reference.md,
+   "Geist Mono for all numerals ... with tabular-nums on counters"). */
+.context-meter__value {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}

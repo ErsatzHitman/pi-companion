@@ -1,0 +1,309 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+/**
+ * T33B1 source-level accessibility/touch-target checks (extended by
+ * T33B2 for the steer/follow-up/abort controls).
+ *
+ * `react-native` component modules can't be rendered under this
+ * workspace's plain `vitest` setup (see the VITEST LIMITATION note this
+ * task's brief carries, already proven by
+ * `../../ui/primitives/touch-targets.test.ts` and
+ * `../../ui/recipes/recipe-accessibility.test.ts`), so — exactly like
+ * those two files — this statically verifies the source contracts a
+ * render/TalkBack pass would otherwise check. The optimistic
+ * pending -> sent -> failed *state* lifecycle (and the steer/follow-up
+ * queue transitions, abort) is proven in `composer-model.test.ts`; this
+ * file only proves the view wires that state to real accessible controls.
+ * The 48dp touch-target guarantee itself is proven once, for every
+ * audited interactive component including this file's
+ * `composer-icon-action.tsx`, by the shared strict-AND predicate in
+ * `../../ui/primitives/touch-targets.test.ts` (T85) — this file no longer
+ * carries a second, looser copy of that check.
+ */
+
+function readSource(name: string): string {
+  return readFileSync(fileURLToPath(new URL(`./${name}`, import.meta.url)), "utf8");
+}
+
+/**
+ * `readSource` with comments stripped, for assertions that must reach
+ * real code rather than being satisfiable by this file's own doc
+ * comments — see `../transcript/transcript-accessibility.test.ts`'s
+ * identical helper and the `header.tsx` regression it guards against.
+ */
+function readCode(name: string): string {
+  return readSource(name)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+describe("Composer.tsx", () => {
+  const source = readSource("Composer.tsx");
+  /*
+   * Every assertion below that must reach real JSX reads `code`, not
+   * `source`. `Composer.tsx`'s own doc comment quotes
+   * `accessibilityLiveRegion="polite"`, so an unanchored regex over the
+   * raw file text was satisfied by that prose alone: deleting the real
+   * prop from the entries `View` left this suite green, proven by
+   * mutation at the P5-W5 merge gate. The raw-hex check deliberately
+   * keeps reading `source` — a hex literal in a comment is worth
+   * flagging too.
+   */
+  const code = readCode("Composer.tsx");
+
+  it("contains no raw hex colour literal", () => {
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it("reads its styling from useTheme()", () => {
+    expect(code).toMatch(/useTheme\(\)/);
+  });
+
+  it("is built on the shared PromptBar recipe, not a fork of it", () => {
+    expect(code).toMatch(/from "\.\.\/\.\.\/ui\/recipes"/);
+    expect(code).toMatch(/<PromptBar/);
+  });
+
+  it("gives the composer a discoverable TalkBack name via the Section primitive", () => {
+    expect(code).toMatch(/<Section\s/);
+    expect(code).toMatch(/COMPOSER_ACCESSIBILITY_LABEL/);
+  });
+
+  it("announces entry status changes via a polite live region", () => {
+    expect(code).toMatch(/accessibilityLiveRegion="polite"/);
+  });
+
+  it("pairs every entry status with visible text, never colour alone", () => {
+    expect(code).toMatch(/entryStatusLabel\(entry\.status\)/);
+  });
+
+  it("does not collapse the failed-entry Retry button into a non-interactive accessible group", () => {
+    // A collapsing wrapper (a bare `accessible` prop on the row's outer
+    // View, which also renders the Retry Button) would make the button
+    // unreachable as its own TalkBack node. Assert the row's opening
+    // `<View ...>` tag — where `ComposerEntryRow` renders its
+    // `entryRow`-styled wrapper — carries no such prop.
+    const rowFnStart = source.indexOf("function ComposerEntryRow");
+    expect(rowFnStart).toBeGreaterThan(-1);
+    const rowOpenTagStart = source.indexOf("<View", rowFnStart);
+    const rowOpenTagEnd = source.indexOf(">", rowOpenTagStart);
+    const rowOpenTag = source.slice(rowOpenTagStart, rowOpenTagEnd);
+    expect(rowOpenTag).toMatch(/style=\{styles\.entryRow\}/);
+    expect(rowOpenTag).not.toMatch(/\baccessible\b/);
+
+    const retryBranch = source.slice(source.indexOf('entry.status === "failed"'));
+    expect(retryBranch).toMatch(/<Button/);
+  });
+
+  it("renders no <Modal> element and does not import Modal from react-native (keyboard ownership: plan.md §9.3)", () => {
+    expect(code).not.toMatch(/<Modal\b/);
+    const reactNativeImportLine = source
+      .split("\n")
+      .find((line) => line.includes('from "react-native"'));
+    expect(reactNativeImportLine).toBeDefined();
+    expect(reactNativeImportLine).not.toMatch(/\bModal\b/);
+  });
+
+  it("T33B4: the root container never shrinks (flexShrink: 0), so it cannot be compressed out of view by a sheet or the IME (plan.md §9.3)", () => {
+    expect(code).toMatch(/root:\s*\{\s*flexShrink:\s*0\s*\}/);
+    expect(code).toMatch(/<View style=\{styles\.root\}/);
+  });
+
+  // T75: `onSubmit` is no longer called directly from `handleSend` — it
+  // moved inside `sendWithOutbox`, which every send (text-only or not)
+  // now goes through. The optimistic guarantee this test proves is
+  // unchanged: the entry lands in state via `setState` before the async
+  // call chain that eventually awaits `onSubmit` is even invoked, so
+  // this anchors to `void sendWithOutbox(...)` (the last thing
+  // `handleSend` does) rather than to `onSubmit(entryText)` directly,
+  // which no longer appears in this function's own text.
+  it("submits optimistically: the entry is added via submitDraft, and setState runs before sendWithOutbox (and therefore onSubmit) is ever invoked", () => {
+    const submitIndex = source.indexOf("submitDraft(state");
+    const setStateIndex = source.indexOf("setState(nextState)");
+    const sendWithOutboxCallIndex = source.indexOf(
+      "void sendWithOutbox(entry.id, entry.text, attachmentsToSend)",
+    );
+    expect(submitIndex).toBeGreaterThan(-1);
+    expect(setStateIndex).toBeGreaterThan(submitIndex);
+    expect(sendWithOutboxCallIndex).toBeGreaterThan(setStateIndex);
+  });
+});
+
+describe("composer-icon-action.tsx (microphone / attachment controls)", () => {
+  const source = readSource("composer-icon-action.tsx");
+  const code = readCode("composer-icon-action.tsx");
+
+  it("contains no raw hex colour literal", () => {
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it("reads its styling from useTheme()", () => {
+    expect(code).toMatch(/useTheme\(\)/);
+  });
+
+  // T85: this file used to carry its own 48dp check here — a whole-file
+  // `minDimensions.some((value) => value >= 48)` regex scan that (a) was
+  // an OR across every `minHeight`/`minWidth` in the file, not scoped to
+  // this component's own touchable element, and (b) duplicated the
+  // per-element, strict-AND audit `../../ui/primitives/touch-targets.test.ts`
+  // already runs against this exact file (`ComposerIconAction`, added to
+  // that shared loop by T81 via an explicit `path`). Two predicates for
+  // one rule is how the loose one survives, so it is deleted here, not
+  // relaxed: `ComposerIconAction`'s 48dp touch target is proven solely by
+  // the shared audit's "ComposerIconAction declares a 48dp (or
+  // hitSlop-padded) touch target" case.
+
+  it("exposes a button role with a mandatory accessible name", () => {
+    expect(code).toMatch(/accessibilityRole="button"/);
+    expect(code).toMatch(/accessibilityLabel=\{accessibleName\}/);
+    expect(code).toMatch(/accessibleName: string/);
+  });
+
+  it("hides its decorative glyph from assistive tech", () => {
+    expect(code).toMatch(/accessibilityElementsHidden/);
+  });
+});
+
+describe("Composer wires the microphone and attachment actions with distinct accessible names", () => {
+  const code = readCode("Composer.tsx");
+
+  it("uses MIC_ACTION_LABEL and ATTACH_ACTION_LABEL, not a shared/generic label", () => {
+    expect(code).toMatch(/accessibleName=\{MIC_ACTION_LABEL\}/);
+    expect(code).toMatch(/accessibleName=\{ATTACH_ACTION_LABEL\}/);
+  });
+
+  // T33B7: mic/attach now wire to `handleMicPress`/`handleAttachPress`,
+  // not the raw `onMicPress`/`onAttachPress` props directly — those two
+  // internal handlers still call the prop synchronously first (proven in
+  // `attachment-wiring.test.ts`, mutation-checked), so an existing
+  // caller's contract is unchanged, but each handler also now runs the
+  // T33B7 permission + pick/upload flow this same file's wiring test
+  // proves is real. This replaces the pre-T33B7
+  // "not an inline recorder/picker" assertion, which this task's own
+  // brief made obsolete: attachment picking now genuinely lives inline
+  // here, behind an injected port (`attachment-wiring.test.ts`).
+  it("mic and attach controls invoke the internal handlers, not the raw props directly", () => {
+    expect(code).toMatch(/onPress=\{handleMicPress\}/);
+    expect(code).toMatch(/onPress=\{handleAttachPress\}/);
+  });
+});
+
+describe("T33B2 Composer wires Steer/Follow-up/Abort with distinct accessible names and correct handlers", () => {
+  const code = readCode("Composer.tsx");
+
+  it("each of the three controls uses its own *_ACTION_LABEL constant as its Button label (their distinctness/wording is proven in composer-model.test.ts)", () => {
+    expect(code).toMatch(/label=\{STEER_ACTION_LABEL\}/);
+    expect(code).toMatch(/label=\{FOLLOW_UP_ACTION_LABEL\}/);
+    expect(code).toMatch(/label=\{ABORT_ACTION_LABEL\}/);
+  });
+
+  it("each control is wired to its own handler, not a shared one", () => {
+    expect(code).toMatch(/onPress=\{handleSteer\}/);
+    expect(code).toMatch(/onPress=\{handleFollowUp\}/);
+    expect(code).toMatch(/onPress=\{handleAbort\}/);
+  });
+
+  it("the three controls are rendered only while a turn is running", () => {
+    const controlsBlockStart = code.indexOf("state.turnRunning ? (");
+    expect(controlsBlockStart).toBeGreaterThan(-1);
+    const controlsBlockEnd = code.indexOf(") : null}", controlsBlockStart);
+    expect(controlsBlockEnd).toBeGreaterThan(controlsBlockStart);
+    const controlsBlock = code.slice(controlsBlockStart, controlsBlockEnd);
+    expect(controlsBlock).toMatch(/label=\{STEER_ACTION_LABEL\}/);
+    expect(controlsBlock).toMatch(/label=\{FOLLOW_UP_ACTION_LABEL\}/);
+    expect(controlsBlock).toMatch(/label=\{ABORT_ACTION_LABEL\}/);
+  });
+});
+
+describe("T33B2 Composer disables plain Send while a turn is running", () => {
+  it("PromptBar's canSend requires a submittable draft AND that no turn is running AND (T33B7) no attachment still uploading", () => {
+    const code = readCode("Composer.tsx");
+    const promptBarStart = code.indexOf("<PromptBar");
+    expect(promptBarStart).toBeGreaterThan(-1);
+    const promptBarTagEnd = code.indexOf("/>", promptBarStart);
+    const promptBarTag = code.slice(promptBarStart, promptBarTagEnd);
+    expect(promptBarTag).toMatch(/canSend=\{[\s\S]*?canSubmitDraft\(state\.draft\)/);
+    expect(promptBarTag).toMatch(/!state\.turnRunning/);
+    expect(promptBarTag).toMatch(/!attachmentsHavePendingUploads\(attachmentsState\)/);
+  });
+});
+
+describe("T33B2 known loose end closed: PromptBar's queued count reflects real state, not a literal", () => {
+  it("queuedCount is wired to pendingCount(state), not a hardcoded 0", () => {
+    const code = readCode("Composer.tsx");
+    expect(code).toMatch(/queuedCount=\{pendingCount\(state\)\}/);
+    expect(code).not.toMatch(/queuedCount=\{0\}/);
+  });
+});
+
+describe("T33B2 steer/follow-up/abort submit optimistically, same contract as plain send", () => {
+  const code = readCode("Composer.tsx");
+
+  it("handleSteer: submitSteer runs and updates state before turnService.steer is awaited", () => {
+    const submitIndex = code.indexOf("submitSteer(state");
+    const setStateIndex = code.indexOf("setState(result.state)", submitIndex);
+    const callIndex = code.indexOf("turnService.steer(entryText)");
+    expect(submitIndex).toBeGreaterThan(-1);
+    expect(setStateIndex).toBeGreaterThan(submitIndex);
+    expect(callIndex).toBeGreaterThan(setStateIndex);
+  });
+
+  it("handleFollowUp: submitFollowUp runs and updates state before turnService.followUp is awaited", () => {
+    const submitIndex = code.indexOf("submitFollowUp(state");
+    const setStateIndex = code.indexOf("setState(result.state)", submitIndex);
+    const callIndex = code.indexOf("turnService.followUp(entryText)");
+    expect(submitIndex).toBeGreaterThan(-1);
+    expect(setStateIndex).toBeGreaterThan(submitIndex);
+    expect(callIndex).toBeGreaterThan(setStateIndex);
+  });
+
+  it("handleAbort: abortTurn runs and updates state before turnService.abort is awaited", () => {
+    const abortIndex = code.indexOf("abortTurn(state)");
+    const setStateIndex = code.indexOf("setState(result.state)", abortIndex);
+    const callIndex = code.indexOf("turnService.abort()");
+    expect(abortIndex).toBeGreaterThan(-1);
+    expect(setStateIndex).toBeGreaterThan(abortIndex);
+    expect(callIndex).toBeGreaterThan(setStateIndex);
+  });
+});
+
+describe("T33B3 queue depth and mode are wired into the composer, not literals or colour alone", () => {
+  const code = readCode("Composer.tsx");
+
+  it("the queue status row renders only while a turn is running, alongside Steer/Follow-up/Abort", () => {
+    const controlsBlockStart = code.indexOf("state.turnRunning ? (");
+    expect(controlsBlockStart).toBeGreaterThan(-1);
+    const controlsBlockEnd = code.indexOf(") : null}", controlsBlockStart);
+    expect(controlsBlockEnd).toBeGreaterThan(controlsBlockStart);
+    const controlsBlock = code.slice(controlsBlockStart, controlsBlockEnd);
+    expect(controlsBlock).toMatch(/<StatusIndicator/);
+    expect(controlsBlock).toMatch(/<Select/);
+    expect(controlsBlock).toMatch(/label=\{STEER_ACTION_LABEL\}/);
+    expect(controlsBlock).toMatch(/label=\{FOLLOW_UP_ACTION_LABEL\}/);
+    expect(controlsBlock).toMatch(/label=\{ABORT_ACTION_LABEL\}/);
+  });
+
+  it("the queue depth StatusIndicator's statusText is computed from queueDepth(state), not a literal", () => {
+    expect(code).toMatch(/statusText=\{queueDepthLabel\(queueDepth\(state\)\)\}/);
+  });
+
+  it("the mode Select's value is state.mode, not a hardcoded literal", () => {
+    expect(code).toMatch(/<Select[\s\S]{0,300}?value=\{state\.mode\}/);
+    expect(code).not.toMatch(/<Select[\s\S]{0,200}?value=\{"steer"\}/);
+    expect(code).not.toMatch(/<Select[\s\S]{0,200}?value=\{"follow-up"\}/);
+  });
+
+  it("selecting a mode calls handleModeChange, which routes through setDispatchMode and turnService.setMode with a rejection revert", () => {
+    expect(code).toMatch(/onValueChange=\{\(value\)\s*=>\s*handleModeChange\(/);
+    const handlerStart = code.indexOf("const handleModeChange");
+    expect(handlerStart).toBeGreaterThan(-1);
+    const handlerEnd = code.indexOf("[state, turnService]", handlerStart);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    const handlerBody = code.slice(handlerStart, handlerEnd);
+    expect(handlerBody).toMatch(/setDispatchMode\(state, mode\)/);
+    expect(handlerBody).toMatch(/turnService\.setMode\(mode\)/);
+    expect(handlerBody).toMatch(/revertDispatchMode\(current, previousMode\)/);
+  });
+});

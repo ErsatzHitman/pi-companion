@@ -1,0 +1,22 @@
+/**
+ * `SessionCostMeter` styles (plan.md §8.3, §10.1, §10.5; T48A2). Colocated
+ * with `session-cost-meter.tsx`, mirroring `features/rail/context-meter.css`'s
+ * precedent. Every value below is a design token: no raw hex, pixel
+ * spacing, or duration literal.
+ */
+
+.session-cost-meter__readout {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-2);
+}
+
+/* Numerals: Geist Mono + tabular figures, matching `ContextMeter`'s own
+   `.context-meter__value` and the `Progress` primitive's percentage
+   readout (docs/beautiful-ui-reference.md, "Geist Mono for all numerals
+   ... with tabular-nums on counters"). */
+.session-cost-meter__value {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}

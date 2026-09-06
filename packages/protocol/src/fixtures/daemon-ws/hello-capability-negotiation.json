@@ -1,0 +1,81 @@
+{
+  "scenario": "hello-capability-negotiation",
+  "description": "Client connects, sends the WebSocket hello with declared capabilities, and the daemon replies with server_info advertising its feature flags.",
+  "planRef": "plan.md §14.2 (hello and server capability negotiation)",
+  "frames": [
+    {
+      "id": "hello-1",
+      "direction": "client_to_daemon",
+      "wireType": "hello",
+      "note": "First hello on a fresh WebSocket connection; clientId is generated locally by the client.",
+      "message": {
+        "type": "hello",
+        "clientId": "clid_fixture_web_0001",
+        "clientType": "browser",
+        "protocolVersion": 1,
+        "appVersion": "0.1.0-fixture",
+        "capabilities": {
+          "voice": false,
+          "pushNotifications": false,
+          "selective_agent_timeline": true,
+          "reasoning_merge_enum": true,
+          "custom_mode_icons": true,
+          "terminal_reflowable_snapshot": true,
+          "provider_subagents": true,
+          "project_updates": true,
+          "compact_provider_snapshots": true,
+          "pi_ui_bridge": true
+        }
+      }
+    },
+    {
+      "id": "server-info-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(status:server_info)",
+      "note": "Server info is delivered as a session-wrapped status message immediately after a valid hello.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "status",
+          "payload": {
+            "status": "server_info",
+            "serverId": "srv_fixture_0001",
+            "hostname": "fixture-daemon",
+            "version": "0.1.0-fixture",
+            "desktopManaged": false,
+            "capabilities": {
+              "voice": {
+                "enabled": false,
+                "reason": "No speech provider configured"
+              }
+            },
+            "features": {
+              "providersSnapshot": true,
+              "checkoutForgeSetAutoMerge": true,
+              "checkoutGithubSetAutoMerge": true,
+              "githubCheckDetails": true,
+              "forgeCheckDetails": true,
+              "forgeSearch": true,
+              "daemonStatusRpc": true,
+              "relayConfig": true,
+              "terminal-restore-modes": true,
+              "terminal-input-mode-replay": true,
+              "terminal-size-ownership": true,
+              "rewind": true,
+              "agentTimelinePromptIndex": true,
+              "checkoutRefresh": true,
+              "workspaceMultiplicity": true,
+              "projectRemove": true,
+              "projectAdd": true,
+              "projectList": true,
+              "worktreeRestore": true,
+              "workspaceRecovery": true,
+              "piUiBridge": true,
+              "trustedDevices": true
+            }
+          }
+        }
+      }
+    }
+  ]
+}

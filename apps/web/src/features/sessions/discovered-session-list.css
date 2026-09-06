@@ -1,0 +1,61 @@
+/**
+ * Discovered-session list styles (T27B5, plan.md §8.3/§10.2). Every
+ * value is a `var(--...)` custom property from `@picompanion/design-
+ * tokens` — no raw hex colour, pixel spacing literal, or duration
+ * literal, matching `session-list.css`'s precedent.
+ */
+
+.pc-discovered-session-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-discovered-session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  border: 1px dashed var(--color-line);
+  border-radius: var(--radius-control);
+  padding: var(--spacing-2) var(--spacing-3);
+}
+
+.pc-discovered-session-row__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-1);
+}
+
+.pc-discovered-session-row__title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink);
+}
+
+.pc-discovered-session-row__meta {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+.pc-discovered-session-row__preview {
+  overflow: hidden;
+  max-width: 40ch;
+  color: var(--color-ink-2);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* T27B5: the "find sessions" trigger, alongside "New session". */
+.pc-sessions-screen__discover-trigger {
+  margin-bottom: var(--spacing-3);
+  margin-left: var(--spacing-2);
+}

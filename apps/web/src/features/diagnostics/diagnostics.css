@@ -1,0 +1,94 @@
+/**
+ * Diagnostics screen styles (T140, plan.md §10.1/§10.2: Beautiful UI is
+ * the visual language for the whole product, including screens with no
+ * direct Beautiful UI counterpart). T41B1 shipped this feature's markup
+ * with six `pc-diagnostics*` class names and zero matching rules; this
+ * file is that missing baseline pass, not a redesign. Every value below
+ * is a `var(--...)` token from `@picompanion/design-tokens` — no raw
+ * hex colour — and reuses the same dashed-hairline-divider / 1px-ring /
+ * small-type-scale language `files.css` and `session-list.css` already
+ * use, plus `.pc-section` (`ui/primitives/primitives.css`) for section
+ * framing.
+ */
+
+.pc-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-5);
+}
+
+.pc-diagnostics__intro {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-2);
+  max-width: 60ch;
+}
+
+/* T41B2's export control (`DiagnosticsExportControl`): button, its
+   redaction-scope hint, and a status line, stacked with the same
+   `.pc-status` full-width-wrap convention `.pc-diagnostics-field` uses
+   below. */
+.pc-diagnostics-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-1) var(--spacing-3);
+}
+
+.pc-diagnostics-export__hint {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-3);
+  max-width: 60ch;
+}
+
+.pc-diagnostics-section__fields {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  overflow: hidden;
+}
+
+.pc-diagnostics-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-1) var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-bottom: 1px dashed var(--color-line);
+  background-color: var(--color-surface);
+}
+
+.pc-diagnostics-section__fields .pc-diagnostics-field:last-child {
+  border-bottom: none;
+}
+
+.pc-diagnostics-field__label {
+  flex: 0 0 auto;
+  min-width: 9rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-3);
+}
+
+.pc-diagnostics-field__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink);
+}
+
+/* The copy button and its status text (`.pc-status`, already styled by
+   `ui/primitives/primitives.css`) always sit after the value; a status
+   message wraps onto its own line rather than squeezing the row. */
+.pc-diagnostics-field .pc-status {
+  flex: 1 1 100%;
+}
+
+.pc-diagnostics-export .pc-status {
+  flex: 1 1 100%;
+}

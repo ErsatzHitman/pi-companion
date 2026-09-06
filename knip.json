@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.{js,mjs,cjs,ts}"],
+      "project": ["scripts/**/*.{js,mjs,cjs,ts}"]
+    },
+    "packages/server": {
+      "ignoreDependencies": ["sherpa-onnx-node"]
+    },
+    "apps/android": {
+      "entry": [
+        "src/app/**/*.{ts,tsx}",
+        "app.config.ts",
+        "metro.config.js",
+        "babel.config.js",
+        "scripts/run-guard-no-web-artifacts.mjs"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.mjs"]
+    }
+  }
+}

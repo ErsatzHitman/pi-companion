@@ -1,0 +1,69 @@
+{
+  "scenario": "old-helper-old-client",
+  "description": "A pre-piUiPayloadV2 Pi UI helper emits v1 top-level element fields; the daemon normalizes them into a canonical payload internally, then projects the element back to a client that has not negotiated piUiPayloadV2. The client sees exactly the v1 shape it already understands.",
+  "planRef": "plan.md §4.2 step 7",
+  "helperVersion": "old",
+  "clientCapability": "old",
+  "elements": [
+    {
+      "kind": "log",
+      "helperInput": {
+        "id": "activity",
+        "ns": "advisor",
+        "kind": "log",
+        "placement": "inline",
+        "title": "Advisor",
+        "lines": ["one", "two"],
+        "tail": 50
+      },
+      "expectedNormalizedElement": {
+        "id": "activity",
+        "ns": "advisor",
+        "kind": "log",
+        "placement": "inline",
+        "title": "Advisor",
+        "payload": { "kind": "log", "lines": ["one", "two"], "tail": 50 },
+        "lines": ["one", "two"],
+        "tail": 50
+      },
+      "expectedClientElement": {
+        "id": "activity",
+        "ns": "advisor",
+        "kind": "log",
+        "placement": "inline",
+        "title": "Advisor",
+        "lines": ["one", "two"],
+        "tail": 50
+      }
+    },
+    {
+      "kind": "diff",
+      "helperInput": {
+        "id": "d",
+        "ns": "review",
+        "kind": "diff",
+        "placement": "inline",
+        "diff": "--- a\n+++ b\n",
+        "filePath": "src/a.ts"
+      },
+      "expectedNormalizedElement": {
+        "id": "d",
+        "ns": "review",
+        "kind": "diff",
+        "placement": "inline",
+        "payload": { "kind": "diff", "unifiedDiff": "--- a\n+++ b\n", "filePath": "src/a.ts" },
+        "diff": "--- a\n+++ b\n",
+        "filePath": "src/a.ts"
+      },
+      "expectedClientElement": {
+        "id": "d",
+        "ns": "review",
+        "kind": "diff",
+        "placement": "inline",
+        "diff": "--- a\n+++ b\n",
+        "filePath": "src/a.ts",
+        "unifiedDiff": "--- a\n+++ b\n"
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": ["../../.oxlintrc.json"],
+  "plugins": ["import"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": [
+              "react",
+              "react-dom",
+              "react-dom/*",
+              "react-native",
+              "react-native-*",
+              "@react-native/*",
+              "expo",
+              "expo-*",
+              "@expo/*"
+            ],
+            "message": "packages/frontend-core must stay platform-neutral (repository invariant, enforced by T14): React, React Native, and Expo imports belong in apps/web or apps/android, never here. See plan.md §7.3 and this package's import-guard.test.ts."
+          }
+        ]
+      }
+    ],
+    "no-restricted-globals": [
+      "error",
+      "window",
+      "document",
+      "navigator",
+      "localStorage",
+      "sessionStorage",
+      "indexedDB",
+      "alert",
+      "confirm",
+      "prompt",
+      "XMLHttpRequest",
+      "WebSocket",
+      "fetch",
+      "history",
+      "location",
+      "self",
+      "top",
+      "screen",
+      "Notification",
+      "Worker",
+      "requestAnimationFrame",
+      "cancelAnimationFrame"
+    ]
+  }
+}

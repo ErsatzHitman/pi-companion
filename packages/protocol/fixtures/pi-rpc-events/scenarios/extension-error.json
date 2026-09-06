@@ -1,0 +1,15 @@
+{
+  "scenario": "extension-error",
+  "description": "An installed extension throws while handling a lifecycle hook; the runtime surfaces it without killing the session.",
+  "planBullets": [],
+  "notes": "Not an explicit §14.2 bullet; captured for full 21-type coverage and because extension failures are a common real-world Pi RPC event.",
+  "sessionId": "synthetic-session-ext-error-0001",
+  "events": [
+    {
+      "type": "extension_error",
+      "extensionPath": "/synthetic/pi-home/.pi/agent/extensions/synthetic-roster/index.mjs",
+      "event": "agent_end",
+      "error": "TypeError: Cannot read properties of undefined (reading 'synthetic') at synthetic-roster/index.mjs:42"
+    }
+  ]
+}

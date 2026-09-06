@@ -1,0 +1,38 @@
+{
+  "kind": "markdown",
+  "description": "Rich textual content rendered with a markdown renderer. Example: the btw extension's secondary conversation screen.",
+  "planRef": "plan.md §11.3 (markdown), §11.7 (btw)",
+  "frames": [
+    {
+      "id": "markdown-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:11:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 8,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "notes",
+                  "ns": "btw",
+                  "kind": "markdown",
+                  "placement": "screen",
+                  "title": "BTW: design review notes"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

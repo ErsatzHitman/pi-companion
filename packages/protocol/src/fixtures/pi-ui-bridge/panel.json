@@ -1,0 +1,106 @@
+{
+  "kind": "panel",
+  "description": "A composed focused view combining status, markdown, roster, progress, and log. Example: the loop extension's run panel with a stop action, showing the full pi.ui.action round trip.",
+  "planRef": "plan.md §11.3 (panel), §11.7 (loop), §12.3 (Pi UI action)",
+  "frames": [
+    {
+      "id": "panel-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:07:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 3,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "run-4",
+                  "ns": "loop",
+                  "kind": "panel",
+                  "placement": "sheet",
+                  "title": "Loop run #4",
+                  "actions": [
+                    {
+                      "id": "stop",
+                      "label": "Stop",
+                      "variant": "danger",
+                      "confirm": "Stop the running loop?"
+                    },
+                    { "id": "details", "label": "Details" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "action-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(pi.ui.action.request)",
+      "note": "User confirmed the dangerous 'stop' action after the confirm prompt.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.request",
+          "agentId": "agt_fixture_0001",
+          "actionId": "stop",
+          "elementId": "run-4",
+          "payload": {},
+          "requestId": "req_fixture_action_0001"
+        }
+      }
+    },
+    {
+      "id": "action-response-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(pi.ui.action.response)",
+      "note": "Acknowledges the request was routed to the owning extension; not the final outcome.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.response",
+          "payload": {
+            "requestId": "req_fixture_action_0001",
+            "ok": true,
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "id": "action-result-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_action_result)",
+      "note": "Final result from the owning extension namespace after it handled the stop action.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:07:02.000Z",
+            "event": {
+              "type": "pi_ui_action_result",
+              "provider": "pi",
+              "result": {
+                "actionId": "stop",
+                "elementId": "run-4",
+                "ok": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

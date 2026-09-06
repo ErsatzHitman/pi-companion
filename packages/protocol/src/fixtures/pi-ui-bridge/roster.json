@@ -1,0 +1,104 @@
+{
+  "kind": "roster",
+  "description": "List of agents, roles, keys, or tasks with per-row actions. Example: the subagents extension's fleet roster with a cancel action.",
+  "planRef": "plan.md §11.3 (roster), §11.7 (subagents)",
+  "frames": [
+    {
+      "id": "roster-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:09:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 6,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "fleet",
+                  "ns": "subagents",
+                  "kind": "roster",
+                  "placement": "pinned",
+                  "title": "Subagent fleet (2 running)",
+                  "actions": [
+                    {
+                      "id": "cancel",
+                      "label": "Cancel",
+                      "variant": "danger",
+                      "confirm": "Cancel this subagent?"
+                    },
+                    { "id": "open", "label": "Open" }
+                  ],
+                  "durable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "action-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(pi.ui.action.request)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.request",
+          "agentId": "agt_fixture_0001",
+          "actionId": "cancel",
+          "elementId": "fleet",
+          "payload": { "subagentId": "sub_fixture_0001" },
+          "requestId": "req_fixture_action_0002"
+        }
+      }
+    },
+    {
+      "id": "action-response-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(pi.ui.action.response)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.response",
+          "payload": {
+            "requestId": "req_fixture_action_0002",
+            "ok": true,
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "id": "action-result-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_action_result)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:09:02.000Z",
+            "event": {
+              "type": "pi_ui_action_result",
+              "provider": "pi",
+              "result": {
+                "actionId": "cancel",
+                "elementId": "fleet",
+                "ok": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

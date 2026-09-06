@@ -1,0 +1,114 @@
+{
+  "kind": "composer",
+  "description": "Replace or prefill the message draft, with an undo path back to what the user had typed. Example: the prompt-arbitrage extension rewriting the composer draft. The action response and result frames name which client dispatched the undo (T128).",
+  "planRef": "plan.md §11.3 (composer), §11.7 (prompt-arbitrage)",
+  "frames": [
+    {
+      "id": "composer-delta-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_delta)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:14:00.000Z",
+            "event": {
+              "type": "pi_ui_delta",
+              "provider": "pi",
+              "agentId": "agt_fixture_0001",
+              "revision": 11,
+              "delta": {
+                "op": "upsert",
+                "element": {
+                  "id": "arbitrage-suggestion",
+                  "ns": "prompt-arbitrage",
+                  "kind": "composer",
+                  "placement": "inline",
+                  "title": "Composer replacement suggested",
+                  "actions": [
+                    {
+                      "id": "accept",
+                      "label": "Use suggestion",
+                      "variant": "primary"
+                    },
+                    {
+                      "id": "undo",
+                      "label": "Undo",
+                      "variant": "secondary"
+                    }
+                  ],
+                  "ttl": 60000
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "action-request-1",
+      "direction": "client_to_daemon",
+      "wireType": "session(pi.ui.action.request)",
+      "note": "User rejects the suggested rewrite and restores their original composer draft.",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.request",
+          "agentId": "agt_fixture_0001",
+          "actionId": "undo",
+          "elementId": "arbitrage-suggestion",
+          "payload": {},
+          "requestId": "req_fixture_action_0004"
+        }
+      }
+    },
+    {
+      "id": "action-response-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(pi.ui.action.response)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "pi.ui.action.response",
+          "payload": {
+            "requestId": "req_fixture_action_0004",
+            "ok": true,
+            "error": null,
+            "answeredBy": {
+              "clientId": "clid_fixture_0002"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "action-result-1",
+      "direction": "daemon_to_client",
+      "wireType": "session(agent_stream:pi_ui_action_result)",
+      "message": {
+        "type": "session",
+        "message": {
+          "type": "agent_stream",
+          "payload": {
+            "agentId": "agt_fixture_0001",
+            "timestamp": "2026-08-31T10:14:03.000Z",
+            "event": {
+              "type": "pi_ui_action_result",
+              "provider": "pi",
+              "result": {
+                "actionId": "undo",
+                "elementId": "arbitrage-suggestion",
+                "ok": true
+              },
+              "answeredBy": {
+                "clientId": "clid_fixture_0002"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

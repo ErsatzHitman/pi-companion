@@ -1,0 +1,24 @@
+{
+  "scenario": "unknown-tool-call",
+  "description": "A tool call for a name the client does not recognize (e.g. shipped by a newer Pi build or a third-party extension). Consumers must fall back to a generic tool-call view without crashing.",
+  "planBullets": ["unknown tool"],
+  "sessionId": "synthetic-session-unknown-0001",
+  "events": [
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "call-synthetic-0099",
+      "toolName": "future_experimental_tool",
+      "args": {
+        "target": "/synthetic/workspace/demo-repo",
+        "mode": "synthetic-preview"
+      }
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "call-synthetic-0099",
+      "toolName": "future_experimental_tool",
+      "result": { "status": "ok", "note": "synthetic result payload of unknown shape" },
+      "isError": false
+    }
+  ]
+}

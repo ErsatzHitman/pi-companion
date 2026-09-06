@@ -1,0 +1,101 @@
+/**
+ * Session rail list styles (T27B1, plan.md §8.3/§10.2). Every value is a
+ * `var(--...)` custom property from `@picompanion/design-tokens` — no
+ * raw hex colour, pixel spacing literal, or duration literal, matching
+ * the rule documented in `ui/primitives/primitives.css`.
+ */
+
+.pc-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.pc-session-list__group + .pc-session-list__group {
+  border-top: 1px dashed var(--color-line);
+  padding-top: var(--spacing-4);
+}
+
+.pc-session-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-session-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--spacing-1);
+}
+
+/* T27B4: archive/delete row actions popover. */
+.pc-session-row__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.pc-session-row__button {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-1);
+  border: none;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-hairline);
+  background-color: var(--color-surface);
+  padding: var(--spacing-2) var(--spacing-3);
+  font-family: var(--font-family-sans);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-easing-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+.pc-session-row__button:hover {
+  background-color: var(--color-surface-raised);
+}
+
+.pc-session-row__button:active {
+  transform: scale(0.96);
+}
+
+.pc-session-row__button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pc-session-row__button[data-selected="true"] {
+  box-shadow:
+    0 0 0 1px var(--color-accent),
+    var(--shadow-hairline);
+}
+
+.pc-session-row__title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink);
+}
+
+.pc-session-row__meta {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+/* T27B2: the /h/:serverId/sessions screen (session list + creation). */
+.pc-sessions-screen__create-trigger {
+  margin-bottom: var(--spacing-3);
+}
+
+/* T38A3: the session tree mounted below the flat session list. */
+.pc-sessions-screen__tree {
+  margin-top: var(--spacing-4);
+}

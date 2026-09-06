@@ -1,0 +1,26 @@
+/**
+ * TerminalRoute styles (plan.md §10.2, T30A2). Token-only, same rule as
+ * `terminal-view.css`.
+ */
+
+.pc-terminal-route__params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+  margin: 0 0 var(--spacing-3) 0;
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-terminal-route__params dt {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pc-terminal-route__params dd {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+}

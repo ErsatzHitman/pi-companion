@@ -1,0 +1,23 @@
+// T102: typechecks packages/server's src/**/*.test.ts files, which
+// tsconfig.server.json (the production build project) and
+// tsconfig.server.typecheck.json (its --noEmit twin, used by the
+// "typecheck" npm script) both exclude. See
+// scripts/ci/guard-server-test-typecheck-ceiling.mjs, which runs this
+// project and enforces a ceiling on its error count as part of
+// `npm run typecheck`.
+//
+// T120: the seven src/server/agent/providers/pi/ui-bridge/*.test.ts files
+// T102 deferred ("whoever picks up ui-bridge next should fold them back
+// into `include` ... once T109 lands") are back in `include` here. T109
+// turned out to already be satisfied and landed nothing, so this
+// re-inclusion had no owner until T120. Their errors are now part of the
+// measured count the ceiling in guard-server-test-typecheck-ceiling.mjs
+// enforces.
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

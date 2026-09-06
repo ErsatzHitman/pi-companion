@@ -1,0 +1,239 @@
+appId: sh.picompanion.debug
+name: "accessibility audit — 48dp touch targets and TalkBack labels"
+tags:
+  - accessibility
+---
+# T37E10 (plan.md §14.4 "verify 48dp touch targets and TalkBack labels on
+# critical controls"). This wave has no emulator, no device, and no
+# Maestro binary — same as every T37E* flow so far (see ../README.md's
+# own "What T37D proved, and what it did not") — this flow has never
+# been run. `../e2e/flows/accessibility-audit.contract.test.ts` is this
+# flow's real proof: every testId/string named below is
+# `readCode()`/`readComponentCode()`-matched (full JSX/style-object
+# expressions, comment-stripped, anchored to the one top-level component
+# that owns each one) against real source, plus the RN-free model
+# functions called directly — see that file's own doc comment.
+#
+# ## What "critical control" means here, and why these screens
+#
+# This is the one §14.4 scenario allowed to sample across many features
+# (per this task's own brief), so it deliberately walks several already-
+# mounted screens in one continuous run rather than adding a screen of
+# its own: onboarding + the connect form (both real since T32S10/T32A8),
+# then the composer (T33B7's mic/attach action, reached the same way
+# `composer-inputs.yaml`/T37E3 already established — a direct
+# `picompanion://` deep link to `/h/:serverId/session/:agentId`,
+# bypassing the still-open "ConnectForm never navigates away from
+# /connect" gap that flow's own header comment names). This task's
+# `depends-on` also names T34B4 (panel) and T35A4 (files upload/
+# download) as *sources* of critical controls — see "NOT sampled here"
+# below for exactly why neither is actually reachable to sample live
+# today, and what each control's 48dp/label contract rests on instead.
+#
+# ## How this flow proves "48dp" and "TalkBack label" without a device
+#
+# Neither stock Maestro command measures an element's rendered size or
+# plays it through TalkBack's speech engine — no sibling flow in this
+# directory has ever attempted either, and this one does not invent a
+# capability none of them has. What IS real and checked below:
+#   - **48dp**: every control this flow visits renders through a
+#     primitive/composer-local component whose own style object declares
+#     a literal `minHeight`/`minWidth` of 48 on the exact `Pressable`/
+#     `TextInput` being tapped — proven in the contract test by reading
+#     that declaration back out of the component's own source, the same
+#     static-contract convention `ui/primitives/touch-targets.test.ts`
+#     (T26A/T57B) already established. This flow's `tapOn`/`assertVisible`
+#     steps are the reachability half of that proof (once a device
+#     exists, hitting the wrong-sized element would also fail these
+#     steps) — never a substitute for the contract test's own
+#     measurement of the declared minimum.
+#   - **TalkBack label**: Maestro's Android driver matches a `text:`
+#     selector against an element's visible text OR its `content-desc`
+#     attribute, and an RN `accessibilityLabel` compiles to exactly that
+#     `content-desc` — so `assertVisible: { text: "..." }` against a
+#     string that exists *only* as an `accessibilityLabel` (never as
+#     on-screen text) is a real proof that the string reaches the
+#     accessibility tree, which is what TalkBack reads aloud. The
+#     composer's mic/attach buttons are the clean case: their glyph is
+#     `accessibilityElementsHidden`, so "Record voice message"/"Add
+#     attachment" below can only be found through content-desc, not
+#     through a coincidental match against visible glyph text. This
+#     still does not prove TalkBack's own synthesized speech output —
+#     that needs a real device with TalkBack switched on, out of reach
+#     this wave like everything else in this file's "no device" note.
+#
+# ## A CI-guard-shaped wrinkle in one assertion
+#
+# `../README.md`'s "Isolation" section and
+# `scripts/ci/guard-no-production-daemon-port.mjs` fail CI if the
+# production daemon's port number appears anywhere in this directory,
+# for any reason, including a comment — a blunt, deliberately
+# non-context-aware substring check (see that guard's own doc comment;
+# even this paragraph writes the number nowhere, on purpose). The
+# connect form's real empty-address validation error
+# (`connect-form-model.ts`'s `parseConnectAddress("")`) is "Enter a host
+# address, like ws://192.168.1.10:" followed by an entirely unrelated
+# *example* port that happens to be the same four digits as the
+# production daemon's real one. The assertion below matches only the
+# prefix up to (not including) that port, which is still an unambiguous
+# proof the real validation error rendered — the production daemon's
+# port itself is referenced nowhere in this file.
+#
+# ## NOT sampled here — named, not silently skipped
+#
+#   - **Real voice capture and real attachment picking** (the behaviour
+#     *behind* the mic/attach buttons' OS-permission check) — already
+#     disclosed by `composer-inputs.yaml` (T37E3): both buttons are live,
+#     tappable, 48dp, and correctly labelled (which is everything this
+#     flow's own scope covers), but pressing either only ever reaches an
+#     honest "unavailable" fallback (no `expo-audio`/`expo-image-picker`/
+#     `expo-document-picker` installed). This flow does not re-tap either
+#     button past its own touch-target/label proof above — that walk-
+#     through already belongs to `composer-inputs.yaml`.
+#   - **Share intent** — no in-app receiver is mounted anywhere under
+#     `apps/android/src/app/` (`features/share/index.ts`'s own "Nothing
+#     imports the receiver/port yet" note, still true as of this
+#     writing); `composer-inputs.yaml`'s header comment gives the full
+#     two-part reason. `T69` (P5-W21) is already filed to build the
+#     chooser screen this needs.
+#   - **The files screen's upload/download controls (T35A4)** — a gap
+#     THIS flow found, not a restatement of one already on record.
+#     `SessionFilesRoute`
+#     (`apps/android/src/app/h/[serverId]/session/[agentId]/files/
+#     [...path].tsx`) passes `FilesScreen` no `filePicker` and no
+#     `fetchImpl`, and `files-screen.tsx`'s own `uploadController`/
+#     `downloadController` are built with `useMemo(() => { if (!client ||
+#     !filePicker) return null; ...})` / the equivalent `fetchImpl` guard
+#     — so `UploadPanel` and `DownloadPanel` are unconditionally omitted
+#     on the real route today, independent of any daemon connection.
+#     `T32S14` (P5-W20, this same wave) is wiring `fetchImpl` at this
+#     exact route to make `DownloadPanel`/T66's named relay-download
+#     refusal reachable; `filePicker` (the upload half) is outside
+#     T32S14's stated scope, so `UploadPanel` has no task named to mount
+#     it even once T32S14 lands. See the contract test's matching case
+#     for the exact source lines.
+#   - **Panel (T34B4), and every other Pi UI element kind** — structurally
+#     unreachable on this wave's isolated daemon for the same two reasons
+#     `extension-sheets.yaml` (T37E5) already discloses in full: no
+#     production path from a connected host to an open session screen
+#     without this flow's own deep-link workaround (which reaches the
+#     composer, never a Pi-UI-bearing session), and no live daemon this
+#     harness starts ever emits a `pi_ui_state`/`pi_ui_delta`. This flow
+#     does not attempt a third disclosure of the same gap. What IS true
+#     and checked in the contract test: `panel.tsx` renders its row
+#     actions through a real `<Button>`, so the exact 48dp/label proof
+#     this flow already gives `Button`-based onboarding/connect-form/
+#     composer-send controls covers panel's controls too, structurally,
+#     the moment panel ever becomes reachable.
+#
+# ## Independence and sharding (../README.md's "Flow independence")
+#
+# `launchApp: { clearState: true, clearKeychain: true }` starts this flow
+# from the same fresh-install state every other flow in this directory
+# does. It never depends on `pairing.yaml`, `cold-start-restore.yaml`, or
+# any prior run of itself or a sibling flow. It talks to no daemon at all
+# (no `${DAEMON_HOST}`/`${DAEMON_PORT}` reference below, same as
+# `composer-inputs.yaml`) — the connect-form submit below is expected to
+# fail validation locally (empty address), never to reach a daemon, and
+# the deep link that follows opens the composer directly, independent of
+# whatever the connect form's in-memory state was left at. Nothing this
+# flow does persists past the run beyond the app's own fresh `clearState`,
+# so it is trivially safe to shard alongside every other `../maestro/
+# *.yaml` flow: distinct package, distinct in-memory per-launch state, no
+# shared daemon, no shared file.
+
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# =====================================================================
+# ONBOARDING (OnboardingGate.tsx, mounted by connect.tsx) — welcome step.
+# Button.tsx's Pressable `touchArea` (minHeight: 48) is this control's
+# 48dp proof; its `accessibilityLabel` is its own visible `label` text,
+# so the text assertion below doubles as both a visible-copy and a
+# TalkBack-label check.
+# =====================================================================
+- assertVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    text: "Get started"
+- tapOn:
+    id: "connect-onboarding-welcome-continue"
+
+# =====================================================================
+# ONBOARDING — permissions step. Same Button.tsx 48dp/label contract as
+# above, sampled on a second, independent control.
+# =====================================================================
+- assertVisible:
+    id: "connect-onboarding"
+- assertVisible:
+    text: "Continue"
+- tapOn:
+    id: "connect-onboarding-permission-continue"
+
+# =====================================================================
+# CONNECT FORM (ConnectForm.tsx). `connect-form-address-field` is a
+# TextField (TextField.tsx's TextInput `input` style, minHeight: 48);
+# `connect-form-submit-button` is another Button.tsx instance.
+# Submitting with the field's own initial empty value (never touched by
+# this flow) drives `validateConnectForm` to a real error, which
+# TextField.tsx folds into that field's OWN accessibilityLabel as
+# `${label}. ${error}` — a live TalkBack-facing STATE CHANGE, not merely
+# a static label, and the visible error `<Text>` under the field renders
+# the identical string. See this file's header comment for why the
+# asserted text below stops just short of the address's example port
+# number.
+# =====================================================================
+- assertVisible:
+    id: "connect-form"
+- assertVisible:
+    id: "connect-form-address-field"
+- assertVisible:
+    text: "Add host"
+- tapOn:
+    id: "connect-form-submit-button"
+- assertVisible:
+    text: "Enter a host address, like ws://192.168.1.10"
+
+# =====================================================================
+# COMPOSER (Composer.tsx) — reached via the same deep link
+# `composer-inputs.yaml` (T37E3) already established, independent of the
+# connect form's state above. `composer-input` is PromptBar.tsx's
+# TextInput (minHeight: 48, accessibilityLabel="Message"). `composer-mic`
+# / `composer-attach` are `ComposerIconAction` — a 48dp touch area
+# (minWidth/minHeight: 48) declared in `composer-icon-action.tsx`
+# itself, NOT covered by `ui/primitives/touch-targets.test.ts`'s scan
+# (see the contract test's dedicated case for that gap) — with their
+# glyph `accessibilityElementsHidden`, so the text assertions below can
+# only be satisfied through content-desc (this file's header comment
+# explains the mechanism).
+# =====================================================================
+- openLink: "picompanion://h/e2e-host/session/e2e-session"
+- assertVisible:
+    id: "composer"
+- assertVisible:
+    id: "composer-input"
+- assertVisible:
+    id: "composer-mic"
+- assertVisible:
+    text: "Record voice message"
+- assertVisible:
+    id: "composer-attach"
+- assertVisible:
+    text: "Add attachment"
+
+# --- COMPOSER STATE CHANGE: send with no daemon connected reconciles the
+# --- optimistic entry to "Failed" (`composer-model.ts`'s
+# --- `entryStatusLabel("failed")`, since T32S13 wired `onSubmit` to a
+# --- real `AppCore.startTurn`) inside a `View` carrying
+# --- `accessibilityLiveRegion="polite"` — TalkBack announces this
+# --- transition without the user needing to re-find the entry.
+- tapOn:
+    id: "composer-input"
+- inputText: "Accessibility audit sample message"
+- tapOn:
+    id: "composer-send"
+- assertVisible:
+    id: "composer-entries"
+- assertVisible:
+    text: "Failed"

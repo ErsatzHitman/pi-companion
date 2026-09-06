@@ -1,0 +1,22 @@
+{
+  "description": "T37F (plan.md §14.4, §15.4; docs/issues-from-plan.md T37F) — the Phase 5 exit-gate shard assignment for the ten §14.4 flows (T37E1-T37E10). `flows` is the canonical list of the ten scenarios this exit gate covers (every non-reserved *.yaml basename in this directory except `smoke`, T37D's own harness-proof flow, and `file-download` (T77), added after this set closed and deliberately excluded — see that flow's own header comment — neither is one of the ten). `shards` partitions that list for parallel CI execution: every flow appears in exactly one shard, no shard is empty, and shard membership is fixed by flow name so a run is reproducible regardless of execution order (apps/android/maestro/README.md's 'Flow independence' section is what makes running two shards, or two flows within one shard, in parallel or in any order safe — each flow already allocates its own daemon, port, and PASEO_HOME and starts with clearState: true). Read by apps/android/e2e/harness/shard-plan.ts (validated against the real flow registry by shard-plan.test.ts) and by the android-maestro-e2e CI workflow's matrix. Grouping rationale, not a correctness requirement: flows that share a rough shape (host pairing/network, process kill-and-relaunch, composer/offline, permission/sheet interaction, cross-screen navigation) are split across different shards so no one shard is disproportionately slow.",
+  "flows": [
+    "accessibility-audit",
+    "background-kill-restore",
+    "cold-start-restore",
+    "composer-inputs",
+    "extension-sheets",
+    "files-and-terminal",
+    "network-switch",
+    "notification-approval",
+    "offline-cache-outbox",
+    "pairing"
+  ],
+  "shards": [
+    { "name": "shard-1", "flows": ["pairing", "network-switch"] },
+    { "name": "shard-2", "flows": ["cold-start-restore", "background-kill-restore"] },
+    { "name": "shard-3", "flows": ["composer-inputs", "offline-cache-outbox"] },
+    { "name": "shard-4", "flows": ["notification-approval", "extension-sheets"] },
+    { "name": "shard-5", "flows": ["files-and-terminal", "accessibility-audit"] }
+  ]
+}

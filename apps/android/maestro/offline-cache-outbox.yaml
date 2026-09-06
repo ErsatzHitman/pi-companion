@@ -1,0 +1,229 @@
+appId: sh.picompanion.debug
+name: "offline cache and outbox flush — the composer's own queue/retry cycle, and two disclosed gaps blocking the rest"
+tags:
+  - offline
+---
+# T37E8 (plan.md §14.4 "read offline cache and flush a safe outbox
+# item"). This wave has no emulator, no device, and no Maestro binary
+# (same as every T37E* flow so far — see ../README.md's own "What T37D
+# proved, and what it did not") — this flow has never been run.
+# `../e2e/flows/offline-cache-outbox.contract.test.ts` is this flow's
+# real proof: every testId/string named below is `readCode()`-matched
+# (full JSX/statement expressions, comment-stripped, anchored to the one
+# top-level component/function that owns it — never a bare identifier,
+# per `CLAUDE.md`'s "source-text assertions" rules) against real source,
+# plus real behavioural proof against `@picompanion/frontend-core`'s
+# actual `composer.OutboxController` (RN-free, no fake pretending to be
+# it) for everything below that a plain vitest run CAN exercise without
+# a device.
+#
+# ---------------------------------------------------------------------
+# WHAT THIS TASK'S BRIEF SAYS, AND WHAT IS ACTUALLY REACHABLE TODAY.
+#
+# "Nothing in this repository has ever constructed an `OfflineCache`" —
+# `platform/offline/index.ts`'s own header, T68 (this wave, P5-W20)
+# owns building that. This flow does not construct one either and does
+# not import a construction that does not exist — see that module's
+# "What a mount site needs to construct" snippet for the exact code a
+# mount site (T68's grant, `app-shell/core.ts`) would add.
+#
+# But T68's gap turned out not to be the *only* thing standing between
+# this scenario and a device proof. Investigating what "flush a safe
+# outbox item" could even mean on the app as it exists today surfaced a
+# **second, independent gap**, found by this task and disclosed here
+# because nothing else in the wave names it:
+#
+#   `Composer.tsx`'s `handleSend` only calls `sendWithOutbox` — the
+#   *only* code path that touches the real, durable-shaped
+#   `outbox.enqueue`/`markSending`/`markSent`/`markFailed` — when
+#   `attachmentsToSend.length > 0` (the "attachment-bearing send" branch,
+#   T33B7's "Attachments flow through the core outbox" brief). A
+#   plain **text-only** send — the *only* input mode this build can
+#   actually drive (`composer-inputs.yaml`'s own header: voice, real
+#   attachment picking, and share intent are all unavailable/unwired) —
+#   takes the sibling branch a few lines below, which talks only to the
+#   local, ephemeral `entries` UI array (`composer-model.ts`) and never
+#   calls anything on `outbox` at all. So the real
+#   `@picompanion/frontend-core` `OutboxController` — the thing that
+#   actually gives an entry a *stable client submission id unchanged
+#   across retries* (`packages/frontend-core/src/composer/outbox.ts`'s
+#   own opening guarantee) — is unreachable from ANY UI action this
+#   build supports, independent of whether its storage is the in-memory
+#   fallback (`in-memory-outbox-runtime.ts`, used today) or T68's future
+#   real `SqliteStructuredStorage`. "Flush a safe outbox item" against
+#   the real outbox therefore has no UI path to drive at all yet, on any
+#   emulator, until an attachment picker is wired
+#   (`attachment-source-port.ts`'s own "To wire a real picker" note —
+#   blocked on `expo-image-picker`/`expo-document-picker`, both on this
+#   wave's known-uninstallable list) — a `Composer.tsx` gap, not this
+#   flow's or T68's to close. See
+#   `../e2e/flows/offline-cache-outbox.contract.test.ts`'s "the durable
+#   outbox is unreachable from any text-only send" describe block for
+#   the exact `readFunctionCode` proof of the gate, kept
+#   mutation-honest.
+#
+#   A **related, second finding** in the same area, dormant until the
+#   first gap above is closed: even when `sendWithOutbox` *is* reached,
+#   its failure path calls `outbox.markFailed(outboxEntryId, message)`
+#   with no `idempotencyVerified` option, which — per `outbox.ts`'s own
+#   contract — parks the entry `awaiting-confirmation`, never `pending`
+#   (`getAutoResendCandidates` deliberately excludes it). But
+#   `Composer.tsx`'s own `handleRetry` (`recoverFailedDraft`) never
+#   calls `outbox.remove(id)` or `outbox.confirmResend(id)` on that
+#   entry — it only edits the local `entries` array. A user-tapped Retry
+#   therefore leaves the original `awaiting-confirmation` entry
+#   orphaned in outbox storage forever (never resent, never confirmed,
+#   never removed), and — once attachment sends resubmit through
+#   `handleSend` again — a fresh `enqueue()` call mints an entirely new
+#   stable id for the resend rather than confirming the original. That
+#   is the opposite of "a stable id unchanged across retries." Proven in
+#   the contract test's "handleRetry never reconciles the outbox entry
+#   it orphans" case, directly against real `OutboxController` behaviour
+#   — not asserted here since nothing on screen could show it.
+#
+# What this flow CAN and DOES prove for real, on the one input mode
+# this build supports: the **composer-model-level** entry lifecycle
+# (`composer-model.ts`'s local `entries`/`draft`, T33B1/T33B7) safely
+# queues a failed send, never silently drops or duplicates its text on
+# retry, and always leaves Retry available again — the closest thing to
+# "a safe outbox item" a plain-text send can demonstrate on this build.
+# It also proves the read-side gap plainly, rather than skipping past
+# it: T37B's own acceptance criterion ("Cached data is visibly marked
+# stale until catch-up...on-device proof is T37E8's") points a real,
+# already-wired `Banner` at a state (`session-transcript-staleness`,
+# `session/[agentId]/index.tsx`) that — per that file's own doc comment
+# — can never actually render `true` yet, because nothing in this
+# repository ever calls the timeline reducer's `restoreCachedTimeline`.
+# This flow asserts that absence as the honest, current, real behaviour
+# it is, not a placeholder.
+#
+# `clearState`/`clearKeychain` start this flow from the same
+# fresh-install state every other flow in this directory does
+# (../README.md's "Flow independence") — this flow pairs no host and
+# talks to no daemon at all (deliberately: the *whole point* is to
+# exercise the app with nothing connected, the truest form of
+# "offline"), so it needs no `${DAEMON_HOST}`/`${DAEMON_PORT}` and no
+# cleanup beyond the app's own fresh `clearState`.
+#
+# ## Reaching the composer without pairing
+#
+# Same technique `composer-inputs.yaml` (T37E3) established and
+# documented in full: Expo Router resolves the app's own registered
+# `picompanion://` deep-link scheme straight to
+# `session/[agentId]/index.tsx`, independent of any in-app button or of
+# `ConnectForm` ever having run. `serverId`/`agentId` are free-form path
+# segments this route never validates against a real paired host (see
+# `SessionRoute`'s own doc comment) — any non-empty strings work; this
+# flow uses its own distinct pair (`e2e-offline-host`/`e2e-offline-
+# session`) so a test runner sharding this flow alongside
+# `composer-inputs.yaml` can never confuse the two in a log.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- openLink: "picompanion://h/e2e-offline-host/session/e2e-offline-session"
+
+# --- Composer renders under its default root testId ("composer" —
+# --- session/[agentId]/index.tsx passes no `testId` prop, same as
+# --- composer-inputs.yaml's own anchor).
+- assertVisible:
+    id: "composer"
+
+# ---------------------------------------------------------------------
+# READ THE OFFLINE CACHE — the honest, currently-unreachable half.
+#
+# `SessionTranscript` (session/[agentId]/index.tsx) already renders a
+# real `Banner` fed by `describeTimelineStaleness({ stale: state.stale,
+# gap: state.gap })` on every batch — see that file's own doc comment,
+# quoted above. `createEmptyTimelineState()`
+# (`@picompanion/frontend-core`'s `timeline` domain) always starts
+# `stale: false`, and nothing in this repository ever calls the
+# reducer's `restoreCachedTimeline` to flip it — confirmed by this
+# flow's own contract test, which greps the whole `apps/android/src`
+# tree for a real (non-test, non-comment) call site and finds none. So
+# this banner can only ever be absent on this build today — asserting
+# it is NOT visible is asserting the real, current, honest state, not a
+# weakened stand-in for the intended one.
+- assertNotVisible:
+    id: "session-transcript-staleness"
+# --- THE INTENDED ASSERTION, once T68 constructs a real `OfflineCache`/
+# --- `SqliteStructuredStorage` (`platform/offline/index.ts`'s own "What
+# --- a mount site needs to construct" snippet) AND something calls
+# --- `restoreCachedTimeline` off a real cached tail before this route's
+# --- batcher first renders (neither is this task's or T68's `Owns`
+# --- grant beyond the construction itself — a session-route wiring
+# --- task, same family as T32S7/T32S8, would still need to thread the
+# --- restored snapshot into `SessionTranscript`'s batcher). Left here,
+# --- commented, exactly like `cold-start-restore.yaml`'s own blocked
+# --- steps, so it is not silently invented later against the wrong
+# --- text:
+#  - assertVisible:
+#      id: "session-transcript-staleness"
+#  - assertVisible:
+#      text: "Showing cached messages — confirming with the server."
+
+# ---------------------------------------------------------------------
+# FLUSH A SAFE OUTBOX ITEM — what IS reachable: the composer-model
+# entry lifecycle's own retry/recover cycle, offline, proven never to
+# lose or duplicate the queued text. (The REAL, durable-shaped
+# `OutboxController` this phrase names in plan.md §14.4 is unreachable
+# from this or any text-only send — see this file's header comment for
+# exactly why, and the contract test for the source-anchored proof.)
+#
+# Send #1: composer-input -> composer-send, exactly like
+# composer-inputs.yaml's own keyboard-entry case. With nothing paired,
+# `AppCore.startTurn` settles `{ status: "failed" }` ("Not connected to
+# a daemon"), `Composer`'s own `markEntryFailed` path renders "Failed"
+# with the text still visible and Retry offered — the honest unpaired
+# outcome, never a delivered turn (same as composer-inputs.yaml already
+# established for this exact input mode).
+- tapOn:
+    id: "composer-input"
+- inputText: "Offline outbox flush attempt one"
+- tapOn:
+    id: "composer-send"
+- assertVisible:
+    id: "composer-entries"
+- assertVisible:
+    text: "Offline outbox flush attempt one"
+- assertVisible:
+    text: "Failed"
+- assertVisible:
+    id: "composer-entry-.*-retry"
+
+# Tap Retry: `recoverFailedDraft` removes the failed entry and restores
+# its text to `state.draft` — `composer-entries` itself only renders
+# while `state.entries.length > 0` (`Composer.tsx`), so it disappears
+# entirely rather than showing a stale "Failed" row once nothing failed
+# remains queued. The text is not lost — it is what the next step's
+# `composer-send` tap resubmits, sight unseen (still present in the
+# input, per `value={state.draft}`), proving Retry recovers rather than
+# discards.
+- tapOn:
+    id: "composer-entry-.*-retry"
+- assertNotVisible:
+    id: "composer-entries"
+
+# Send #2 (the flush attempt): still nothing paired, so this fails the
+# exact same honest way — but critically, it is a FRESH attempt
+# (`submitDraft` mints a new composer-model entry id), not a frozen
+# "Failed" row nobody ever tried again. The recovered text reaches the
+# outbox path again, unmodified, and fails again for the one real
+# reason it can (no daemon), never silently vanishing and never
+# duplicating into two visible entries.
+- tapOn:
+    id: "composer-send"
+- assertVisible:
+    id: "composer-entries"
+- assertVisible:
+    text: "Offline outbox flush attempt one"
+- assertVisible:
+    text: "Failed"
+- assertVisible:
+    id: "composer-entry-.*-retry"
+
+# One more recovery, to show the affordance is not a one-shot: Retry
+# never becomes a dead end after its first use.
+- tapOn:
+    id: "composer-entry-.*-retry"
+- assertNotVisible:
+    id: "composer-entries"

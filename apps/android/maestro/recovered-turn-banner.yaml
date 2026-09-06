@@ -1,0 +1,141 @@
+appId: sh.picompanion.debug
+name: "recovered-turn banner — the real banner text, and Resend/Discard reaching a real outbox"
+tags:
+  - transcript
+---
+# T106 (plan.md §14.4 family; docs/issues-from-plan.md "Prove the
+# recovered-turn banner above the source-text layer"). Same standing
+# limitation as every flow in this directory (`../README.md`'s "What
+# T37D proved, and what it did not"): this wave has no emulator, no
+# device, and no Maestro binary, so this flow has never been run.
+# `../e2e/flows/recovered-turn-banner.contract.test.ts` is the real,
+# gate-able proof — it parses this file's own steps
+# (`../e2e/flows/maestro-yaml.ts`'s `parseMaestroSteps`) and checks every
+# id/text below against real, unmocked source, the same discipline
+# `composer-inputs.contract.test.ts` established (T72) after
+# `composer-inputs.yaml` drifted into asserting a status label the wired
+# app could no longer reach and nothing caught it because nothing ever
+# read the yaml back.
+#
+# ---------------------------------------------------------------------
+# WHY THIS FLOW OPENS A DEV-ONLY LAB ROUTE, NOT THE REAL SESSION SCREEN.
+#
+# `RecoveredTurnBanner` (`../src/features/transcript/recovered-turn-
+# banner.tsx`, T95/T106) imports `react-native`, so — like every other
+# view in this tree — a plain `vitest` run can only prove its JSX by
+# anchored source text, never by rendering it (that file's own doc
+# comment: the repo-wide limitation, proven 27 times before this one).
+# Closing that gap for real needs *some* screen, reachable by Maestro,
+# that mounts the REAL component against a REAL recovered turn. The
+# session route that actually owns this banner in production
+# (`../src/app/h/[serverId]/session/[agentId]/index.tsx`) cannot supply
+# one on this build, for two independent, disclosed reasons — neither
+# closable from this flow or from `recovered-turn-banner.tsx`/
+# `recovered-turn-model.ts` alone:
+#
+#   1. `TurnOutboxOwner.getRecoveredTurns()` (`../src/platform/offline/
+#      turn-outbox-owner.ts`) returns `null` forever on this build,
+#      because `expo-sqlite` is not installed
+#      (`../src/platform/offline/sqlite-driver.ts`'s own doc comment
+#      names the exact command: `npm install expo-sqlite@~16.0.10
+#      --workspace=@picompanion/android`). `selectRecoveredTurnsForSession`
+#      then always returns `[]` — nothing this session route can render
+#      would ever show a banner, install or no.
+#
+#   2. Even once (1) is fixed, `Composer.tsx`'s own `OutboxController`
+#      instance (built by `../src/features/composer/in-memory-outbox-
+#      runtime.ts`'s `createInMemoryStructuredStorage()`) is a SEPARATE
+#      instance, over separate storage, from `AppCore.turnOutbox`'s
+#      `TurnOutboxOwner` (built over `SqliteStructuredStorage` once (1)
+#      lands) — `recovered-turn-banner.tsx`'s own doc comment names this
+#      finding in full. A real device send-then-kill scenario cannot
+#      produce a `RecoveredTurn` the session route's banner would ever
+#      see, independent of (1), because the two `OutboxController`
+#      instances never share data, and the mount site
+#      (`../src/app/index.tsx`) passes neither an `outbox` nor a
+#      `structuredStorage` prop into `Composer` today.
+#
+# So this task adds one small, `__DEV__`-gated surface —
+# `../src/dev/recovered-turn-lab.tsx` (content) plus
+# `../src/app/dev/recovered-turn-lab.tsx` (route wrapper, dead-code-
+# eliminated out of a release build exactly like `component-lab.tsx`/
+# `recipe-lab.tsx` already are, plan.md §10.3/§10.4's own dev-lab
+# convention) — that mounts the REAL `RecoveredTurnBanner` against a
+# hand-built `AwaitingConfirmationTurn` fixture and a plain
+# `RecoveredTurnOutbox`-shaped object, closing gap (1)/(2)'s reachability
+# problem for the VIEW layer specifically, without pretending the full
+# crash-recovery pipeline is reachable (it is not — see the lab's own
+# doc comment, and this task's report, for the exact chain above kept
+# honest rather than papered over). This is a disclosed, deliberate
+# expansion beyond this task's literal four-file `Owns` grant, made
+# because the acceptance criterion ("a maestro flow asserts the
+# banner's real text with a recovered turn present") has no other real
+# surface to point at on this build.
+#
+# `clearState`/`clearKeychain` starts fresh, same as every flow here;
+# this flow pairs no host and talks to no daemon at all (same shape as
+# `offline-cache-outbox.yaml`), so it needs no daemon host/port and no
+# cleanup beyond the app's own fresh `clearState`.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- openLink: "picompanion://dev/recovered-turn-lab"
+
+# --- The lab's own ScrollView root (recovered-turn-lab.tsx's `testID`).
+- assertVisible:
+    id: "recovered-turn-lab"
+- assertVisible:
+    id: "recovered-turn-lab-status"
+- assertVisible:
+    text: "Last action: none"
+
+# ---------------------------------------------------------------------
+# THE BANNER'S REAL RENDERED TEXT — describeRecoveredTurn()'s exact
+# sentence, for BOTH fixture turns (`recovered-turn-lab.tsx`'s
+# `FIXTURE_TURNS`: "lab-turn-1", "lab-turn-2"). Each Banner's testId is
+# `recovered-turn-banner-${turn.id}` (`recovered-turn-banner.tsx`).
+- assertVisible:
+    id: "recovered-turn-banner-lab-turn-1"
+- assertVisible:
+    id: "recovered-turn-banner-lab-turn-2"
+- assertVisible:
+    text: "A message from before the app closed could not be confirmed as sent. It has not been resent automatically."
+
+# ---------------------------------------------------------------------
+# RESEND (confirmRecoveredTurn) — tapping it must reach the lab's own
+# outbox object (never a fake pretending to be one; the counting-fake/
+# real-OutboxController split is `recovered-turn-model.test.ts`'s job,
+# not this flow's) and be visibly observed on screen, not just
+# registered: "registration is not receipt" — the status line updates
+# AND the acted-on turn's banner/actions disappear, never just one of
+# the two.
+- tapOn:
+    id: "recovered-turn-banner-lab-turn-1-confirm"
+- assertVisible:
+    text: "Last action: confirmed lab-turn-1"
+- assertNotVisible:
+    id: "recovered-turn-banner-lab-turn-1"
+- assertNotVisible:
+    id: "recovered-turn-banner-lab-turn-1-actions"
+# turn-2's banner is untouched by turn-1's action.
+- assertVisible:
+    id: "recovered-turn-banner-lab-turn-2"
+
+# ---------------------------------------------------------------------
+# DISCARD (discardRecoveredTurn) — the other half of the pair; both are
+# mounted and proven here, never only one ("half a mount" is not a
+# proof of the pair).
+- tapOn:
+    id: "recovered-turn-banner-lab-turn-2-discard"
+- assertVisible:
+    text: "Last action: discarded lab-turn-2"
+- assertNotVisible:
+    id: "recovered-turn-banner-lab-turn-2"
+- assertNotVisible:
+    id: "recovered-turn-banner-lab-turn-2-actions"
+
+# Both fixture turns are now gone — the whole banner area is empty.
+- assertNotVisible:
+    id: "recovered-turn-banner-lab-turn-1"
+- assertNotVisible:
+    id: "recovered-turn-banner-lab-turn-2"

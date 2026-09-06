@@ -1,0 +1,25 @@
+{
+  "scenario": "steer-and-follow-up-queue",
+  "description": "User sends a steer message mid-turn and queues a follow-up; the queue drains as the turn progresses.",
+  "planBullets": ["steer and follow-up queue"],
+  "sessionId": "synthetic-session-queue-0001",
+  "events": [
+    { "type": "queue_update", "steering": [], "followUp": [] },
+    {
+      "type": "queue_update",
+      "steering": ["Also check /synthetic/workspace/demo-repo/src/example.ts"],
+      "followUp": []
+    },
+    {
+      "type": "queue_update",
+      "steering": ["Also check /synthetic/workspace/demo-repo/src/example.ts"],
+      "followUp": ["Then run the synthetic test suite"]
+    },
+    {
+      "type": "queue_update",
+      "steering": [],
+      "followUp": ["Then run the synthetic test suite"]
+    },
+    { "type": "queue_update", "steering": [], "followUp": [] }
+  ]
+}
