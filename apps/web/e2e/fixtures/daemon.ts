@@ -8,9 +8,19 @@
  * agent provider clients (`agentClients: {}` — the same minimal shape
  * `packages/server`'s own `createTestPaseoDaemon` test fixture uses,
  * see `packages/server/src/server/test-utils/paseo-daemon.ts`), and
- * the bundled web UI disabled (`preview-server.ts` serves a separate
- * static production build instead — plan.md §15.2's artifact, not the
- * daemon's own §15.2 bundling path).
+ * the bundled web UI disabled here (`webUi: { enabled: false, distDir:
+ * null }`) — deliberately, still, as of T43B2b: `preview-server.ts`
+ * builds and serves the real packaged bundle
+ * (`packages/server/dist/server/web-ui`, produced by the same
+ * `scripts/build-daemon-web-ui.mjs` every packaging path runs) on its
+ * OWN origin rather than through this daemon's `web-ui.ts` middleware,
+ * because that middleware unconditionally injects
+ * `window.__PASEO_INITIAL_DAEMON_CONNECTION__` into every served
+ * `index.html`, which would make every spec's manual `/connect` flow
+ * (this suite's `daemonConnection` fixture) render `BootstrapConnectStatus`
+ * instead of the `ConnectForm` those specs drive. See
+ * `preview-server.ts`'s module doc and T43B2b's report for the full
+ * reasoning and the follow-up this leaves filed.
  *
  * `stop()` always tears the daemon down and removes its temp
  * directories; callers must invoke it from a `finally`/`afterAll` so a

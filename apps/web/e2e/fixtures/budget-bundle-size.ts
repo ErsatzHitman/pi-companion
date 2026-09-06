@@ -7,7 +7,11 @@
  * Measures the REAL network payload a browser downloads for a fresh,
  * direct navigation to the session route against the REAL production
  * build this harness's own `preview-server.ts` already produces and
- * serves (`vite build`, the same artifact `npm run build
+ * serves — as of T43B2b, the packaged bundle at
+ * `packages/server/dist/server/web-ui` that `scripts/build-daemon-web-
+ * ui.mjs` produces (every packaging path's own artifact, T43A1), whose
+ * `.js`/`.css`/`.html` files are byte-identical copies of `vite build`'s
+ * own `apps/web/dist` output (the same artifact `npm run build
  * --workspace=@picompanion/web` produces, plan.md §15.2) — not a static
  * guess at which chunk names "should" belong to the route.
  *

@@ -516,6 +516,10 @@ jobs:
       - name: Run apps/web unit and component tests
         run: npm run test --workspace=@picompanion/web
 
+      # This build's own dist/ is not what Playwright serves (see T43B2b
+      # note below) -- kept as its own step so a build break in apps/web
+      # itself is attributed here, before the slower E2E run, rather than
+      # surfacing only inside global-setup's rebuild.
       - name: Build apps/web
         run: npm run build --workspace=@picompanion/web
 
@@ -535,6 +539,26 @@ jobs:
       # during module resolution before a single spec executed. Invisible
       # until T194/T195 unmasked it: this job used to fail earlier, at the
       # frontend-core build.
+      #
+      # T43B2b: `npm run test:e2e` below rebuilds apps/web and every
+      # workspace dependency a second time, inside Playwright's
+      # `global-setup.ts` (`fixtures/preview-server.ts`'s
+      # `buildWorkspaceDependencies` + `runBuildDaemonWebUi`) -- that
+      # second build is the one actually served to the browser, and it
+      # now runs through `scripts/build-daemon-web-ui.mjs`, the exact
+      # script every packaging path uses (T43A1), producing
+      # `packages/server/dist/server/web-ui`. So this job's own "Build
+      # apps/web" and "Build @picompanion/server" steps above/below are
+      # deliberately redundant with what the E2E run does internally --
+      # they exist to fail fast, with a shorter, clearer log, on an
+      # ordinary compile break, before paying the ~2-3 minute cost of
+      # driving a real browser. The suite that actually runs against
+      # `apps/web` code is the one global-setup builds, not these two
+      # steps' output. See `apps/web/e2e/fixtures/preview-server.ts`'s
+      # module doc for why this fixture serves the packaged bundle
+      # (`packages/server/dist/server/web-ui`) rather than a standalone
+      # `apps/web/dist` copy, and why it stops short of a single daemon-
+      # served origin for every spec.
       - name: Build @picompanion/server (the E2E fixture's daemon)
         run: npm run build --workspace=@picompanion/server
 

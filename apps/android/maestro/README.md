@@ -191,3 +191,20 @@ workflow that reads it.
   gate's actual acceptance criterion — has never been performed and remains the one
   outstanding step. Everything above is proven structurally and by unit test, not by a real
   run.
+
+## T43B2b — the phase-8 packaging exit gate's Android half
+
+`../../.github/workflows/android-maestro-e2e.yml` also carries a second, separate job,
+`packaged-app-smoke`, added for the phase-8 packaging exit gate (docs/issues-from-plan.md
+T43B2b) rather than the Phase 5 exit gate above. It answers a different, narrower question:
+not "do all ten §14.4 scenarios pass on a development build", but "does the app launch at all
+on the real PACKAGED build" — `apps/android/eas.json`'s `production-apk` profile
+(`sh.picompanion`, the same profile a real release uses, plan.md §15.3), not `development`'s
+`sh.picompanion.debug` developer client. It runs only `smoke.yaml` — the one flow
+`../e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` already excludes from the ten-flow
+set because it has no daemon dependency and no paired-host precondition, making it the right
+size for "does the packaged artifact boot" rather than "do all ten scenarios work."
+
+Same disclosure as the Phase 5 gate above: this job has never executed end-to-end either (no
+`EXPO_TOKEN`, no verified emulator boot in this repository), dry-runs with a logged notice
+until `EXPO_TOKEN` is configured, and stays `workflow_dispatch` for the identical reason.

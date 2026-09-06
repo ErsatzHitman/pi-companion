@@ -34,6 +34,45 @@ name: Android Maestro E2E
 # `ci.yml` gate: plan.md §15.4's "Required jobs from Phase 1 onward" list
 # does not include an emulator-backed Maestro run, and nothing in this
 # repository's CI has ever booted an Android emulator before.
+#
+# --- T43B2b: the phase-8 packaging exit gate's Android half -------------
+#
+# `packaged-app-smoke` below is a SEPARATE job from `maestro-e2e` above,
+# added for docs/issues-from-plan.md's T43B2b ("pass the browser and
+# device suites as the packaging exit gate"), not a fourth T37E flow or a
+# change to the Phase 5 shard set. It answers a narrower, different
+# question than `maestro-e2e` does:
+#   - `maestro-e2e` (T37F, Phase 5): do all ten §14.4 scenarios pass on a
+#     DEVELOPMENT build (`sh.picompanion.debug`, EAS `development`
+#     profile, `developmentClient: true`)?
+#   - `packaged-app-smoke` (T43B2b, Phase 8): does the app launch at all
+#     on the PACKAGED build (`sh.picompanion`, EAS `production-apk`
+#     profile, `apps/android/eas.json` -- the same profile
+#     `android-apk-release.yml` and plan.md §15.3 use for a real release)?
+# It deliberately runs only `smoke.yaml` -- `apps/android/e2e/harness/
+# shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` already excludes `smoke`
+# from the Phase 5 ten-flow set for exactly this reason: it is the one
+# flow with no daemon dependency and no paired-host precondition, so it
+# is the right size for "does the packaged artifact even boot," not "do
+# all ten scenarios work," which stays `maestro-e2e`'s job.
+#
+# T43B2b's own brief scoped this task to `.github/workflows/ci.yml`
+# only. This job lives here instead, in the file that already owns every
+# other EAS-build-plus-emulator job in this repository, for one reason:
+# putting a second, near-identical ~80-line EAS-build/download/emulator-
+# boot block inside `ci.yml` (this workflow's `maestro-e2e` job already
+# has one) would be exactly the kind of avoidable duplication CLAUDE.md
+# warns against, with no collision risk to weigh against it -- P8-W10 is
+# a solo wave; no other task in it touches `.github/workflows/*`. See
+# T43B2b's own report for this reasoning spelled out, in case a future
+# reader disagrees with where the line was drawn.
+#
+# Same disclosure as `maestro-e2e` above: this job has never executed
+# end-to-end (no EXPO_TOKEN, no verified emulator boot here), dry-runs
+# with a logged notice until EXPO_TOKEN is configured, and stays
+# workflow_dispatch rather than joining the push/pull_request `ci.yml`
+# gate, for the identical reason `maestro-e2e` gives above (plan.md
+# §15.4's required-job list does not include an emulator-backed run).
 
 on:
   workflow_dispatch:
@@ -196,3 +235,124 @@ jobs:
           echo "::notice::EXPO_TOKEN secret is not configured on this repository yet (see android-apk-release.yml)."
           echo "::notice::Skipping this shard's emulator run; matrix shard ${{ matrix.shard }} is a dry run."
           echo "::notice::This workflow has never executed end-to-end -- see its own header comment."
+
+  # T43B2b -- see this file's header comment ("T43B2b: the phase-8
+  # packaging exit gate's Android half") for why this is a separate job
+  # from maestro-e2e above rather than an eleventh shard.
+  packaged-app-smoke:
+    name: packaged-app-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/frontend-core
+
+      - name: Check EAS credentials are configured
+        id: eas-secrets
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Expo and EAS
+        if: steps.eas-secrets.outputs.configured == 'true'
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # Same shape as maestro-e2e's "Build development APK on EAS" step
+      # above and android-apk-release.yml's "Build Android APK on EAS"
+      # step, but `apps/android/eas.json`'s `production-apk` profile
+      # (package `sh.picompanion`, `distribution: store`) -- the real
+      # packaged/release build, not the `development` profile's
+      # `sh.picompanion.debug` developer client. EAS auto-manages signing
+      # credentials for this profile the same way it would for a real
+      # release build; no keystore is committed to this repository
+      # (plan.md §15.3, T44B1's "signing material is not present in the
+      # repository" criterion).
+      - name: Build production APK on EAS
+        id: eas_build
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          build_json="$(npx eas build --platform android --profile production-apk --non-interactive --wait --json)"
+          echo "$build_json" > "$RUNNER_TEMP/eas-build.json"
+
+          build_id="$(jq -r 'if type == "array" then .[0].id // empty else .id // empty end' "$RUNNER_TEMP/eas-build.json")"
+          if [ -z "$build_id" ]; then
+            echo "Failed to determine EAS build ID."
+            cat "$RUNNER_TEMP/eas-build.json"
+            exit 1
+          fi
+
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve and download the packaged APK artifact
+        id: artifact
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          build_view_json="$(npx eas build:view '${{ steps.eas_build.outputs.build_id }}' --json)"
+          echo "$build_view_json" > "$RUNNER_TEMP/eas-build-view.json"
+
+          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/eas-build-view.json")"
+          if [ -z "$artifact_url" ]; then
+            echo "Failed to determine APK artifact URL."
+            cat "$RUNNER_TEMP/eas-build-view.json"
+            exit 1
+          fi
+
+          apk_path="$RUNNER_TEMP/picompanion-packaged.apk"
+          curl --fail --location --output "$apk_path" "$artifact_url"
+          echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
+
+      - name: Install Maestro CLI
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # Only `smoke.yaml` -- see this file's header comment for why the
+      # packaging exit gate's Android half is scoped to that one flow
+      # rather than the Phase 5 ten-flow set.
+      - name: Boot emulator, install the packaged APK, and run the smoke flow
+        if: steps.eas-secrets.outputs.configured == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_8
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb install -r "${{ steps.artifact.outputs.apk_path }}"
+            npx tsx apps/android/e2e/run-flow.ts smoke
+
+      - name: Dry run (EXPO_TOKEN not configured)
+        if: steps.eas-secrets.outputs.configured == 'false'
+        run: |
+          echo "::notice::EXPO_TOKEN secret is not configured on this repository yet (see android-apk-release.yml)."
+          echo "::notice::Skipping the packaged-app smoke run; this job is a dry run."
+          echo "::notice::This job has never executed end-to-end -- see this file's header comment."
