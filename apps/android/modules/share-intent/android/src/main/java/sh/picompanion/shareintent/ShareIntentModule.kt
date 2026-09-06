@@ -43,7 +43,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
  *   `ShareIntentPort.getInitialShareIntent()`'s documented
  *   `Linking.getInitialURL()`-shaped one-shot contract).
  * - **Warm delivery** (app already running, `singleTask` launch mode —
- *   see `apps/android/plugins/with-share-intent-module.ts`'s doc
+ *   see `apps/android/plugins/with-share-intent-module.js`'s doc
  *   comment for why `onNewIntent`/`setIntent` must be wired in
  *   `MainActivity`): delivered through `OnNewIntent` below.
  * - **Arrived warm but before any JS listener is attached** (a real,

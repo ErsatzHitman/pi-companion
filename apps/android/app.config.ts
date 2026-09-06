@@ -10,8 +10,13 @@ import acceptedFileMimeTypes from "./src/features/share/accepted-file-mime-types
 // more common, officially-documented way to declare a local plugin
 // (Expo resolves it via `resolveConfigPluginFunction`, requiring the
 // resolved module's default export to be the `ConfigPlugin` — exactly
-// what `./plugins/with-share-intent-module.ts` exports), so this is not
-// a workaround, just the form the type declares.
+// what `./plugins/with-share-intent-module.js` exports), so this is not
+// a workaround, just the form the type declares. `with-share-intent-
+// module.js` is plain JavaScript, not TypeScript (T204) — see its own
+// doc comment for why: Expo's plugin resolver `require()`s whatever
+// this string resolves to, and the nested `@expo/config-plugins` a
+// clean `npm ci` installs under `apps/android/node_modules` on CI
+// cannot load `.ts` the way this workstation's hoisted-root copy can.
 
 /**
  * Expo app config — plan.md §6, §9.1, §15.3.

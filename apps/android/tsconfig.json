@@ -8,7 +8,8 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "allowJs": true
   },
   "include": [
     "src/**/*",
@@ -16,7 +17,8 @@
     "app.config.ts",
     "metro.config.js",
     "babel.config.js",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "plugins/**/*"
   ],
   "exclude": ["node_modules", "dist", ".expo", "android", "ios"]
 }

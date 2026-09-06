@@ -1,4 +1,5 @@
-import { withMainActivity, type ConfigPlugin } from "expo/config-plugins";
+// @ts-check
+const { withMainActivity } = require("expo/config-plugins");
 
 /**
  * Config plugin for T36F's native share module (plan.md §9.3).
@@ -33,6 +34,41 @@ import { withMainActivity, type ConfigPlugin } from "expo/config-plugins";
  * rather than requiring anyone to hand-edit the (gitignored, generated)
  * `android/` output.
  *
+ * **Written as plain CommonJS JavaScript, not TypeScript (T204).** Expo's
+ * plugin resolver (`resolvePluginForModule` in
+ * `@expo/config-plugins/build/utils/plugin-resolver.js`) requires the
+ * resolved plugin file from disk through Node; `@expo/require-utils`'s
+ * `loadModuleSync` only transpiles the *entry* config file
+ * (`app.config.ts`) — anything Expo resolves afterwards, including a
+ * plugin referenced by path, is loaded with a plain `require()` when it
+ * detects a CommonJS module, and Node cannot `require()` `.ts` directly.
+ * That is invisible on this workstation, where `@expo/config-plugins`
+ * resolves from the hoisted root install (57.0.9, which happens to also
+ * accept `.ts` files in `resolvePluginForModule`'s extension probe) —
+ * but `package-lock.json` pins a *separate, nested*
+ * `apps/android/node_modules/@expo/config-plugins` at **54.0.5** for
+ * this workspace specifically (`node -e
+ * "console.log(require('../../package-lock.json')
+ * .packages['apps/android/node_modules/@expo/config-plugins'].version)"`
+ * from `apps/android` prints `54.0.5`), and that nested copy is what a
+ * clean `npm ci` on CI actually installs and resolves from — Node's
+ * module resolution always prefers the nearest `node_modules` over an
+ * ancestor's, so the newer, TS-tolerant root copy is shadowed there.
+ * `apps/android/node_modules` is empty on this workstation (nothing
+ * nested has ever been installed here), which is exactly why `npx expo
+ * config --type public` succeeds locally and fails on CI's
+ * "Production prebuild smoke" step with `PluginError: Failed to
+ * resolve plugin for module "./plugins/with-share-intent-module"` —
+ * see this feature's task report for the full install-layout diff.
+ * Writing this plugin as plain `.js` (the conventional way Expo config
+ * plugins are authored) removes the divergence entirely: a `.js` file
+ * `require()`s under every `@expo/config-plugins` version this
+ * repository has ever pinned, so which copy resolves stops mattering.
+ * `@ts-check` plus the JSDoc `@type` annotations below keep this file
+ * under real type-checking (see `../tsconfig.json`'s `allowJs`) without
+ * needing the whole project's `checkJs` turned on — this file opts in
+ * per-file, the same way `../metro.config.js` already does.
+ *
  * **Unverified in this sandbox**: this task may not run
  * `expo prebuild`, `eas build`, or Gradle (this wave's hard rules), so
  * this plugin has never actually been applied to a real
@@ -49,7 +85,7 @@ const METHOD_BLOCK = `
    * \`ShareIntentModule\`'s \`OnNewIntent\` listener fires, and so any
    * later \`getIntent()\` read (this activity's own or a module's) sees
    * the intent that actually woke this activity — not the one that
-   * first created it. See \`../../plugins/with-share-intent-module.ts\`.
+   * first created it. See \`../../plugins/with-share-intent-module.js\`.
    */
   ${METHOD_MARKER} {
     super.onNewIntent(intent)
@@ -63,7 +99,7 @@ const BUNDLE_IMPORT_ANCHOR = "import android.os.Bundle";
  * Patches a generated `MainActivity.kt`'s source with the `onNewIntent`
  * override this feature needs (see the module doc comment above). Pure
  * string-in, string-out so it can be unit-tested without invoking
- * `withMainActivity` or `expo prebuild` — see `with-share-intent-module.test.ts`.
+ * `withMainActivity` or `expo prebuild` — see `with-share-intent-module.test.js`.
  *
  * Every patch below either changes `contents` or throws. A `.replace()` that
  * silently no-ops when its anchor is missing is exactly the failure mode
@@ -71,8 +107,11 @@ const BUNDLE_IMPORT_ANCHOR = "import android.os.Bundle";
  * emitting `import android.os.Bundle`, a silent no-op here would leave
  * `Intent` unimported while the plugin reports success — a failure Gradle
  * or EAS would only surface much later, far from this file. See P5-W19/T67.
+ *
+ * @param {string} contents
+ * @returns {string}
  */
-export function patchMainActivityContents(contents: string): string {
+function patchMainActivityContents(contents) {
   if (contents.includes(METHOD_MARKER)) {
     // Already applied — a second prebuild, or the plugin ran twice in one
     // pass. Idempotent: return unchanged rather than double-inserting.
@@ -92,7 +131,7 @@ export function patchMainActivityContents(contents: string): string {
           IMPORT_LINE +
           '" was not inserted. The Expo template likely stopped emitting that import. Open the ' +
           "generated android/app/src/main/java/**/MainActivity.kt, find where it declares its " +
-          "imports now, and update BUNDLE_IMPORT_ANCHOR in with-share-intent-module.ts to match.",
+          "imports now, and update BUNDLE_IMPORT_ANCHOR in with-share-intent-module.js to match.",
       );
     }
     patched = withImport;
@@ -109,7 +148,8 @@ export function patchMainActivityContents(contents: string): string {
   return `${patched.slice(0, lastBrace)}${METHOD_BLOCK}\n${patched.slice(lastBrace)}`;
 }
 
-export const withShareIntentModule: ConfigPlugin = (config) => {
+/** @type {import("expo/config-plugins").ConfigPlugin} */
+const withShareIntentModule = (config) => {
   return withMainActivity(config, (config) => {
     if (config.modResults.language !== "kt") {
       throw new Error(
@@ -124,4 +164,7 @@ export const withShareIntentModule: ConfigPlugin = (config) => {
   });
 };
 
-export default withShareIntentModule;
+module.exports = withShareIntentModule;
+module.exports.withShareIntentModule = withShareIntentModule;
+module.exports.patchMainActivityContents = patchMainActivityContents;
+module.exports.default = withShareIntentModule;

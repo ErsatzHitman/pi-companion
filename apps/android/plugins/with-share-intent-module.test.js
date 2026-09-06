@@ -1,5 +1,6 @@
+// @ts-check
 import { describe, expect, it } from "vitest";
-import { patchMainActivityContents } from "./with-share-intent-module";
+import { patchMainActivityContents } from "./with-share-intent-module.js";
 
 /**
  * Tests for T67 (P5-W19): the share-intent config plugin must fail loudly
@@ -14,6 +15,11 @@ import { patchMainActivityContents } from "./with-share-intent-module";
  * contains `import android.os.Bundle` at the version currently pinned, and
  * that the patched file compiles under Kotlin/Gradle. Neither is checked
  * by any gate in this repository — T36F said so and this task repeats it.
+ *
+ * Converted from `.ts` to `.js` at T204 alongside its subject (see
+ * `with-share-intent-module.js`'s doc comment for why): this file's own
+ * behavioural coverage of `patchMainActivityContents` is unchanged, only
+ * the extension and the import specifier moved.
  */
 
 // A realistic stand-in for what `expo prebuild` emits for a default Expo
@@ -57,7 +63,7 @@ describe("patchMainActivityContents", () => {
     );
     // The message must say what a developer should do, not only what went wrong.
     expect(() => patchMainActivityContents(withoutBundleImport)).toThrow(
-      /update BUNDLE_IMPORT_ANCHOR in with-share-intent-module\.ts to match/,
+      /update BUNDLE_IMPORT_ANCHOR in with-share-intent-module\.js to match/,
     );
   });
 
