@@ -428,6 +428,8 @@ cap — no wave exceeds 4 tasks and no task is scheduled at or before any of its
 | T210   | Fix legacy-retirement.md ordering: the undo must precede the cutover            | phase-8   | docs             | P8-W12 | —                                                                     |
 | T211   | guard-run-guard-wiring cannot report a stale allowlist entry                    | phase-8   | ci               | P8-W13 | T209                                                                  |
 | T212   | Drop the churning file and test counts from legacy-retirement.md 2.3            | phase-8   | docs             | P8-W13 | —                                                                     |
+| T213   | guard-no-legacy-app-tree's ALLOWLISTED_PATHS has the shape T211 closed          | phase-8   | ci               | P8-W14 | —                                                                     |
+| T214   | guard-run-guard-wiring's CI job copy names one of its three failure modes       | phase-8   | ci               | P8-W14 | T211                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -620,7 +622,9 @@ the task details always agree.
 |        | guard into CI, which T207 shipped unwired, and filed T209.               |       |
 | P8-W12 | T209, T210 (both filed by the P8-W11 gate; disjoint: ci vs docs). Both   | 2     |
 |        | KEEP; the gate found nothing to fix and filed T211, T212.                |       |
-| P8-W13 | T211, T212 (both filed by the P8-W12 gate; disjoint: ci vs docs)         | 2     |
+| P8-W13 | T211, T212 (both filed by the P8-W12 gate; disjoint: ci vs docs). Both   | 2     |
+|        | KEEP; the gate fixed one contradictory sentence and filed T213, T214.    |       |
+| P8-W14 | T213, T214 (both filed by the P8-W13 gate; disjoint: guard vs ci.yml)    | 2     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7460,6 +7464,46 @@ has now been paid three times. Keep what discriminates; drop what only decorates
 
 - [ ] Every remaining figure is one whose change would mean something is wrong
 - [ ] No figure in the document is restated in a second place
+
+#### T213 — `guard-no-legacy-app-tree.mjs`'s `ALLOWLISTED_PATHS` has the shape T211 closed
+
+`labels: phase-8, area: ci` · `wave: P8-W14` · `depends-on: none`
+
+`scripts/ci/guard-no-legacy-app-tree.mjs` consults `ALLOWLISTED_PATHS` only from inside its loop
+over the paths it is given, so an entry is read only when a matching path still exists and still
+carries a legacy import. A key naming a file that has since been deleted, or one that no longer
+contains what the entry excuses, is unreachable and silently ignored — the same unreachable-entry
+shape T211 removed from `guard-run-guard-wiring.mjs` one wave earlier.
+
+There is no live defect: both entries name files that exist and the P8-W13 merge gate confirmed
+the control flow by reading it. This is a smaller surface than T211's — two entries, one guard —
+so it is worth doing correctly rather than quickly.
+
+Owns: `scripts/ci/guard-no-legacy-app-tree.mjs` and its test.
+
+- [ ] The guard fails when an allowlist key names a path that does not exist
+- [ ] The guard fails when an allowlist key names a path that no longer carries the import the
+      entry excuses, so an entry cannot outlive its reason
+- [ ] Both proven by MUTATION against the real `ALLOWLISTED_PATHS`, restored afterwards
+- [ ] Reuse T211's reporting vocabulary so the two guards fail in the same words
+
+#### T214 — The `guard-run-guard-wiring` CI job's copy names one of its three failure modes
+
+`labels: phase-8, area: ci` · `wave: P8-W14` · `depends-on: T211`
+
+T211 gave the guard two new failure modes (an allowlist entry naming a runner that does not
+exist, and one naming a runner a workflow now genuinely wires). The job's step name in
+`.github/workflows/ci.yml` and the comment above it still describe only the original one, so a
+CI failure reading `STALE ALLOWLIST ENTRY` appears under a step named for unwired runners.
+
+"Fail when X" is not "fail only when X", so this is incomplete rather than false — it is not the
+T124 defect class, and T211 was right to keep `ci.yml` out of its scope. Bundle it into a wave
+that touches `ci.yml` for another reason rather than spending a wave slot on it.
+
+Owns: the `guard-run-guard-wiring` job block in `.github/workflows/ci.yml`, nothing else.
+
+- [ ] The step name and its comment name all three failure modes
+- [ ] No other job block is touched
 
 #### T32A1 — Build the Android connect form
 

@@ -152,11 +152,13 @@ exclusion comments quoted above.
 Run in the foreground, once each, from a clean tree (`git status --porcelain`
 empty before and after every command below).
 
-**The Result column is a dated snapshot, not a live expectation.** Every figure
-below was re-measured by the P8-W10 merge gate and orchestrator at `56122cf`
-on 2026-09-06, replacing T43B2a's original measurements, which had drifted and
-once told a reader that an 18th typecheck error was a regression when it is
-the baseline. T212 dropped this table's earlier counts of files scanned and
+**Every figure in the Result column is a live expectation, not a dated
+snapshot.** That is a change: until T212 this paragraph said the opposite, and
+told the reader to re-measure and overwrite any figure that disagreed. Each one
+below was measured by the P8-W10 merge gate and orchestrator at `56122cf` on
+2026-09-06, replacing T43B2a's original measurements, which had drifted and once
+told a reader that an 18th typecheck error was a regression when it is the
+baseline. T212 dropped this table's earlier counts of files scanned and
 tests run — they moved every wave and carried no information the exit code
 and the figures beside them did not, the same distinction `CLAUDE.md`'s
 paragraph on the local test-suite baseline draws for
