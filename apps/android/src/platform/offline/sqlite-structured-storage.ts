@@ -80,6 +80,46 @@ export const OFFLINE_CACHE_SQL = {
   oldestFirst: `SELECT row_id, updated_at FROM ${TABLE} WHERE collection = ? ORDER BY updated_at ASC, row_id ASC`,
 } as const;
 
+/**
+ * Malformed-row tolerance (T42B2, `docs/issues-from-plan.md`'s T42B2
+ * acceptance criterion "a malformed import is rejected safely").
+ *
+ * There is no versioned-JSON importer in this repository — see
+ * `./migration-decision.test.ts` and `docs/frontend-data-migration.md`
+ * §2/§3 for why (RESET/RE-PAIR; T42 never adds an import path). `put`
+ * is nonetheless the one place any structured value — from today's real
+ * callers, or a hypothetical future importer — actually reaches this
+ * cache, so it is where "malformed input" is a real vector: `put`
+ * already refuses a secret-shaped value before it reaches the driver
+ * (see `assertNotSecretShaped` above), and refuses (via `JSON.stringify`
+ * throwing) a value that cannot round-trip through JSON at all, such as
+ * one containing a circular reference — in both cases nothing is
+ * written and every previously-stored row is untouched.
+ *
+ * The read side needs the same care for a row whose *stored* text is
+ * not valid JSON — e.g. a hypothetical import that wrote directly into
+ * the table, or on-disk corruption. Before T42B2, `get`/`list` called
+ * `JSON.parse` unguarded: one unreadable row didn't just fail its own
+ * read, it made `list()` throw for the *entire* collection, corrupting
+ * reads of every sibling row that was perfectly fine. `tryParseStoredValue`
+ * is the fix: `get` treats an unparsable row the same as a missing one
+ * (`null`, matching `StructuredStorage`'s existing `T | null` contract —
+ * no caller in `@picompanion/frontend-core` distinguishes "missing" from
+ * "corrupt"), and `list` skips only the unparsable row and still returns
+ * every other one. This mirrors the try/catch-and-fall-back-to-a-safe-
+ * default pattern this codebase already uses for persisted JSON
+ * elsewhere (`../key-value-storage.ts`'s `readIndex`,
+ * `../../features/connect/onboarding-model.ts`, `../../features/
+ * settings/settings-model.ts`) rather than inventing a new one.
+ */
+function tryParseStoredValue<T>(raw: string): { ok: true; value: T } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(raw) as T };
+  } catch {
+    return { ok: false };
+  }
+}
+
 interface ValueRow {
   value: string;
 }
@@ -112,21 +152,47 @@ export const DEFAULT_MAX_ROWS_PER_COLLECTION = 200;
  * site that also redacts by value shape; unifying *detection* did not
  * require unifying which checks each site runs.
  */
-function assertNotSecretShaped(value: unknown, path: string): void {
+function assertNotSecretShaped(
+  value: unknown,
+  path: string,
+  seen: WeakSet<object> = new WeakSet(),
+): void {
   if (value === null || typeof value !== "object") {
     return;
   }
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => assertNotSecretShaped(item, `${path}[${index}]`));
-    return;
+  // T42B2: a circular reference (impossible from real JSON, but not
+  // impossible from a hand-built object graph a hypothetical future
+  // importer might construct) would otherwise recurse forever here and
+  // crash with a stack-depth-dependent `RangeError` rather than a clean,
+  // deterministic rejection — still "rejected", but not "rejected
+  // safely" in any reproducible sense. Tracking visited objects turns
+  // that into the same explicit, typed error every other malformed
+  // value gets.
+  if (seen.has(value)) {
+    throw new Error(
+      `SqliteStructuredStorage.put refused a value containing a circular reference at ${path} — this cache only stores values that round-trip through JSON.`,
+    );
   }
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    if (security.isSecretShapedKey(key)) {
-      throw new Error(
-        `SqliteStructuredStorage.put refused a value with a secret-shaped field "${key}" at ${path}.${key} — secrets belong in SecureStorage (see ../secure-storage.ts), never in the plain offline cache.`,
-      );
+  // Tracks only the objects currently on the recursion stack (removed
+  // again below), not every object ever visited — so a DAG that
+  // legitimately references the same nested object twice from two
+  // different paths (no cycle) is never mistaken for one.
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => assertNotSecretShaped(item, `${path}[${index}]`, seen));
+      return;
     }
-    assertNotSecretShaped(nested, `${path}.${key}`);
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (security.isSecretShapedKey(key)) {
+        throw new Error(
+          `SqliteStructuredStorage.put refused a value with a secret-shaped field "${key}" at ${path}.${key} — secrets belong in SecureStorage (see ../secure-storage.ts), never in the plain offline cache.`,
+        );
+      }
+      assertNotSecretShaped(nested, `${path}.${key}`, seen);
+    }
+  } finally {
+    seen.delete(value);
   }
 }
 
@@ -171,7 +237,11 @@ export class SqliteStructuredStorage implements StructuredStorage {
   async get<T>(collection: string, id: string): Promise<T | null> {
     await this.ensureSchema();
     const row = await this.driver.getFirstAsync<ValueRow>(OFFLINE_CACHE_SQL.get, [collection, id]);
-    return row ? (JSON.parse(row.value) as T) : null;
+    if (!row) {
+      return null;
+    }
+    const parsed = tryParseStoredValue<T>(row.value);
+    return parsed.ok ? parsed.value : null;
   }
 
   async put<T>(collection: string, id: string, value: T): Promise<void> {
@@ -199,7 +269,17 @@ export class SqliteStructuredStorage implements StructuredStorage {
     const prefix = options?.idPrefix;
     const filtered = prefix ? rows.filter((row) => row.row_id.startsWith(prefix)) : rows;
     const limited = options?.limit !== undefined ? filtered.slice(0, options.limit) : filtered;
-    return limited.map((row) => JSON.parse(row.value) as T);
+    const values: T[] = [];
+    for (const row of limited) {
+      const parsed = tryParseStoredValue<T>(row.value);
+      if (parsed.ok) {
+        values.push(parsed.value);
+      }
+      // A row whose stored text fails to parse is skipped, not thrown —
+      // see this module's doc comment ("Malformed-row tolerance", T42B2).
+      // One unreadable row must never take down every sibling row's read.
+    }
+    return values;
   }
 
   async clear(collection: string): Promise<void> {
