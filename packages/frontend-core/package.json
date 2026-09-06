@@ -14,7 +14,7 @@
   },
   "scripts": {
     "clean": "node ../../scripts/clean-package-dist.mjs",
-    "build": "npm run build --workspace=@picompanion/protocol && tsc -p tsconfig.json --incremental false",
+    "build": "npm run build --workspace=@picompanion/client && tsc -p tsconfig.json --incremental false",
     "build:clean": "npm run clean && npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit --incremental false",
     "test": "vitest run"

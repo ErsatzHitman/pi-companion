@@ -404,8 +404,12 @@ jobs:
           cache: "npm"
       - run: npm ci
 
-      - name: Build protocol (frontend-core's shared wire contract)
-        run: npm run build --workspace=@picompanion/protocol
+      # frontend-core declares @picompanion/client and @picompanion/protocol.
+      # This job runs `npm run typecheck` directly, which does NOT run
+      # frontend-core's own build script, so the chain must be built here.
+      # Building only protocol left six jobs red on every push until T195.
+      - name: Build frontend-core's declared dependency chain (protocol -> relay -> client)
+        run: npm run build --workspace=@picompanion/client
 
       - name: Typecheck frontend-core
         run: npm run typecheck --workspace=@picompanion/frontend-core
