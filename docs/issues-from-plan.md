@@ -491,6 +491,9 @@ that recomputation has to be domain-specific:
 | T229   | SHA-pin the 56 tag-pinned GitHub Actions refs, looked up not guessed            | phase-9   | ci               | P9-W11 | —                                                                     |
 | T230   | Make the relay wire version structurally impossible to diverge                  | phase-9   | daemon           | P9-W12 | T44A3                                                                 |
 | T231   | Triage the 36 baselined npm advisories (needs npm install)                      | phase-9   | tooling          | P9-W13 | T44A3                                                                 |
+| T232   | Register the workspace-test-coverage stale-allowlist walk in CAPABILITIES       | phase-9   | tooling          | P9-W14 | T44A4                                                                 |
+| T233   | Wire or allowlist cli's test:local and server's test:integration                | phase-9   | ci               | P9-W15 | T44A4                                                                 |
+| T234   | Decide whether protocol's and web's Linux-only CI coverage is intended          | phase-9   | ci               | P9-W16 | T44A4                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -532,20 +535,21 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**443 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W3
-merge gate — the commit that filed `T229`, `T230` and `T231`, three rows past the **440**
+**446 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W4
+merge gate — the commit that filed `T232`, `T233` and `T234`, three rows past the **443**
+counted at the P9-W3 gate, six past the **440**
 counted at the P9-W2 gate, four past the **439** counted at the P9-W1
 gate, seven rows past the **436**
 counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 222 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 225 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 13 (+7). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 16 (+10). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 13. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 16. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -729,7 +733,11 @@ the task details always agree.
 | P9-W3  | T44A3                                                                    | 1     |
 |        | KEEP-WITH-FIX; all three checks fire, but the register under-reported    |       |
 |        | the wave's own new tag-pinned Actions as zero. Filed T229-T231.          |       |
-| P9-W4  | T44A4                                                                    | 1     |
+| P9-W4  | T44A4 — landed at the P9-W4 gate (KEEP-WITH-FIX):                        | 1     |
+|        | the job classification and the coverage guard are sound, but             |       |
+|        | relay-tests claimed no build was needed while one test reads             |       |
+|        | a gitignored dist/, and two prose claims were false. Filed               |       |
+|        | T232-T234.                                                               |       |
 | P9-W5  | T44B1                                                                    | 1     |
 | P9-W6  | T44B2                                                                    | 1     |
 | P9-W7  | T225 (filed by the P9-W1 gate; a rationale, not a new assertion).        | 1     |
@@ -739,6 +747,9 @@ the task details always agree.
 | P9-W11 | T229 (filed by the P9-W3 gate; look every SHA up, never guess).          | 1     |
 | P9-W12 | T230 (filed by the P9-W3 gate; needs the Workers packaging answer).      | 1     |
 | P9-W13 | T231 (owner-blocked: needs npm install for a semver-major bump)          | 1     |
+| P9-W14 | T232 (filed by the P9-W4 gate; the T215 precedent, one entry).           | 1     |
+| P9-W15 | T233 (filed by the P9-W4 gate; the new guard cannot see it).             | 1     |
+| P9-W16 | T234 (filed by the P9-W4 gate; a decision, not a code change).           | 1     |
 
 ---
 
@@ -8150,6 +8161,88 @@ baseline.
 - [ ] Every advisory is either cleared by a bump or carries a written reason it cannot be
 - [ ] The baseline shrinks to match; no advisory is dropped from it without being fixed
 - [ ] `node scripts/ci/run-guard-audit-baseline.mjs` exits 0 against the real audit
+
+#### T232 — Register the workspace-test-coverage stale-allowlist walk in CAPABILITIES
+
+`labels: phase-9, area: tooling` · `wave: P9-W14` · `depends-on: T44A4`
+
+T44A4 shipped `findWorkspaceTestCoverageViolations` in
+`scripts/ci/guard-workspace-test-coverage.mjs` — the third instance of the capability
+class T211 and T213 shipped one wave apart: a dedicated walk over a guard's own allowlist
+that reports an entry naming something which no longer exists, or which no longer needs the
+exemption. T215 registered those two in `guard-capability-prose.mjs`'s `CAPABILITIES` as two
+separate entries. T44A4's `Owns:` line was `CI workflows`, which does not reach that file —
+the identical ownership gap that produced T215 in the first place.
+
+Nothing is live today: `node scripts/ci/run-guard-capability-prose.mjs` exits 0 at the P9-W4
+gate commit. This is preventive, and it must follow T215's shape rather than copy T44A4's
+spec prose:
+
+- ONE non-group entry (T168's group shape is not needed).
+- `denyingPhrases` worded FORWARD, in this task's own words — never lifted verbatim from
+  the new guard's own header, which narrates the pre-fix defect in past tense and would
+  collide the first time a comment reflow welds the clause onto one line. That is exactly
+  the trap T215 measured and then deliberately worded around.
+- Call `isAppSourcePath` on the paths you expect the denial scan to reach before you trust
+  a scope. Reading CLAUDE.md's list is not the check; executing the predicate is.
+- Prove the entry can FIRE before trusting it: append a denying sentence to a real,
+  in-scope tracked file, watch the runner exit 1 naming the capability, restore
+  byte-identically from a scratchpad copy (never `git checkout --`), and confirm
+  `node scripts/ci/run-guard-clean-working-tree.mjs` exits 0.
+
+Owns: `scripts/ci/guard-capability-prose.mjs` and its test. Nothing else.
+
+- [ ] One entry registered, worded forward, not lifted from the guard's own narration
+- [ ] `isAppSourcePath` executed on the paths relied on, not inferred from prose
+- [ ] The entry proven able to fire, and the tree restored byte-identically after
+
+#### T233 — Wire or allowlist cli's test:local and server's test:integration
+
+`labels: phase-9, area: ci` · `wave: P9-W15` · `depends-on: T44A4`
+
+T44A4 wired `@picompanion/cli`'s `test:unit` and left `test:local` (`tests/run-all.ts`,
+which spawns real isolated daemon subprocesses with its own concurrency pool and a `zx`
+dependency) unwired, disclosing it rather than shipping it sight-unseen. `packages/server`'s
+`test:integration` is unwired for the same reason and predates that wave.
+
+**The guard T44A4 shipped cannot see this gap, and that is the point of filing it.**
+`guard-workspace-test-coverage.mjs` is satisfied by any ONE `test*` script per workspace, so
+`cli-tests` and `server-tests` running `test:unit` fully rescue both packages while the
+heavier suites stay invisible to it by construction. A follow-up that only re-reads the
+guard's output will conclude, correctly and uselessly, that nothing is wrong.
+
+Either wire each suite into CI with the process/port lifecycle and wall time actually
+measured — not assumed — or record, per suite, why it stays local-only. Whichever way it
+goes, the answer belongs somewhere a reader of `docs/ci-matrix.md` will find it.
+
+Owns: `.github/workflows/ci.yml` and `docs/ci-matrix.md`. Not the suites themselves.
+
+- [ ] Each suite is either running in CI or has a written, specific reason it is not
+- [ ] Any wiring is backed by a measured run, not an estimate
+- [ ] `docs/ci-matrix.md` records the outcome where its coverage claim lives
+
+#### T234 — Decide whether protocol's and web's Linux-only CI coverage is intended
+
+`labels: phase-9, area: ci` · `wave: P9-W16` · `depends-on: T44A4`
+
+T44A4's coverage classification records, accurately, that `protocol-client-tests` runs on
+`ubuntu-latest` only, and that web's Playwright, axe and performance-budget E2E do too —
+`web-unit-tests (windows-latest)` deliberately runs the jsdom suite alone. Three jobs run on
+Windows in total.
+
+That asymmetry is currently a fact nobody decided. It sits against `plan.md` §15.4's
+Windows-primary-daemon framing: the daemon this product talks to is expected to run on
+Windows, and the protocol package is the layer that describes that conversation.
+
+This is a decision task, not a code task. The acceptable outcomes are a written
+"Linux-only is correct for these, because ..." or a job added for whichever area the
+reasoning says needs one. Do not add Windows jobs across the board to make a table look
+symmetric — CI minutes spent proving nothing is the failure mode here.
+
+Owns: `docs/ci-matrix.md`, and `.github/workflows/ci.yml` only if the decision adds a job.
+
+- [ ] The Windows/Linux split is a recorded decision with a stated reason
+- [ ] Any job added is justified by that reasoning, not by symmetry
 
 #### T32A1 — Build the Android connect form
 

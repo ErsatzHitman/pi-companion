@@ -50,9 +50,12 @@
  * intermittent/environment-sensitive (headless Chromium scheduling,
  * CI-runner load) rather than a reproducible defect this task could
  * isolate and fix directly. Given that, dropping the retry could not be
- * shown safe from local evidence, and CLAUDE.md's own warning applies
- * literally: "a retry removed while its cause is live turns a masked
- * flake into a red matrix." Kept at 1, documented here instead of
+ * shown safe from local evidence, and the T44A4 wave brief's own warning
+ * applies literally: a retry removed while its cause is live turns a
+ * masked flake into a red matrix. (CORRECTED at the P9-W4 merge gate:
+ * this quoted that sentence as CLAUDE.md's own. It appears in no
+ * CLAUDE.md in this tree; it is the task brief's wording.) Kept at 1,
+ * documented here instead of
  * silently relied on — if a future run reproduces this with a
  * diagnosable cause, fix that cause and drop this retry in the same
  * change; do not raise it further as a way to keep tolerating a growing

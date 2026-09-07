@@ -391,17 +391,34 @@ jobs:
 
   # T44A4: `@picompanion/relay` has a real `"test": "vitest run"` script and
   # 7 test files (34 tests) — see `scripts/ci/guard-workspace-test-
-  # coverage.mjs`'s header for how this gap was measured. It has zero
-  # workspace dependencies of its own (`packages/relay/package.json`
-  # declares none), so no build step is needed before `vitest run` — it
-  # transforms TypeScript on the fly, same as every other vitest-run
-  # workspace in this file. `relay`'s two heaviest test files
-  # (`e2e.test.ts`, `live-relay.e2e.test.ts`) already self-skip unless an
-  # opt-in env var this job never sets is present (`FORCE_RELAY_E2E=1` /
-  # `RUN_LIVE_RELAY_E2E=1`), so this job never opens a real network
-  # connection — verified directly: `npm run test --workspace=@picompanion/relay`
-  # completed in 1.55s with "5 passed | 2 skipped (7)" locally while this
-  # job was written.
+  # coverage.mjs`'s header for how this gap was measured. `relay` declares
+  # no workspace dependencies of its own, but one of its tests still needs
+  # a build: `src/dist-handshake-parity.test.ts` resolves
+  # `../dist/encrypted-channel.js` and asserts on its BUILT text, and
+  # `packages/relay/dist` is gitignored, so a clean `npm ci` checkout has
+  # none. That test self-heals by shelling `npm run build` out from inside
+  # vitest, under vitest's default 5000 ms per-test timeout — a
+  # timing-dependent first-run path that must not be CI's normal one. The
+  # explicit build step below makes `dist/` exist so the self-heal never
+  # runs, matching how `cli-tests` and the `typecheck` job build first.
+  # (CORRECTED at the P9-W4 merge gate: this said "so no build step is
+  # needed before `vitest run` — it transforms TypeScript on the fly", and
+  # offered a local `npm run test` run as direct verification. That run
+  # passed off the stale gitignored `dist/` every local checkout carries,
+  # which CLAUDE.md names as the standing first suspect whenever a local
+  # build agrees where CI would not.)
+  #
+  # `relay`'s two heaviest test files do stay skipped here, but not for the
+  # reason first recorded. `live-relay.e2e.test.ts` really is gated on
+  # `RUN_LIVE_RELAY_E2E === "1"`. `e2e.test.ts` is not: its real gate is
+  # `(FORCE_RELAY_E2E === "1" || nodeMajor < 25) && wranglerCliPath !== null`,
+  # and this workflow pins `NODE_VERSION: "22"`, so the env-var clause is
+  # inert and the ONLY thing keeping that file skipped is that `wrangler`
+  # is absent from the tree (declared in no package.json, not present in
+  # package-lock.json). Adding `wrangler` as a devDependency would arm a
+  # 90 s-startup wrangler dev server in this job, silently. (CORRECTED at
+  # the P9-W4 merge gate: this said both files "self-skip unless an opt-in
+  # env var this job never sets is present", which is true of one of them.)
   relay-tests:
     name: relay-tests
     needs: changes
@@ -414,6 +431,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
       - run: npm ci
+
+      # `src/dist-handshake-parity.test.ts` asserts on `dist/encrypted-channel.js`,
+      # which is gitignored and therefore absent on a clean checkout. Building
+      # here keeps that test off its in-test `npm run build` self-heal path,
+      # which would run under vitest's default 5000 ms timeout.
+      - name: Build relay
+        run: npm run build --workspace=@picompanion/relay
 
       - name: Run relay tests
         run: npm run test --workspace=@picompanion/relay

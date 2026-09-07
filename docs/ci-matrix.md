@@ -17,7 +17,8 @@ task's brief):** run `34083431130`, event `push` to `main`, conclusion
 `docker-checks`, both path-conditional by design — see §4). Three of the 35
 ran on `windows-latest`: `frontend-core-tests (windows-latest)`,
 `web-unit-tests (windows-latest)`, `server-tests (windows-latest)`. The
-other 32 ran on `ubuntu-latest`.
+other 32 are declared `ubuntu-latest` — "declared", not "ran": the two
+skipped jobs named above are among them.
 
 ---
 
@@ -206,11 +207,21 @@ run test:unit --workspace=@picompanion/server` — **not** the package's own
   This was measured directly, not assumed:
   `npm run test --workspace=@picompanion/relay` → `5 passed | 2 skipped
 (7)`, `34 passed | 4 skipped (38)`, 1.55s. The two skipped files
-  (`e2e.test.ts`, `live-relay.e2e.test.ts`) self-gate behind
-  `FORCE_RELAY_E2E=1`/`RUN_LIVE_RELAY_E2E=1` env vars this new job never
-  sets, so wiring the package's plain `test` script never opens a real
-  network connection (the second file would otherwise dial the real
-  `wss://relay.paseo.sh`). Closed in this same commit — see §5.
+  (`e2e.test.ts`, `live-relay.e2e.test.ts`) both stay skipped in this job,
+  but on two different gates. `live-relay.e2e.test.ts` is genuinely
+  env-gated: `RUN_LIVE_RELAY_E2E === "1"`, which nothing sets, and it is
+  the file that would otherwise dial the real `wss://relay.paseo.sh`.
+  `e2e.test.ts` is not env-gated in any effective sense: its real
+  condition is `(FORCE_RELAY_E2E === "1" || nodeMajor < 25) &&
+  wranglerCliPath !== null`, and `ci.yml` pins `NODE_VERSION: "22"`, so
+  the left disjunct is already true and the env var changes nothing. The
+  only thing keeping that file skipped is `wrangler` being absent from
+  the tree. Adding it as a devDependency would arm a 90 s-startup
+  wrangler dev server in `relay-tests` without any workflow edit. Closed in this same commit — see §5.
+  (CORRECTED at the P9-W4 merge gate: this said both files "self-gate
+  behind `FORCE_RELAY_E2E=1`/`RUN_LIVE_RELAY_E2E=1` env vars this new job
+  never sets". That is true of one of the two, and it named the wrong
+  mechanism for the file whose e2e run is the heavier of the pair.)
 - **`cli-tests` (T44A4, new).** `@picompanion/cli` had a real `"test:unit":
 "vitest run src"` script and 21 test files (173 tests) with **no CI job
   running them**, also despite being listed under `backend`. Measured:
@@ -356,8 +367,13 @@ config lives" conventions) rather than only here. Summary:
   not proof the failure mode is gone — it is evidence the failure mode is
   intermittent/environment-sensitive (real-browser timing under headless
   Chromium, possibly worse under a loaded CI runner than this workstation),
-  which is exactly the situation CLAUDE.md warns about directly: "a retry
-  removed while its cause is live turns a masked flake into a red matrix."
+  which is exactly the situation the T44A4 wave brief warns about: a retry
+  removed while its cause is live turns a masked flake into a red matrix.
+  (CORRECTED at the P9-W4 merge gate: this attributed that sentence to
+  CLAUDE.md as a direct quotation. It appears in no CLAUDE.md in this
+  tree, at HEAD or at the wave base — it is the orchestrator's wording in
+  the task brief. The decision it supports is unaffected; the citation
+  was not something a reader could have checked and found.)
   Dropping it could not be shown safe from the evidence gathered here. The
   config's own doc comment now states this precisely — what closed
   (ports), what did not (the real, rare axe-timing race), and what a future
