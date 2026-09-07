@@ -1202,6 +1202,71 @@ export const CAPABILITIES = [
       /nothing enforces that (?:a human |the owner |someone )?actually bumps `?version`? before (?:pushing|cutting) a (?:new )?release tag/i,
     ],
   },
+  {
+    // T249: T237 (`scripts/ci/run-guard-signing-material.mjs`) shipped
+    // `readContentIfWorthwhile` — the function that now reads EVERY tracked
+    // file's content (subject only to the 5 MiB size cap), replacing a prior
+    // `SKIP_CONTENT_READ_EXTENSIONS` set that used to return `undefined`
+    // before any read for `.png`/`.jpg`/.../`.zip`/`.jar`/`.pdf` — and
+    // registered nothing here. This is the identical omission class T232
+    // closed for `guard-workspace-test-coverage.mjs` one commit earlier in
+    // the same wave (P9-B): a real, uniquely-declared capability with no
+    // `CAPABILITIES` entry.
+    //
+    // `isShippedSourcePath` executed directly against the declaring file,
+    // per this task's own instruction rather than inferred from a list of
+    // areas (T124's repeated caution against conflating `isAppSourcePath`
+    // and `isShippedSourcePath`):
+    // `isShippedSourcePath("scripts/ci/run-guard-signing-material.mjs")` ===
+    // `true` (`scripts/ci` under T156's widening) — see this task's own
+    // report for the executed command and output.
+    //
+    // NOT a forward guard in the usual sense: a live denial of a closely
+    // related premise (that content scanning skips certain extensions) DID
+    // exist in three places the moment T237 landed, and all three were
+    // corrected by the P9-B merge gate (`bc6c303`) — two inside
+    // `guard-signing-material.mjs`'s own header (the "would throw on binary
+    // content" reasoning, and a pointer to a skip list T237 deleted) and one
+    // in `docs/android-apk-release.md` §2.2 — each now carrying a
+    // "CORRECTED at the P9-B merge gate" marker directly before the quoted
+    // false sentence, so none trips this entry today. Do not treat that
+    // silence as evidence the entry is unnecessary: an entry registered
+    // before `bc6c303` would have caught two of those three sites outright.
+    // Proven instead against a scratchpad-restored copy of
+    // `guard-signing-material.mjs` — see this task's own report for the
+    // exact sentence, file, and both exit codes — and pinned at the fixture
+    // level below.
+    //
+    // `methodNames`: a bare `readContentIfWorthwhile` is a real,
+    // camel-cased function name declared in exactly ONE file
+    // (`scripts/ci/run-guard-signing-material.mjs:86`) — measured directly:
+    // `git grep -n "readContentIfWorthwhile"` across the whole tracked tree
+    // returns that one declaration plus mentions inside its own test file
+    // (import/usage, never a second declaration) and two doc references in
+    // `docs/android-apk-release.md`. No AND-group or `RegExp` shape-anchor
+    // is needed, the same reasoning `findUndeclaredRootDependencies` and
+    // `computeVersionCodeFromSemver` give for their own bare names.
+    //
+    // `denyingPhrases`: worded away from BOTH corrected sites' actual
+    // wording ("would throw", "verified by reading that file's main()
+    // above", "the (much narrower) skip list this guard actually uses") and
+    // from `guard-signing-material.mjs`'s own present-tense narration of
+    // what it does now ("reads every tracked file it can", "needs no
+    // content decode at all") — compared DE-WRAPPED (`//` gutters stripped,
+    // whitespace collapsed, stricter than `flattenProse` itself, which
+    // leaves `//` in place) against both files' full text, so a future
+    // comment reflow welding a wrapped clause onto one line cannot create
+    // the collision CLAUDE.md's T215 section describes. Confirmed directly:
+    // all four candidate phrases considered for this entry returned `false`
+    // against that de-wrapped text before any was kept.
+    name: "guard-signing-material reads every tracked file's content, no extension skipped (readContentIfWorthwhile)",
+    methodNames: ["readContentIfWorthwhile"],
+    denyingPhrases: [
+      /run-guard-signing-material(?:\.mjs)? (?:still )?skips? (?:reading )?(?:a|the) file'?s? content based on (?:its )?extension/i,
+      /(?:content|byte) scanning (?:is|gets) skipped for (?:certain|some|binary) (?:file )?extensions? before (?:this|the) guard ever reads? (?:it|them)/i,
+      /guard-signing-material(?:\.mjs)? (?:cannot|can'?t|does not|never) (?:reads?|scans?) (?:a|the) (?:\.jks|\.keystore|\.apk|\.aab|keystore|binary) file'?s? content for a pem header/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

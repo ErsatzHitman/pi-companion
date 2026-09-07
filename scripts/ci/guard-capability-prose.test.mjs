@@ -3506,6 +3506,144 @@ test("T232: on the real, committed tree, the new entry is shipped and the full d
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
 
+// T249: T237 shipped `readContentIfWorthwhile` (`scripts/ci/run-guard-
+// signing-material.mjs`) — the function that now reads every tracked
+// file's content, subject only to the 5 MiB size cap, with no extension
+// skipped — and registered nothing here. Same two proofs as T215/T228/T232
+// above: the entry can FIRE (fixture-level), and it does not collide with
+// the real, COMMITTED content of either file the capability's own header
+// narration lives in. A separate, manual RED/GREEN proof against the real
+// tracked `scripts/ci/guard-signing-material.mjs` (not these fixtures) is
+// recorded in this task's own report, per the task brief's "watched firing
+// against real committed content" requirement.
+
+test("T249: a live denying sentence about guard-signing-material's content read is flagged once readContentIfWorthwhile is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-signing-material.mjs",
+      content:
+        "export function readContentIfWorthwhile(absolutePath) {\n" +
+        "  return readFileSync(absolutePath, 'utf8');\n" +
+        "}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-example-fixture.mjs",
+      content:
+        "// guard-signing-material.mjs cannot read a keystore file's content for a PEM header.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "scripts/ci/guard-example-fixture.mjs");
+  assert.equal(
+    violations[0].capability,
+    "guard-signing-material reads every tracked file's content, no extension skipped (readContentIfWorthwhile)",
+  );
+});
+
+test("T249: guard-signing-material.mjs's own real committed header (post P9-B fix) does not trip the new entry", () => {
+  // The capability is DECLARED in run-guard-signing-material.mjs, not in
+  // guard-signing-material.mjs (the two are siblings) — shippedFiles must
+  // carry the declaring file's own real content so the capability resolves
+  // as shipped at all; pairing this test's path with the wrong file's
+  // content here would make `findShippedCapabilities` treat the capability
+  // as unshipped and pass vacuously regardless of what appFiles said,
+  // catalogue defect class 5 in this repository's own list. Confirmed by
+  // mutation in this task's report: with the paths correct as below, a
+  // synthetic denyingPhrase matching real text in guard-signing-material.mjs
+  // fails this test; with shippedFiles' content swapped back to the wrong
+  // file (as an earlier draft of this test had it), the same mutation left
+  // it passing.
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-signing-material.mjs",
+      content: readCommittedFile("scripts/ci/run-guard-signing-material.mjs"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-signing-material.mjs",
+      content: readCommittedFile("scripts/ci/guard-signing-material.mjs"),
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "guard-signing-material reads every tracked file's content, no extension skipped (readContentIfWorthwhile)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T249: run-guard-signing-material.mjs's own real committed T237 comment does not trip the new entry", () => {
+  const real = readCommittedFile("scripts/ci/run-guard-signing-material.mjs");
+  const shippedFiles = [{ path: "scripts/ci/run-guard-signing-material.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/run-guard-signing-material.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "guard-signing-material reads every tracked file's content, no extension skipped (readContentIfWorthwhile)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T249: docs/android-apk-release.md's real committed §2.2 (post P9-B fix) does not trip the new entry", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-signing-material.mjs",
+      content: readCommittedFile("scripts/ci/run-guard-signing-material.mjs"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/android-apk-release.md",
+      content: readCommittedFile("docs/android-apk-release.md"),
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "guard-signing-material reads every tracked file's content, no extension skipped (readContentIfWorthwhile)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T249: on the real, committed tree, the new entry is shipped and the full denial scan stays clean", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const capabilityName =
+    "guard-signing-material reads every tracked file's content, no extension skipped (readContentIfWorthwhile)";
+  // Resolve shippedness from the TREE, through the guard's own predicate —
+  // see the note on T215's/T228's/T232's equivalent assertions above.
+  const shippedNames = findShippedCapabilities(shippedFiles).map((c) => c.name);
+  assert.ok(
+    shippedNames.includes(capabilityName),
+    "T249's capability is no longer declared in any shipped file: either" +
+      " run-guard-signing-material.mjs's readContentIfWorthwhile was removed," +
+      " or its methodNames token has stopped matching the real declaration",
+  );
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
 // --- T244: reproduce collision 2 (block-first) against a real file, and
 // pin the fix — this guard's own `stripComments` used to be a BLOCK-first
 // regex pair, which misreads a `/*`-shaped sequence inside a genuine `//`
