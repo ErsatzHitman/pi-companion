@@ -483,6 +483,7 @@ that recomputation has to be domain-specific:
 | T221   | guard-capability-prose states two contradictory member rationales               | phase-8   | ci               | P8-W19 | —                                                                     |
 | T222   | CLOSED (T184)'s disambiguation half is live and false                           | phase-8   | ci               | P8-W21 | T223                                                                  |
 | T223   | The findBuildOrderViolations RegExp member is refactor-fragile                  | phase-8   | ci               | P8-W20 | —                                                                     |
+| T224   | A live "roughly 8 capabilities today" claim against a real 12                   | phase-8   | ci               | P8-W22 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -524,16 +525,17 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**435 tasks** (distinct IDs counted directly from the table above), recounted at the P8-W19
-merge gate — the commit that filed `T222` and `T223`, two rows past the **433** counted at the
-P8-W18 gate and three past the **432** T219 verified at
+**436 tasks** (distinct IDs counted directly from the table above), recounted at the P8-W21
+merge gate — the commit that filed `T224`, one row past the **435** counted at the P8-W19
+gate, three past the **433** counted at the
+P8-W18 gate and four past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 214 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 215 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 52 (+47), P9 unchanged at 6. See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 unchanged at 6. See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 52, P9 6. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 6. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -703,7 +705,9 @@ the task details always agree.
 |        | KEEP; the answer was that NEITHER cited rationale is live.               |       |
 | P8-W20 | T223 (filed by the P8-W19 gate; a real check-cannot-fail shape).         | 1     |
 |        | KEEP; the gate restored the RegExp branch's lost mutation coverage.      |       |
-| P8-W21 | T222 (filed by the P8-W19 gate; runs after T223 owns the member)         | 1     |
+| P8-W21 | T222 (filed by the P8-W19 gate; runs after T223 owns the member).        | 1     |
+|        | KEEP; the gate cut a precedent it cited that does not exist.             |       |
+| P8-W22 | T224 (filed by the P8-W21 gate; pre-existing, not this wave's)           | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |
@@ -7830,6 +7834,41 @@ owns it, and runs after you.
 - [ ] The entry survives the const-arrow refactor of its declaration, proven by a test that FAILS
       before your change
 - [ ] Whatever form the member ends up in, the reason is stated once and is true today
+- [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
+      `node scripts/ci/run-guard-capability-prose.mjs` still exits 0 with the same group count
+
+#### T224 — A live "roughly 8 capabilities ... today" claim against a real count of 12
+
+`labels: phase-8, area: ci` · `wave: P8-W22` · `depends-on: none`
+
+`scripts/ci/guard-capability-prose.mjs`, inside `findCapabilityDenialViolations`'s T184 cache
+comment, says "(roughly 8 capabilities × ~1200 files today, trivial either way)".
+`node scripts/ci/run-guard-capability-prose.mjs` reports **12 capability group(s)** against
+**1219** shipped files. The word "today" makes this a live present-tense claim, not a dated
+snapshot, which is what separates it from the figures around it.
+
+Verified pre-existing at `9218e27` (identical text, one wave earlier), and outside T222's `Owns`
+line by about two hundred lines, which is why it was filed rather than fixed at the P8-W21 gate.
+
+This is materially the condition `CLAUDE.md`'s T217 section names for revisiting the rejected
+generic guard: a NEW count claim found stale in a file the denial scan can actually see, and
+`scripts/ci` is in that scope. **Fix this site by hand** — drop the figures, or date them the way
+T218 dated this same directory's shipped-file counts — and record in the T217 section whether
+the fifth-stale-count condition is now met. **Do not re-propose the generic guard**; T217
+measured 867 hits over 2288 files and found zero live defects, and one more hand-fixed site does
+not overturn that.
+
+Scope note, measured rather than assumed: the `~1200-file list` and `~900 appFiles` figures a few
+lines below sit inside an explicit past-tense narration of the pre-T184 algorithm ("the old
+`evidencePool.some(...)` walk ran..."). They are legitimate history. Only the "today" claim is
+live.
+
+Owns: that comment in `scripts/ci/guard-capability-prose.mjs`, and the `CLAUDE.md` T217
+subsection's re-trigger paragraph. **Comments only.**
+
+- [ ] No live count claim about the capability list survives in that comment
+- [ ] `CLAUDE.md`'s T217 re-trigger condition records what this site was, and says whether it
+      changes the conclusion
 - [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
       `node scripts/ci/run-guard-capability-prose.mjs` still exits 0 with the same group count
 

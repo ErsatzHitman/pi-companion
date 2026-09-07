@@ -167,7 +167,7 @@ const COMPACTION_FILES_READ_FIELD =
 const COMPACTION_FILES_MODIFIED_FIELD =
   /\bfilesModified\??\s*:\s*(?:readonly\s+)?(?:string\[\]|ReadonlyArray<string>)/;
 
-// T183 (HISTORICAL — see CLOSED (T184) and CORRECTED (T222 gate) below):
+// T183 (HISTORICAL — see CLOSED (T184) and CORRECTED (T222) below):
 // from T183 until T223 replaced it with the bare string below, this member
 // was a `RegExp`. At the time it was chosen, that was NOT for T169's
 // disambiguation reason (a bare `findBuildOrderViolations` collides with
@@ -221,7 +221,7 @@ const COMPACTION_FILES_MODIFIED_FIELD =
 // more ~905×1204 walk for this (or any) entry, which is what retired the
 // PERFORMANCE rationale the paragraph above measured.
 //
-// CORRECTED (T222 gate): this block used to go on to say that, even with
+// CORRECTED (T222): this block used to go on to say that, even with
 // the walk above gone, "the member being a `RegExp` still matters for the
 // reasons T169 gave (disambiguating a same-file, same-name collision)".
 // That was never true for this member, and T221 established it directly:
@@ -237,16 +237,25 @@ const COMPACTION_FILES_MODIFIED_FIELD =
 // const-arrow refactor that the old `RegExp` silently failed to match).
 //
 // The 4m3-4m5s -> **0.8s** speedup this block used to cite from the T184
-// change is also not restated here: `run-guard-capability-prose.mjs`'s
+// change is not restated as a LIVE figure: `run-guard-capability-prose.mjs`'s
 // wall-clock time moves with the size of the tracked file corpus every
-// wave, the same reason CLAUDE.md's test-count and shipped-files-count
-// paragraphs stopped pinning a figure — a runtime number here would need
-// the same re-measurement every wave to stay honest. Measured directly on
-// this tree at the T222 gate, three foreground runs of
+// wave. The runs below are therefore DATED rather than left standing as
+// what the runner costs today — the same treatment T218 gave this guard's
+// own shipped-file counts, in this directory. (CLAUDE.md took the other
+// route for its two count claims, the `scripts/ci` test count and the
+// capability ENTRY count, and dropped both figures outright.) Measured
+// directly on this tree at T222, three foreground runs of
 // `node scripts/ci/run-guard-capability-prose.mjs`: 1.257s, 1.228s,
 // 1.347s — order-of-a-second, not order-of-a-minute, which is the only
 // property this comment needs to assert; the exact figure will drift by
 // the next wave and is not worth re-pinning.
+//
+// CORRECTED at the P8-W21 merge gate: the paragraph above cited
+// "CLAUDE.md's test-count and shipped-files-count paragraphs" as its
+// precedent. CLAUDE.md has no shipped-files-count paragraph — `grep -i
+// restate CLAUDE.md` returns the test count, the capability entry count,
+// and the sentence naming those two. And it labelled its own measurement
+// "the T222 gate": T222 is the task, and the task took the measurement.
 const FIND_BUILD_ORDER_VIOLATIONS_MEMBER = "findBuildOrderViolations";
 
 // T215: T211 (`guard-run-guard-wiring.mjs`) added a dedicated walk over the
