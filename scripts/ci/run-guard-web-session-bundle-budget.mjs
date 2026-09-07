@@ -23,13 +23,20 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 
-// `vite` is NOT declared in the root `package.json`; it is a devDependency
-// of `apps/web` only, and this import resolves through npm workspace
-// hoisting into the root `node_modules`. That is the T194 shape (a real
-// dependency no manifest declares), and it holds on CI today only because
-// nothing else in the tree pins a conflicting `vite` that would force a
-// nested install. Recorded at the P9-W1 merge gate and filed as T227;
-// the fix is a declaration, not a change here.
+// CORRECTED (T227): this said `vite` is NOT declared in the root
+// `package.json`, that it is a devDependency of `apps/web` only, and that
+// this import resolved purely through npm workspace hoisting into the
+// root `node_modules` — the T194 shape (a real dependency no manifest
+// declares), recorded at the P9-W1 merge gate as a comment right here.
+// That is no longer true: T227 declared `vite` as a root `devDependency`
+// (at the same `^8.2.2` range `apps/web/package.json` already pinned, with
+// `package-lock.json`'s `packages[""].devDependencies` updated in the same
+// commit so the two manifests stay in sync — see that commit for the
+// read-only lockfile-consistency check that made a hand-edit here safe
+// without an `npm install`), and added
+// `scripts/ci/guard-declared-root-dependencies.mjs` to fail the CLASS (any
+// undeclared third-party import anywhere in `scripts/ci`) rather than only
+// this one instance.
 import { build, loadConfigFromFile, mergeConfig } from "vite";
 
 import {

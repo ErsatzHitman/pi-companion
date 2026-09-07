@@ -1268,6 +1268,32 @@ jobs:
       - name: Fail when a tracked file matches a curated, high-signal secret pattern
         run: node scripts/ci/run-guard-secret-scan.mjs
 
+  # T227: `scripts/ci` runs from the repository root with no workspace
+  # manifest of its own, so a third-party import there has no manifest to
+  # satisfy it except the root `package.json`. An import that resolves only
+  # because npm hoisted some OTHER workspace's copy into the root
+  # `node_modules` (the T194 shape) works silently until a nested or
+  # conflicting install anywhere in the tree stops the hoist from resolving
+  # it — exactly what this guard found: `run-guard-web-session-bundle-
+  # budget.mjs` imported `vite`, declared only in `apps/web/package.json`.
+  # Unconditional and needs no `npm ci`: it reads only the committed
+  # `scripts/ci/*.mjs` source text and the committed root `package.json`,
+  # never the installed `node_modules` tree — see
+  # scripts/ci/guard-declared-root-dependencies.mjs for the checked rule,
+  # its production-files-only scope, and its comment-stripping design.
+  guard-declared-root-dependencies:
+    name: guard / every scripts/ci third-party import is declared in the root package.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on a scripts/ci third-party import the root package.json does not declare
+        run: node scripts/ci/run-guard-declared-root-dependencies.mjs
+
   # T44B1: `guard-secret-scan.mjs` above cannot cover this — its
   # `BINARY_EXTENSIONS` skip list explicitly excludes `.keystore`, `.jks`,
   # `.apk` and `.aab` from ever being scanned, which is correct for THAT
