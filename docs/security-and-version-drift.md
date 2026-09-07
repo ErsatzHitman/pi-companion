@@ -238,10 +238,10 @@ header). A second, live proof was run against a real tracked file:
 
 1. This very document (`docs/security-and-version-drift.md`) was committed
    first, as a genuinely tracked file.
-2. A synthetic, obviously-fake AWS access key id
-   (`AKIAEXAMPLEEXAMPLE99`, a 20-character `AKIA`-prefixed string that
-   matches the shape but is not, and has never been, a real credential) was
-   appended to this file.
+2. A synthetic, obviously-fake AWS access key id — the `AKIA` prefix
+   followed by 16 example characters, deliberately not spelled out as one
+   contiguous run in this sentence so this very paragraph cannot itself
+   re-trip the guard it is describing — was appended to this file.
 3. `node scripts/ci/run-guard-secret-scan.mjs` was run: it exited **1**,
    naming this exact file, the exact line number, and `aws-access-key-id`
    as the matched pattern — WITHOUT printing the matched text itself, per
