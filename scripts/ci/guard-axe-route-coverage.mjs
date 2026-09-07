@@ -118,6 +118,14 @@ export function extractRoutePath(routeFileSource) {
  * codebase's ESM-import convention) extension. `fileExists` and
  * `routeTreeDir` are injected so this stays a pure function under test —
  * see `computeDeclaredRoutes` for the real, `node:fs`-backed caller.
+ *
+ * The returned path always uses forward slashes. `join` emits `\` on
+ * Windows, which made this guard's own violation message quote
+ * `apps\web\src\routes\x.tsx` beside a forward-slash manifest path,
+ * as if the two lived in different trees (found at the P9-W2 merge gate;
+ * CI runs on ubuntu, so only local runs ever saw it). `fileExists` is
+ * still called with the platform-native candidate, which is what
+ * `node:fs` was handed before this change.
  */
 export function resolveRouteFile(routeTreeDir, importPath, fileExists) {
   const withoutExtension = importPath.replace(/\.js$/, "");
@@ -125,7 +133,7 @@ export function resolveRouteFile(routeTreeDir, importPath, fileExists) {
   for (const extension of ROUTE_FILE_EXTENSIONS) {
     const candidate = base + extension;
     if (fileExists(candidate)) {
-      return candidate;
+      return candidate.split("\\").join("/");
     }
   }
   return null;

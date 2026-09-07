@@ -487,6 +487,7 @@ that recomputation has to be domain-specific:
 | T225   | Nothing links the 60 ms coalescer pin to the 20 msg/s bridge budget             | phase-9   | daemon           | P9-W7  | —                                                                     |
 | T226   | Web caps the extension log at 500 lines where Android bounds it to 200          | phase-9   | web              | P9-W8  | —                                                                     |
 | T227   | scripts/ci imports vite, which no root package.json declares                    | phase-9   | ci               | P9-W9  | —                                                                     |
+| T228   | Register the axe route-coverage walk in guard-capability-prose                  | phase-9   | ci               | P9-W10 | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -528,18 +529,19 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**439 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W1
-merge gate — the commit that filed `T225`, `T226` and `T227`, three rows past the **436**
-counted at the P8-W21 gate, four past the **435** counted at the P8-W19
+**440 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W2
+merge gate — the commit that filed `T228`, one row past the **439** counted at the P9-W1
+gate, four rows past the **436**
+counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 218 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 219 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 9 (+3). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 10 (+4). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 9. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 10. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -718,6 +720,8 @@ the task details always agree.
 |        | KEEP-WITH-FIX; the gate cut two false attributions from its own          |       |
 |        | classification of plan.md 14.5, and filed T225-T227.                     |       |
 | P9-W2  | T44A2                                                                    | 1     |
+|        | KEEP-WITH-FIX; the gate moved a typecheck step that could not have       |       |
+|        | passed a clean CI checkout, and filed T228.                              |       |
 | P9-W3  | T44A3                                                                    | 1     |
 | P9-W4  | T44A4                                                                    | 1     |
 | P9-W5  | T44B1                                                                    | 1     |
@@ -725,6 +729,7 @@ the task details always agree.
 | P9-W7  | T225 (filed by the P9-W1 gate; a rationale, not a new assertion).        | 1     |
 | P9-W8  | T226 (filed by the P9-W1 gate; a product decision, not a guard).         | 1     |
 | P9-W9  | T227 (filed by the P9-W1 gate; the T194 shape, one wave's work).         | 1     |
+| P9-W10 | T228 (filed by the P9-W2 gate; the T211/T213 omission, again).           | 1     |
 
 ---
 
@@ -7980,6 +7985,54 @@ and runner. Recorded in place at the P9-W1 merge gate as a comment above the `vi
 - [ ] If the guard is built, it FAILS on a real undeclared import added to a scratch copy
       of a `scripts/ci` file and passes with it removed — proven, not assumed
 - [ ] `node scripts/ci/run-guard-web-session-bundle-budget.mjs` still exits 0
+
+#### T228 — Register the axe route-coverage walk in guard-capability-prose
+
+`labels: phase-9, area: ci` · `wave: P9-W10` · `depends-on: none`
+
+T44A2 (P9-W2) shipped `scripts/ci/guard-axe-route-coverage.mjs`: `computeDeclaredRoutes`
+derives the real route list from `apps/web/src/routes/route-tree.ts`, and
+`findRouteCoverageViolations` reports both directions — a declared route with no entry in
+`apps/web/e2e/fixtures/route-coverage-manifest.ts`, and a manifest entry naming a route that
+no longer exists. That is the same capability CLASS `CLAUDE.md`'s T215 subsection registered
+for T211 and T213: a walk that closes the "check that cannot fail" shape for its own
+curated list. **Nothing was registered in `guard-capability-prose.mjs`'s `CAPABILITIES`,**
+because T44A2's `Owns` line did not cover that file — the exact omission T211 and T213
+each made, which cost T215 a whole later task to close.
+
+`CLAUDE.md`'s instruction is explicit: **add a new capability entry the moment you ship
+one.** No live denying prose exists today (the P9-W2 gate grepped `docs/`, `plan.md`,
+`apps/web/src` and `apps/web/e2e`, and the real runner is at exit 0), so this entry is
+FORWARD protection in T162's shape — the same choice T215 made for both of its entries.
+
+Shape it the way T215 shaped `findStaleAllowlistViolations`, and for the same reasons:
+
+- A single non-group member naming **`findRouteCoverageViolations`** — a real, newly-named,
+  uniquely-declared function. Do NOT use a string literal (a route path, a message
+  fragment): `stripCommentsAndStrings` erases those before any check runs, which is what
+  makes an entry permanently unable to ship.
+- Word the `denyingPhrases` so they are NOT lifted from
+  `guard-axe-route-coverage.mjs`'s own header narration, which legitimately describes the
+  pre-fix state in past tense. T215 hit this exact collision and documented it.
+- **Call the exported `isAppSourcePath` on
+  `scripts/ci/guard-axe-route-coverage.mjs` before trusting any scope claim.** Do not read a
+  list of areas from prose — conflating it with `isShippedSourcePath` is the error T147,
+  T216, T217 and T224 each had to close.
+
+Owns: `scripts/ci/guard-capability-prose.mjs`, `scripts/ci/guard-capability-prose.test.mjs`,
+and one paragraph in `CLAUDE.md`. **Nothing else** — in particular, not
+`guard-axe-route-coverage.mjs` itself.
+
+- [ ] The entry is proven able to FIRE: a denying sentence in that entry's own wording,
+      appended to a real in-scope tracked file, makes
+      `node scripts/ci/run-guard-capability-prose.mjs` exit 1 naming this capability;
+      restoring the file from a scratchpad copy (never `git checkout --`) returns it to
+      exit 0 with `git status --porcelain` empty
+- [ ] The phrases do not collide with `guard-axe-route-coverage.mjs`'s own header, proven
+      by a test that feeds that file's real committed content through
+      `findCapabilityDenialViolations` and asserts zero matches
+- [ ] `node --test scripts/ci/*.test.mjs` is all-pass and the full-tree scan stays at
+      exit 0
 
 #### T32A1 — Build the Android connect form
 

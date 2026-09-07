@@ -513,18 +513,6 @@ jobs:
       - name: Typecheck apps/web
         run: npm run typecheck --workspace=@picompanion/web
 
-      # T44A2: apps/web/e2e/tsconfig.json existed before this task and was
-      # never run through tsc anywhere in this repository -- the workspace
-      # "typecheck" script above only covers apps/web/tsconfig.json's own
-      # "src/**/*" include, and Playwright's own transform of .spec.ts files
-      # (below) strips types rather than checking them. Without this step,
-      # accessibility.spec.ts's `Record<SweptRoutePath, RouteSweep>` sweep
-      # table -- the compile-time half of keeping every route's axe check in
-      # sync with fixtures/route-coverage-manifest.ts, see that spec's own
-      # doc comment -- would never actually be checked in CI.
-      - name: Typecheck apps/web/e2e
-        run: npx tsc -p apps/web/e2e/tsconfig.json --noEmit
-
       - name: Run apps/web unit and component tests
         run: npm run test --workspace=@picompanion/web
 
@@ -573,6 +561,32 @@ jobs:
       # served origin for every spec.
       - name: Build @picompanion/server (the E2E fixture's daemon)
         run: npm run build --workspace=@picompanion/server
+
+      # T44A2: apps/web/e2e/tsconfig.json existed before this task and was
+      # never run through tsc anywhere in this repository -- the workspace
+      # "typecheck" script only covers apps/web/tsconfig.json's own
+      # "src/**/*" include, and Playwright's own transform of .spec.ts files
+      # strips types rather than checking them. Without this step,
+      # accessibility.spec.ts's `Record<SweptRoutePath, RouteSweep>` sweep
+      # table -- the compile-time half of keeping every route's axe check in
+      # sync with fixtures/route-coverage-manifest.ts, see that spec's own
+      # doc comment -- would never actually be checked in CI.
+      #
+      # THIS STEP'S POSITION IS LOAD-BEARING: it must stay AFTER the
+      # `Build @picompanion/server` step above. `e2e/fixtures/daemon.ts`
+      # imports `@picompanion/server` as a value and a type, and that
+      # package exposes types only through `dist/server/server/exports.d.ts`,
+      # which is gitignored -- `tsc --traceResolution` shows that build
+      # output is the ONLY resolution path. Placed before the build (where
+      # P9-W2 first landed it), this step exits 2 with `TS2307` on every
+      # clean checkout while passing on any workstation carrying a stale
+      # `dist/`, and its failure would stop the job before `Run Playwright
+      # E2E` -- the axe sweep this task exists to add -- ever ran. That is
+      # exactly the T199 trap the comment above `Install Playwright
+      # browsers` narrates, for the same package. Moved here at the P9-W2
+      # merge gate.
+      - name: Typecheck apps/web/e2e
+        run: npx tsc -p apps/web/e2e/tsconfig.json --noEmit
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

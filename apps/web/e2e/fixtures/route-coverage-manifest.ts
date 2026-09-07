@@ -74,14 +74,20 @@ export const ROUTE_COVERAGE = [
       "throws notFound() instead of ever rendering a component. This harness's Playwright " +
       "run serves the production bundle (fixtures/preview-server.ts runs " +
       "scripts/build-daemon-web-ui.mjs, the same production build every packaging path " +
-      "uses), so this route is not reachable to sweep here at all, in any build this suite " +
-      "ever runs against.",
+      "uses), so there is no lab UI here to sweep in any build this suite ever runs against: " +
+      "the URL resolves, but what it renders is the not-found surface, which this spec's own " +
+      "404 case already axe-checks. The lab's real UI is covered by " +
+      "apps/web/src/dev/component-lab.test.tsx's jest-axe case -- jsdom, so not a substitute " +
+      "for a real-browser sweep, and not claimed as one. (CORRECTED at the P9-W2 merge gate: " +
+      "this said the route is 'not reachable to sweep here at all', which a reader can " +
+      "falsify by opening the URL.)",
   },
   {
     routePath: "/dev/recipe-lab",
     swept: false,
     reason:
       "T25B dev-only recipe lab (dev/recipe-lab-route.tsx): identical production-bundle " +
-      "exclusion as /dev/component-lab above, for the same reason.",
+      "exclusion as /dev/component-lab above, for the same reason, with the same jsdom-only " +
+      "jest-axe coverage in apps/web/src/dev/recipe-lab.test.tsx.",
   },
 ] as const satisfies readonly RouteCoverageEntry[];
