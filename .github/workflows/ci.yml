@@ -738,6 +738,27 @@ jobs:
         run: npm run build --workspace=@picompanion/android
 
   # --- Targeted server tests on Linux and Windows -------------------------
+  #
+  # T233 investigated wiring `@picompanion/server`'s own `"test"` script
+  # (`test:unit && test:integration`) and kept `test:integration` unwired,
+  # for a specific, source-confirmed reason, not "it is heavy":
+  # `test:integration` runs `src/server/daemon-e2e/{models,live-preferences}
+  # .e2e.test.ts` and `src/server/agent/model-catalog.e2e.test.ts`, and its
+  # Claude-provider cases run unconditionally (not gated behind a `which
+  # claude` check the way the Codex/OpenCode cases are). Every one of them
+  # calls `createDaemonTestContext`, which calls
+  # `test-utils/claude-auth.ts`'s `seedClaudeAuth`, which throws immediately
+  # if neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` is set —
+  # `grep -n "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .github/workflows/
+  # *.yml` finds neither configured as a secret anywhere in this repository
+  # today. Provisioning either is a real cost/security decision (a paid,
+  # live-network-calling credential handed to every push and PR run) that
+  # T233's `Owns:` line (this file and `docs/ci-matrix.md`) does not carry
+  # authority to make unilaterally, so this stays local-only rather than
+  # being wired against a secret this task would have to invent. Ports are
+  # not the blocker here — `test-utils/paseo-daemon.ts` binds
+  # `127.0.0.1:0` (OS-assigned), never a fixed port. See
+  # `docs/ci-matrix.md` §4 for the fuller writeup.
 
   server-tests-ubuntu:
     name: server-tests (ubuntu-latest)
@@ -776,13 +797,29 @@ jobs:
   # runs `test:unit`, NOT the package's own `"test"` script (`test:unit &&
   # test:local`): `test:local` (`tests/run-all.ts`) spawns real, isolated
   # daemon subprocesses per test file with its own concurrency pool and `zx`
-  # dependency — a heavier, differently-shaped integration suite this task
-  # did not verify is CI-safe (process/port lifecycle, wall time), so it
-  # stays a disclosed gap rather than being wired sight-unseen. `cli`
-  # resolves `@picompanion/{protocol,client,server}` through their built
-  # `dist/` (package.json `exports`), so the same dependency chain the
-  # `typecheck` job's "Build backend dependency chain" step already builds
-  # is built here first.
+  # dependency. `cli` resolves `@picompanion/{protocol,client,server}`
+  # through their built `dist/` (package.json `exports`), so the same
+  # dependency chain the `typecheck` job's "Build backend dependency chain"
+  # step already builds is built here first.
+  #
+  # T233 read `test:local` rather than estimating it and kept it unwired.
+  # Unlike `test:integration` above, no credential is missing: `grep -rn
+  # "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" packages/cli/tests` finds
+  # nothing, and every port in the suite is OS-assigned
+  # (`tests/helpers/network.ts`'s `getAvailablePort()`,
+  # `tests/setup.ts`/`tests/helpers/test-daemon.ts`'s `getRandomPort()` —
+  # ranges 10000-60000 and 20000-30000, 6767/6768 never appear). The actual
+  # gap is wall time and shared-runner behavior: `run-all.ts` runs `npm run
+  # build:server` first, then 39 numbered test files at concurrency 4 by
+  # default, spawning a fresh isolated daemon per file — its own
+  # `KNOWN_HEAVY_TESTS` names five files as the long pole (05-agent-run,
+  # 06-agent-send, 11-agent-wait, 13-permit-allow-deny, 14-worktree). T233
+  # could not produce a trustworthy measured wall-time number for this
+  # suite (no access to trigger a real GitHub Actions run, and a full local
+  # run was judged unsafe to attempt blind on the machine available to this
+  # task — see `docs/ci-matrix.md` §4). Wiring on an estimate is exactly
+  # what this repository's CLAUDE.md says not to do; this stays local-only
+  # until a real measured run exists.
   cli-tests:
     name: cli-tests
     needs: changes

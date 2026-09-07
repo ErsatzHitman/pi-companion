@@ -206,6 +206,39 @@ run test:unit --workspace=@picompanion/server` — **not** the package's own
   already unwired at the wave base and stays that way here — filed as a
   disclosed gap, not this task's to close (its `Owns:` line is CI workflow
   files, not a new integration-suite verification).
+  **T233 closed the investigation, not the gap: `test:integration` stays
+  unwired for a specific reason, read from source, not run.** It executes
+  `src/server/daemon-e2e/models.e2e.test.ts`,
+  `src/server/daemon-e2e/live-preferences.e2e.test.ts` and
+  `src/server/agent/model-catalog.e2e.test.ts`. The Codex/OpenCode cases in
+  each file are gated behind `test.runIf(isBinaryInstalled("codex"/
+  "opencode"))` and would simply skip on a runner without those CLIs, but
+  the Claude-provider cases are **not** gated the same way — every one
+  calls `createDaemonTestContext`, which calls
+  `test-utils/claude-auth.ts`'s `seedClaudeAuth`, and that function's own
+  body throws `"Claude credentials not found in environment..."` the
+  instant neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` is set.
+  `grep -rn "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN"
+  .github/workflows/*.yml` returns nothing: neither secret is configured
+  anywhere in this repository today, so this suite would fail its very
+  first assertion on every run if wired as-is. Provisioning either secret
+  is a real cost/security decision — a paid, live-network credential
+  exposed to every push and PR — that T233's `Owns:` line (`ci.yml` and
+  this file) does not carry authority to make. Ports are not the blocker:
+  `test-utils/paseo-daemon.ts`'s `prepareTestDaemonConfig` sets
+  `listen: "127.0.0.1:0"`, an OS-assigned ephemeral port, every time — read
+  directly, never run, per this task's hard constraint on the two daemon
+  ports. This task never executed `test:integration` or any file inside
+  it, consistent with "never run the full server suite." A process/port
+  runner for exactly this lane already exists —
+  `scripts/e2e-sandbox/run-e2e-lane.ts` (T101, `docs/server-e2e-sandbox.md`)
+  wires `npm run test:integration:sandboxed`, bounds it with
+  `terminateWithTreeKill`, and re-rolls off 6767/6768 if either is ever
+  allocated — but T101's own doc says it "was not permitted to exercise it
+  for real" and its 8-minute timeout is "a starting estimate, not a
+  measured budget." That runner solves the process/port half of wiring
+  this suite; it does nothing about the credential gap above, which is the
+  actual reason `test:integration` cannot be wired into `ci.yml` today.
 - `protocol-client-tests` (ubuntu-latest only): `@picompanion/client` and
   `@picompanion/highlight`, alongside protocol.
 - **`relay-tests` (T44A4, new).** `@picompanion/relay` had a real `"test":
@@ -241,11 +274,43 @@ passed (173)`, ~75s (after the same protocol→relay→highlight→client→serv
 test:local`, and `test:local` (`tests/run-all.ts`) is a materially
   different, heavier suite** — it spawns real, isolated daemon subprocesses
   per test file (its own header: "Runs all test phases as separate
-  subprocesses with a bounded worker pool") using `zx`, with its own
-  process/port lifecycle this task did not verify is CI-safe (wall time,
-  concurrency, cleanup on a shared runner). `cli-tests` deliberately runs
-  only `test:unit`. Wiring `test:local` into CI is a distinct, disclosed
-  gap for a future task, not silently folded into this one.
+  subprocesses with a bounded worker pool") using `zx`. `cli-tests`
+  deliberately runs only `test:unit`.
+  **T233 investigated `test:local` rather than re-stating this as an open
+  question, and kept it unwired.** Unlike `test:integration` above, no
+  credential is missing here: `grep -rn
+  "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" packages/cli/tests` finds
+  zero hits, and none of the 39 numbered test files under
+  `packages/cli/tests/` (`^\d{2}-.*\.test\.ts$`, counted directly —
+  `KNOWN_HEAVY_TESTS` in `run-all.ts` had cited only five of them) invokes
+  a real provider completion the way `agent-lifecycle.test.ts` under
+  `tests/e2e/` would; the ones checked (help/flag parsing, daemon-not-
+  running handling, `provider models` against the static catalog, `daemon
+  pair`/`restart`/`stop` lifecycle, `schedule create` registration) do not
+  need one. Ports are OS-assigned throughout, read directly from source:
+  `tests/helpers/network.ts`'s `getAvailablePort()` binds `127.0.0.1:0`
+  and releases it; `tests/setup.ts`'s `getRandomPort()` returns
+  `10000 + random*50000`; `tests/helpers/test-daemon.ts`'s own
+  `getRandomPort()` returns `20000 + random*10000`. None of the three ever
+  produces 6767 or 6768, and every daemon-spawning test in this suite goes
+  through one of them — confirmed by reading, not by running the suite,
+  per this task's hard constraint. What remains genuinely unmeasured is
+  wall time and shared-runner behavior: `run-all.ts` runs `npm run
+  build:server` before any test file starts, then schedules 39 files
+  across a concurrency-4 worker pool, and its own `KNOWN_HEAVY_TESTS`
+  comment names five files (05-agent-run, 06-agent-send, 11-agent-wait,
+  13-permit-allow-deny, 14-worktree) as slow enough to need deliberate
+  shard placement. This task has no way to trigger a real GitHub Actions
+  run to time it there, and judged a full local run on the machine
+  available to it unsafe to attempt blind — a single-file measurement
+  attempt outside the documented `npm run test:local` entry point hit
+  environment-specific friction (a `zx` shell-quoting failure tied to how
+  this Windows workstation resolves `bash`) before any daemon actually
+  started, which is disclosed here as what was tried, not as a claim about
+  the suite's own portability. **Wiring `test:local` into CI is still a
+  distinct, disclosed gap for a future task with access to measure it on a
+  real runner — not silently folded into this one, and not wired on the
+  estimate above.**
 - **Allowlisted, not a gap:** `@picompanion/bridge` (`packages/pi-bridge`)
   declares no `"test"` script and has zero test files anywhere under
   `packages/pi-bridge/` — there is no command any CI job could invoke.
