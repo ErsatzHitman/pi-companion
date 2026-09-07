@@ -443,3 +443,16 @@ drift site can never satisfy this condition — if one of them goes stale, fix i
 no guard was ever going to see it. (CORRECTED at the P8-W17 merge gate: this listed
 `packages/*/src` as in scope and omitted `packaging/**`. Both were checked against the real
 exported function, not inferred.)
+
+**T224: the re-trigger condition above has now fired, once, by hand.** The site was
+`findCapabilityDenialViolations`'s own T184 cache comment in
+`scripts/ci/guard-capability-prose.mjs` — inside `isAppSourcePath`'s scope — claiming
+"roughly 8 capabilities × ~1200 files today". A merge gate reading the comment noticed
+"today", ran the guard, and found both numbers already wrong (measure it yourself; do not
+copy a number from this paragraph — see the standing rule above this section). It was
+found by a human-in-the-loop reading a comment, not by any matcher, which is exactly the
+kind of hit this section already said would not overturn the rejection. **This does not
+change the conclusion**: fix the one site by hand (drop the figures rather than date them,
+per the standing rule two sections up), and do not build the generic guard on the strength
+of this single hand-found hit. The condition to actually revisit would be a **matcher**
+independently surfacing a live count claim in-scope — not another hand-found one.

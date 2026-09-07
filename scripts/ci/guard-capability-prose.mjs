@@ -1156,9 +1156,10 @@ export function findCapabilityDenialViolations({ shippedFiles, appFiles }) {
   // call). Since this pass no longer runs once per appFile, the cache no
   // longer needs to survive an O(appFiles) multiplier to pay for itself —
   // it now backs a walk over `shippedFiles` alone, run once per capability
-  // (roughly 8 capabilities × ~1200 files today, trivial either way), but
-  // keeping it means a shipped file already cleaned for one capability is
-  // never re-cleaned for the next.
+  // group — a number of groups times a number of shipped files, both of
+  // which grow every wave and are trivial at any size either has reached
+  // so far — but keeping it means a shipped file already cleaned for one
+  // capability is never re-cleaned for the next.
   const cleanedSourceCache = new WeakMap();
   function cleanedSource(file) {
     let cleaned = cleanedSourceCache.get(file);
