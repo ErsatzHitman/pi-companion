@@ -513,6 +513,18 @@ jobs:
       - name: Typecheck apps/web
         run: npm run typecheck --workspace=@picompanion/web
 
+      # T44A2: apps/web/e2e/tsconfig.json existed before this task and was
+      # never run through tsc anywhere in this repository -- the workspace
+      # "typecheck" script above only covers apps/web/tsconfig.json's own
+      # "src/**/*" include, and Playwright's own transform of .spec.ts files
+      # (below) strips types rather than checking them. Without this step,
+      # accessibility.spec.ts's `Record<SweptRoutePath, RouteSweep>` sweep
+      # table -- the compile-time half of keeping every route's axe check in
+      # sync with fixtures/route-coverage-manifest.ts, see that spec's own
+      # doc comment -- would never actually be checked in CI.
+      - name: Typecheck apps/web/e2e
+        run: npx tsc -p apps/web/e2e/tsconfig.json --noEmit
+
       - name: Run apps/web unit and component tests
         run: npm run test --workspace=@picompanion/web
 
@@ -966,6 +978,34 @@ jobs:
 
       - name: Fail when a workflow job's EAS profile resolves to a package no flow it runs can launch
         run: node scripts/ci/run-guard-app-id-package-pairing.mjs
+
+  # T44A2 (plan.md §10.5: "Web axe gates pass across every route").
+  # Unconditional, alongside guard-legacy-paths et al. above — derives the
+  # real route list from apps/web/src/routes/route-tree.ts itself (its own
+  # imports, each route file's own path: literal) and fails, in both
+  # directions, if apps/web/e2e/fixtures/route-coverage-manifest.ts's
+  # ROUTE_COVERAGE ever names a different set of routes: a route added to
+  # route-tree.ts with nothing said about it here, or a manifest entry
+  # naming a route that no longer exists. Every swept:false entry must also
+  # carry a written reason. See scripts/ci/guard-axe-route-coverage.mjs's
+  # own header for the full mechanism, and that file's doc comment for the
+  # separate, independent TypeScript-level check
+  # (apps/web/e2e/accessibility.spec.ts's own `Record<SweptRoutePath, ...>`
+  # sweep table) that keeps the manifest and the real axe checks in sync
+  # with EACH OTHER -- this guard only ties the manifest to the real route
+  # tree.
+  guard-axe-route-coverage:
+    name: guard / every route is accounted for in the axe sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail when a declared route has no accessibility-sweep manifest entry, or vice versa
+        run: node scripts/ci/run-guard-axe-route-coverage.mjs
 
   # T126: unconditional guard, alongside guard-legacy-paths et al. above —
   # `vite build` reports a `node:` builtin reaching apps/web's bundle graph
