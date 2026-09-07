@@ -23,8 +23,9 @@
 //    (T45A3) drives the real `FrameClock` + `TimelineCoalescer` +
 //    `Transcript` stack at 100 simulated updates/second under fake timers
 //    and asserts the p95 bound directly; it runs as part of `apps/web`'s
-//    ordinary vitest suite, which `web-tests` in `.github/workflows/ci.yml`
-//    already runs on every push. No new gate was added for this bullet.
+//    ordinary vitest suite, which `.github/workflows/ci.yml`'s `web-tests`
+//    job runs whenever the `web` (or `full`) path filter matches. No new
+//    gate was added for this bullet.
 //
 // 3. **The same budget at 200 ms on a Pixel 8 API 35 reference emulator.**
 //    NOT MEASURABLE HERE — this requires a real Android emulator (or
@@ -64,32 +65,59 @@
 //    task owns CI files only.
 //
 // 6. **No bridge update rate above 20 messages/second per agent.**
-//    MEASURABLE STATICALLY IN CI TODAY, structurally true but NOT
-//    DIRECTLY GATED by any dedicated assertion today — a real gap, filed
-//    rather than silently left implicit or worked around with a new
-//    `packages/server/src` test this task cannot own.
+//    MEASURABLE STATICALLY IN CI TODAY, and ALREADY PINNED — by exact
+//    equality, which is stricter than any bound this classification
+//    could have proposed.
 //    `packages/server/src/server/agent/agent-stream-coalescer.ts`'s
 //    `AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS = 60` coalesces same-agent
 //    stream deltas into at most one flush per 60 ms window
-//    (`1000 / 60 ≈ 16.67` flushes/sec, under the 20/sec budget by
-//    construction), and `agent-stream-coalescer.test.ts` /
-//    `agent-manager-stream-coalescing.test.ts` cover the coalescer's
-//    correctness — but neither test, nor anything else this task found,
-//    asserts the derived rate bound itself (e.g. "windowMs must stay
-//    >= 50"), so a future change to that one constant could silently
-//    raise the real rate above budget with nothing failing. Owner: whoever
-//    next touches `packages/server/src/server/agent/agent-stream-coalescer.ts`
-//    (out of this task's `CI workflow files` + `scripts/ci` scope) — the
-//    seam is a one-line assertion in that file's own test:
-//    `assert.ok(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS >= 50)`.
+//    (`1000 / 60 ≈ 16.67` flushes/sec, inside the 20/sec budget), and
+//    `agent-stream-coalescer.test.ts:130` asserts
+//    `expect(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS).toBe(60)` — an
+//    equality pin, so ANY change to that constant (not just one that
+//    raises the rate) fails `@picompanion/server`'s ordinary suite, which
+//    `.github/workflows/ci.yml`'s `server-tests` jobs run whenever the
+//    `backend` (or `full`) path filter matches.
+//
+//    What is genuinely missing is a RATIONALE, not an assertion: nothing
+//    at that assertion connects 60 ms to §14.5's 20 msg/s, and it sits
+//    inside a test titled about something else (that same file, line 127:
+//    "uses constructor windowMs instead of a hard-coded value"), so a
+//    future reader may relax the pin without knowing a
+//    published budget depends on it. Owner: whoever next touches that
+//    file (out of this task's `CI workflow files` + `scripts/ci` scope);
+//    the seam is a comment plus a test title, not a new assertion.
+//    (CORRECTED at the P9-W1 merge gate: this said the budget was "NOT
+//    DIRECTLY GATED by any dedicated assertion today", that a change
+//    "could silently raise the real rate above budget with nothing
+//    failing", and named `assert.ok(AGENT_STREAM_COALESCE_DEFAULT_
+//    WINDOW_MS >= 50)` as the fix. The exact-equality pin above already
+//    ships in the file this classification searched, and is stricter, so
+//    that recommendation would have added a weaker duplicate and closed
+//    a hole that was never open.)
 //
 // 7. **Terminal 4 MiB soft / 8 MiB hard backpressure.** MEASURABLE
-//    STATICALLY IN CI TODAY, and ALREADY MEASURED AND GATED.
-//    `packages/server/src/terminal/terminal-session-controller.test.ts`
-//    and `packages/server/src/server/websocket/encrypted-relay-socket.test.ts`
-//    exercise the real soft/hard backpressure thresholds defined in
-//    `terminal-session-controller.ts` and `physical-socket.ts`; both run
-//    in `@picompanion/server`'s ordinary test suite.
+//    STATICALLY IN CI TODAY, and ALREADY MEASURED AND GATED — in the two
+//    files that actually declare the pair, each pinned by its own
+//    colocated test:
+//    `packages/frontend-core/src/terminal/terminal-output-buffer.ts`
+//    (`TERMINAL_OUTPUT_SOFT_BUFFER_BYTES = 4 * 1024 * 1024`,
+//    `TERMINAL_OUTPUT_HARD_BUFFER_BYTES = 8 * 1024 * 1024`, asserted by
+//    value in `terminal-output-buffer.test.ts`), and
+//    `apps/android/src/features/terminal/terminal-output-buffer.ts`
+//    (`TERMINAL_OUTPUT_BUFFER_SOFT_BYTES` /
+//    `TERMINAL_OUTPUT_BUFFER_HARD_BYTES`, the same two values, with a
+//    flood test asserting `bufferedBytes` never exceeds the hard cap).
+//    Both run in their workspace's ordinary vitest suite.
+//    (CORRECTED at the P9-W1 merge gate: this attributed the thresholds
+//    to `terminal-session-controller.ts` and `physical-socket.ts`.
+//    Neither declares them — the controller imports a 4 MiB
+//    `MAX_CLIENT_BUFFERED_BYTES` from `terminal-restore.ts`, and
+//    `physical-socket.ts`'s `MAX_PHYSICAL_SOCKET_BUFFERED_BYTES` is
+//    **64 MiB**, an OOM backstop its own comment distinguishes from a
+//    frame-size violation. The verdict was right and the citation was
+//    wrong, which is the worse half: a reader checking it would find
+//    64 MiB and conclude the 8 MiB budget is unenforced.)
 //
 // 8. **Reconnect restores cached content immediately and starts
 //    authoritative catch-up within one second of socket readiness.**
@@ -99,15 +127,23 @@
 //    real resume-controller stack; it runs in `apps/web`'s ordinary vitest
 //    suite.
 //
-// Net: of §14.5's eight budgets, six are already measured and gated
-// (five pre-existing, plus this task's new #1), one (#3, the Android
+// Net: seven of the eight items above are already measured and gated
+// (six pre-existing, plus this task's new #1), and one (#3, the Android
 // emulator paint budget) genuinely cannot be measured in this environment
-// and is disclosed rather than faked, and one (#6, the bridge rate) is
-// measurable but currently ungated — filed above with the exact one-line
-// fix and its owner, per this task's `Do not fill in files owned by a
-// different task` scope boundary. #5 (extension log) is measured but the
-// two platforms' real behavior disagrees with each other and is disclosed
-// rather than silently reconciled.
+// and is disclosed rather than faked. #5 (extension log) is measured, but
+// the two platforms' real behavior disagrees with each other and with the
+// letter of that bullet, and is disclosed rather than silently reconciled.
+//
+// The eight items above are NOT one-to-one with §14.5's eight bullets,
+// and the totals matching is a coincidence: §14.5's frame-clock-mechanism
+// bullet is design rationale rather than a threshold and has no item
+// here, while its single paint bullet is split into #2 (web, measurable
+// in CI) and #3 (Android emulator, not measurable here) because the two
+// halves have opposite answers. Read §14.5 itself for the plan's list;
+// this one is organised by what CI can check.
+// (CORRECTED at the P9-W1 merge gate: this said "of §14.5's eight
+// budgets" — implying a bullet-for-bullet mapping that does not hold —
+// and counted the bridge rate as ungated, which #6 above now corrects.)
 //
 // ## Why this needs a real Vite manifest, not a directory-size heuristic
 //
@@ -125,11 +161,17 @@
 // an exemption this guard has to apply by hand.
 //
 // A directory-size or whole-`dist`-size check cannot tell any of this
-// apart: it would count the terminal/editor chunks (measured at this
-// guard's calibration commit: xterm alone is 331 KB raw / 83 KB gzip,
-// `@picompanion/highlight`'s syntax-highlight data is 708 KB raw / 234 KB
-// gzip) as part of "the session route's" cost, which is exactly the
-// double-count §14.5 says NOT to make. So this guard reads Vite's own
+// apart: it would count the terminal/editor chunks as part of "the
+// session route's" cost. Re-measured at the P9-W1 merge gate from the
+// real built chunks with `zlib.gzipSync(level: 9)`, the same level
+// `run-guard-web-session-bundle-budget.mjs` compresses with, on the
+// emitted bytes minus the trailing `sourceMappingURL` comment (which the
+// guard's own sourcemap-less build never emits): `xterm-*.js` is 331,215
+// bytes raw -> 82,138 gzip, and `@picompanion/highlight`'s
+// `file-syntax-highlight-*.js` is 707,982 raw -> 230,900 gzip — either one
+// alone is a large fraction of the whole 512,000-byte budget. Counting
+// them here would be exactly the double-count §14.5 says NOT to make.
+// So this guard reads Vite's own
 // `.vite/manifest.json` (`build.manifest: true`) — the same module graph
 // Vite used to decide chunking — and walks only STATIC `imports` edges
 // from two roots: the entry (`index.html`) and the session screen's own

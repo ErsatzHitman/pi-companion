@@ -334,9 +334,25 @@ test("MUTATION: a route accidentally gaining STATIC imports of the lazy chunks i
   );
   assert.ok(files.has("assets/file-syntax-highlight-Cptb-E_u.js"));
 
-  // Real measured per-file gzip sizes from this task's report (not
-  // invented): summing them with xterm's and the highlight data's real
-  // gzip sizes now added pushes the total well past the budget.
+  // Per-file gzip sizes from T44A1's report at its calibration build (not
+  // invented): summing them with xterm's and the highlight data's gzip
+  // sizes now added pushes the total well past the budget. What this test
+  // proves is the SUM crossing the budget, so the exact bytes below are
+  // fixture data, not a live measurement of the current tree — do not
+  // cite them as one. Re-measured at the P9-W1 merge gate with
+  // `zlib.gzipSync(level: 9)` — the level
+  // `run-guard-web-session-bundle-budget.mjs` uses — over the built chunks
+  // minus their trailing `sourceMappingURL` comment, which reproduces two
+  // of the three lazy-chunk pairs below EXACTLY (707,982 -> 230,900 and
+  // 27,115 -> 9,314) and every one of the eleven initial-closure figures.
+  // The xterm pair is the one entry that does not reproduce: the real
+  // chunk is 331,215 raw -> 82,138 gzip, and 83,083 is unreachable at any
+  // zlib level (5 -> 83,397, 6 -> 82,660, 9 -> 82,138), so its recorded
+  // provenance cannot be right. Kept as-is deliberately: the number only
+  // has to push the sum past the budget, which it does either way, and
+  // silently swapping in a figure from a different measurement session
+  // would make the whole table's provenance ambiguous instead of one
+  // entry's.
   const REAL_GZIP_BYTES = {
     "assets/index-C2PM7DAC.js": 100_701,
     "assets/preload-helper-BFFo02Z4.js": 95_299,

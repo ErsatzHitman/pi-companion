@@ -484,6 +484,9 @@ that recomputation has to be domain-specific:
 | T222   | CLOSED (T184)'s disambiguation half is live and false                           | phase-8   | ci               | P8-W21 | T223                                                                  |
 | T223   | The findBuildOrderViolations RegExp member is refactor-fragile                  | phase-8   | ci               | P8-W20 | —                                                                     |
 | T224   | A live "roughly 8 capabilities today" claim against a real 12                   | phase-8   | ci               | P8-W22 | —                                                                     |
+| T225   | Nothing links the 60 ms coalescer pin to the 20 msg/s bridge budget             | phase-9   | daemon           | P9-W7  | —                                                                     |
+| T226   | Web caps the extension log at 500 lines where Android bounds it to 200          | phase-9   | web              | P9-W8  | —                                                                     |
+| T227   | scripts/ci imports vite, which no root package.json declares                    | phase-9   | ci               | P9-W9  | —                                                                     |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -525,17 +528,18 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**436 tasks** (distinct IDs counted directly from the table above), recounted at the P8-W21
-merge gate — the commit that filed `T224`, one row past the **435** counted at the P8-W19
-gate, three past the **433** counted at the
-P8-W18 gate and four past the **432** T219 verified at
+**439 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W1
+merge gate — the commit that filed `T225`, `T226` and `T227`, three rows past the **436**
+counted at the P8-W21 gate, four past the **435** counted at the P8-W19
+gate, six past the **433** counted at the
+P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 215 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 218 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 unchanged at 6. See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 9 (+3). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 6. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 9. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -711,11 +715,16 @@ the task details always agree.
 |        | KEEP; the gate cut a re-trigger firing that could not have happened.     |       |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
+|        | KEEP-WITH-FIX; the gate cut two false attributions from its own          |       |
+|        | classification of plan.md 14.5, and filed T225-T227.                     |       |
 | P9-W2  | T44A2                                                                    | 1     |
 | P9-W3  | T44A3                                                                    | 1     |
 | P9-W4  | T44A4                                                                    | 1     |
 | P9-W5  | T44B1                                                                    | 1     |
 | P9-W6  | T44B2                                                                    | 1     |
+| P9-W7  | T225 (filed by the P9-W1 gate; a rationale, not a new assertion).        | 1     |
+| P9-W8  | T226 (filed by the P9-W1 gate; a product decision, not a guard).         | 1     |
+| P9-W9  | T227 (filed by the P9-W1 gate; the T194 shape, one wave's work).         | 1     |
 
 ---
 
@@ -7872,6 +7881,105 @@ subsection's re-trigger paragraph. **Comments only.**
       changes the conclusion
 - [ ] `node --test scripts/ci/*.test.mjs` is all-pass and
       `node scripts/ci/run-guard-capability-prose.mjs` still exits 0 with the same group count
+
+#### T225 — Nothing links the 60 ms coalescer pin to the 20 msg/s bridge budget
+
+`labels: phase-9, area: daemon` · `wave: P9-W7` · `depends-on: none`
+
+plan.md §14.5 budgets "no bridge update rate above 20 messages per second per agent".
+`packages/server/src/server/agent/agent-stream-coalescer.ts`'s
+`AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS = 60` is what delivers it
+(`1000 / 60 ≈ 16.67` flushes/sec), and it is already pinned by exact equality at
+`agent-stream-coalescer.test.ts:130` — `expect(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS)
+.toBe(60)` — so the constant cannot move without the suite going red.
+
+**The assertion is not the gap; its silence is.** Nothing at that line, or at the constant's
+own declaration, says a published performance budget depends on the value, and the assertion
+sits inside a test titled "uses constructor windowMs instead of a hard-coded value" — a
+title about parameterisation, not about a rate ceiling. A future reader relaxing the pin (or
+rewriting that test around its stated subject) has nothing in front of them to say what
+else breaks.
+
+**Do NOT add `assert.ok(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS >= 50)`.** The P9-W1 gate
+cut exactly that recommendation from `scripts/ci/guard-web-session-bundle-budget.mjs`'s
+header: it is strictly weaker than the equality pin that already ships, and adding it would
+read as closing a hole that was never open.
+
+Owns: `packages/server/src/server/agent/agent-stream-coalescer.ts` and its test's title and
+comments. **Comments and one test title only** — no behaviour change, no new assertion,
+no change to the 60 ms value.
+
+- [ ] The constant's declaration names §14.5's 20 msg/s budget and shows the arithmetic
+- [ ] The test carrying the equality pin has a title that says the pin guards that budget,
+      or the pin moves to a test whose title does
+- [ ] `npm run test:unit --workspace=@picompanion/server` is all-pass, and the pinned value
+      is still exactly 60
+
+#### T226 — Web caps the extension log at 500 lines where Android bounds it to 200
+
+`labels: phase-9, area: web` · `wave: P9-W8` · `depends-on: none`
+
+plan.md §14.5: "extension log: virtualize above 200 lines." The two platforms answer it
+differently, and neither matches the letter of the bullet:
+
+- Android bounds a `log` element to the bridge contract's own default tail of exactly 200
+  lines (`apps/android/src/features/extensions/renderers/renderers-model.test.ts`, "bounds
+  the log to the bridge contract's default tail of 200 lines").
+- Web's `apps/web/src/features/extensions/renderers/log.tsx` caps to
+  `DEFAULT_LOG_TAIL = 500`, and its own doc comment says this is deliberately "not full list
+  virtualization" because the payload arrives pre-bounded on the wire (plan.md §11.4).
+
+So the same budget bullet is met by two different mechanisms at two different thresholds,
+and "cap the payload" is not "virtualize the render". Filed by the P9-W1 gate, which found
+it disclosed (correctly) in `scripts/ci/guard-web-session-bundle-budget.mjs`'s
+classification but owned by nobody.
+
+**This is a product decision, not a guard.** Decide which number is right and why — and
+whether the budget means the payload cap or the render window — then make the two
+platforms and §14.5 agree, in writing. Do not "fix" it by changing one constant to match
+the other with no recorded rationale, and do not build a CI check that pins two numbers
+whose disagreement nobody has resolved.
+
+Owns: `apps/web/src/features/extensions/renderers/log.tsx`, the Android renderer's log
+bound, and whichever of plan.md §14.5 / §11.4 records the decision.
+
+- [ ] One threshold, and one mechanism, is stated as the intended behaviour, with the
+      reason recorded where a reader of the budget will find it
+- [ ] Both platforms' tests assert that threshold by name, not by a literal repeated in
+      two places
+- [ ] `scripts/ci/guard-web-session-bundle-budget.mjs`'s classification of this bullet is
+      updated to say it is resolved, not disclosed
+
+#### T227 — scripts/ci imports vite, which no root package.json declares
+
+`labels: phase-9, area: ci` · `wave: P9-W9` · `depends-on: none`
+
+`scripts/ci/run-guard-web-session-bundle-budget.mjs` imports `build`,
+`loadConfigFromFile` and `mergeConfig` from `vite`. `vite` is declared only in
+`apps/web/package.json`; the root `package.json` does not list it. The import resolves
+today purely because npm hoists the workspace's copy into the root `node_modules`.
+
+**This is the T194 shape** — a real dependency no manifest declares, which works until an
+install nests it (a second, conflicting `vite` range anywhere in the workspace is enough).
+T194 was found only after the repository gained a remote and a clean `npm ci` checkout
+disagreed with every local one; this is the same class, caught before it fires.
+
+Two candidate fixes, and the second is the durable one:
+
+1. Declare `vite` as a root `devDependency` at the version `apps/web` already pins.
+2. Guard the class, not the instance: every third-party import in `scripts/ci` must be
+   declared by the ROOT `package.json` (node builtins and relative paths excluded), so the
+   next runner that reaches for a workspace-only package fails at the guard rather than on
+   a future clean install. `scripts/ci` runs from the repository root with no workspace of
+   its own, which is exactly why its imports have no other manifest to satisfy them.
+
+Owns: the root `package.json` dependency list and, if built, the new guard plus its test
+and runner. Recorded in place at the P9-W1 merge gate as a comment above the `vite` import.
+
+- [ ] `vite` is resolvable from the repository root by declaration, not by hoisting
+- [ ] If the guard is built, it FAILS on a real undeclared import added to a scratch copy
+      of a `scripts/ci` file and passes with it removed — proven, not assumed
+- [ ] `node scripts/ci/run-guard-web-session-bundle-budget.mjs` still exits 0
 
 #### T32A1 — Build the Android connect form
 

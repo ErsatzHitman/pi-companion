@@ -746,8 +746,13 @@ jobs:
       # what makes the "excluding lazy ... chunks" clause a checked fact
       # rather than a hand-applied exemption, and this task's report for the
       # measured number and the real RED/GREEN proof.
+      # Deliberately UNCONDITIONAL, unlike the two steps above: this guard
+      # runs its own `vite build` from `apps/web/vite.config.ts` and never
+      # reads `scripts/build-daemon-web-ui.mjs`, so gating it on that file's
+      # existence (as it was written at P9-W1, copied from the packaging
+      # steps) would make a budget regression invisible the day that
+      # unrelated script moved. `npm ci` above is its only prerequisite.
       - name: Guard / web session route stays under the §14.5 gzip budget
-        if: ${{ hashFiles('scripts/build-daemon-web-ui.mjs') != '' }}
         run: node scripts/ci/run-guard-web-session-bundle-budget.mjs
 
       - name: Skip (build-daemon-web-ui.mjs not present yet, see T18)

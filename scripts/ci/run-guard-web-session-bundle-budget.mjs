@@ -23,6 +23,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 
+// `vite` is NOT declared in the root `package.json`; it is a devDependency
+// of `apps/web` only, and this import resolves through npm workspace
+// hoisting into the root `node_modules`. That is the T194 shape (a real
+// dependency no manifest declares), and it holds on CI today only because
+// nothing else in the tree pins a conflicting `vite` that would force a
+// nested install. Recorded at the P9-W1 merge gate and filed as T227;
+// the fix is a declaration, not a change here.
 import { build, loadConfigFromFile, mergeConfig } from "vite";
 
 import {
@@ -124,7 +131,7 @@ async function main() {
       console.error(
         "guard-web-session-bundle-budget: FAILED — plan.md §14.5's web session route budget " +
           "is exceeded. Measure before changing the budget; do not silence this by raising the " +
-          "limit without written rationale (CLAUDE.md, plan.md §14.5).",
+          "limit without written rationale (plan.md §14.5's closing sentence).",
       );
       process.exitCode = 1;
     }
