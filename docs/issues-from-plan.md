@@ -508,6 +508,8 @@ that recomputation has to be domain-specific:
 | T247   | Fail an Android release whose tag disagrees with app.config.ts version          | phase-9   | ci               | P9-W28 | T235                                                                  |
 | T248   | Apply T237's measurement to guard-secret-scan's binary skip list                | phase-9   | tooling          | P9-W29 | T237                                                                  |
 | T249   | Register readContentIfWorthwhile in CAPABILITIES                                | phase-9   | tooling          | P9-W30 | T237, T232                                                            |
+| T250   | Make test:integration wire-able or retire its dead auth helpers                 | phase-9   | server           | P9-W31 | T233                                                                  |
+| T251   | Extend guard-declared-workspace-deps to packages/relay                          | phase-9   | tooling          | P9-W32 | T230, T227                                                            |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -549,8 +551,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**460 tasks** (distinct IDs counted directly from the table above), recounted at the P9-B
-merge gate — the commit that filed `T248` and `T249`, two rows past the **458** recounted at
+**462 tasks** (distinct IDs counted directly from the table above), recounted at the P9-C
+merge gate — the commit that filed `T250` and `T251`, two rows past the **460** recounted at the
+P9-B merge gate — the commit that filed `T248` and `T249`, two rows past the **458** recounted at
 the P9-A merge gate, which filed `T246` and `T247`, two past the **456** filed at
 the P9-W9 gate with `T244`, three past the **455** counted just after the
 P9-W8 gate, two past the **454** filed at that
@@ -836,6 +839,10 @@ the task details always agree.
 |        | file over — and this one still skips 24 tracked files).                  |       |
 | P9-W30 | T249 (filed by the P9-B gate; T232's own omission class,                 | 1     |
 |        | committed by the wave that closed it for someone else).                  |       |
+| P9-W31 | T250 (filed by the P9-C gate; the suite fails, but not for the           | 1     |
+|        | reason T233 committed — and the remedy it named would not help).         |       |
+| P9-W32 | T251 (filed by the P9-C gate; the gap T230 named as the reason           | 1     |
+|        | a relay→protocol import cannot be added safely).                         |       |
 
 ---
 
@@ -8807,6 +8814,85 @@ Owns: `scripts/ci/guard-capability-prose.mjs` and its test. **Do not restate any
 - [ ] The entry is watched firing, against real committed content, before it is trusted
 - [ ] The phrases are checked de-wrapped against the guard's own historical narration
 - [ ] `run-guard-capability-prose.mjs` exits 0 on the real tree afterward, tree clean
+
+#### T250 — Make test:integration wire-able or retire its dead auth helpers
+
+`labels: phase-9, area: server` · `wave: P9-W31` · `depends-on: T233`
+
+T233 kept `@picompanion/server`'s `test:integration` unwired and committed a reason, in
+`.github/workflows/ci.yml` and `docs/ci-matrix.md`, that the P9-C merge gate disproved twice
+over: by call graph (`createDaemonTestContext` never reaches `seedClaudeAuth`) and by execution
+(with both credential variables unset, `model-catalog.e2e.test.ts` fails with
+`AssertionError: expected 'Unknown provider: claude' to be null`, not a credentials error). The
+gate corrected the prose; it did not find the real answer, because that is a server
+investigation and no `Owns` line in the wave covered it.
+
+Two things fall out of the same measurement, and both belong to whoever picks this up:
+
+1. **Why does the fake-client test daemon answer `Unknown provider: claude`?** The error is
+   raised in `packages/server/src/server/session/provider/provider-catalog-session.ts`
+   when no provider snapshot entry exists for the requested provider, yet the daemon is built
+   from `createTestAgentClients()` fakes whose `fetchCatalog` returns a hard-coded Claude
+   catalog of exactly the variants the test asserts. Either the snapshot is never populated
+   from those fakes, the test daemon's provider list is empty by construction, or the e2e
+   suite predates a catalog-session refactor. Measure which, by reading the path from
+   `createTestPaseoDaemon` to the snapshot — then either fix the suite so it passes against
+   the fakes, or record why it cannot and what it would need. Only after that is "wire it"
+   a decision anyone can make.
+2. **`seedClaudeAuth` (`test-utils/claude-auth.ts`) and its sole caller
+   `useTempClaudeConfigDir` (`test-utils/claude-config.ts`) are unreachable.** Zero call
+   sites; kept alive only by the `test-utils/index.ts` barrel re-export, which is why
+   `run-orphan-modules.mjs` exits 0 — a barrel re-export counts as an importer, a dead-code
+   shape that guard is structurally blind to, and precisely what led T233 to believe the
+   helper was on the path. Wire them into a real test or delete them. If the guard's
+   blindness is worth closing, file it separately; do not widen this task into it.
+
+Run only the targeted files, one at a time, foreground, with a timeout — never the whole
+`test:integration` script. The test daemon binds `127.0.0.1:0`; still confirm nothing on this
+path can touch 6767 or 6768 before running anything.
+
+Owns: `packages/server/src/server/test-utils/claude-auth.ts`,
+`packages/server/src/server/test-utils/claude-config.ts`,
+`packages/server/src/server/test-utils/index.ts`, the three `*.e2e.test.ts` files
+`test:integration` runs and whatever under `packages/server/src/server/session/provider/`
+the measurement names, plus the T233 paragraphs in `.github/workflows/ci.yml` and
+`docs/ci-matrix.md` (to record the answer, not to re-litigate the correction).
+
+- [ ] The `Unknown provider` cause is measured by reading the daemon-to-snapshot path, not guessed
+- [ ] The suite either passes against the fakes locally, or the doc says exactly what it needs
+- [ ] `seedClaudeAuth`/`useTempClaudeConfigDir` are either called by a real test or deleted
+- [ ] The `ci.yml` and `docs/ci-matrix.md` paragraphs record the measured answer
+
+#### T251 — Extend guard-declared-workspace-deps to packages/relay
+
+`labels: phase-9, area: tooling` · `wave: P9-W32` · `depends-on: T230, T227`
+
+T230 decided the relay must keep its own `CURRENT_RELAY_VERSION` rather than import
+`CURRENT_RELAY_PROTOCOL_VERSION` from `@picompanion/protocol`, and one of its stated reasons
+was that `scripts/ci/guard-declared-workspace-deps.mjs` walks only `apps/android/src` and
+`apps/web/src` (its own `srcDir` entries), so an undeclared `packages/relay` →
+`packages/protocol` import would resolve through the workspace symlink locally, pass every
+guard, and only fail on a fresh `npm ci` checkout — the exact shape T194 shipped and T227
+closed for the root manifest. Nothing owns closing that gap for `packages/*`.
+
+Extend the guard's walk to `packages/relay/src` at minimum, and measure whether every
+`packages/*/src` can be admitted at once: some packages legitimately import siblings they
+declare (`server` → `protocol`), and the guard must read each package's own `package.json`
+`dependencies` rather than the root's. Prove it fires — add an undeclared cross-workspace
+import to a scratch copy of a relay file, watch the runner exit 1 naming the package,
+restore from the scratchpad copy (never `git checkout --`), exit 0, `git status --porcelain`
+empty. Register the widened capability in `guard-capability-prose.mjs`'s `CAPABILITIES` in
+the same commit, and grep for prose asserting the guard "does not scan `packages/relay`"
+before landing (T230's own doc says it today, and this task falsifies that sentence).
+
+Owns: `scripts/ci/guard-declared-workspace-deps.mjs`, its runner and test,
+`scripts/ci/guard-capability-prose.mjs` (the one new entry), and the sentence in
+`docs/security-and-version-drift.md` that names the gap.
+
+- [ ] `packages/relay/src` is walked, and the decision on the rest of `packages/*/src` is recorded
+- [ ] A watched firing on an undeclared relay import, at CLI level, restored from a scratchpad copy
+- [ ] The `CAPABILITIES` entry is proven to fire before it is trusted
+- [ ] T230's "does not scan `packages/relay`" sentence is corrected in the same commit
 
 #### T32A1 — Build the Android connect form
 

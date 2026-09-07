@@ -150,10 +150,15 @@ These hold everywhere in the codebase, not just for a single task:
 locked, rmdir` failure mode directly (Windows holds a file handle open slightly longer
   under CPU contention from concurrently-running sibling files, so the delete races the
   still-exiting process). `src/services/github-service.test.ts` spawns a real `git`
-  subprocess per fixture invocation across its suite. All four share the identical trait
-  that already justified every one of `test:unit:serial`'s existing members: a real spawned
-  subprocess and/or a temp directory, contending with every other file racing in the same
-  parallel lane for CPU and (on Windows) file-handle release. The fix moved those four files
+  subprocess per fixture invocation across its suite. All four share the trait that justified
+  most of `test:unit:serial`'s existing members — contention-sensitive, OS-level work: a real
+  spawned subprocess and/or a temp directory, contending with every other file racing in the
+  same parallel lane for CPU and (on Windows) file-handle release. (CORRECTED at the P9-C
+  merge gate: this said "the identical trait that already justified every one of" the
+  existing members. `docs/server-e2e-sandbox.md` gives `exports.test.ts` a different cause —
+  a large, disk-bound module load — and its two hub WebSocket files a real loopback transport
+  on top of the harness's subprocess. A fifth contender that times out for one of those
+  reasons is still a candidate, judged by the same measure-the-source rule.) The fix moved those four files
   from `test:unit:parallel` into `test:unit:serial` in `packages/server/package.json`; it did
   not touch `testTimeout` in `packages/server/vitest.config.ts`, because raising it would have
   hidden the contention rather than removed it — the same four files could still exceed a

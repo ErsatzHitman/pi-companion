@@ -404,8 +404,13 @@ Newly established by T236 (not measured by the earlier disclosure above):
   top-level `"."` export but its `exports["./*"]` wildcard resolves every deep
   import to `"./dist/*.js"`. A consumer that resolves these packages by their
   package specifier (which is the repository invariant — see this repository's
-  `CLAUDE.md`) gets `dist/` output or nothing; there is no `src/`-resolving
-  fallback in any of the four `exports` maps.
+  `CLAUDE.md`) gets `dist/` output or nothing. (CORRECTED at the P9-C merge gate:
+  this said "there is no `src/`-resolving fallback in any of the four `exports`
+  maps". Three of them declare one — `design-tokens`, `highlight` and
+  `frontend-core` each carry `exports["."].source = "./src/index.ts"` — but
+  `apps/android/metro.config.js` sets neither `unstable_conditionNames` nor
+  `resolverMainFields`, so Metro never resolves through the `source` condition
+  and the conclusion holds for this app.)
 - `git check-ignore -v` against a real, existing path in each of the four
   `dist/` directories (not the `.gitignore` file's text) confirms all four are
   ignored by the same rule: `.gitignore:2:dist/` matches

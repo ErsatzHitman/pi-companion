@@ -58,9 +58,11 @@ task). All 264 files still passed with it present; nothing here depended on
 it. Re-run on a clean `main` if a byte-exact reproduction is needed.
 
 **CORRECTED (T240, P9-W22 gate):** the "seven" below is now eleven. T240 measured
-that four more files share the identical cause this section describes — real
+that four more files share one of the causes this section describes — real
 subprocess spawns and/or temp-directory teardown racing under `--fileParallelism`
-— and moved them from `test:unit:parallel` to `test:unit:serial`:
+(the section also lists a disk-bound module load and a real WebSocket transport;
+the P9-C gate corrected "the identical cause" to "one of") — and moved them from
+`test:unit:parallel` to `test:unit:serial`:
 `src/server/hub/daemon-executions.test.ts` and `src/server/hub/hub-cli-contract.test.ts`
 (both drive the same `HubRelationshipHarness` as this section's own
 `relationship-controller.test.ts` / `execution-session.websocket.test.ts` rows),

@@ -746,16 +746,27 @@ jobs:
   # .e2e.test.ts` and `src/server/agent/model-catalog.e2e.test.ts`, and its
   # Claude-provider cases run unconditionally (not gated behind a `which
   # claude` check the way the Codex/OpenCode cases are). Every one of them
-  # calls `createDaemonTestContext`, which calls
-  # `test-utils/claude-auth.ts`'s `seedClaudeAuth`, which throws immediately
-  # if neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` is set —
-  # `grep -n "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN" .github/workflows/
-  # *.yml` finds neither configured as a secret anywhere in this repository
-  # today. Provisioning either is a real cost/security decision (a paid,
-  # live-network-calling credential handed to every push and PR run) that
-  # T233's `Owns:` line (this file and `docs/ci-matrix.md`) does not carry
-  # authority to make unilaterally, so this stays local-only rather than
-  # being wired against a secret this task would have to invent. Ports are
+  # calls `createDaemonTestContext`.
+  #
+  # CORRECTED at the P9-C merge gate. This said `createDaemonTestContext`
+  # "calls `test-utils/claude-auth.ts`'s `seedClaudeAuth`, which throws
+  # immediately if neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY`
+  # is set", and that provisioning one of those as a repository secret was
+  # the blocker. Both halves were false, and the second would have handed a
+  # paid credential to every push and PR run for no benefit.
+  # `daemon-test-context.ts` is 55 lines and calls only
+  # `createTestPaseoDaemon` and `new DaemonClient`; `seedClaudeAuth`'s sole
+  # caller is `useTempClaudeConfigDir`, which itself has zero callers.
+  # Executed at the gate with both variables unset,
+  #   cd packages/server && npx vitest run \
+  #     src/server/agent/model-catalog.e2e.test.ts
+  # fails with `AssertionError: expected 'Unknown provider: claude' to be
+  # null`, raised by `provider-catalog-session.ts` because the fake-client
+  # test daemon carries no provider snapshot entry — not with a credentials
+  # error. That daemon is built from `createTestAgentClients()` fakes whose
+  # catalog is hard-coded, so a live credential is consulted nowhere on the
+  # path. The decision to keep this unwired stands (the suite fails as-is);
+  # the diagnosis and the remedy did not, and T250 owns the real one. Ports are
   # not the blocker here — `test-utils/paseo-daemon.ts` binds
   # `127.0.0.1:0` (OS-assigned), never a fixed port. See
   # `docs/ci-matrix.md` §4 for the fuller writeup.

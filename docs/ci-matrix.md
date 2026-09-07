@@ -214,31 +214,38 @@ run test:unit --workspace=@picompanion/server` — **not** the package's own
   each file are gated behind `test.runIf(isBinaryInstalled("codex"/
   "opencode"))` and would simply skip on a runner without those CLIs, but
   the Claude-provider cases are **not** gated the same way — every one
-  calls `createDaemonTestContext`, which calls
-  `test-utils/claude-auth.ts`'s `seedClaudeAuth`, and that function's own
-  body throws `"Claude credentials not found in environment..."` the
-  instant neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` is set.
-  `grep -rn "ANTHROPIC_API_KEY\|CLAUDE_CODE_OAUTH_TOKEN"
-  .github/workflows/*.yml` returns nothing: neither secret is configured
-  anywhere in this repository today, so this suite would fail its very
-  first assertion on every run if wired as-is. Provisioning either secret
-  is a real cost/security decision — a paid, live-network credential
-  exposed to every push and PR — that T233's `Owns:` line (`ci.yml` and
-  this file) does not carry authority to make. Ports are not the blocker:
+  calls `createDaemonTestContext`. **CORRECTED at the P9-C merge gate.** This
+  said `createDaemonTestContext` "calls `test-utils/claude-auth.ts`'s
+  `seedClaudeAuth`, and that function's own body throws `"Claude credentials
+  not found in environment..."`" without `CLAUDE_CODE_OAUTH_TOKEN` or
+  `ANTHROPIC_API_KEY`, and that provisioning one as a repository secret was
+  the blocker. Neither is true. `daemon-test-context.ts` calls only
+  `createTestPaseoDaemon` and `new DaemonClient`; `seedClaudeAuth`'s one
+  caller, `useTempClaudeConfigDir`, has no callers of its own. Executed at
+  the gate with both variables unset, `npx vitest run
+  src/server/agent/model-catalog.e2e.test.ts` fails with
+  `AssertionError: expected 'Unknown provider: claude' to be null`, raised by
+  `provider-catalog-session.ts` because the fake-client test daemon has no
+  provider snapshot entry — a credential is consulted nowhere on that path,
+  and the daemon's `createTestAgentClients()` catalog is hard-coded. The
+  decision survives (the suite fails as-is); the remedy did not, and T250
+  owns finding the real one. Ports are not the blocker:
   `test-utils/paseo-daemon.ts`'s `prepareTestDaemonConfig` sets
   `listen: "127.0.0.1:0"`, an OS-assigned ephemeral port, every time — read
   directly, never run, per this task's hard constraint on the two daemon
   ports. This task never executed `test:integration` or any file inside
   it, consistent with "never run the full server suite." A process/port
   runner for exactly this lane already exists —
-  `scripts/e2e-sandbox/run-e2e-lane.ts` (T101, `docs/server-e2e-sandbox.md`)
+  `packages/server/scripts/e2e-sandbox/run-e2e-lane.ts` (T101,
+  `docs/server-e2e-sandbox.md`)
   wires `npm run test:integration:sandboxed`, bounds it with
   `terminateWithTreeKill`, and re-rolls off 6767/6768 if either is ever
   allocated — but T101's own doc says it "was not permitted to exercise it
   for real" and its 8-minute timeout is "a starting estimate, not a
   measured budget." That runner solves the process/port half of wiring
-  this suite; it does nothing about the credential gap above, which is the
-  actual reason `test:integration` cannot be wired into `ci.yml` today.
+  this suite; the other half — why the fake-client daemon answers
+  `Unknown provider` — is the open question the correction above hands to
+  T250.
 - `protocol-client-tests` (ubuntu-latest only): `@picompanion/client` and
   `@picompanion/highlight`, alongside protocol.
 - **`relay-tests` (T44A4, new).** `@picompanion/relay` had a real `"test":
