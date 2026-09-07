@@ -57,6 +57,24 @@ carried one file outside this task's scope,
 task). All 264 files still passed with it present; nothing here depended on
 it. Re-run on a clean `main` if a byte-exact reproduction is needed.
 
+**CORRECTED (T240, P9-W22 gate):** the "seven" below is now eleven. T240 measured
+that four more files share the identical cause this section describes — real
+subprocess spawns and/or temp-directory teardown racing under `--fileParallelism`
+— and moved them from `test:unit:parallel` to `test:unit:serial`:
+`src/server/hub/daemon-executions.test.ts` and `src/server/hub/hub-cli-contract.test.ts`
+(both drive the same `HubRelationshipHarness` as this section's own
+`relationship-controller.test.ts` / `execution-session.websocket.test.ts` rows),
+`src/server/terminal-activity-route.test.ts` (a real per-test child process plus
+`rmSync` of its temp `cwd`), and `src/services/github-service.test.ts` (a real `git`
+subprocess per fixture invocation). This was measured, not guessed — see
+`CLAUDE.md`'s "Working locally" section for the full account and the file-list
+evidence — and confirmed by three consecutive `npm run test:unit
+--workspace=@picompanion/server` runs on one commit all exiting 0. The `<7 files
+above>` / `<the same 7 files>` command text and the "251 (of 258 non-e2e)" /
+"264 files" counts below are T101's own dated measurement and are left as historical
+record; they no longer match the current `packages/server/package.json`, which is
+the source of truth for the current split.
+
 ## The two (really seven) Windows parallelism flakes
 
 Across separate full runs of the pre-split `test:unit`, these files were each

@@ -129,6 +129,42 @@ These hold everywhere in the codebase, not just for a single task:
 - Commit incrementally so partial progress is never lost, and use commit messages
   prefixed with the task ID you are implementing (e.g. `T12B: ...`).
 
+- **"`npm run test:unit` is all-pass" means the LOCAL command, run on your own machine,
+  not the CI job of the same name (T240).** Run the exact command
+  (`npm run test:unit --workspace=@picompanion/server`, a single workspace's own unit-test
+  entry point — not "the full test suite" the bullet above forbids, which means the whole
+  monorepo across every package) three times in a row on one commit and read all three exit
+  codes yourself; do not infer the third from the first two. T240 exists because three agents
+  in one wave (P9-W7) ran that exact command on the same commit and got three different
+  answers — pass, one failure, then four failures — with **zero assertion failures** in any
+  of them, which is the signature of contention, not a real defect. The cause, measured by
+  reading the contending files' own source rather than by guessing: `HubRelationshipHarness`
+  (`src/server/hub/test-utils/relationship-harness.ts`) spawns a real `git init` subprocess,
+  a real child daemon process, and a `tsx`-loaded CLI subprocess per test, and two of its four
+  callers (`src/server/hub/relationship-controller.test.ts`,
+  `src/server/hub/execution-session.websocket.test.ts`) were already isolated in
+  `test:unit:serial` for exactly that shape — its other two callers
+  (`src/server/hub/daemon-executions.test.ts`, `src/server/hub/hub-cli-contract.test.ts`) were
+  not. `src/server/terminal-activity-route.test.ts` spawns a real child process per test under
+  a temp directory it then `rmSync`s recursively, matching the `EBUSY: resource busy or
+locked, rmdir` failure mode directly (Windows holds a file handle open slightly longer
+  under CPU contention from concurrently-running sibling files, so the delete races the
+  still-exiting process). `src/services/github-service.test.ts` spawns a real `git`
+  subprocess per fixture invocation across its suite. All four share the identical trait
+  that already justified every one of `test:unit:serial`'s existing members: a real spawned
+  subprocess and/or a temp directory, contending with every other file racing in the same
+  parallel lane for CPU and (on Windows) file-handle release. The fix moved those four files
+  from `test:unit:parallel` into `test:unit:serial` in `packages/server/package.json`; it did
+  not touch `testTimeout` in `packages/server/vitest.config.ts`, because raising it would have
+  hidden the contention rather than removed it — the same four files could still exceed a
+  higher timeout under heavier local load, and a passing run would prove nothing about the
+  next one. Moving them removes the contention itself: each now runs alone rather than
+  racing the others for the same machine resources. If a future wave sees the local command
+  disagree with itself again, measure the new contender's source for the same shape (a real
+  spawned process, a real temp directory) before adding a fifth file here or touching the
+  timeout — and if a timeout is ever raised instead, that choice must be justified in this
+  paragraph, not merely committed.
+
 ## Wave-end and merge-gate verification MUST run against committed content (T93)
 
 An orphaned uncommitted fix has twice concealed the true state of `main`: at P5-W22 it
