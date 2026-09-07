@@ -3392,3 +3392,116 @@ test("T228: on the real, committed tree, all five new entries are shipped and th
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
+
+// T232: T44A4's `guard-workspace-test-coverage.mjs` shipped the third
+// instance of the T211/T213 "stale allowlist walk" capability class. Same
+// two proofs as T215/T228 above: the entry can FIRE (fixture-level), and it
+// does not collide with the real, COMMITTED content of the file that ships
+// it. A separate, manual RED/GREEN proof against the real tracked file (not
+// these fixtures) is recorded in this task's own report.
+
+test("T232: a live denying sentence about guard-workspace-test-coverage is flagged once the stale walk is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-workspace-test-coverage.mjs",
+      content:
+        "export function findWorkspaceTestCoverageViolations({ workspaces, allowlist }) {\n" +
+        "  for (const [workspace, allowlistReason] of Object.entries(allowlist)) {}\n" +
+        "}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-example-fixture.mjs",
+      content: "// guard-workspace-test-coverage cannot detect a stale allowlist entry.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "scripts/ci/guard-example-fixture.mjs");
+  assert.equal(
+    violations[0].capability,
+    "guard-workspace-test-coverage detects stale allowlist entries (stale-missing-workspace/stale-tested)",
+  );
+});
+
+test("T232: the entry's methodNames token is not satisfied by guard-run-guard-wiring.mjs's OWN stale walk (workspace vs runner destructuring)", () => {
+  const shippedFiles = [
+    {
+      // The T211 shape, not the T232 shape: destructures `runner`, not
+      // `workspace`. Proves this entry's RegExp is anchored to the real
+      // variable names guard-workspace-test-coverage.mjs uses, not merely
+      // to "some Object.entries(allowlist) walk exists somewhere".
+      path: "scripts/ci/guard-run-guard-wiring.mjs",
+      content:
+        "export function findUnwiredRunGuardViolations({ allowlist }) {\n" +
+        "  for (const [runner, allowlistReason] of Object.entries(allowlist)) {}\n" +
+        "}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-example-fixture.mjs",
+      content: "// guard-workspace-test-coverage cannot detect a stale allowlist entry.\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T232: guard-workspace-test-coverage.mjs's own real committed header does not trip its new entry", () => {
+  const real = readCommittedFile("scripts/ci/guard-workspace-test-coverage.mjs");
+  const shippedFiles = [{ path: "scripts/ci/guard-workspace-test-coverage.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-workspace-test-coverage.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "guard-workspace-test-coverage detects stale allowlist entries (stale-missing-workspace/stale-tested)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T232: guard-workspace-test-coverage.test.mjs's own real committed test titles do not trip the new entry", () => {
+  const real = readCommittedFile("scripts/ci/guard-workspace-test-coverage.test.mjs");
+  const shippedFiles = [{ path: "scripts/ci/guard-workspace-test-coverage.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-workspace-test-coverage.test.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "guard-workspace-test-coverage detects stale allowlist entries (stale-missing-workspace/stale-tested)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T232: on the real, committed tree, the new entry is shipped and the full denial scan stays clean", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const capabilityName =
+    "guard-workspace-test-coverage detects stale allowlist entries (stale-missing-workspace/stale-tested)";
+  // Resolve shippedness from the TREE, through the guard's own predicate — see
+  // the note on T215's/T228's equivalent assertions above.
+  const shippedNames = findShippedCapabilities(shippedFiles).map((c) => c.name);
+  assert.ok(
+    shippedNames.includes(capabilityName),
+    "T232's capability is no longer declared in any shipped file: either the" +
+      " guard it protects was removed, or its methodNames token has stopped" +
+      " matching the real declaration",
+  );
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});

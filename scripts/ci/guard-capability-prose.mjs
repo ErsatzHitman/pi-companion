@@ -284,6 +284,33 @@ const FIND_BUILD_ORDER_VIOLATIONS_MEMBER = "findBuildOrderViolations";
 const STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER =
   /for\s*\(\s*const\s*\[\s*runner\s*,\s*allowlistReason\s*\]\s*of\s*Object\.entries\(\s*allowlist\s*\)\s*\)/;
 
+// T232: T44A4 (`scripts/ci/guard-workspace-test-coverage.mjs`) shipped the
+// same T211/T213-shaped stale-allowlist walk a third time — a dedicated
+// pass over `ALLOWLISTED_UNTESTED_WORKSPACES`'s own keys, independent of
+// the main per-workspace loop, reporting `kind: "stale-missing-workspace"`
+// (the allowlisted package no longer resolves from a workspace glob) or
+// `kind: "stale-tested"` (a real workflow now genuinely tests it). Like
+// T211 and unlike T213, this walk was folded into the pre-existing
+// `findWorkspaceTestCoverageViolations` rather than given its own function
+// name, so — for the identical reason `STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER`
+// above is a `RegExp` and not a bare string — a `methodNames` token here
+// cannot be the two violation `kind` string literals (erased by
+// `stripCommentsAndStrings` before any check runs) or the enclosing
+// function's name (that name also covers the unrelated "untested workspace"
+// half of this guard, so its mere existence proves nothing about the stale
+// walk specifically). This `RegExp` instead anchors to the real, structural
+// CODE shape the walk added — `for (const [workspace, allowlistReason] of
+// Object.entries(allowlist))` — which survives comment-and-string stripping
+// because it is neither. Measured directly across every tracked
+// `packages/*/src`, `apps/*/src`, and `scripts/ci` file (test files
+// excluded, per `isShippedSourcePath`): exactly one match,
+// `guard-workspace-test-coverage.mjs`'s own loop — its sibling
+// `run-guard-workspace-test-coverage.mjs` CLI entry point only destructures
+// `{ kind, workspace, allowlistReason }` from each already-produced
+// violation object, never re-declaring this walk.
+const STALE_WORKSPACE_TEST_COVERAGE_ALLOWLIST_WALK_MEMBER =
+  /for\s*\(\s*const\s*\[\s*workspace\s*,\s*allowlistReason\s*\]\s*of\s*Object\.entries\(\s*allowlist\s*\)\s*\)/;
+
 /** @type {Capability[]} */
 export const CAPABILITIES = [
   {
@@ -1030,6 +1057,42 @@ export const CAPABILITIES = [
     denyingPhrases: [
       /nothing checks that (?:every )?scripts\/ci import is declared (?:by|in) the root package\.json/i,
       /an undeclared third-party import in scripts\/ci (?:would|could) keep resolving by hoisting with nothing to (?:catch|flag) it/i,
+    ],
+  },
+  {
+    // T232: T44A4's `guard-workspace-test-coverage.mjs` shipped the third
+    // instance of the T211/T213 "stale allowlist walk" capability class —
+    // see `STALE_WORKSPACE_TEST_COVERAGE_ALLOWLIST_WALK_MEMBER`'s own doc
+    // comment above for why the member is a `RegExp` anchored to the real
+    // code shape rather than a bare name, the same reasoning T215's
+    // `STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER` entry gives.
+    //
+    // FORWARD guard, T162's/T215's shape: no site anywhere in
+    // `apps/web/src`, `apps/android/src`, `scripts/ci`, `packaging/**`, or
+    // `docs/**` (outside the excluded ledger) denies this capability today
+    // — grepped for "stale"/"cannot"/"unreachable"/"undetected"/"unnoticed"
+    // across `guard-workspace-test-coverage.mjs`,
+    // `guard-workspace-test-coverage.test.mjs`, and
+    // `run-guard-workspace-test-coverage.mjs` and found nothing resembling
+    // the phrases below: the file's own header narrates what the walk DOES
+    // ("an allowlist entry is checked for staleness by walking the
+    // allowlist's own keys directly ... why folding either check into the
+    // main loop would make it unreachable"), never that it fails to. So
+    // there is no live sentence to prove this entry against; it is proven
+    // instead against a scratch copy of a real tracked file and pinned at
+    // the fixture level below — see this task's own report for the exact
+    // file, sentence, and both exit codes.
+    //
+    // Not a group: this single member is already unique across every
+    // tracked shipped file (measured directly, see that constant's own
+    // comment), so there is no bare-name collision for an AND-group to
+    // guard against, the same as T215's two entries above.
+    name: "guard-workspace-test-coverage detects stale allowlist entries (stale-missing-workspace/stale-tested)",
+    methodNames: [STALE_WORKSPACE_TEST_COVERAGE_ALLOWLIST_WALK_MEMBER],
+    denyingPhrases: [
+      /guard-workspace-test-coverage(?:\.mjs)? (?:cannot|can'?t|does not) (?:report|detect|catch) a stale allowlist entry/i,
+      /an? ALLOWLISTED_UNTESTED_WORKSPACES entry naming a (?:renamed|removed|nonexistent|non-existent) workspace (?:cannot be (?:flagged|detected|caught)|goes unnoticed|is never (?:re-?checked|revisited))/i,
+      /a workspace (?:that a workflow|a workflow) now (?:genuinely )?tests can (?:still|also) (?:sit|remain) in the allowlist (?:unnoticed|undetected)/i,
     ],
   },
 ];
