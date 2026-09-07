@@ -182,7 +182,7 @@ jobs:
 
       - name: Setup Expo and EAS
         if: steps.eas-secrets.outputs.configured == 'true'
-        uses: expo/expo-github-action@v8
+        uses: expo/expo-github-action@c7b66a9c327a43a8fa7c0158e7f30d6040d2481e # v8.2.1
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
@@ -251,7 +251,7 @@ jobs:
       # could run its flows in any order and reach the same result.
       - name: Boot emulator, install the APK, and run this shard's flows
         if: steps.eas-secrets.outputs.configured == 'true'
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
           arch: x86_64
@@ -327,7 +327,7 @@ jobs:
 
       - name: Setup Expo and EAS
         if: steps.eas-secrets.outputs.configured == 'true'
-        uses: expo/expo-github-action@v8
+        uses: expo/expo-github-action@c7b66a9c327a43a8fa7c0158e7f30d6040d2481e # v8.2.1
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
@@ -405,7 +405,7 @@ jobs:
       # again.
       - name: Boot emulator, install the packaged APK, and run the smoke flow
         if: steps.eas-secrets.outputs.configured == 'true'
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
           arch: x86_64
