@@ -497,6 +497,7 @@ that recomputation has to be domain-specific:
 | T235   | Give apps/android a per-release versionCode so a second APK installs            | phase-9   | android          | P9-W17 | T44B1                                                                 |
 | T236   | Settle whether the EAS remote archive carries the locally-built dist/           | phase-9   | ci               | P9-W18 | T44B1                                                                 |
 | T237   | Close or document guard-signing-material's content-read skip list               | phase-9   | tooling          | P9-W19 | T44B1                                                                 |
+| T238   | Decide whether the published CLI binary keeps the name paseo                    | phase-9   | docs             | P9-W20 | T44B2                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -538,8 +539,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**449 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W5
-merge gate — the commit that filed `T235`, `T236` and `T237`, three rows past the **446**
+**450 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W6
+merge gate — the commit that filed `T238`, one row past the **449** counted at the P9-W5
+gate, four past the **446**
 counted at the P9-W4 gate, six past the **443**
 counted at the P9-W3 gate, six past the **440**
 counted at the P9-W2 gate, four past the **439** counted at the P9-W1
@@ -548,12 +550,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 228 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 229 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 19 (+13). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 20 (+14). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 19. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 20. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -746,7 +748,11 @@ the task details always agree.
 |        | enforcement is real and fires both ways, but the wave's own new          |       |
 |        | guard and the previously-green secret scan both went red on the          |       |
 |        | commit that added them. Filed T235-T237.                                 |       |
-| P9-W6  | T44B2                                                                    | 1     |
+| P9-W6  | T44B2 — landed at the P9-W6 gate (KEEP-WITH-FIX): the                    | 1     |
+|        | source-inspection method is sound and the rollback section is            |       |
+|        | usable, but the runbook's FIRST command told a non-expert to             |       |
+|        | expect `added 1 package` from an install that resolves a few             |       |
+|        | hundred, and two citations named the wrong source. Filed T238.           |       |
 | P9-W7  | T225 (filed by the P9-W1 gate; a rationale, not a new assertion).        | 1     |
 | P9-W8  | T226 (filed by the P9-W1 gate; a product decision, not a guard).         | 1     |
 | P9-W9  | T227 (filed by the P9-W1 gate; the T194 shape, one wave's work).         | 1     |
@@ -761,6 +767,7 @@ the task details always agree.
 | P9-W18 | T236 (filed by the P9-W5 gate; owner-blocked on EXPO_TOKEN).             | 1     |
 | P9-W19 | T237 (filed by the P9-W5 gate; a real gap, measured, not a               | 1     |
 |        | regression — parity with guard-secret-scan's own skip list).             |       |
+| P9-W20 | T238 (filed by the P9-W6 gate; a naming decision, ownerless).            | 1     |
 
 ---
 
@@ -8338,6 +8345,39 @@ their test, and `docs/android-apk-release.md` §2.2.
 - [ ] A PEM key under a skipped extension is either caught, or documented as out of scope
 - [ ] A CLI-level test covers the skip list, not only the matcher
 - [ ] The decision is proven by a firing that was watched, not asserted
+
+#### T238 — Decide whether the published CLI binary keeps the name paseo
+
+`labels: phase-9, area: docs` · `wave: P9-W20` · `depends-on: T44B2`
+
+`packages/cli/package.json` publishes `@picompanion/cli` with `"bin": { "paseo":
+"bin/paseo" }`, so `npm install -g @picompanion/cli` puts a command named **`paseo`** on the
+user's PATH, and `packages/cli/src/utils/client-id.ts` resolves its home as
+`process.env.PASEO_HOME ?? join(homedir(), ".paseo")`. `plan.md` §1.1's identity table names
+the product and the package scope but says nothing either way about the executable's name,
+so nobody has actually decided this — it was inherited from the port and has never been
+questioned in writing. Surfaced at the P9-W6 merge gate while checking T44B2's clean-install
+runbook, which necessarily documents the name a user types.
+
+This is a genuine two-sided decision, not an obvious rename. **Keeping `paseo`** is the
+safe option: it is what `docs/clean-install-and-rollback.md`, every provenance document and
+the owner's live `$PASEO_HOME` already use, and renaming would strand existing data
+directories and every runbook that names the command. **Renaming** is what `CLAUDE.md`'s
+reference-only-documents rule points at — it says Paseo's naming must not bleed into new
+product docs, UI copy or package metadata, and a `bin` entry is package metadata a user
+reads on the first line of the runbook.
+
+Whichever way it goes, the decision must be written down where the next reader meets the
+name, not left implicit in `package.json`. If the name is kept, say in `plan.md` §1.1 that it
+is kept deliberately and why; if it changes, the rename touches `bin/`, `PASEO_HOME`, and
+every runbook that names either, and needs a migration note for the existing directory.
+
+Owns: `plan.md` §1.1 and `docs/clean-install-and-rollback.md` §A.2. A rename, if chosen, is a
+separate task — this one decides and records.
+
+- [ ] The decision is recorded where a reader meets the command name, not only in metadata
+- [ ] The reasoning names the `$PASEO_HOME` migration cost explicitly
+- [ ] If the name is kept, `CLAUDE.md`'s naming rule is reconciled with it in writing
 
 #### T32A1 — Build the Android connect form
 

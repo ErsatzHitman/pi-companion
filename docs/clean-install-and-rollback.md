@@ -42,9 +42,18 @@ somewhere to talk to.
 npm install -g @picompanion/cli
 ```
 
-**What you should see:** npm prints a short summary ending in something like
-`added 1 package in 2s`, and a new command called `paseo` becomes available in
-your terminal.
+**What you should see:** npm prints a short summary ending in a line of the
+form `added N packages in Ms`, where **N is in the low hundreds, not 1**.
+
+No exact figure is printed here on purpose. Two independent walks of this
+repository's `package-lock.json` at the P9-W6 merge gate returned 286 and 243
+registry packages, because hoisting, deduplication and platform-optional
+entries all move the number, and an npm upgrade moves it again. **A big number
+here is normal and is not a sign you installed the wrong thing** — it is the
+`paseo` program plus every library it depends on. If you see `added 1 package`,
+something is wrong: check you typed the package name in full.
+
+A new command called `paseo` becomes available in your terminal.
 
 **How to check it worked**, without starting anything:
 
@@ -59,12 +68,30 @@ touch your data directory. If this fails with "command not found" or
 run `npm config get prefix` and add that folder's `bin` (or, on Windows, the
 prefix folder itself) to your `PATH`, then open a new terminal window.
 
-**What actually landed on disk:** the installed package contains exactly two
-kinds of file — a small launcher script (`bin/paseo`, 2 lines: it just loads
-the real program) and the compiled program itself (`dist/`, everything the
-`paseo` command needs to run). Nothing else. The install step by itself does
-not create, read, or write your data directory — it only copies files into
-npm's own global package folder. See §B.1–§B.2 for the exact evidence.
+**What actually landed on disk:** three things, and it is worth knowing which
+is which.
+
+1. **The `paseo` package itself** — a small launcher script (`bin/paseo`, 2
+   lines: it just loads the real program), the compiled program (`dist/`), and
+   its `package.json`. That is the whole published package; §B.1 lists it
+   exactly.
+2. **The libraries it depends on**, downloaded from npm at install time. These
+   are the majority of the files and the whole of that large "added N
+   packages" number. They live beside the package in npm's global folder and
+   are removed with it when you uninstall.
+3. **A `paseo` shortcut** in npm's global command folder, which is what makes
+   the word `paseo` work as a command anywhere.
+
+The install step by itself does not create, read, or write your data directory
+— it only copies files into npm's own global package folder. See §B.1–§B.2
+for the exact evidence.
+
+(CORRECTED at the P9-W6 merge gate: this said the install lands "exactly two
+kinds of file ... Nothing else", and paired that with an expected `added 1
+package`. Both described the published TARBALL, not an install: the tarball
+vendors no `node_modules`, so npm resolves the dependency closure from the
+registry. §B.1 of this same document already named `package.json` as a third
+file, which contradicted the "exactly two ... Nothing else" above it.)
 
 **Do not run a bare `paseo` with no other words after it yet.** Typing just
 `paseo` and pressing enter starts a **first-time setup wizard**, and that
@@ -260,7 +287,13 @@ npm pack --dry-run --workspace=@picompanion/cli
 
 At this commit that reports **238 total files, 98.9 kB packed / 452.4 kB
 unpacked**, and the listing includes `bin/paseo` (76 B) and `package.json`
-(1.5 kB) alongside the `dist/` tree — grep the command's own output for
+(1.5 kB) alongside the `dist/` tree. **These figures describe what ships in
+the tarball, which is not the same question as what an install places on
+disk:** `packages/cli/package.json` declares eleven direct runtime
+dependencies and no `bundledDependencies`, and this tarball vendors no
+`node_modules`, so npm resolves the whole dependency closure from the registry
+at install time — a few hundred packages, per §A.2. Grep the command's own
+output for
 `bin/paseo`, `.map`, and `package.json` to confirm: zero `.map` files appear
 (the `"!dist/**/*.map"` exclusion holds), and `bin/paseo` and `package.json`
 are both present as the manifest claims. `npm pack` always runs the
@@ -300,7 +333,13 @@ if (invocation.argv.length === 0) {
 completely bare invocation (zero arguments) is rewritten to `onboard` before
 the command parser ever sees it. `paseo --version` and `paseo --help` have
 one argument each, so this branch is never reached for them —
-`classifyInvocation`'s `argv.length === 0` check is the only gate.
+`createCliParseArgv`'s `argv.length === 0` check (`packages/cli/src/run.ts:30`)
+is the only gate.
+
+(CORRECTED at the P9-W6 merge gate: this named `classifyInvocation`. That
+function lives in `packages/cli/src/classify.ts` and has no length check — its
+own early return is `if (!firstArg)`. The length check runs one level up, on
+the invocation `classifyInvocation` returns.)
 
 `packages/cli/src/commands/onboard.ts`'s default port is 6767 (
 `.option("--port <port>", "Port to listen on (default: 6767)")`), matching
@@ -505,9 +544,22 @@ checkout under AGPL provenance (`cli`, `client`, `expo-two-way-audio`,
 `highlight`, `protocol`, `relay`, `server`) all agree at `0.3.0-beta.2`; the
 packages and apps built new for this product (`design-tokens`,
 `frontend-core`, `pi-bridge`, `apps/android`, `apps/web`) all agree at
-`0.1.0`. This is a deliberate two-tier scheme, not drift — confirmed by
+`0.1.0`. This is a deliberate two-tier scheme, not drift. The reason is
+provenance: `0.3.0-beta.2` is the version of the read-only Paseo reference
+checkout the backend was ported from, recorded in `docs/T02-provenance.md`,
+`docs/T03-provenance.md`, `docs/T04-provenance.md` and
+`docs/T18-provenance.md`; the packages built new for this product started at
+`0.1.0`. `scripts/ci/guard-version-drift.mjs` **passes** on this split, which
+is the check that matters, but it neither documents nor enforces the split
+itself — it compares each declared pin against its own target's `version`
+and is agnostic about whether two packages share a number. Run it:
+
+(CORRECTED at the P9-W6 merge gate: this said the split was "confirmed by
 reading `scripts/ci/guard-version-drift.mjs`'s own header comment, which
-documents this exact choice, and by running it:
+documents this exact choice". That header documents a different deliberate
+choice — that consumers pin `@picompanion/*` with exact version strings — and
+says nothing about the two-tier split. The conclusion was right; the citation
+pointed at a source that does not support it.)
 
 ```
 node scripts/ci/run-guard-version-drift.mjs
