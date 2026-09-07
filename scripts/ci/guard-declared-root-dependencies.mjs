@@ -67,6 +67,8 @@
 
 import { builtinModules } from "node:module";
 
+import { stripComments } from "./source-comment-stripper.mjs";
+
 const BUILTIN_MODULE_NAMES = new Set(builtinModules);
 
 /**
@@ -118,55 +120,22 @@ export function resolveRootPackageName(specifier) {
   return segments[0];
 }
 
-// `guard-capability-prose.mjs`, `guard-no-node-builtin-in-web-bundle.mjs`
-// and `guard-no-duplicate-permission-state.mjs` each ship a `stripComments`
-// that strips `/* */` BLOCK comments first, then `//` LINE comments. That
-// order has a real collision right here in this directory:
-// `run-guard-web-session-bundle-budget.mjs`'s own header prose contains
-// the backtick-quoted glob text `` `@picompanion/*` `` inside a `//` line
-// comment — the literal two characters `/` `*` sit right there, unescaped,
-// because they are glob syntax inside a comment, not a real block-comment
-// opener. A block-first pass sees that `/*` before it ever notices the
-// `//` earlier on the same line, and starts consuming everything up to the
-// FIRST subsequent `*/` — the closing delimiter of an unrelated, later
-// JSDoc comment — swallowing every statement in between, including the
-// real `import { build, loadConfigFromFile, mergeConfig } from "vite";`
-// this guard exists to see. Proven directly: a block-first `stripComments`
-// silently drops that entire span, and `run-guard-declared-root-
-// dependencies.mjs` (built with it first) reported `OK` against the
-// unmodified tree — the exact "check that cannot fail" shape, on its own
-// motivating case.
-//
-// `stripComments` below strips LINE comments first, then BLOCK comments —
-// the opposite order — which resolves this collision (a `//` comment is
-// recognized and blanked before any `/*` that merely appears later in that
-// same commented-out text is ever reached) at the cost of the reverse,
-// rarer collision: a genuine `/** */` block comment containing literal
-// `//` example text (`guard-no-duplicate-permission-state.mjs`'s own
-// header uses a zero-width-joined `` *‍/ `` specifically to dodge writing
-// literal `*/` inside such a comment; it also writes literal `` `// …` ``
-// text a couple of lines above that, which a line-first pass truncates
-// early). Measured directly, not assumed: line-first-then-block was run
-// against every one of this directory's production `.mjs` files (the exact
-// set this guard scans) and diffed against a byte-for-byte reference
-// (Perl, `/^\s*import\s+(?:type\s+)?[^;]*?\s*from\s*(['"])([^'"]+)\1/mg`
-// plus the dynamic/require/re-export shapes, run BEFORE any comment
-// stripping, so it cannot share this bug) — the two agree on every real,
-// non-comment, non-fixture third-party specifier in the directory: `vite`,
-// exactly once, and nothing else. No production file in this directory
-// loses a real import to the corruption above (also measured: every file
-// whose raw text contains a line starting with `import ` still yields at
-// least one extracted specifier after line-first stripping). This is a
-// fact about today's files, not a structural guarantee — a future comment
-// that legitimately needs to write `//` inside a real block comment,
-// immediately before a real import statement, could reintroduce this
-// guard's own hazard in the other direction; `guard-declared-root-
-// dependencies.test.mjs` pins today's measurement so a regression there is
-// visible, not silent.
-/** @param {string} source @returns {string} `source` with comment text blanked, string literals preserved */
-export function stripComments(source) {
-  return source.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-}
+// T244: this file used to hand-roll its own line-first-then-block
+// `stripComments` here, with a paragraph describing the real collision that
+// order has against a block comment containing literal `//`-shaped text;
+// see `source-comment-stripper.mjs`'s own header for that collision's full
+// history, including the fact that it happens right here — `guard-no-
+// duplicate-permission-state.mjs` is one of the production files this
+// guard scans, and its real header carries exactly that shape.
+// `stripComments` is now the shared, order-independent tokenizer imported at
+// the top of this file from `./source-comment-stripper.mjs` and re-exported
+// here (this file's own test imports it directly), used identically by the
+// other three guards T244 fixed. `guard-declared-root-dependencies.test.mjs`
+// keeps this file's own per-file real-import proof (every production
+// `.mjs` file whose raw text contains a real import still yields a
+// specifier through the shared stripper) so a future regression in the
+// shared module is still caught here, not only in that module's own test.
+export { stripComments };
 
 // Captures one `import ... from "specifier"` statement, including a
 // multi-line named-import clause. `[^;]*?` (not `[\s\S]*?`) bounds the

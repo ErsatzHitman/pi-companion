@@ -237,3 +237,54 @@ test("the real scripts/ci production files declare every third-party import in t
       " is gone, or comment stripping has silently blinded the extractor to it",
   );
 });
+
+// --- T244's own acceptance criterion: PER FILE, not "at least one file" ---
+// A raw, line-anchored regex (never itself comment-stripped, so it cannot
+// share `extractImportSpecifiers`'s own bug) decides whether a file's RAW
+// text plausibly contains a real top-level import: `import` must be the
+// first non-whitespace token on its line. Every comment style this
+// codebase actually uses (`// …`, ` * …`) puts other characters before
+// `import` on that line, so this cannot be satisfied by a doc-comment
+// example — verified directly below, not merely assumed, against the one
+// file in this directory whose header quotes import-shaped example text.
+const RAW_TOP_LEVEL_IMPORT_LINE = /^[ \t]*import\s/m;
+
+test("RAW_TOP_LEVEL_IMPORT_LINE does not match a doc comment's import-shaped example text", () => {
+  const legacyAppTreeHeader = readFileSync(
+    fileURLToPath(new URL("./guard-no-legacy-app-tree.mjs", import.meta.url)),
+    "utf8",
+  );
+  // That file's own header names the legacy package scope in prose without
+  // ever writing a real `import` statement in its header comment — this
+  // just pins that a `//`-prefixed line never matches the raw heuristic.
+  assert.equal(RAW_TOP_LEVEL_IMPORT_LINE.test('// import { x } from "./y";\n'), false);
+  assert.equal(RAW_TOP_LEVEL_IMPORT_LINE.test(' * import("some-package")\n'), false);
+  assert.ok(legacyAppTreeHeader.length > 0); // the file exists and was read
+});
+
+test("every real scripts/ci production file whose raw text has a top-level import line yields at least one specifier, checked per file", () => {
+  const scriptsCiDir = fileURLToPath(new URL(".", import.meta.url));
+  const files = readdirSync(scriptsCiDir)
+    .filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"))
+    .map((name) => ({
+      path: `scripts/ci/${name}`,
+      content: readFileSync(new URL(name, import.meta.url), "utf8"),
+    }));
+
+  const filesWithRawImportLine = files.filter((f) => RAW_TOP_LEVEL_IMPORT_LINE.test(f.content));
+  // Sanity: this directory is full of real imports (every run-guard-*.mjs
+  // entry point, at minimum) — if this were ever empty, the test below
+  // would vacuously pass while checking nothing.
+  assert.ok(filesWithRawImportLine.length > 10, "expected many scripts/ci files to have imports");
+
+  const filesWithNoExtractedSpecifier = filesWithRawImportLine.filter(
+    (f) => extractImportSpecifiers(f.content).length === 0,
+  );
+  assert.deepEqual(
+    filesWithNoExtractedSpecifier.map((f) => f.path),
+    [],
+    "every one of these files' raw text starts a line with `import`, so extractImportSpecifiers" +
+      " must return at least one specifier for each — an empty result for any of them means" +
+      " comment-stripping silently ate a real import",
+  );
+});

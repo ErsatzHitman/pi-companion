@@ -45,6 +45,8 @@
 import { builtinModules } from "node:module";
 import { posix } from "node:path";
 
+import { stripComments } from "./source-comment-stripper.mjs";
+
 /** A module reachable from the entry whose filename marks it as test-only
  * is allowed to import a `node:` builtin even if the walk somehow reaches
  * it (today it never does — nothing in `apps/web/src` imports a `.test.*`
@@ -79,19 +81,18 @@ const INDEX_BASENAMES = ["index.ts", "index.tsx", "index.js", "index.jsx"];
  * exact string equality for exactly that reason. */
 const NODE_BUILTIN_MODULE_NAMES = new Set(builtinModules);
 
-/**
- * Strips block and line comments before any import-specifier regex is run
- * against a file's text — the codebase's established defense against a
- * doc comment that quotes a real import statement forging an edge (P6-W6's
- * `session-tree-sheet.contract.test.ts` precedent; this exact file's own
- * header comment names `node:fs`/`node:path`/`node:url` in prose).
- *
- * @param {string} content
- * @returns {string}
- */
-export function stripComments(content) {
-  return content.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-}
+// T244: `stripComments` used to be this file's own hand-rolled BLOCK-first
+// regex pair (`/\* … \*//g` then `//.*$/gm`), which has a real collision — a
+// `/*`-shaped sequence inside a genuine `//` line comment (a backtick-quoted
+// glob like `` `@picompanion/*` ``, present verbatim in `guard-declared-
+// root-dependencies.mjs`'s own header, one of the files
+// `guard-capability-prose.mjs` scans under `scripts/ci`) is misread as a
+// block-comment opener and swallows real code up to the next unrelated
+// `*/`. See `source-comment-stripper.mjs`'s own header for the full
+// collision history and its real, in-tree reproduction. `stripComments` is
+// now that shared, order-independent tokenizer — re-exported here (this
+// file's own test imports it directly) rather than only used internally.
+export { stripComments };
 
 /**
  * Matches, in order of capture group: a dynamic `import("spec")`, a

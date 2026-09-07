@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   CANONICAL_PERMISSION_STATE_PATH,
   findDuplicatePermissionStateUnions,
+  stripComments,
 } from "./guard-no-duplicate-permission-state.mjs";
 
 const CANONICAL_UNION = `
@@ -176,4 +181,42 @@ test("catches multiple duplicates across multiple files in one pass", () => {
     { path: "apps/android/src/features/connect/a.ts", typeName: "A" },
     { path: "apps/android/src/features/composer/b.ts", typeName: "B" },
   ]);
+});
+
+// --- T244's own acceptance criterion, this guard's own shape: PER FILE ---
+// This guard extracts `type X = …;` declarations, not import specifiers, so
+// its own analog of "every file with a real import still yields a
+// specifier" is "every file with a real top-level `type X = …;` alias
+// still yields one after comment-stripping" — checked the same way, with a
+// raw, line-anchored, never-comment-stripped heuristic that this
+// codebase's `//`- and ` * `-prefixed comment styles cannot satisfy.
+const RAW_TOP_LEVEL_TYPE_ALIAS_LINE = /^[ \t]*(?:export\s+)?type\s+\w+\s*=/m;
+
+test("every real apps/android/src file whose raw text has a top-level `type X =` line still has one after stripComments, checked per file", () => {
+  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const trackedPaths = execFileSync("git", ["ls-files", "apps/android/src"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  })
+    .split("\n")
+    .filter(Boolean)
+    .filter((path) => path.endsWith(".ts") || path.endsWith(".tsx"));
+
+  assert.ok(trackedPaths.length > 10, "expected many files under apps/android/src");
+
+  const filesThatLostTheirDeclaration = [];
+  for (const path of trackedPaths) {
+    const content = readFileSync(join(repoRoot, path), "utf8");
+    if (!RAW_TOP_LEVEL_TYPE_ALIAS_LINE.test(content)) continue;
+    const cleaned = stripComments(content);
+    if (!RAW_TOP_LEVEL_TYPE_ALIAS_LINE.test(cleaned)) filesThatLostTheirDeclaration.push(path);
+  }
+
+  assert.deepEqual(
+    filesThatLostTheirDeclaration,
+    [],
+    "every one of these files' raw text starts a line with a `type X =` alias, so it must" +
+      " still be there after stripComments — losing it for any of these means comment" +
+      " stripping silently ate a real declaration",
+  );
 });

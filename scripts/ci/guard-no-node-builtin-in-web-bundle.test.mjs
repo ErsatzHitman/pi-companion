@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { extname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   extractImportSpecifiers,
   findNodeBuiltinViolations,
@@ -442,4 +446,41 @@ test("isTestOnlyPath matches .test. and .spec. files, not ordinary source", () =
   assert.equal(isTestOnlyPath("apps/web/src/app/App.spec.ts"), true);
   assert.equal(isTestOnlyPath("apps/web/src/app/App.tsx"), false);
   assert.equal(isTestOnlyPath("apps/web/src/features/testing/helpers.ts"), false);
+});
+
+// --- T244's own acceptance criterion: PER FILE, not "at least one file" ---
+// Same raw, line-anchored, never-comment-stripped heuristic as
+// `guard-declared-root-dependencies.test.mjs` uses for its own per-file
+// proof — see that file's own comment for why this cannot be satisfied by
+// this codebase's `//`- or ` * `-prefixed doc-comment examples.
+const RAW_TOP_LEVEL_IMPORT_LINE = /^[ \t]*import\s/m;
+const PARSEABLE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+
+test("every real, parseable apps/web/src file whose raw text has a top-level import line yields at least one specifier, checked per file", () => {
+  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const trackedPaths = execFileSync("git", ["ls-files", "apps/web/src"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  })
+    .split("\n")
+    .filter(Boolean)
+    .filter((path) => PARSEABLE_EXTENSIONS.has(extname(path)));
+
+  assert.ok(trackedPaths.length > 10, "expected many parseable files under apps/web/src");
+
+  const filesWithNoExtractedSpecifier = [];
+  for (const path of trackedPaths) {
+    const content = readFileSync(join(repoRoot, path), "utf8");
+    if (!RAW_TOP_LEVEL_IMPORT_LINE.test(content)) continue;
+    const specifiers = extractImportSpecifiers(stripComments(content));
+    if (specifiers.length === 0) filesWithNoExtractedSpecifier.push(path);
+  }
+
+  assert.deepEqual(
+    filesWithNoExtractedSpecifier,
+    [],
+    "every one of these files' raw text starts a line with `import`, so extractImportSpecifiers" +
+      " must return at least one specifier for each — an empty result for any of them means" +
+      " comment-stripping silently ate a real import",
+  );
 });

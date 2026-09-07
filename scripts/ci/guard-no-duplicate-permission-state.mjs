@@ -55,6 +55,8 @@
 // import-safe so `guard-no-duplicate-permission-state.test.mjs` can seed
 // violations without touching the real working tree.
 
+import { stripComments } from "./source-comment-stripper.mjs";
+
 export const CANONICAL_PERMISSION_STATE_PATH =
   "apps/android/src/features/composer/permission-recovery.ts";
 
@@ -73,9 +75,20 @@ const CANONICAL_LITERALS = new Set([
 const MIN_SUBSET_MEMBERS = 2;
 
 /** Strips `/* … *‍/` and `// …` comments so a comment mentioning the literal never counts as a declaration of it. */
-function stripComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-}
+// T244: this doc comment's own `` `/* … *‍/` `` / `` `// …` `` example is
+// deliberately left exactly as it was written before this task — it is a
+// real, naturally-occurring instance of the exact hazard `stripComments`
+// used to have when it was this file's own hand-rolled BLOCK-first regex
+// pair: a `/*`-shaped sequence inside a genuine `//` line comment (or, the
+// mirror, a `//`-shaped sequence inside a genuine block comment, which is
+// what THIS doc comment's own `// …` text actually is) could be misread by
+// the wrong-order pass and swallow real code up to some unrelated later
+// delimiter. `stripComments` is now the shared, order-independent tokenizer
+// imported at the top of this file, re-exported here so this file's own
+// test can import it directly, exactly as before. See `source-comment-
+// stripper.mjs`'s own header for the full collision history — this exact
+// doc comment is one of its two real, in-tree reproductions.
+export { stripComments };
 
 /** Extracts every double-quoted string literal's inner text from a type body, in source order, allowing duplicates (a union should not repeat a literal, but this is a reader, not a validator of that). */
 function extractStringLiterals(body) {

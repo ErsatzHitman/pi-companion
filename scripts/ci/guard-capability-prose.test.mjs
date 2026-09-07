@@ -3505,3 +3505,52 @@ test("T232: on the real, committed tree, the new entry is shipped and the full d
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
+
+// --- T244: reproduce collision 2 (block-first) against a real file, and
+// pin the fix — this guard's own `stripComments` used to be a BLOCK-first
+// regex pair, which misreads a `/*`-shaped sequence inside a genuine `//`
+// line comment as a block-comment opener and swallows real code up to the
+// next unrelated real closing delimiter. `guard-declared-root-
+// dependencies.mjs` (one of the real files `isShippedSourcePath` admits
+// under `scripts/ci`) writes exactly that shape in its own header: a
+// backtick-quoted `` `@picompanion/*` `` glob inside a `//` comment,
+// immediately followed by a real `const WORKSPACE_SCOPE = "@picompanion/";`
+// declaration and then an unrelated JSDoc block. ---
+
+test("T244: guard-declared-root-dependencies.mjs's real WORKSPACE_SCOPE declaration is no longer swallowed by comment-stripping order", () => {
+  const content = readRepoFile("scripts/ci/guard-declared-root-dependencies.mjs");
+
+  // Before T244 (this guard's own then-shipped block-first stripComments):
+  // this returned false — a real declaration this guard's own declaration-
+  // detection was blind to purely because of comment-stripping order,
+  // reproduced directly in this task's report.
+  assert.equal(isCapabilityMemberDeclared(content, "WORKSPACE_SCOPE"), true);
+
+  // And the actual CAPABILITIES entry this file backs (`findUndeclaredRoot-
+  // Dependencies`) is unaffected either way, sitting well past where the
+  // old collision's swallow reached — confirmed here so a reader does not
+  // have to take that on faith.
+  assert.equal(isCapabilityMemberDeclared(content, "findUndeclaredRootDependencies"), true);
+});
+
+test("T244: the real, committed tree's full denial scan is unchanged by the shared comment stripper", () => {
+  // This is the same real-tree walk `findShippedCapabilities`/
+  // `findCapabilityDenialViolations` are exercised against throughout this
+  // file (see the T215/T228/T232 tests above) — restated here as its own
+  // named case because it is this task's own required proof: the shared
+  // `source-comment-stripper.mjs`-backed `stripComments` must not move any
+  // of this guard's real, tree-wide findings.
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  assert.equal(findShippedCapabilities(shippedFiles).length, CAPABILITIES.length);
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});

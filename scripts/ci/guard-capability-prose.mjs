@@ -62,10 +62,13 @@
 // quotation" cases, each proven by deleting the marker and confirming the
 // same input then fails.
 //
-// Pure, dependency-free check function only. `run-guard-capability-
-// prose.mjs` is the CLI entry point CI actually runs; this module stays
-// import-safe so `guard-capability-prose.test.mjs` can seed fixtures
-// without touching the real working tree.
+// Pure, dependency-free check function only (beyond the shared, equally
+// pure `./source-comment-stripper.mjs` — see T244 near `stripComments`
+// below). `run-guard-capability-prose.mjs` is the CLI entry point CI
+// actually runs; this module stays import-safe so `guard-capability-
+// prose.test.mjs` can seed fixtures without touching the real working tree.
+
+import { stripComments as sharedStripComments } from "./source-comment-stripper.mjs";
 
 /**
  * @typedef {string | RegExp} CapabilityMember A group member naming a
@@ -1116,8 +1119,25 @@ const HISTORICAL_CONTEXT_WINDOW = 300;
 // actual sentence without opening the file.
 const REPORT_CONTEXT_WINDOW = 80;
 
+// T244: this used to be a hand-rolled BLOCK-first regex pair
+// (`/\* … \*//g` then `//.*$/gm`), which has a real collision — a `/*`-
+// shaped sequence inside a genuine `//` line comment (a backtick-quoted
+// glob like `` `@picompanion/*` ``, present verbatim in `guard-declared-
+// root-dependencies.mjs`'s own header, one of the files this guard scans
+// under `scripts/ci`) is misread as a block-comment opener and swallows
+// real code up to the next unrelated real closing delimiter. Measured
+// directly against that real file: before this fix,
+// `isCapabilityMemberDeclared(content, "WORKSPACE_SCOPE")` returned `false`
+// for a `const WORKSPACE_SCOPE = "@picompanion/";` declaration that is
+// genuinely there — a real declaration this guard's own declaration-
+// detection was blind to purely because of comment-stripping order. See
+// `source-comment-stripper.mjs`'s own header for the full collision history
+// (line-first has the mirror failure) and its real, in-tree reproduction of
+// both directions. `stripCommentsAndStrings` below still layers this
+// file's OWN, deliberately single-line-only `stripStringLiterals` on top —
+// that erasure scope is unchanged by this task (see its own comment).
 function stripComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  return sharedStripComments(source);
 }
 
 // T184: `isCapabilityMemberDeclared`'s comment-stripping alone was never
