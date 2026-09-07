@@ -277,50 +277,78 @@ header). A second, live proof was run against a real tracked file:
 
 ---
 
-## 4. GitHub Actions supply-chain pinning (measured, not fixed)
+## 4. GitHub Actions supply-chain pinning (T229: fixed, re-measured after)
 
 Measured directly from the committed tree at the P9-W3 merge gate (commit
 `910188f`) with `git grep -h "uses: " HEAD -- '.github/workflows/*.yml'`,
 counting SHA pins as `@` followed by forty hex characters: **78** total
-`uses:` lines across `ci.yml`, `android-apk-release.yml`, and
-`android-maestro-e2e.yml`. These counts move whenever a job is added — they
-are a dated snapshot, not a live figure; the `git grep` above re-derives
-them in one command.
+`uses:` lines, of which 22 were SHA-pinned and 56 were still tag-pinned
+(`actions/setup-node@v4` x34, `actions/checkout@v4` x16 beside 21
+already-SHA-pinned occurrences, `expo/expo-github-action@v8` x3,
+`reactivecircus/android-emulator-runner@v2` x2,
+`cachix/install-nix-action@v27` x1). That was already a dated snapshot by
+the time T229 started; waves landed between the two, and T229's own
+re-measurement — with the identical command, before touching anything —
+found different counts: **88** `uses:` lines, 25 already SHA-pinned, 63
+tag-pinned. Neither historical figure should be trusted without re-running
+the command; the current state is the table below, re-derived at this
+section's own commit (named in the paragraph after it).
 
-| Action                                   | Count  | Pinning                                                              |
-| ---------------------------------------- | ------ | -------------------------------------------------------------------- |
-| `actions/checkout`                       | 37     | 21 SHA-pinned (`@11d5960a...` `# v4.4.0`), **16 tag-pinned** (`@v4`) |
-| `actions/setup-node`                     | 34     | **all 34 tag-pinned** (`@v4`)                                        |
-| `expo/expo-github-action`                | 3      | **all 3 tag-pinned** (`@v8`)                                         |
-| `reactivecircus/android-emulator-runner` | 2      | **both tag-pinned** (`@v2`)                                          |
-| `cachix/install-nix-action`              | 1      | **tag-pinned** (`@v27`)                                              |
-| `dorny/paths-filter`                     | 1      | SHA-pinned (`@de90cc6f...` `# v3.0.2`)                               |
-| **Total**                                | **78** | **22 SHA-pinned, 56 tag-pinned**                                     |
+T229 SHA-pinned every remaining tag-pinned `uses:` line, resolving each
+commit via `gh api repos/<owner>/<repo>/git/refs/tags/<tag>` — dereferencing
+one annotated tag object where the API returned `object.type: "tag"` rather
+than `"commit"` (`reactivecircus/android-emulator-runner@v2`) — rather than
+guessing, landed across three commits in increasing order of risk
+(`actions/setup-node` first, then the remaining `actions/checkout@v4`
+occurrences, then the three third-party actions last) so a bad pin can be
+bisected instead of reverted wholesale. The exact API call, whether each
+tag was annotated, and the response read for every SHA are in that task's
+commit messages (`git log --grep=T229`), not repeated here.
 
-A mutable tag (`@v4`, `@v8`, `@v2`, `@v27`) can be repointed by its owner to
-a different commit at any time — a real supply-chain surface. This is
-**measured and disclosed, not fixed**: per this task's explicit
-instruction, fixing all 56 without knowing the exact commit SHA behind each
-tag TODAY is not attempted — a wrong SHA silently breaks every job that
-uses it, which is a worse outcome than the current, at-least-visible risk.
-**Filed as a finding, owner: whoever next touches
-`.github/workflows/*.yml` with the ability to look up (not guess) each
-tag's current commit SHA** — `gh api repos/<org>/<repo>/git/refs/tags/<tag>`
-or the GitHub UI's "commit" link on each release resolves this safely. The
-three new guard jobs this task adds (`guard-version-drift`,
-`guard-secret-scan`, `guard-audit-baseline`) each use the repository's
-already-established SHA-pinned `actions/checkout` line — and each also adds
-an `actions/setup-node@v4` step, which is a mutable tag. **So this wave
-added three SHA-pinned lines and three tag-pinned ones**, taking the
-tag-pinned total from 53 at the wave base to 56 here. Reusing the existing
-`setup-node@v4` line is consistent with all thirty-one pre-existing steps
-and was the right call over inventing a lone SHA pin for three jobs, but it
-is an addition to the surface this section measures, not a neutral act.
+Re-measured after those three commits, at this repository's `HEAD` at the
+time this paragraph was written (`git rev-parse HEAD` →
+`de5fce9402742ecfb8ce6ad90cf6bbd30451f93d`), with the same commands as
+above:
+
+```
+$ git grep -h "uses: " HEAD -- '.github/workflows/*.yml' | wc -l
+88
+$ git grep -hE "uses: [A-Za-z0-9_./-]+@[0-9a-f]{40}" HEAD -- '.github/workflows/*.yml' | wc -l
+88
+$ git grep -hoE "uses: [A-Za-z0-9_./-]+" HEAD -- '.github/workflows/*.yml' | sed 's/uses: //' | sort | uniq -c
+     42 actions/checkout
+     39 actions/setup-node
+      1 cachix/install-nix-action
+      1 dorny/paths-filter
+      3 expo/expo-github-action
+      2 reactivecircus/android-emulator-runner
+```
+
+| Action                                   | Count  | Pinning                                                   |
+| ---------------------------------------- | ------ | --------------------------------------------------------- |
+| `actions/checkout`                       | 42     | **all 42 SHA-pinned** (`@11d5960a...` `# v4.4.0`)         |
+| `actions/setup-node`                     | 39     | **all 39 SHA-pinned** (`@49933ea5...` `# v4.4.0`)         |
+| `expo/expo-github-action`                | 3      | **all 3 SHA-pinned** (`@c7b66a9c...` `# v8.2.1`)          |
+| `reactivecircus/android-emulator-runner` | 2      | **both SHA-pinned** (`@a421e438...` `# v2.38.0`)          |
+| `cachix/install-nix-action`              | 1      | **SHA-pinned** (`@ba0dd844...` `# v27`)                   |
+| `dorny/paths-filter`                     | 1      | SHA-pinned (`@de90cc6f...` `# v3.0.2`, unchanged by T229) |
+| **Total**                                | **88** | **all 88 SHA-pinned, 0 tag-pinned**                       |
+
+No mutable tag (`@v4`, `@v8`, `@v2`, `@v27`) remains anywhere in
+`.github/workflows/*.yml`. The supply-chain surface this section used to
+disclose as an open finding is closed by pinning, not by narrowing the
+count basis — every command above is copy-pasteable and re-derives the
+table from the live tree; nothing in it was hand-typed to match an
+expectation.
+
 (CORRECTED at the P9-W3 merge gate: this said "so this task adds zero new
 tag-pinned `uses:` lines", counting only one of the two `uses:` lines each
 new job contributes. In a register whose acceptance criterion is that
 nothing is silently waived, that under-reported this wave's own added
-attack surface — the single number a reader would most want to trust.)
+attack surface — the single number a reader would most want to trust. That
+sentence described a surface T229, above, has since closed entirely: there
+is no longer a tag-pinned line of any kind in this tree left to
+under-report.)
 
 ---
 
