@@ -124,10 +124,13 @@ describe("AgentStreamCoalescer", () => {
     ]);
   });
 
+  test("pins AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS at 60, which plan.md §14.5's 20 msg/s per-agent bridge budget depends on", () => {
+    expect(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS).toBe(60);
+  });
+
   test("uses constructor windowMs instead of a hard-coded value", async () => {
     const { coalescer, flushes } = createHarness(10);
 
-    expect(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS).toBe(60);
     expect(coalescer.handle("agent-1", assistant("fast"))).toBe(true);
 
     await vi.advanceTimersByTimeAsync(9);

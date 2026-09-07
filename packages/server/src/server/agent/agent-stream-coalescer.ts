@@ -1,5 +1,33 @@
 import type { AgentProvider, AgentStreamEvent, AgentTimelineItem } from "./agent-sdk-types.js";
 
+/**
+ * plan.md §14.5 budgets "no bridge update rate above 20 messages per second per agent"
+ * (plan.md:1154). This constant is what delivers that budget for a single continuously
+ * streaming timeline entry: while events for the same assistant_message/reasoning text
+ * stream (or the same running tool_call) keep arriving, they collapse into one buffered
+ * entry per window (see collapseEntries below), and that entry produces exactly one
+ * onFlush call every windowMs — so that stream's own flush cadence is capped at
+ * 1000 / 60 ≈ 16.67 messages/sec, under the 20/sec ceiling. Each onFlush call reaches the
+ * bridge as one dispatched event: AgentManager's onFlush wiring
+ * (agent-manager.ts:654-658) calls recordAndDispatchTimelineItem, which calls
+ * dispatchStream once per invocation.
+ *
+ * This is the value production actually runs with: AgentManager falls back to it
+ * (agent-manager.ts:653) whenever `agentStreamCoalesceWindowMs` is not supplied, and its
+ * only production construction site, bootstrap.ts's `new AgentManager({...})` (around
+ * bootstrap.ts:834), does not supply it. Every override of `windowMs` found in this
+ * package today is in a `*.test.ts` file.
+ *
+ * What this window does NOT bound: flushBuffer (below) calls onFlush once per collapsed
+ * entry, not once per flush, so a single window that accumulates several entries that do
+ * not collapse together — alternating assistant/reasoning text, different providers or
+ * turnIds, or more than one distinct tool_call — dispatches one bridge message per entry
+ * out of that one window. (`agent-stream-coalescer.test.ts`'s "preserves strict
+ * alternating assistant/reasoning order" flushes 4 items from a single 60 ms window.) A
+ * terminal tool_call (completed/failed/canceled) also flushes immediately, bypassing the
+ * window entirely (see `handle()` below). So `windowMs` throttles one stream's own update
+ * cadence; it is not a hard ceiling on total per-agent bridge traffic.
+ */
 export const AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS = 60;
 
 type CoalescableTextKind = "assistant_message" | "reasoning";
