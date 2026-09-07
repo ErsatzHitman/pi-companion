@@ -389,6 +389,35 @@ jobs:
       - name: Run highlight tests
         run: npm run test --workspace=@picompanion/highlight
 
+  # T44A4: `@picompanion/relay` has a real `"test": "vitest run"` script and
+  # 7 test files (34 tests) — see `scripts/ci/guard-workspace-test-
+  # coverage.mjs`'s header for how this gap was measured. It has zero
+  # workspace dependencies of its own (`packages/relay/package.json`
+  # declares none), so no build step is needed before `vitest run` — it
+  # transforms TypeScript on the fly, same as every other vitest-run
+  # workspace in this file. `relay`'s two heaviest test files
+  # (`e2e.test.ts`, `live-relay.e2e.test.ts`) already self-skip unless an
+  # opt-in env var this job never sets is present (`FORCE_RELAY_E2E=1` /
+  # `RUN_LIVE_RELAY_E2E=1`), so this job never opens a real network
+  # connection — verified directly: `npm run test --workspace=@picompanion/relay`
+  # completed in 1.55s with "5 passed | 2 skipped (7)" locally while this
+  # job was written.
+  relay-tests:
+    name: relay-tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Run relay tests
+        run: npm run test --workspace=@picompanion/relay
+
   # --- frontend-core unit and contract tests ------------------------------
 
   frontend-core-tests:
@@ -716,6 +745,43 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true') }}
     runs-on: windows-latest
     steps: *server_test_steps
+
+  # T44A4: `@picompanion/cli` has a real `"test:unit": "vitest run src"`
+  # script and 21 test files (173 tests) — see `scripts/ci/guard-workspace-
+  # test-coverage.mjs`'s header for how this gap was measured. Deliberately
+  # runs `test:unit`, NOT the package's own `"test"` script (`test:unit &&
+  # test:local`): `test:local` (`tests/run-all.ts`) spawns real, isolated
+  # daemon subprocesses per test file with its own concurrency pool and `zx`
+  # dependency — a heavier, differently-shaped integration suite this task
+  # did not verify is CI-safe (process/port lifecycle, wall time), so it
+  # stays a disclosed gap rather than being wired sight-unseen. `cli`
+  # resolves `@picompanion/{protocol,client,server}` through their built
+  # `dist/` (package.json `exports`), so the same dependency chain the
+  # `typecheck` job's "Build backend dependency chain" step already builds
+  # is built here first.
+  cli-tests:
+    name: cli-tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      - name: Build cli dependency chain
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/relay
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/client
+          npm run build --workspace=@picompanion/server
+
+      - name: Run cli unit tests
+        run: npm run test:unit --workspace=@picompanion/cli
 
   # --- Daemon package dry-run with bundled new web UI ----------------------
   #
@@ -1108,6 +1174,35 @@ jobs:
 
       - name: Fail on an unwired run-guard runner, or a stale allowlist entry (missing runner or now-wired)
         run: node scripts/ci/run-guard-run-guard-wiring.mjs
+
+  # T44A4 (plan.md §13 phase 9, "Run the complete CI matrix rather than the
+  # full suite locally"; docs/issues-from-plan.md T44A4's second acceptance
+  # criterion, "the matrix covers protocol, core, web, Android and backend").
+  # Unconditional, alongside guard-run-guard-wiring above — the defect this
+  # closes (a workspace with real tests and no CI job running them) is a
+  # standing repository invariant, not something scoped to one changed
+  # directory. Enumerates every workspace from the root package.json's
+  # `workspaces` field and fails when one is tested by no `run:` step in any
+  # workflow and has no reasoned ALLOWLISTED_UNTESTED_WORKSPACES entry, or
+  # when that allowlist itself has gone stale (T211/T213 shape — see
+  # scripts/ci/guard-workspace-test-coverage.mjs for both violation classes).
+  # This guard's own first run found, and this same commit closed, the exact
+  # gap it exists to prevent from recurring: `@picompanion/relay` (7 test
+  # files) and `@picompanion/cli` (21 test files) were both listed under the
+  # `backend` path filter with no job running either's tests — see the
+  # `relay-tests`/`cli-tests` jobs above.
+  guard-workspace-test-coverage:
+    name: guard / every workspace has a real CI test job or a reasoned allowlist entry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on an untested workspace, or a stale allowlist entry (missing workspace or now-tested)
+        run: node scripts/ci/run-guard-workspace-test-coverage.mjs
 
   # T44A3 (plan.md §13 phase 9, "Complete ... version-drift checks";
   # docs/security-and-version-drift.md is the findings register this job's
