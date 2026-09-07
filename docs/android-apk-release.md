@@ -104,17 +104,51 @@ other tasks are added).
   `guard-secret-scan.mjs`'s own `private-key-block` pattern) — so a raw key
   pasted into an unrelated text file is still caught by content.
 
-  **The content half does not reach every tracked file.**
-  `run-guard-signing-material.mjs`'s `SKIP_CONTENT_READ_EXTENSIONS` returns
-  before reading, so a PEM key under `key.zip`, `key.jar` or `key.pdf` is caught
+  **The content half used not to reach every tracked file.**
+  `run-guard-signing-material.mjs`'s `SKIP_CONTENT_READ_EXTENSIONS` returned
+  before reading, so a PEM key under `key.zip`, `key.jar` or `key.pdf` was caught
   only by name — which those three extensions do not trigger. Measured at the
   P9-W5 merge gate by tracking the identical header twice: as `.txt` the guard
-  reported a violation, as `.zip` it reported none. This is parity with
-  `guard-secret-scan.mjs`, so it is not a regression, but it is a gap and T237
-  owns it. (CORRECTED at the P9-W5 merge gate: this said the guard fires when
-  "ANY tracked file's content contains a PEM private-key header", and named "a
-  keystore renamed to hide its extension" as caught by content. A `.jks`
-  renamed to `.zip` is precisely the case the skip list drops.)
+  reported a violation, as `.zip` it reported none. This was parity with
+  `guard-secret-scan.mjs`, so it was not a regression, but it was a gap, and
+  T237 owned closing or documenting it. (CORRECTED at the P9-W5 merge gate: this
+  said the guard fires when "ANY tracked file's content contains a PEM
+  private-key header", and named "a keystore renamed to hide its extension" as
+  caught by content. A `.jks` renamed to `.zip` was precisely the case the skip
+  list dropped.)
+
+  **CLOSED at the T237 gate: the skip list was removed, not narrowed.**
+  `readContentIfWorthwhile` (`run-guard-signing-material.mjs`) now reads every
+  tracked file's content, subject only to the existing 5 MiB size cap — no
+  extension is skipped any more. The decision was measured, not reasoned about:
+  Node's `"utf8"` decode never throws on invalid byte sequences (it substitutes
+  U+FFFD and returns a string), so the guard's own `catch` around
+  `readFileSync` was never actually "the decode failure the binary keystore
+  always lands in" — that claim, in an earlier version of this document and of
+  the module's own comment, was false. Because decoding never throws, a PEM
+  header's literal ASCII bytes survive into the decoded text wherever the
+  container does not compress them: a real PKZIP archive built with
+  `CompressionLevel.NoCompression` and containing a file whose bytes were an
+  unmodified PEM header was, once read, caught by `findSigningMaterialViolations`
+  — the identical header zipped with ordinary DEFLATE compression was not,
+  because compression (not the extension) scrambles the bytes, the same
+  limitation a gzipped `.txt` file would have. There is therefore no extension
+  in the old skip list that is structurally immune to holding a pasted key
+  (PNG `tEXt`/`zTXt` chunks, JPEG `COM` markers, ID3 tags, and uncompressed PDF
+  streams all share the same "survives if not compressed" property), so
+  "narrow the list to the extensions that genuinely cannot hold a pasted key"
+  had no non-empty answer. The old performance rationale did not hold up
+  measured either: at this commit `git ls-files` names 24 tracked files under
+  the old list's extensions (8 `.png`, 8 `.ttf`, 8 `.woff2`; zero
+  `.zip`/`.jar`/`.pdf`), the largest is 344 KB, and reading and scanning all 24
+  produces zero false positives in well under a second. See
+  `scripts/ci/run-guard-signing-material.mjs`'s own T237 comment for the full
+  measurement, and `scripts/ci/guard-signing-material.test.mjs` for the CLI-level
+  test that exercises `readContentIfWorthwhile` directly against a real file on
+  disk under a formerly-skipped extension (`.zip`), proving the fix by a firing
+  that was watched: the same PEM-bearing fixture is read as `undefined` if the
+  old skip set is reintroduced and as real content once it is not, and only the
+  latter is what ships.
 
   See that module's own header for the full reasoning,
   including why this is a new, dedicated guard rather than a change to

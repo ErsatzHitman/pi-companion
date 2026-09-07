@@ -8394,9 +8394,9 @@ Consider whether `guard-secret-scan.mjs` deserves the same treatment in the same
 Owns: `scripts/ci/guard-signing-material.mjs`, `scripts/ci/run-guard-signing-material.mjs`,
 their test, and `docs/android-apk-release.md` §2.2.
 
-- [ ] A PEM key under a skipped extension is either caught, or documented as out of scope
-- [ ] A CLI-level test covers the skip list, not only the matcher
-- [ ] The decision is proven by a firing that was watched, not asserted
+- [x] A PEM key under a skipped extension is either caught, or documented as out of scope
+- [x] A CLI-level test covers the skip list, not only the matcher
+- [x] The decision is proven by a firing that was watched, not asserted
 
 #### T238 — Decide whether the published CLI binary keeps the name paseo
 

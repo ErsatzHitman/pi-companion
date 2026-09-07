@@ -6,9 +6,8 @@
 //
 // Scans `git ls-files` (tracked files only — never a raw filesystem walk,
 // which could otherwise wander outside the repository) exactly like
-// `run-guard-secret-scan.mjs`, but with a much narrower content-read skip
-// list: unlike that guard, this one's job is to catch a signing file BY
-// NAME even when it is binary, so it must not skip `.jks`/`.keystore`/
+// `run-guard-secret-scan.mjs`, but this guard's job is to catch a signing file
+// BY NAME even when it is binary, so it must not skip `.jks`/`.keystore`/
 // `.apk`/`.aab`/etc. before running the name check.
 
 import { execFileSync } from "node:child_process";
@@ -20,46 +19,56 @@ import { findSigningMaterialViolations } from "./guard-signing-material.mjs";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-// Generic binary-asset extensions this repository legitimately tracks in
-// quantity, skipped before any content READ so this guard does not waste time
-// trying to UTF-8-decode images/fonts/audio.
+// T237: there used to be a `SKIP_CONTENT_READ_EXTENSIONS` set here
+// (`.png`/`.jpg`/.../`.zip`/`.jar`/`.pdf`) that returned `undefined` before
+// any content read, so the PEM-header content check never ran on those
+// extensions — measured at the P9-W5 merge gate by tracking an identical PEM
+// header as both `.txt` (violation reported) and `.zip` (none reported).
 //
-// This list DOES narrow the content check, and the narrowing is real: a PEM
-// private key pasted into a tracked `key.zip`, `key.jar` or `key.pdf` is not
-// caught here, while the same bytes under `key.txt` are. Measured at the P9-W5
-// merge gate by tracking the identical header under both extensions: `.txt`
-// reported a violation, `.zip` reported none. The name-based checks are
-// unaffected — every path still goes through
-// `findSigningMaterialViolations`'s extension and basename checks, and none of
-// the extensions listed here can satisfy `SIGNING_MATERIAL_EXTENSIONS` or
-// `SIGNING_MATERIAL_FILENAMES` (deliberately disjoint sets).
+// T237 decided AGAINST narrowing that list and instead REMOVED it, because no
+// extension in it is actually safe to skip once you read real files instead
+// of reasoning about them:
 //
-// This is parity with `run-guard-secret-scan.mjs`, whose `BINARY_EXTENSIONS`
-// skips the same three, so it is not a regression — but it is a gap, and T237
-// owns deciding whether to read content on these (size-capped) or narrow the
-// list. (CORRECTED at the P9-W5 merge gate: this said "This is NOT a
-// security-relevant exclusion", which is true of the name checks and false of
-// the content check — the half that exists to catch a renamed keystore.)
-const SKIP_CONTENT_READ_EXTENSIONS = new Set([
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".ico",
-  ".webp",
-  ".woff",
-  ".woff2",
-  ".ttf",
-  ".otf",
-  ".eot",
-  ".mp3",
-  ".mp4",
-  ".wav",
-  ".zip",
-  ".jar",
-  ".pdf",
-]);
-
+//   - Node's `Buffer`-backed `"utf8"` decode never throws on invalid byte
+//     sequences — it substitutes U+FFFD and returns a string. Verified
+//     directly: `Buffer.from([0x00, 0xff, 0xfe, 0x50, 0x4b, 0x03,
+//     0x04]).toString("utf8")` returns a 7-character string, no exception.
+//     So the `catch` below is NOT "a real binary keystore always lands
+//     here" (that claim, made by an earlier version of this comment, was
+//     never true) — it exists only for a genuine I/O race (the file is
+//     deleted or its permissions change between the `statSync` and the
+//     `readFileSync`).
+//   - Because decoding never throws, a binary file's literal ASCII bytes
+//     survive into the decoded string wherever the file itself stores them
+//     uncompressed. Measured directly: a real, valid PKZIP archive
+//     (`System.IO.Compression.ZipFile`, `CompressionLevel.NoCompression`)
+//     containing a file whose content was a PEM header decoded byte-for-byte
+//     back to the original text, and `findSigningMaterialViolations` caught
+//     it. The same PEM header zipped with ordinary DEFLATE compression did
+//     NOT survive (compression scrambles the bytes) — so a compressed
+//     archive still is not caught by content, but that is a limitation of
+//     compression, not of this guard's extension handling, and it applies
+//     identically to a `.txt` file gzipped by hand. PNG (`tEXt`/`zTXt`
+//     chunks), JPEG (`COM` markers), ID3 audio tags, and uncompressed PDF
+//     streams all have the same "literal bytes survive if the container
+//     doesn't compress them" property — there is no extension in the old
+//     list that is structurally immune to holding a pasted key, which is
+//     what "narrow the list to the extensions that genuinely cannot hold a
+//     pasted key" would have required.
+//   - The performance rationale the old comment gave ("does not waste time
+//     trying to UTF-8-decode images/fonts/audio") does not hold up measured
+//     against this repository's real tracked assets: at the time of this
+//     change, `git ls-files` names 24 tracked files under the old skip
+//     list's extensions (8 `.png`, 8 `.ttf`, 8 `.woff2`; zero `.zip`/`.jar`/
+//     `.pdf`), the largest is 344 KB, and reading and scanning every one of
+//     them produces zero false positives and finishes in well under a
+//     second — the existing `MAX_SCANNED_BYTES` cap below already bounds the
+//     worst case regardless of extension.
+//
+// So: every tracked file's content is now read (subject to the size cap),
+// with no extension-based skip. The name-based checks
+// (`findSigningMaterialViolations`'s extension/filename matches) are
+// unaffected either way — they never depended on content being read.
 const MAX_SCANNED_BYTES = 5 * 1024 * 1024; // 5 MiB — generous for any hand-edited text file here.
 
 function listTrackedFiles() {
@@ -67,15 +76,14 @@ function listTrackedFiles() {
   return output.split("\n").filter(Boolean);
 }
 
-function extensionOf(path) {
-  const dot = path.lastIndexOf(".");
-  return dot === -1 ? "" : path.slice(dot).toLowerCase();
-}
-
-function readContentIfWorthwhile(path) {
-  if (SKIP_CONTENT_READ_EXTENSIONS.has(extensionOf(path))) return undefined;
-
-  const absolutePath = join(repoRoot, path);
+/**
+ * @param {string} absolutePath the file's real, absolute path on disk
+ * @returns {string | undefined} the file's UTF-8 text content, or `undefined`
+ *   when it is too large to be worth reading or a genuine I/O error occurs
+ *   reading it (see the T237 comment above the skip list this function used
+ *   to consult — it no longer skips by extension).
+ */
+export function readContentIfWorthwhile(absolutePath) {
   let size;
   try {
     size = statSync(absolutePath).size;
@@ -87,8 +95,10 @@ function readContentIfWorthwhile(path) {
   try {
     return readFileSync(absolutePath, "utf8");
   } catch {
-    // Not decodable as UTF-8 — a real binary keystore always lands here.
-    // The name-based checks already ran on `path` regardless of this.
+    // A genuine I/O race (permission change, deletion) between the
+    // `statSync` above and this read — NOT a UTF-8 decode failure; see the
+    // T237 comment above for why decoding itself never throws here. The
+    // name-based checks already ran on the file's path regardless of this.
     return undefined;
   }
 }
@@ -98,7 +108,7 @@ function main() {
   const violations = [];
 
   for (const path of files) {
-    const content = readContentIfWorthwhile(path);
+    const content = readContentIfWorthwhile(join(repoRoot, path));
     violations.push(...findSigningMaterialViolations(path, content));
   }
 
