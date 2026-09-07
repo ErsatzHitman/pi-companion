@@ -245,12 +245,20 @@ This is the same "two sources of truth for a version" shape CLAUDE.md's T230 not
 names elsewhere. **Filed as a gap, not fixed**: `apps/android/app.config.ts` is not
 in this task's Owns line (only `.github/workflows/android-apk-release.yml`,
 `.gitignore`, `apps/android/eas.json`, a new `scripts/ci` guard, and this doc are).
-The concrete fix, for whoever owns `app.config.ts` next (T44B2 or a new task): bump
-`version`/set an explicit `android.versionCode` per release, or set
-`"autoIncrement": true` on the `production-apk` profile (EAS then increments
+The concrete fix: bump `version`/set an explicit `android.versionCode` per release,
+or set `"autoIncrement": true` on the `production-apk` profile (EAS then increments
 `versionCode` itself on every build using that profile) — the second is the
 smaller, more mechanical change and does not require deriving anything from the git
 tag at all.
+
+**CORRECTED: this previously said "for whoever owns `app.config.ts` next (T44B2 or
+a new task)".** T44B2's own `Owns:` line is `docs/` only, so it was never going to
+be the task that fixes this file; the P9-W5 merge gate filed the dedicated
+follow-up as **T235** (`docs/issues-from-plan.md`, wave `P9-W17`, owning
+`apps/android/app.config.ts` and `apps/android/eas.json`), still unfixed as of
+T44B2's own commit. T44B2's record of the resulting install-time collision
+(`INSTALL_FAILED_VERSION_DOWNGRADE`) lives in
+`docs/clean-install-and-rollback.md` §A.3, §A.6, and §B.6.
 
 ### 3.3 Disclosed, unverifiable-here: does the EAS remote archive include locally-built `dist/`?
 
