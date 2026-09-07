@@ -288,12 +288,22 @@ that version — T235 derives it as `major * 1_000_000 + minor * 1_000 + patch`,
 releases apart.
 
 What remains two independent identifiers is the git TAG and the declared `version`.
-Nothing fails a release that tags `v0.2.0` while `app.config.ts` still says `0.1.0`;
-that release rebuilds the previous `versionCode` and collides on the device exactly
-as before (`INSTALL_FAILED_VERSION_DOWNGRADE`). Bump `version` in the same commit you
-tag. Enforcing that mechanically is filed separately, and the check has to run on the
-GitHub runner: EAS evaluates `app.config.ts` on its own build machine and never sees
-the runner's environment.
+Bump `version` in the same commit you tag; a build whose declared `version` disagrees
+with its tag rebuilds the previous `versionCode` and collides on the device exactly as
+before (`INSTALL_FAILED_VERSION_DOWNGRADE`).
+
+**CORRECTED (T247).** This previously said "Nothing fails a release that tags `v0.2.0`
+while `app.config.ts` still says `0.1.0` ... Enforcing that mechanically is filed
+separately" — true when written (T235 explicitly filed the gap and left it open). T247
+closed it: `.github/workflows/android-apk-release.yml`'s `publish-android-apk` job now
+runs `scripts/ci/run-guard-android-release-tag-version.mjs` right after checkout, before
+any build step, and fails the job loudly when the tag's stripped `v`/`android-v` prefix
+disagrees with `app.config.ts`'s declared `version`. That check has to run on the GitHub
+runner, never inside `app.config.ts` itself: EAS evaluates `app.config.ts` on its own
+build machine and never sees the runner's `RELEASE_TAG` — the same constraint T235's own
+decision record in `app.config.ts` names. See `scripts/ci/guard-android-release-tag-
+version.mjs` for the tag shapes it derives from this workflow's real triggers and for
+the `workflow_dispatch`-with-no-recognized-tag-shape decision.
 
 **CORRECTED at the P9-A merge gate.** This said `versionCode` "never increases
 release over release" and that Android "will refuse to install one over the other as
