@@ -94,6 +94,78 @@ the tree, not assumed:
   dependency-audit concern (§2), not a version-drift one, and are not
   duplicated here.
 
+### 1.2 T230 addendum: the Workers-boundary question, answered
+
+T230 (`wave: P9-W12`) was filed by this section's first bullet above to
+answer, with evidence rather than assumption, whether
+`packages/relay/src/cloudflare-adapter.ts` can take a `@picompanion/protocol`
+import at the Cloudflare Workers boundary. Measured at
+`bc6c303e7c51274879d4444631e0bc13ea64e7e9` (`git rev-parse HEAD`):
+
+- **The Workers runtime is not the blocker.** `@picompanion/protocol`'s
+  `daemon-endpoints.ts` — the module that exports
+  `CURRENT_RELAY_PROTOCOL_VERSION` — has zero `import` statements, in
+  either the source or its compiled `dist/daemon-endpoints.js`. It uses only
+  `URL`, string methods, and `RegExp`, all present in the Workers runtime.
+  `packages/protocol/package.json`'s `exports` map resolves the subpath
+  `@picompanion/protocol/daemon-endpoints` unambiguously to
+  `dist/daemon-endpoints.js` via its `"./*"` wildcard entry (only a
+  `types`/`default` pair — no `node`/`browser` condition branch to diverge
+  on). `packages/relay/wrangler.toml` sets `main = "src/cloudflare-adapter.ts"`,
+  so `wrangler`'s own bundler (esbuild) would resolve that specifier by
+  ordinary Node module resolution and, because the target module has no
+  imports of its own, pull in nothing beyond that one small file — no
+  `zod` (protocol's only runtime dependency lives entirely outside this
+  module), no Node builtins, nothing incompatible with Workers.
+- **The real blocker is dependency-declaration mechanics, not the runtime.**
+  `packages/relay/package.json` does not list `@picompanion/protocol` under
+  `dependencies`. Because this is an npm workspace, the import would
+  actually _resolve_ today without any edit — every `packages/*` and
+  `apps/*` member is symlinked into the root `node_modules/@picompanion/*`
+  unconditionally (confirmed: `node_modules/@picompanion/protocol` already
+  points at `packages/protocol` on this tree) — but doing that on purpose
+  is the exact undeclared-workspace-dependency shape
+  `scripts/ci/guard-declared-workspace-deps.mjs` (T60B) exists to catch for
+  `apps/android` and `apps/web`; that guard does not scan `packages/relay`
+  today, so an undeclared import here would not be caught, which makes it
+  worse, not safer, to ship deliberately in the one package deployed
+  completely outside the rest of this monorepo's own build tooling
+  (`wrangler deploy`, not `npm run build`).
+  Declaring the dependency correctly requires adding
+  `"@picompanion/protocol": "0.3.0-beta.2"` to
+  `packages/relay/package.json`'s `dependencies` — and `package-lock.json`
+  carries its own mirrored copy of every workspace member's `dependencies`
+  block (confirmed at its `"packages/relay"` entry), which `npm ci`
+  validates against `package.json` exactly. Adding the line without
+  regenerating that lockfile entry would desync the two and break `npm ci`
+  in CI; regenerating it requires running `npm install`, which — like the
+  `npm audit` half of this same document — this environment's permission
+  classifier refuses, per this task's own hard rules ("npm install ... any
+  package.json-dependency or package-lock.json edit is REFUSED ... Do not
+  attempt it").
+- **Decision: KEEP the guard.** The structural fix (relay imports
+  protocol's real constant) is correct in principle and blocked in this
+  environment by the dependency-declaration/lockfile mechanics above, not
+  by anything about Cloudflare Workers. `findRelayProtocolVersionDrift`
+  (§1's table, third row) was re-proven on this tree: mutating
+  `cloudflare-adapter.ts`'s `CURRENT_RELAY_VERSION` literal to `"3"` made
+  `run-guard-version-drift.mjs` exit 1 naming the exact mismatch, and
+  restoring it byte-identically returned it to exit 0 with
+  `run-guard-clean-working-tree.mjs` also exit 0 (this document's own §1
+  historical mutation predates this re-proof and stays as originally
+  measured).
+  **When the owner unblocks `npm install`:** run, from the repository root,
+  `npm install @picompanion/protocol@0.3.0-beta.2 --workspace=@picompanion/relay --save-exact`
+  (or hand-add the `dependencies` line and run a plain `npm install` to
+  regenerate the lockfile entry), change `cloudflare-adapter.ts` to
+  `import { CURRENT_RELAY_PROTOCOL_VERSION as CURRENT_RELAY_VERSION } from "@picompanion/protocol/daemon-endpoints";`
+  in place of the local literal, rebuild `packages/relay`
+  (`npm run build --workspace=@picompanion/relay`), and confirm a real
+  Cloudflare Workers deploy still bundles cleanly before treating
+  `findRelayProtocolVersionDrift`'s relay-side check as redundant and
+  removing it — the compile error only replaces the guard once the import
+  is real, not once it merely typechecks locally.
+
 ---
 
 ## 2. Dependency scan (`npm audit`)
