@@ -128,25 +128,58 @@ export class AgentStorage {
   }
 
   private queueRecordWrite(record: StoredAgentRecord): Promise<void> {
-    const agentId = record.id;
-    const prev = this.pendingWrites.get(agentId) ?? Promise.resolve();
-    const next = prev.then(async () => {
-      if (this.deleting.has(agentId)) {
-        return undefined;
+    return this.runExclusive(record.id, async () => {
+      if (this.deleting.has(record.id)) {
+        return;
       }
 
       await this.writeRecord(record);
-      return undefined;
     });
+  }
 
-    const tracked = next.finally(() => {
-      if (this.pendingWrites.get(agentId) === tracked) {
-        this.pendingWrites.delete(agentId);
-      }
-    });
+  // Serializes every mutating operation for one agent id -- both the write
+  // itself AND, for read-modify-write callers (applySnapshot, setTitle), the
+  // read that precedes it -- into a single per-agent FIFO queue.
+  //
+  // Before this existed, only the WRITE step was queued (via this same
+  // `pendingWrites` map, previously populated solely from `queueRecordWrite`).
+  // A read-modify-write caller did its read (`get()`) *outside* that queue, so
+  // a concurrent write landing between the read and the eventual write was
+  // invisible to the reader. That is exactly how `applySnapshot`'s `archivedAt`
+  // guard (see below) could be defeated: a still-running agent's own
+  // concurrent snapshot flush could read the pre-archive record, and its
+  // later write -- built from that stale read -- would land after the archive
+  // write and silently erase `archivedAt` again. The guard's own comment only
+  // ever promised to cover "normal persistence", i.e. the sequential case
+  // where the read always happens after any prior write has fully settled;
+  // nothing enforced that until now (see T243).
+  //
+  // Every caller that reads `this.cache` before writing must do both the read
+  // and the write inside the SAME `runExclusive` callback, and must write via
+  // `this.writeRecord` directly rather than `this.upsert`/`queueRecordWrite`
+  // (which would re-enter `runExclusive` for the same id while the lock is
+  // already held, deadlocking against itself).
+  //
+  // A failed previous operation does not block the next one -- `prev.then(fn,
+  // fn)` runs `fn` whether the previous operation resolved or rejected, so one
+  // write failure cannot wedge every later mutation for that agent id behind a
+  // promise that will never settle.
+  private runExclusive(agentId: string, fn: () => Promise<void>): Promise<void> {
+    const prev = this.pendingWrites.get(agentId) ?? Promise.resolve();
+    const run = prev.then(fn, fn);
+    const tracked = run
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .finally(() => {
+        if (this.pendingWrites.get(agentId) === tracked) {
+          this.pendingWrites.delete(agentId);
+        }
+      });
 
     this.pendingWrites.set(agentId, tracked);
-    return tracked;
+    return run;
   }
 
   private async writeRecord(record: StoredAgentRecord): Promise<void> {
@@ -207,35 +240,51 @@ export class AgentStorage {
     options?: { title?: string | null; internal?: boolean },
   ): Promise<void> {
     await this.load();
-    await this.waitForPendingWrite(agent.id);
-    const existing = (await this.get(agent.id)) ?? null;
-    const hasTitleOverride =
-      options !== undefined && Object.prototype.hasOwnProperty.call(options, "title");
-    const hasInternalOverride =
-      options !== undefined && Object.prototype.hasOwnProperty.call(options, "internal");
-    const record = toStoredAgentRecord(agent, {
-      title: hasTitleOverride ? (options?.title ?? null) : (existing?.title ?? null),
-      createdAt: existing?.createdAt,
-      internal: hasInternalOverride ? options?.internal : (agent.internal ?? existing?.internal),
-    });
+    await this.runExclusive(agent.id, async () => {
+      const existing = (await this.get(agent.id)) ?? null;
+      const hasTitleOverride =
+        options !== undefined && Object.prototype.hasOwnProperty.call(options, "title");
+      const hasInternalOverride =
+        options !== undefined && Object.prototype.hasOwnProperty.call(options, "internal");
+      const record = toStoredAgentRecord(agent, {
+        title: hasTitleOverride ? (options?.title ?? null) : (existing?.title ?? null),
+        createdAt: existing?.createdAt,
+        internal: hasInternalOverride ? options?.internal : (agent.internal ?? existing?.internal),
+      });
 
-    // Preserve soft-delete/archive status across snapshot flushes.
-    // `archivedAt` is not part of the ManagedAgent snapshot, so a naive projection
-    // would wipe it during normal persistence (including on daemon restart).
-    if (existing && existing.archivedAt !== undefined) {
-      record.archivedAt = existing.archivedAt;
-    }
-    await this.upsert(record);
+      // Preserve soft-delete/archive status across snapshot flushes.
+      // `archivedAt` is not part of the ManagedAgent snapshot, so a naive
+      // projection would wipe it during normal persistence (including on
+      // daemon restart). The read above and the write below now run inside
+      // the SAME per-agent exclusive section as every other mutation for this
+      // agent id (see `runExclusive`), so a concurrent archive/setTitle/
+      // snapshot call can no longer land between this read and this write --
+      // closing the race where a still-running agent's own snapshot flush
+      // could read a pre-archive record and clobber `archivedAt` after the
+      // archive write had already landed (T243).
+      if (existing && existing.archivedAt !== undefined) {
+        record.archivedAt = existing.archivedAt;
+      }
+
+      if (this.deleting.has(agent.id)) {
+        return;
+      }
+      await this.writeRecord(record);
+    });
   }
 
   async setTitle(agentId: string, title: string): Promise<void> {
     await this.load();
-    await this.waitForPendingWrite(agentId);
-    const record = await this.get(agentId);
-    if (!record) {
-      throw new Error(`Agent ${agentId} not found`);
-    }
-    await this.upsert({ ...record, title });
+    await this.runExclusive(agentId, async () => {
+      const record = this.cache.get(agentId) ?? null;
+      if (!record) {
+        throw new Error(`Agent ${agentId} not found`);
+      }
+      if (this.deleting.has(agentId)) {
+        return;
+      }
+      await this.writeRecord({ ...record, title });
+    });
   }
 
   async flush(): Promise<void> {
@@ -385,10 +434,6 @@ export class AgentStorage {
       this.daemonAgentIdsByExecution.delete(key);
     }
     this.daemonExecutionKeysByAgentId.delete(agentId);
-  }
-
-  private async waitForPendingWrite(agentId: string): Promise<void> {
-    await (this.pendingWrites.get(agentId) ?? Promise.resolve()).catch(() => undefined);
   }
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from "vitest";
+import { describe, expect, test, beforeEach, afterEach, vi } from "vitest";
 import os from "node:os";
 import path from "node:path";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
@@ -294,6 +294,70 @@ describe("AgentStorage", () => {
 
     const recordAfterSnapshot = await storage.get(agentId);
     expect(recordAfterSnapshot?.archivedAt).toBe(archivedAt);
+  });
+
+  // T243: the sequential-only guard above ("applySnapshot preserves archivedAt")
+  // is not enough. A still-running agent keeps producing its own concurrent
+  // applySnapshot flushes (e.g. from streaming activity) that are not
+  // coordinated with an in-progress archive. This test forces the exact
+  // interleaving deterministically -- no reliance on real disk-I/O timing or
+  // machine load -- by gating the internal `get()` read inside one
+  // applySnapshot call so it captures a pre-archive record and then parks
+  // there, while a second, independent archive write is started (but not yet
+  // awaited) before the gate is released.
+  test("a concurrent snapshot flush cannot un-archive a record archived while it is mid-flight", async () => {
+    const agentId = "agent-archive-race";
+    await storage.applySnapshot(createManagedAgent({ id: agentId, lifecycle: "idle" }));
+
+    let releaseFlushRead!: () => void;
+    const flushReadGate = new Promise<void>((resolve) => {
+      releaseFlushRead = resolve;
+    });
+    let signalFlushReadStarted!: () => void;
+    const flushReadStarted = new Promise<void>((resolve) => {
+      signalFlushReadStarted = resolve;
+    });
+
+    const originalGet = storage.get.bind(storage);
+    const getSpy = vi.spyOn(storage, "get");
+    getSpy.mockImplementationOnce(async (id: string) => {
+      // Capture the pre-archive value NOW -- this models the still-running
+      // agent's own concurrent snapshot flush reading state before the
+      // archive write below lands -- then hold the flush's continuation here
+      // until the test releases it.
+      const value = await originalGet(id);
+      signalFlushReadStarted();
+      await flushReadGate;
+      return value;
+    });
+
+    // The still-running agent's own concurrent snapshot flush, racing the
+    // archive below. In production this is triggered by streaming activity,
+    // not by anything archiveAgent() awaits.
+    const concurrentFlush = storage.applySnapshot(
+      createManagedAgent({ id: agentId, lifecycle: "running" }),
+    );
+
+    // Wait until the flush has genuinely captured its (stale) read and is
+    // parked, rather than guessing a microtask count.
+    await flushReadStarted;
+
+    // The archive write itself -- exactly what agent-manager.ts's
+    // markRecordArchived does: an explicit upsert carrying archivedAt.
+    // Started (not yet awaited) while the flush above is still parked
+    // mid-read, so it is guaranteed to be initiated before the flush's own
+    // write, regardless of real disk-I/O speed.
+    const archivedAt = "2025-06-01T00:00:00.000Z";
+    const beforeArchive = await originalGet(agentId);
+    expect(beforeArchive).not.toBeNull();
+    const archiveWrite = storage.upsert({ ...beforeArchive!, archivedAt });
+
+    releaseFlushRead();
+
+    await Promise.all([concurrentFlush, archiveWrite]);
+
+    const after = await storage.get(agentId);
+    expect(after?.archivedAt).toBe(archivedAt);
   });
 
   test("stores titles independently of snapshots", async () => {
