@@ -22,3 +22,23 @@ apps/android/ios/
 
 # Workflow agent scratch (worktrees, run state)
 .pi/
+
+# Android/EAS signing material and credentials exports (T44B1) — must never
+# be committed. scripts/ci/guard-signing-material.mjs enforces this same
+# list as a tracked-tree CI check, independent of whether a file is
+# ignored: an already-tracked file is not un-tracked by adding an ignore
+# rule for it, which is exactly why that guard exists alongside this list
+# rather than instead of it.
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pepk
+*.mobileprovision
+google-services.json
+credentials.json
+
+# Built application packages are a release ARTIFACT the release workflow
+# produces and attaches to a GitHub Release — never a committed file.
+*.apk
+*.aab

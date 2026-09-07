@@ -1268,6 +1268,27 @@ jobs:
       - name: Fail when a tracked file matches a curated, high-signal secret pattern
         run: node scripts/ci/run-guard-secret-scan.mjs
 
+  # T44B1: `guard-secret-scan.mjs` above cannot cover this — its
+  # `BINARY_EXTENSIONS` skip list explicitly excludes `.keystore`, `.jks`,
+  # `.apk` and `.aab` from ever being scanned, which is correct for THAT
+  # guard's content-shaped secret patterns but left the "signing material is
+  # not present in the repository" criterion with zero enforcement. See
+  # scripts/ci/guard-signing-material.mjs for the full reasoning. Unconditional,
+  # same as guard-secret-scan above — a committed keystore is a standing risk
+  # regardless of which directory changed.
+  guard-signing-material:
+    name: guard / no committed file looks like Android/EAS signing material
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail when a tracked file looks like a keystore, credentials export, or PEM private key
+        run: node scripts/ci/run-guard-signing-material.mjs
+
   # T44A3. Needs `npm ci` first (npm audit reads the real, installed
   # dependency tree) and network access to npm's advisory registry, so this
   # is not folded into the unconditional guards above. See

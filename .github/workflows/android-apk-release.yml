@@ -60,11 +60,22 @@ jobs:
       # Build frontend-core's own dependency chain so `apps/android`'s build
       # script (which runs `frontend-core`'s build + the no-web-artifacts
       # guard before `expo prebuild`) has real output to consume, matching
-      # the `android-tests` job in ci.yml.
-      - name: Build frontend-core dependencies (protocol, design-tokens, frontend-core)
+      # the `android-tests` job in ci.yml — including `@picompanion/highlight`,
+      # which `android-tests` builds for the same reason `file-syntax-
+      # highlight.ts` names in its own doc comment: `apps/android` resolves
+      # it through built `dist/*.js` (its package.json `exports`), never
+      # source, so a clean checkout with this build step omitted fails the
+      # same way `android-tests` failed before that job added it — a stale
+      # local `packages/highlight/dist` hid the gap there, and would hide it
+      # here too.
+      # CORRECTED (T44B1): this step previously omitted `@picompanion/highlight`
+      # entirely, and its own comment falsely claimed parity with
+      # `android-tests`, which already built four packages, not three.
+      - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
         run: |
           npm run build --workspace=@picompanion/protocol
           npm run build --workspace=@picompanion/design-tokens
+          npm run build --workspace=@picompanion/highlight
           npm run build --workspace=@picompanion/frontend-core
 
       - name: Check EAS credentials are configured
