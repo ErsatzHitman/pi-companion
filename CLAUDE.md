@@ -58,6 +58,29 @@ docs, UI copy, or package metadata:
 `plan.md` itself is the only document in this repository that describes the _new_
 product; everything above is reference-only.
 
+**These documents are frozen, not annotatable (T242).** A reference-only file is
+valuable exactly because it is an unedited snapshot of what Paseo did, or of what an
+audit against Paseo found — never edit one to mark a row or sentence as superseded,
+correct a name a later decision retired, or otherwise layer this product's own
+decisions onto it, even clearly attributed. That blurs the same boundary "never let
+their descriptions of 'Paseo' bleed into new product docs" protects, in the other
+direction: once one of these files carries a mix of Paseo's original content and our
+own annotations, the next reader can no longer tell which parts are still Paseo's
+without checking git blame, and the file stops being trustworthy as a historical
+record. If something in one goes stale relative to a later decision, leave it exactly
+as written — it is still an accurate record of what it was capturing — and record the
+supersession in `plan.md`, the one document that governs this product's present.
+
+The corollary binds shipped source, not just the docs themselves: **never cite a
+reference-only document as authority for a current product fact or decision.** These
+files may still be read for behavior, the same way `D:\paseo` itself may be, but
+whatever is learned from one belongs in a citable home outside the reference-only
+list — a `plan.md` section, a test, or another written requirement — before shipped
+code cites it. A code comment justifying today's behavior by pointing at one of these
+files is a defect the moment it does so, regardless of whether the fact stated is
+still true; the fix is to restate that fact in `plan.md` (or wherever the capability
+actually lives) and cite that instead, not to argue the fact still holds.
+
 ## Repository invariants
 
 These hold everywhere in the codebase, not just for a single task:
