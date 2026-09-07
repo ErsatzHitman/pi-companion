@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const APP_CONFIG_PATH = "apps/android/app.config.ts";
 const RUNNER_PATH = "scripts/ci/run-guard-android-release-tag-version.mjs";
+const WORKFLOW_PATH = ".github/workflows/android-apk-release.yml";
 
 // T93: test committed content, not the working tree — a concurrent editor
 // of app.config.ts could otherwise make this test observe a value no
@@ -25,14 +26,99 @@ function gitShowHead(relativePath) {
   });
 }
 
+// T255: derive the tag globs from the workflow's OWN `on: push: tags:`
+// block, rather than assuming the two this repository happens to declare
+// today. This is what makes the pin below fail when a third glob is added
+// to the trigger and the guard does not yet recognize it — the exact gap
+// T255 was filed to close (docs/issues-from-plan.md, T255): the two tests
+// this replaces were titled as if they read the workflow but only ever
+// asserted against `stripReleaseTagPrefix`'s own hardcoded literals.
+//
+// Parses the literal YAML shape the workflow actually uses:
+//
+//   on:
+//     push:
+//       tags:
+//         - "v*"
+//         - "android-v*"
+//
+// i.e. a `tags:` line (matched on its own, so a `tags:` key appearing
+// anywhere else in the file would also be picked up — guarded against
+// below by requiring exactly one match) followed immediately by one or
+// more `- "<glob>"` list items. No YAML parser is pulled in for this: the
+// shape is simple enough to anchor directly, and anchoring directly is
+// what lets this fail loudly (via the assertions below) if the workflow's
+// tags block ever stops looking like this, rather than silently deriving
+// zero globs and passing vacuously.
+function extractPushTagGlobs(workflowContent) {
+  const tagsLines = workflowContent
+    .split("\n")
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => /^\s*tags:\s*$/.test(line));
+  assert.equal(
+    tagsLines.length,
+    1,
+    `expected exactly one \`tags:\` line in ${WORKFLOW_PATH}, found ${tagsLines.length}`,
+  );
+
+  const lines = workflowContent.split("\n");
+  const globs = [];
+  for (let i = tagsLines[0].index + 1; i < lines.length; i++) {
+    const match = /^\s*-\s*"([^"]*)"\s*$/.exec(lines[i]);
+    if (match === null) break;
+    globs.push(match[1]);
+  }
+  assert.ok(globs.length > 0, `expected at least one tag glob under \`tags:\` in ${WORKFLOW_PATH}`);
+  return globs;
+}
+
+// Every glob this workflow declares today is a bare literal prefix plus a
+// single trailing `*` (`"v*"`, `"android-v*"`) — never a mid-string
+// wildcard, a character class, or a `?`. That is asserted, not assumed:
+// a shape this function cannot reduce to "literal text, then one trailing
+// `*`" throws rather than silently deriving the wrong literal prefix.
+function globToLiteralPrefix(glob) {
+  assert.equal(
+    glob.endsWith("*") && glob.indexOf("*") === glob.length - 1 && !glob.includes("?"),
+    true,
+    `tag glob "${glob}" in ${WORKFLOW_PATH} is not a bare "<literal>*" shape this pin knows how to reduce to a prefix`,
+  );
+  return glob.slice(0, -1);
+}
+
 // --- stripReleaseTagPrefix: the tag shapes the workflow's real triggers fire on ---
 
-test("stripReleaseTagPrefix strips the 'v' prefix android-apk-release.yml's push trigger fires on", () => {
+test("RELEASE_TAG_PREFIXES (via stripReleaseTagPrefix) covers every tag glob android-apk-release.yml's push trigger fires on", () => {
+  const workflowContent = gitShowHead(WORKFLOW_PATH);
+  const globs = extractPushTagGlobs(workflowContent);
+  for (const glob of globs) {
+    const prefix = globToLiteralPrefix(glob);
+    const sampleTag = `${prefix}0.1.0`;
+    assert.deepEqual(
+      stripReleaseTagPrefix(sampleTag),
+      { prefix, version: "0.1.0" },
+      `stripReleaseTagPrefix does not recognize the "${prefix}" prefix that ` +
+        `${WORKFLOW_PATH}'s push trigger glob "${glob}" fires on — a real ` +
+        `tag of this shape would fail the guard's own ` +
+        `\`unrecognized-tag-shape\` arm even though CI's push trigger accepted it`,
+    );
+  }
+});
+
+// The pin above proves RELEASE_TAG_PREFIXES covers whatever the workflow
+// declares TODAY, deriving the prefixes rather than hardcoding them. The
+// two tests below are unrelated to that: they exercise
+// `stripReleaseTagPrefix`'s general prefix-stripping behavior — including
+// version numbers of different digit widths the pin above never varies —
+// against the two prefixes this guard happens to support right now. They
+// no longer claim to read the workflow's trigger in their titles, because
+// they never did; the pin above is what actually reads it.
+test("stripReleaseTagPrefix strips a hardcoded 'v' prefix across version numbers of varying digit width", () => {
   assert.deepEqual(stripReleaseTagPrefix("v0.1.0"), { prefix: "v", version: "0.1.0" });
   assert.deepEqual(stripReleaseTagPrefix("v12.34.56"), { prefix: "v", version: "12.34.56" });
 });
 
-test("stripReleaseTagPrefix strips the 'android-v' prefix android-apk-release.yml's push trigger fires on", () => {
+test("stripReleaseTagPrefix strips a hardcoded 'android-v' prefix", () => {
   assert.deepEqual(stripReleaseTagPrefix("android-v0.1.0"), {
     prefix: "android-v",
     version: "0.1.0",
