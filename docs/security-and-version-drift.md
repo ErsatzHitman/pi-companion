@@ -222,11 +222,21 @@ high-entropy strings (hashes, fixtures, generated ids) that would make such
 a scanner permanently noisy and, per this repository's own established
 lesson about checks nobody trusts, quickly disabled.
 
-**Real result today**: `guard-secret-scan: OK — no committed file matched a
-curated secret pattern (2443 of 2467 tracked files scanned).` (24 tracked
-files were skipped as binary by extension or by failing UTF-8 decode —
-images, fonts, and similar; see `run-guard-secret-scan.mjs`'s
-`BINARY_EXTENSIONS`.)
+**Real result at the P9-W3 merge gate** (commit `910188f`, the tip of this
+wave — re-run by that gate rather than carried over):
+`guard-secret-scan: OK — no committed file matched a curated secret pattern
+(2453 of 2477 tracked files scanned).` 24 tracked files were skipped as
+binary by extension or by failing UTF-8 decode — images, fonts, and
+similar; see `run-guard-secret-scan.mjs`'s `BINARY_EXTENSIONS`.
+
+**Do not trust that pair of numbers as current** — the total is the tracked
+file count, so every wave that adds a file moves it. Re-derive instead:
+`node scripts/ci/run-guard-secret-scan.mjs` prints both figures, and
+`git ls-tree -r --name-only HEAD | wc -l` is the total it should agree
+with. (CORRECTED at the P9-W3 merge gate: this said "2443 of 2467 tracked
+files" as a live "today" figure. That was measured before this wave's own
+ten files were staged, so the document under-counted the tree it shipped
+in by exactly the files it added.)
 
 ### 3.1 Mutation proof against a REAL tracked file
 
@@ -269,24 +279,28 @@ header). A second, live proof was run against a real tracked file:
 
 ## 4. GitHub Actions supply-chain pinning (measured, not fixed)
 
-Measured directly from the tree (`grep -rn "uses:" .github/workflows/*.yml`,
-72 total `uses:` lines across `ci.yml`, `android-apk-release.yml`, and
-`android-maestro-e2e.yml`):
+Measured directly from the committed tree at the P9-W3 merge gate (commit
+`910188f`) with `git grep -h "uses: " HEAD -- '.github/workflows/*.yml'`,
+counting SHA pins as `@` followed by forty hex characters: **78** total
+`uses:` lines across `ci.yml`, `android-apk-release.yml`, and
+`android-maestro-e2e.yml`. These counts move whenever a job is added — they
+are a dated snapshot, not a live figure; the `git grep` above re-derives
+them in one command.
 
 | Action                                   | Count  | Pinning                                                              |
 | ---------------------------------------- | ------ | -------------------------------------------------------------------- |
-| `actions/checkout`                       | 34     | 18 SHA-pinned (`@11d5960a...` `# v4.4.0`), **16 tag-pinned** (`@v4`) |
-| `actions/setup-node`                     | 31     | **all 31 tag-pinned** (`@v4`)                                        |
+| `actions/checkout`                       | 37     | 21 SHA-pinned (`@11d5960a...` `# v4.4.0`), **16 tag-pinned** (`@v4`) |
+| `actions/setup-node`                     | 34     | **all 34 tag-pinned** (`@v4`)                                        |
 | `expo/expo-github-action`                | 3      | **all 3 tag-pinned** (`@v8`)                                         |
 | `reactivecircus/android-emulator-runner` | 2      | **both tag-pinned** (`@v2`)                                          |
 | `cachix/install-nix-action`              | 1      | **tag-pinned** (`@v27`)                                              |
 | `dorny/paths-filter`                     | 1      | SHA-pinned (`@de90cc6f...` `# v3.0.2`)                               |
-| **Total**                                | **72** | **19 SHA-pinned, 53 tag-pinned**                                     |
+| **Total**                                | **78** | **22 SHA-pinned, 56 tag-pinned**                                     |
 
 A mutable tag (`@v4`, `@v8`, `@v2`, `@v27`) can be repointed by its owner to
 a different commit at any time — a real supply-chain surface. This is
 **measured and disclosed, not fixed**: per this task's explicit
-instruction, fixing all 53 without knowing the exact commit SHA behind each
+instruction, fixing all 56 without knowing the exact commit SHA behind each
 tag TODAY is not attempted — a wrong SHA silently breaks every job that
 uses it, which is a worse outcome than the current, at-least-visible risk.
 **Filed as a finding, owner: whoever next touches
@@ -294,9 +308,19 @@ uses it, which is a worse outcome than the current, at-least-visible risk.
 tag's current commit SHA** — `gh api repos/<org>/<repo>/git/refs/tags/<tag>`
 or the GitHub UI's "commit" link on each release resolves this safely. The
 three new guard jobs this task adds (`guard-version-drift`,
-`guard-secret-scan`, `guard-audit-baseline`) all use the repository's
-already-established SHA-pinned `actions/checkout` line, so this task adds
-zero new tag-pinned `uses:` lines.
+`guard-secret-scan`, `guard-audit-baseline`) each use the repository's
+already-established SHA-pinned `actions/checkout` line — and each also adds
+an `actions/setup-node@v4` step, which is a mutable tag. **So this wave
+added three SHA-pinned lines and three tag-pinned ones**, taking the
+tag-pinned total from 53 at the wave base to 56 here. Reusing the existing
+`setup-node@v4` line is consistent with all thirty-one pre-existing steps
+and was the right call over inventing a lone SHA pin for three jobs, but it
+is an addition to the surface this section measures, not a neutral act.
+(CORRECTED at the P9-W3 merge gate: this said "so this task adds zero new
+tag-pinned `uses:` lines", counting only one of the two `uses:` lines each
+new job contributes. In a register whose acceptance criterion is that
+nothing is silently waived, that under-reported this wave's own added
+attack surface — the single number a reader would most want to trust.)
 
 ---
 

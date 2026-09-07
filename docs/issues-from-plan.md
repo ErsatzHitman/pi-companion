@@ -487,7 +487,10 @@ that recomputation has to be domain-specific:
 | T225   | Nothing links the 60 ms coalescer pin to the 20 msg/s bridge budget             | phase-9   | daemon           | P9-W7  | —                                                                     |
 | T226   | Web caps the extension log at 500 lines where Android bounds it to 200          | phase-9   | web              | P9-W8  | —                                                                     |
 | T227   | scripts/ci imports vite, which no root package.json declares                    | phase-9   | ci               | P9-W9  | —                                                                     |
-| T228   | Register the axe route-coverage walk in guard-capability-prose                  | phase-9   | ci               | P9-W10 | —                                                                     |
+| T228   | Register P9-W2's and P9-W3's four new guard capabilities in CAPABILITIES        | phase-9   | ci               | P9-W10 | —                                                                     |
+| T229   | SHA-pin the 56 tag-pinned GitHub Actions refs, looked up not guessed            | phase-9   | ci               | P9-W11 | —                                                                     |
+| T230   | Make the relay wire version structurally impossible to diverge                  | phase-9   | daemon           | P9-W12 | T44A3                                                                 |
+| T231   | Triage the 36 baselined npm advisories (needs npm install)                      | phase-9   | tooling          | P9-W13 | T44A3                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -529,19 +532,20 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**440 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W2
-merge gate — the commit that filed `T228`, one row past the **439** counted at the P9-W1
-gate, four rows past the **436**
+**443 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W3
+merge gate — the commit that filed `T229`, `T230` and `T231`, three rows past the **440**
+counted at the P9-W2 gate, four past the **439** counted at the P9-W1
+gate, seven rows past the **436**
 counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 219 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 222 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 10 (+4). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 13 (+7). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 10. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 13. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -723,13 +727,18 @@ the task details always agree.
 |        | KEEP-WITH-FIX; the gate moved a typecheck step that could not have       |       |
 |        | passed a clean CI checkout, and filed T228.                              |       |
 | P9-W3  | T44A3                                                                    | 1     |
+|        | KEEP-WITH-FIX; all three checks fire, but the register under-reported    |       |
+|        | the wave's own new tag-pinned Actions as zero. Filed T229-T231.          |       |
 | P9-W4  | T44A4                                                                    | 1     |
 | P9-W5  | T44B1                                                                    | 1     |
 | P9-W6  | T44B2                                                                    | 1     |
 | P9-W7  | T225 (filed by the P9-W1 gate; a rationale, not a new assertion).        | 1     |
 | P9-W8  | T226 (filed by the P9-W1 gate; a product decision, not a guard).         | 1     |
 | P9-W9  | T227 (filed by the P9-W1 gate; the T194 shape, one wave's work).         | 1     |
-| P9-W10 | T228 (filed by the P9-W2 gate; the T211/T213 omission, again).           | 1     |
+| P9-W10 | T228 (filed by the P9-W2 gate; widened by the P9-W3 gate to four).       | 1     |
+| P9-W11 | T229 (filed by the P9-W3 gate; look every SHA up, never guess).          | 1     |
+| P9-W12 | T230 (filed by the P9-W3 gate; needs the Workers packaging answer).      | 1     |
+| P9-W13 | T231 (owner-blocked: needs npm install for a semver-major bump)          | 1     |
 
 ---
 
@@ -7986,7 +7995,7 @@ and runner. Recorded in place at the P9-W1 merge gate as a comment above the `vi
       of a `scripts/ci` file and passes with it removed — proven, not assumed
 - [ ] `node scripts/ci/run-guard-web-session-bundle-budget.mjs` still exits 0
 
-#### T228 — Register the axe route-coverage walk in guard-capability-prose
+#### T228 — Register P9-W2's and P9-W3's four new guard capabilities in CAPABILITIES
 
 `labels: phase-9, area: ci` · `wave: P9-W10` · `depends-on: none`
 
@@ -7999,6 +8008,23 @@ for T211 and T213: a walk that closes the "check that cannot fail" shape for its
 curated list. **Nothing was registered in `guard-capability-prose.mjs`'s `CAPABILITIES`,**
 because T44A2's `Owns` line did not cover that file — the exact omission T211 and T213
 each made, which cost T215 a whole later task to close.
+
+**Widened at the P9-W3 merge gate.** T44A3 (P9-W3) shipped three more guards of the same
+class in the same directory, and registered nothing for the same reason (its `Owns` line
+was "CI workflows"). All three ship in `scripts/ci`, which `isAppSourcePath` DOES admit,
+so entries for them would be live rather than inert:
+
+- `scripts/ci/guard-version-drift.mjs`: `findWorkspacePinDrift`,
+  `findWsHelloProtocolVersionDrift`, `findRelayProtocolVersionDrift`.
+- `scripts/ci/guard-secret-scan.mjs`: `findSecretMatches`.
+- `scripts/ci/guard-audit-baseline.mjs`: `findUnbaselinedAdvisories`,
+  `findStaleBaselineEntries`.
+
+Do all four in this one wave rather than filing a second task with an identical `Owns`
+line: two tasks serially editing `guard-capability-prose.mjs` is how T222 and T223 ended up
+contending over the same member. Each capability still needs its OWN entry and its own
+firing proof — a shared token would let one guard's fix "ship" another's phrase
+protection before that guard had it, which is the merge T215 explicitly refused.
 
 `CLAUDE.md`'s instruction is explicit: **add a new capability entry the moment you ship
 one.** No live denying prose exists today (the P9-W2 gate grepped `docs/`, `plan.md`,
@@ -8031,8 +8057,99 @@ and one paragraph in `CLAUDE.md`. **Nothing else** — in particular, not
 - [ ] The phrases do not collide with `guard-axe-route-coverage.mjs`'s own header, proven
       by a test that feeds that file's real committed content through
       `findCapabilityDenialViolations` and asserts zero matches
+- [ ] Every one of the four capabilities has its own entry, each proven able to fire
+      independently — not one entry covering several guards
 - [ ] `node --test scripts/ci/*.test.mjs` is all-pass and the full-tree scan stays at
       exit 0
+
+#### T229 — SHA-pin the 56 tag-pinned GitHub Actions refs, looked up not guessed
+
+`labels: phase-9, area: ci` · `wave: P9-W11` · `depends-on: none`
+
+Measured at the P9-W3 merge gate over all three workflow files (`git grep -h "uses: "
+HEAD -- '.github/workflows/*.yml'`, counting a SHA pin as `@` plus forty hex characters):
+**78** `uses:` lines, **22** SHA-pinned, **56** tag-pinned. The tag-pinned set is
+`actions/setup-node@v4` (34), `actions/checkout@v4` (16, beside 21 correctly SHA-pinned
+occurrences of the same action), `expo/expo-github-action@v8` (3),
+`reactivecircus/android-emulator-runner@v2` (2) and `cachix/install-nix-action@v27` (1).
+
+A mutable tag can be repointed by its owner to any commit at any time. `actions/checkout`
+already demonstrates this repository's intended style — `@11d5960a...` with a trailing
+`# v4.4.0` comment — it is simply applied to 21 of its 37 occurrences and none of the
+others.
+
+**Look every SHA up; never guess one.** A wrong forty-character pin fails every job that
+uses it, which is worse than the visible risk it replaces. `gh api
+repos/<owner>/<repo>/git/refs/tags/<tag>` resolves a tag to its commit; record the version
+in a trailing comment on every line so a future reader can tell what was pinned.
+
+Do the first-party actions first (`actions/setup-node`, then the 16 remaining
+`actions/checkout@v4`), then the three third-party ones, which carry the higher real risk
+and the higher chance of a breaking pin — so verify CI is green after each group rather
+than pinning all 56 in one commit.
+
+Owns: `.github/workflows/*.yml`, and the pinning table in
+`docs/security-and-version-drift.md` · **Nothing else.**
+
+- [ ] Every `uses:` line names a forty-character commit SHA with a trailing version comment
+- [ ] Every SHA was resolved from the registry or the GitHub API, and the report says how
+- [ ] CI is green on the real run after the change, not only locally
+- [ ] `docs/security-and-version-drift.md` §4's table is re-measured, not edited by hand
+
+#### T230 — Make the relay wire version structurally impossible to diverge
+
+`labels: phase-9, area: daemon` · `wave: P9-W12` · `depends-on: T44A3`
+
+T44A3's `guard-version-drift.mjs` proves that `packages/relay`'s `CURRENT_RELAY_VERSION`
+and `packages/protocol`'s `CURRENT_RELAY_PROTOCOL_VERSION` currently AGREE. It cannot make
+them unable to disagree: they are two independent literals, and the guard is a text check
+over both files. It also fails loudly if either constant is renamed
+(`[extraction-failed]`), which is the right behaviour but is still a guard, not a
+structure.
+
+The durable fix is one exported constant that the other side imports, so divergence is a
+compile error rather than a caught mismatch. **The blocker is the Cloudflare Workers
+packaging question**: `packages/relay/src/cloudflare-adapter.ts` is bundled for a Workers
+runtime, and whether it can take a `@picompanion/protocol` import at that boundary has not
+been established. Answer that first, in writing, and if the answer is no, say so and keep
+the guard — a documented "cannot be structural, here is why" closes this task just as
+well as a refactor.
+
+Owns: `packages/relay/src/`, `packages/protocol/src/daemon-endpoints.ts`, and
+`scripts/ci/guard-version-drift.mjs` if the guard becomes redundant.
+
+- [ ] The Workers-boundary question is answered with evidence, not assumed
+- [ ] Either one constant is the single source and the other side imports it, or the reason
+      it cannot be is recorded where the guard's header points
+- [ ] If the guard stays, it still fires on a real divergence — proven, not assumed
+
+#### T231 — Triage the 36 baselined npm advisories (needs npm install)
+
+`labels: phase-9, area: tooling` · `wave: P9-W13` · `depends-on: T44A3`
+
+**Owner-blocked, and filed as such.** T44A3 recorded `npm audit`'s real output at its
+commit — 36 advisories: 0 critical, 10 high, 23 moderate, 3 low over 1951 dependencies
+— and baselined all 36 in `scripts/ci/guard-audit-baseline.mjs` so a NEW advisory, or a
+severity change on a known one, fails CI. That is the correct handling of findings this
+environment cannot fix; it is not a fix.
+
+Two owners, split as measured at the P9-W3 gate: **29** advisories come from the Android
+toolchain (the Metro/Expo chain; clearing them means Expo SDK `^54.0.18` to `57.x`), and
+**7** from `packages/server` (`@ai-sdk/gateway`, `@ai-sdk/provider-utils`, `ai`,
+`body-parser`, `express`, `qs`, `uuid`).
+
+Both require `npm install`, which the classifier refuses in this environment, and the Expo
+half is a semver-major bump that needs a real device or emulator run to verify — the same
+blocker as T208. **Do not attempt the installs.** When the owner unblocks it, take the
+seven server advisories first: they are ordinary minor bumps and independent of the Expo
+question.
+
+Owns: `package.json` dependency ranges and `scripts/ci/guard-audit-baseline.mjs`'s
+baseline.
+
+- [ ] Every advisory is either cleared by a bump or carries a written reason it cannot be
+- [ ] The baseline shrinks to match; no advisory is dropped from it without being fixed
+- [ ] `node scripts/ci/run-guard-audit-baseline.mjs` exits 0 against the real audit
 
 #### T32A1 — Build the Android connect form
 
