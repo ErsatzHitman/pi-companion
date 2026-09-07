@@ -219,6 +219,21 @@ test("the real scripts/ci production files declare every third-party import in t
     Boolean(rootManifest.dependencies?.vite) || Boolean(rootManifest.devDependencies?.vite),
     true,
   );
-  const viteImporter = files.find((f) => f.content.includes('from "vite"'));
-  assert.equal(Boolean(viteImporter), true); // sanity: the motivating import is still there to protect
+  // Route this through the extractor, not raw text. Raw `.includes` cannot do the job it
+  // names: this guard's own doc comment contains the literal `from "vite"` and sorts
+  // FIRST in `readdirSync` order, so a raw find matched the comment, not the importer,
+  // and stayed green with the real import deleted. Going through
+  // `extractImportSpecifiers` also pins the extractor itself against the hazard
+  // `stripComments`'s own header describes: one legitimate JSDoc line containing `//`
+  // above a real import blanks to end of line first, destroys that block's `*/`, and
+  // lets the block pass swallow the import. Measured at the P9-W9 merge gate: the
+  // shipped `extractImportSpecifiers` returns `["vite"]` for the bare import and `[]`
+  // with that one comment line added, while every check in this file stayed green.
+  const viteImporter = files.find((f) => extractImportSpecifiers(f.content).includes("vite"));
+  assert.equal(
+    Boolean(viteImporter),
+    true,
+    "no scripts/ci file yields `vite` through the extractor: either the motivating import" +
+      " is gone, or comment stripping has silently blinded the extractor to it",
+  );
 });

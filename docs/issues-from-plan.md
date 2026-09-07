@@ -503,6 +503,7 @@ that recomputation has to be domain-specific:
 | T241   | Correct the log bridge fixture's virtualized-log description                    | phase-9   | protocol         | P9-W23 | T226                                                                  |
 | T242   | Rule on superseded mechanism names in reference-only docs                       | phase-9   | docs             | P9-W24 | T226                                                                  |
 | T243   | Close the archive/snapshot interleaving that drops archivedAt                   | phase-9   | daemon           | P9-W25 | none                                                                  |
+| T244   | Replace the four hand-rolled comment strippers with one tokenizer               | phase-9   | tooling          | P9-W26 | T227                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -544,8 +545,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**455 tasks** (distinct IDs counted directly from the table above), recounted just after the
-P9-W8 merge gate — the commit that filed `T243`, one row past the **454** filed at that
+**456 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W9
+merge gate — the commit that filed `T244`, one row past the **455** counted just after the
+P9-W8 gate, two past the **454** filed at that
 gate with `T241` and `T242`, three past the **452** counted at
 the P9-W7 gate, four past the **450** counted at
 the P9-W6 gate, three past the **449** counted at the P9-W5
@@ -558,12 +560,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 234 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 235 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 25 (+19). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 26 (+20). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 25. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 26. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -770,7 +772,11 @@ the task details always agree.
 |        | both platforms' pins watched to fire — but the guard's own item          |       |
 |        | title still quoted the sentence the same commit deleted, and             |       |
 |        | three further citations had gone stale. Filed T241-T242.                 |       |
-| P9-W9  | T227 (filed by the P9-W1 gate; the T194 shape, one wave's work).         | 1     |
+| P9-W9  | T227 — landed at the P9-W9 gate (KEEP-WITH-FIX): manifest and            | 1     |
+|        | lockfile moved together so npm ci stays safe, and the new guard          |       |
+|        | fires on its own motivating case with no allowlist — but the             |       |
+|        | assertion protecting that case could not fail. Filed T244 and            |       |
+|        | widened T228 to a fifth capability.                                      |       |
 | P9-W10 | T228 (filed by the P9-W2 gate; widened by the P9-W3 gate to four).       | 1     |
 | P9-W11 | T229 (filed by the P9-W3 gate; look every SHA up, never guess).          | 1     |
 | P9-W12 | T230 (filed by the P9-W3 gate; needs the Workers packaging answer).      | 1     |
@@ -788,6 +794,7 @@ the task details always agree.
 | P9-W23 | T241 (filed by the P9-W8 gate; one fixture string).                      | 1     |
 | P9-W24 | T242 (filed by the P9-W8 gate; a policy, not an edit).                   | 1     |
 | P9-W25 | T243 (turned main red once; a real interleaving, not a flake).           | 1     |
+| P9-W26 | T244 (filed by the P9-W9 gate; four guards, one shared bug).             | 1     |
 
 ---
 
@@ -8069,6 +8076,9 @@ so entries for them would be live rather than inert:
 - `scripts/ci/guard-audit-baseline.mjs`: `findUnbaselinedAdvisories`,
   `findStaleBaselineEntries`.
 
+**Widened again at the P9-W9 merge gate, to a fifth.** T227 shipped `scripts/ci/guard-declared-root-dependencies.mjs`'s `findUndeclaredRootDependencies`
+— every third-party import in `scripts/ci` must be declared by the ROOT manifest — and registered nothing, for the identical reason: its `Owns` line covers the root `package.json` and the new guard, not `guard-capability-prose.mjs`. That is the FIFTH task to make this omission. It ships in `scripts/ci`, so an entry is live, not inert. **Take it in this wave too**, as its own single non-group member, for the reason the next paragraph gives — and word its phrases so they are not lifted from that guard's own header, which narrates the fixed `vite` defect in the past tense and carries no `HISTORICAL_QUOTE_MARKERS` trigger.
+
 Do all four in this one wave rather than filing a second task with an identical `Owns`
 line: two tasks serially editing `guard-capability-prose.mjs` is how T222 and T223 ended up
 contending over the same member. Each capability still needs its OWN entry and its own
@@ -8106,7 +8116,7 @@ and one paragraph in `CLAUDE.md`. **Nothing else** — in particular, not
 - [ ] The phrases do not collide with `guard-axe-route-coverage.mjs`'s own header, proven
       by a test that feeds that file's real committed content through
       `findCapabilityDenialViolations` and asserts zero matches
-- [ ] Every one of the four capabilities has its own entry, each proven able to fire
+- [ ] Every one of the five capabilities has its own entry, each proven able to fire
       independently — not one entry covering several guards
 - [ ] `node --test scripts/ci/*.test.mjs` is all-pass and the full-tree scan stays at
       exit 0
@@ -8564,6 +8574,50 @@ tests.
 - [ ] A test reproduces the interleaving deterministically, and was watched to fail first
 - [ ] The fix closes the write window, rather than making the caller retry or wait
 - [ ] The rejected alternative is named, with the reason
+
+#### T244 — Replace the four hand-rolled comment strippers with one tokenizer
+
+`labels: phase-9, area: tooling` · `wave: P9-W26` · `depends-on: T227`
+
+Four guards each hand-roll comment stripping with two regexes, and **each order silently
+corrupts source under the opposite collision**:
+
+```js
+source.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, ""); // line-first
+```
+
+`guard-declared-root-dependencies.mjs` strips line-first; `guard-capability-prose.mjs`,
+`guard-no-node-builtin-in-web-bundle.mjs` and `guard-no-duplicate-permission-state.mjs`
+strip block-first. Line-first blanks a `//` that appears INSIDE a block comment, destroying
+that block's `*/`, so the block pass runs on to the next `*/` and swallows whatever lies
+between. Block-first has the mirror failure on a `/*` inside a line comment.
+
+**Measured at the P9-W9 merge gate, on the shipped function, not argued from the regex.**
+Adding one legitimate JSDoc line containing `//` above
+`run-guard-web-session-bundle-budget.mjs`'s real `vite` import took
+`extractImportSpecifiers` from `["vite"]` to `[]` — the guard went blind to its own
+motivating case — while the runner stayed at exit 0 and its whole test file stayed green. A
+comment-only edit, no code touched. That gate repaired the one assertion that can now catch
+it for this guard; the other three carry the mirror hazard with nothing pinning them.
+
+Write one shared stripper as a character state machine that tracks string literals, template
+literals and both comment kinds, and have all four guards use it. Such a stripper has neither
+collision; one written at that gate agreed with the shipped line-first guard on every real
+specifier across all its production files.
+
+**The acceptance criterion that matters is the pin, not the stripper.** A shared correct
+stripper with no test that would notice it regressing just moves the same silence somewhere
+central. Feed every real production file through it and assert that each file whose raw text
+contains a real import still yields at least one specifier — the check that was missing when
+this was found.
+
+Owns: the four guards' stripping functions, whatever module the shared stripper lands in, and
+those guards' tests. **No change to what any guard reports** — if a guard's findings move,
+that is a finding to report, not to absorb.
+
+- [ ] Both collisions are proven to fail before the fix and pass after, on real files
+- [ ] Every file with a real import still yields a specifier, asserted per file
+- [ ] No guard's set of reported violations changes, and that is shown rather than assumed
 
 #### T32A1 — Build the Android connect form
 
