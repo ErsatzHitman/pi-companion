@@ -500,6 +500,8 @@ that recomputation has to be domain-specific:
 | T238   | Decide whether the published CLI binary keeps the name paseo                    | phase-9   | docs             | P9-W20 | T44B2                                                                 |
 | T239   | Replace the coalescer comment's four file:line citations with symbols           | phase-9   | daemon           | P9-W21 | T225                                                                  |
 | T240   | Make server test:unit reproducibly green under file parallelism                 | phase-9   | daemon           | P9-W22 | T225                                                                  |
+| T241   | Correct the log bridge fixture's virtualized-log description                    | phase-9   | protocol         | P9-W23 | T226                                                                  |
+| T242   | Rule on superseded mechanism names in reference-only docs                       | phase-9   | docs             | P9-W24 | T226                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -541,8 +543,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**452 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W7
-merge gate — the commit that filed `T239` and `T240`, two rows past the **450** counted at
+**454 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W8
+merge gate — the commit that filed `T241` and `T242`, two rows past the **452** counted at
+the P9-W7 gate, four past the **450** counted at
 the P9-W6 gate, three past the **449** counted at the P9-W5
 gate, four past the **446**
 counted at the P9-W4 gate, six past the **443**
@@ -553,12 +556,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 231 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 233 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 22 (+16). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 24 (+18). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 22. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 24. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -760,7 +763,11 @@ the task details always agree.
 |        | is more accurate than the spec it implements — it states what the        |       |
 |        | window does NOT bound — but one citation was off by one and one          |       |
 |        | scope claim was false as written. Filed T239-T240.                       |       |
-| P9-W8  | T226 (filed by the P9-W1 gate; a product decision, not a guard).         | 1     |
+| P9-W8  | T226 — landed at the P9-W8 gate (KEEP-WITH-FIX): a real                  | 1     |
+|        | decision, argued and recorded in the budget's own bullet, with           |       |
+|        | both platforms' pins watched to fire — but the guard's own item          |       |
+|        | title still quoted the sentence the same commit deleted, and             |       |
+|        | three further citations had gone stale. Filed T241-T242.                 |       |
 | P9-W9  | T227 (filed by the P9-W1 gate; the T194 shape, one wave's work).         | 1     |
 | P9-W10 | T228 (filed by the P9-W2 gate; widened by the P9-W3 gate to four).       | 1     |
 | P9-W11 | T229 (filed by the P9-W3 gate; look every SHA up, never guess).          | 1     |
@@ -776,6 +783,8 @@ the task details always agree.
 | P9-W20 | T238 (filed by the P9-W6 gate; a naming decision, ownerless).            | 1     |
 | P9-W21 | T239 (filed by the P9-W7 gate; comments only, no behaviour).             | 1     |
 | P9-W22 | T240 (filed by the P9-W7 gate; three runs, three results).               | 1     |
+| P9-W23 | T241 (filed by the P9-W8 gate; one fixture string).                      | 1     |
+| P9-W24 | T242 (filed by the P9-W8 gate; a policy, not an edit).                   | 1     |
 
 ---
 
@@ -8450,6 +8459,60 @@ Owns: `packages/server/package.json`'s test scripts and its vitest config, plus 
 - [ ] The same command run three times on one commit gives the same result three times
 - [ ] The fix is chosen from a measurement of which suites actually contend, not by guess
 - [ ] No test is deleted or skipped, and no timeout is raised without saying why here
+
+#### T241 — Correct the log bridge fixture's virtualized-log description
+
+`labels: phase-9, area: protocol` · `wave: P9-W23` · `depends-on: T226`
+
+`packages/protocol/src/fixtures/pi-ui-bridge/log.json`'s `description` reads "Streaming lines
+shown as a virtualized log." T226 decided the opposite and recorded it in `plan.md` §14.5 and
+§11.3: the `log` element is tail-capped to 200 mounted lines on both platforms, explicitly
+**not** a scrolling render-window virtualization. The fixture lives in a package T226's `Owns:`
+line does not cover, so it was correctly left alone and is genuinely ownerless.
+
+Low risk and small: it is a human-readable description string, not a capability claim, and
+nothing reads it as behaviour. It is filed because it is the wire-adjacent description of the
+very element whose mechanism was just decided, and because a fixture is where the next reader
+goes to learn what a kind means.
+
+**Check the whole fixture directory while you are there**, not only this one file — and check
+whether any test asserts on this string before you change it. If one does, update it in the
+same commit; if none does, say so rather than adding a test to justify the edit.
+
+Owns: `packages/protocol/src/fixtures/pi-ui-bridge/`. Nothing else.
+
+- [ ] The description matches what both renderers actually do
+- [ ] Any test asserting the old string is updated in the same commit
+- [ ] The rest of the fixture directory was checked for the same premise, and the result stated
+
+#### T242 — Rule on superseded mechanism names in reference-only docs
+
+`labels: phase-9, area: docs` · `wave: P9-W24` · `depends-on: T226`
+
+`docs/pi-extension-compatibility.md`'s `log` row still names "virtualized log / tail-following
+list" — the two-mechanism split T226 retired. `CLAUDE.md` lists that file as reference-only:
+historical material describing Paseo's behaviour, never this product's specification, and
+correctly untouched by T226.
+
+**The tension is that the same file is now load-bearing.** Both renderers' new doc comments
+cite §3.3 of it as the authority for the `loop` extension tailing its log at 200 in practice —
+which is the empirical half of T226's decision. So a document ruled reference-only is being
+cited as current evidence in shipped source, while one of its own rows names a mechanism this
+product has rejected. Both cannot be right about what the file is for.
+
+Decide the policy once and write it in `CLAUDE.md`'s reference-only section: either these
+documents may be annotated where a later decision supersedes them (and add the annotation
+here), or they are frozen and shipped source must not cite them as current evidence (and the
+two renderer comments must re-derive that fact from somewhere citable). **Do not silently edit
+the row** — a reference-only document quietly updated is worse than one openly annotated,
+because the next reader cannot tell which parts are still Paseo's and which are ours.
+
+Owns: `CLAUDE.md`'s reference-only-documents section, and — only if the annotate route is
+chosen — `docs/pi-extension-compatibility.md`'s `log` row.
+
+- [ ] The policy is stated in `CLAUDE.md`, not just applied to this one row
+- [ ] The two renderer comments' citation of §3.3 is consistent with whichever rule is chosen
+- [ ] No reference-only document is edited without the edit being marked as an annotation
 
 #### T32A1 — Build the Android connect form
 

@@ -46,7 +46,8 @@
 //    ("asserts the exact retained-row count and hidden-older count at
 //    10,000 rows"). Both run in their workspace's ordinary vitest suite.
 //
-// 5. **Extension log: virtualize above 200 lines.** MEASURABLE STATICALLY
+// 5. **Extension log: cap the mounted line count to 200 on both
+//    platforms.** MEASURABLE STATICALLY
 //    IN CI TODAY, and ALREADY MEASURED AND GATED — RESOLVED, not merely
 //    disclosed, as of T226. Both platforms now share one threshold and one
 //    mechanism: a cap on how many of the payload's `lines` are ever
@@ -64,7 +65,7 @@
 //    THIS guard, because the thing being verified — that a named constant
 //    equals a value — is not a bundle-size measurement this file's Vite
 //    manifest reading has any way to see, the same reason item 4, 6 and 7
-//    above are gated by each platform's own suite rather than by this
+//    above are gated by each workspace's own suite rather than by this
 //    file.
 //    (RESOLVED at T226, which also fixed this classification's own
 //    citation of "plan.md §11.4" for the payload-arrives-pre-bounded
@@ -88,7 +89,8 @@
 //    `AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS = 60` coalesces same-agent
 //    stream deltas into at most one flush per 60 ms window
 //    (`1000 / 60 ≈ 16.67` flushes/sec, inside the 20/sec budget), and
-//    `agent-stream-coalescer.test.ts:130` asserts
+//    `agent-stream-coalescer.test.ts`'s "pins
+//    AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS at 60" test asserts
 //    `expect(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS).toBe(60)` — an
 //    equality pin, so ANY change to that constant (not just one that
 //    raises the rate) fails `@picompanion/server`'s ordinary suite, which

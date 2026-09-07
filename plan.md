@@ -569,7 +569,7 @@ Use DOM features directly:
 - keyboard shortcuts with visible command hints;
 - drag and drop for attachments;
 - proper hover and context menus;
-- virtualized transcript and logs;
+- virtualized transcript and logs (the transcript is windowed by a real virtualizer; the extension `log` element is not — it is tail-capped to 200 mounted lines, per §11.3 and §14.5. T226 decided that, and this bullet's "logs" is the general sense, not the `log` element's mechanism);
 - route-level lazy loading for terminal, editor, diff, and voice code.
 
 ---
