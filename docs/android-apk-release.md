@@ -374,6 +374,110 @@ and the one `android-tests`' local build order does not need because `android-te
 runs its own typecheck/test/prebuild-smoke steps locally, on the same runner that
 just built the dist output, with no remote-archive boundary in between.
 
+#### T236 re-measurement (still owner-blocked; still not settled here)
+
+T236 was filed by this section to settle the open question above with a real
+`eas build:inspect --stage archive` run. **That run needs `EXPO_TOKEN`, `eas` was
+not run, and the first outcome above is unchanged: this cannot be determined from
+this tree.** Everything below is what T236 re-confirmed at `bc6c303e7c51274879d4444631e0bc13ea64e7e9`,
+plus what it could newly establish; none of it closes the question above.
+
+Re-measured, unchanged since the paragraphs above were written:
+
+- `.github/workflows/android-apk-release.yml`'s "Build frontend-core dependencies"
+  step builds exactly `@picompanion/protocol`, `@picompanion/design-tokens`,
+  `@picompanion/highlight`, `@picompanion/frontend-core`, in that order — read
+  directly from the workflow file, not assumed.
+- `find . -iname ".easignore" -not -path "*/node_modules/*"`: no output. Still no
+  `.easignore` anywhere in the tree.
+- `grep -n "eas-build-" apps/android/package.json`: no match. `apps/android/package.json`
+  declares `dev`, `build`, `export`, `android:development`, `android:production`,
+  `guard:no-web`, `typecheck`, `test` — no `eas-build-pre-install` or
+  `eas-build-post-install` script.
+
+Newly established by T236 (not measured by the earlier disclosure above):
+
+- All four workspaces' `package.json` resolve their consumers through `dist/`,
+  not `src/`: `@picompanion/design-tokens`, `@picompanion/highlight` and
+  `@picompanion/frontend-core` each declare `"main": "./dist/index.js"` and an
+  `exports["."].default` of `"./dist/index.js"`; `@picompanion/protocol` has no
+  top-level `"."` export but its `exports["./*"]` wildcard resolves every deep
+  import to `"./dist/*.js"`. A consumer that resolves these packages by their
+  package specifier (which is the repository invariant — see this repository's
+  `CLAUDE.md`) gets `dist/` output or nothing; there is no `src/`-resolving
+  fallback in any of the four `exports` maps.
+- `git check-ignore -v` against a real, existing path in each of the four
+  `dist/` directories (not the `.gitignore` file's text) confirms all four are
+  ignored by the same rule: `.gitignore:2:dist/` matches
+  `packages/protocol/dist`, `packages/design-tokens/dist`,
+  `packages/highlight/dist`, and `packages/frontend-core/dist`.
+  `git ls-files` against all four directories returns nothing — no file under
+  any of them has ever been force-added past the ignore rule.
+- No file in this repository or in the read-only `D:\paseo` reference checkout
+  is authoritative about how `eas build` assembles its remote archive for a
+  monorepo with gitignored build output. Searched `D:\paseo`'s `docs/*.md` for
+  `eas build`, `eas.json`, `build:inspect`, and `.easignore`-shaped mentions;
+  the hits (`docs/android.md`, `docs/release.md`, `docs/pi-companion-release.md`)
+  document how to _invoke_ `eas build`/`eas credentials`/`eas build:list`, never
+  what the archive contains for a workspace whose dependencies build to a
+  gitignored `dist/`. **This is a finding, not a gap in this task's work**: the
+  question is not determinable from this tree, by design — it requires the real
+  build the owner-blocked note above already named.
+
+**The exact command the owner must run** (unchanged from the disclosure above,
+repeated here as the actionable instruction this task exists to hand off):
+
+```bash
+cd apps/android
+npx eas build:inspect --platform android --profile production-apk --stage archive \
+  --output /tmp/eas-archive-inspect --non-interactive
+ls -la /tmp/eas-archive-inspect/packages/protocol \
+       /tmp/eas-archive-inspect/packages/design-tokens \
+       /tmp/eas-archive-inspect/packages/highlight \
+       /tmp/eas-archive-inspect/packages/frontend-core
+```
+
+Run this after `npm run build` has produced real `dist/` output in all four
+package directories (so the archive step has something to either carry or
+drop), and before any `npm ci`/clean step would remove it again.
+
+**What each outcome means:**
+
+- **Each `dist/` directory listed above is present in `/tmp/eas-archive-inspect/…`,
+  non-empty, and its files match what a local `npm run build` for that workspace
+  just produced.** The archive carries the locally-built output. No hook is
+  needed; `android-apk-release.yml`'s existing four-package build step (§3.1) is
+  correct as written, and the four builds it performs are not dead weight. This
+  would stop being true only if a future change adds a fifth `dist/`-resolving
+  workspace to the dependency chain without adding it to that build step, or if
+  `apps/android/package.json` starts declaring an `eas-build-*` hook that
+  overrides or short-circuits how EAS assembles the archive.
+- **Any of the four `dist/` directories is missing, or present but empty, in the
+  inspected archive.** The archive does not carry gitignored build output, and
+  the workflow's local build step (§3.1) provides those packages to nothing —
+  the remote builder resolves `@picompanion/protocol`, `@picompanion/design-tokens`,
+  `@picompanion/highlight` and `@picompanion/frontend-core` through `exports`
+  maps pointing at a `dist/` the archive never delivered, and `expo prebuild`
+  or the Android bundle step fails, or silently bundles stale/absent JS,
+  on the remote builder. The fix is an `eas-build-post-install` hook — EAS's
+  documented mechanism for running a step on the remote builder after its own
+  `npm install`, before the native/bundle step — added to
+  `apps/android/package.json`'s `scripts`, running the same four builds
+  §3.1 already runs locally:
+
+  ```json
+  "eas-build-post-install": "npm run build --workspace=@picompanion/protocol && npm run build --workspace=@picompanion/design-tokens && npm run build --workspace=@picompanion/highlight && npm run build --workspace=@picompanion/frontend-core"
+  ```
+
+  This hook is written out here, not added to `apps/android/package.json`,
+  because this task's own section (T236 in `docs/issues-from-plan.md`) forbids
+  adding it speculatively: an unnecessary remote rebuild costs EAS minutes on
+  every release, and adding it without the inspection above would hide the
+  real answer rather than establish it. Whoever runs the command above and
+  finds a missing/empty `dist/` should paste this exact line into
+  `apps/android/package.json`'s `scripts` and re-run the inspection (or a full
+  build) to confirm the hook closes the gap before relying on it.
+
 ### 3.4 `apps/android`'s inputs that live outside the repository
 
 `expo prebuild` (invoked by EAS's managed CNG when no committed `apps/android/android/`
