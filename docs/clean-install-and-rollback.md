@@ -55,6 +55,19 @@ something is wrong: check you typed the package name in full.
 
 A new command called `paseo` becomes available in your terminal.
 
+**Why the command is called `paseo` and not `pi-companion` or `picompanion`:**
+this is a decided naming choice (`plan.md` §1.1, T238), not a leftover from the
+port. The command name is kept for the same reason `$PASEO_HOME` and every
+`PASEO_*` environment variable are kept: it is how you reach the daemon data
+that already lives under `$PASEO_HOME`, on the same default port, and
+renaming only the command while keeping that directory and that environment
+variable name would leave one system under two names. If you already have
+this daemon installed and running, this decision means the command you
+already type does not change — nothing here asks you to relearn anything or
+move `$PASEO_HOME`. See `plan.md` §1.1 for the full reasoning, including why
+this does not conflict with this repository's rule against inheriting
+Paseo's old naming into new product docs and UI copy.
+
 **How to check it worked**, without starting anything:
 
 ```

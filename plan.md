@@ -42,10 +42,47 @@ What is taken from the reference, and how it arrives:
 
 Use this identity boundary:
 
-| Rename or use for new work                                                                             | Keep for compatibility                                                                                           |
-| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `@picompanion/frontend-core`, `@picompanion/design-tokens`, `@picompanion/web`, `@picompanion/android` | `$PASEO_HOME`, every `PASEO_*` environment variable, daemon file names, relay keys, and existing wire namespaces |
-| Pi Companion display strings, `sh.picompanion`, and `picompanion://`                                   | Paseo-era identifiers inside ported daemon internals; change only in a separately verified metadata cleanup      |
+| Rename or use for new work                                                                             | Keep for compatibility                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@picompanion/frontend-core`, `@picompanion/design-tokens`, `@picompanion/web`, `@picompanion/android` | `$PASEO_HOME`, every `PASEO_*` environment variable, daemon file names, relay keys, existing wire namespaces, and the published CLI's `bin` command name, `paseo` (decided at T238; see below) |
+| Pi Companion display strings, `sh.picompanion`, and `picompanion://`                                   | Paseo-era identifiers inside ported daemon internals; change only in a separately verified metadata cleanup                                                                                    |
+
+**Decision (T238): the published `@picompanion/cli` package keeps its `bin` command named
+`paseo`, not `picompanion` or any `pi-*` name.** This was inherited from the port and had
+never been decided in writing until now; it is decided here, deliberately, rather than left
+implicit in `packages/cli/package.json`. The binary name belongs in the "keep for
+compatibility" column above, for the same reason `$PASEO_HOME` and every `PASEO_*`
+environment variable do: it is the command a user types to reach the exact daemon data that
+already lives under `$PASEO_HOME`, on the same default port, using the same environment
+variable name. Renaming only the command while keeping the environment variable and the data
+directory named `paseo` would put one system under three names instead of one.
+
+The migration cost is the reason this is not a close call. Renaming the `bin` entry does not
+move or touch `$PASEO_HOME` itself — that directory is kept either way, and this decision
+makes no change to it. But every machine that has already run `npm install -g
+@picompanion/cli` — including the project owner's own laptop, which runs a production daemon
+against a real `$PASEO_HOME` today — has a working `paseo` command on `PATH`, and any
+runbook, shell alias, script, or muscle memory that already types `paseo` would silently stop
+resolving the day a renamed package installs, with no error beyond "command not found." That
+cost buys nothing functional: the daemon, its port, and its data directory are not changing
+either way, so the rename would be pure churn for every existing install in exchange for a
+name that matches an already-abandoned command surface.
+
+This is reconciled, not skipped, against CLAUDE.md's reference-only-documents rule, which
+says a reference-only document's descriptions of "Paseo" must not bleed into new product
+docs, UI copy, or package metadata. That rule targets the failure mode of a new document
+quietly inheriting Paseo's own product narrative as though it described this product —
+copy-pasted branding, not a load-bearing identifier. It does not reach an operational
+compatibility name that this same table already keeps on the record for the identical
+reason: `$PASEO_HOME` and `PASEO_*` are also, literally, the string "Paseo" in something a
+user reads, and they are kept anyway because the rule is about avoiding accidental brand
+bleed, not about erasing every occurrence of the string. The CLI's `bin` name is the same
+kept identifier worn on a command line instead of in an environment variable, not a stray
+Paseo description that leaked in. What would change this answer: the `bin` name appearing in
+product-facing marketing or app-store copy, or in UI copy a user reads inside the product
+(neither is true today — a `bin` entry is read by npm and a shell, not rendered in the app);
+or `$PASEO_HOME` itself ever being migrated to a new default, which would remove the
+consistency argument above and reopen this decision in the same commit.
 
 The root `package.json` is authored clean from the first commit: Pi Companion metadata only, plus exactly the workspaces this plan defines. No inherited Paseo metadata exists to clean up.
 
