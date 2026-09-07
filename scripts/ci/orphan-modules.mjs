@@ -50,6 +50,8 @@
 
 import { posix } from "node:path";
 
+import { stripComments } from "./source-comment-stripper.mjs";
+
 const { dirname, join, normalize, extname, basename } = posix;
 
 /** Extensions this walker treats as real modules with edges to resolve.
@@ -71,20 +73,54 @@ export function isTrackedModuleFile(path) {
 
 // --- (2) comment stripping, applied before any specifier regex runs -------
 
-/**
- * Strips block and line comments so a doc comment that happens to contain
- * literal import-shaped text (`e.g. import { X } from "./file"`) can never
- * be misread as a real edge. Deliberately simple — the same
- * `/\*[\s\S]*?\*\//` + `//.*$` pair `T130`'s sweep documents — not a full
- * tokenizer; good enough for this codebase's own source, not a general JS
- * parser.
- *
- * @param {string} source
- * @returns {string}
- */
-export function stripComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-}
+// T252: this file used to hand-roll its own BLOCK-first `stripComments`
+// here (`source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")`)
+// — the same order T244 proved defective next door in
+// `guard-capability-prose.mjs`, `guard-no-node-builtin-in-web-bundle.mjs`
+// and `guard-no-duplicate-permission-state.mjs`. Block-first has zero
+// string-literal awareness, so a `/*`-shaped two-character sequence
+// anywhere in the raw text — inside a `//` comment's own prose, OR inside
+// an ordinary string/template literal — is misread as a block comment's
+// opener, and the pass then runs forward to the FIRST real `*/` anywhere
+// later in the file, silently deleting every real specifier in between.
+//
+// Reproduced directly against two real, in-tree files, neither hypothetical:
+//
+//   - `guard-capability-prose.mjs`'s own header prose writes
+//     `` `packages/*/src` and `apps/*/src` `` inside a `//` line comment —
+//     the literal `*` immediately after the `/` of `packages/*` reads as
+//     `/*` to a naive scanner with no string/comment-boundary tracking.
+//     Old block-first `stripComments(readFileSync(
+//     "guard-capability-prose.mjs"))` swallows everything from there up to
+//     an unrelated JSDoc block's own `*/` roughly 3300 characters later —
+//     including this file's own real
+//     `import { stripComments as sharedStripComments } from
+//     "./source-comment-stripper.mjs";` statement — so
+//     `extractSpecifiers` never sees that import at all. Measured directly:
+//     `extractSpecifiers(readFileSync("guard-capability-prose.mjs"))`
+//     under the OLD stripper omits `"./source-comment-stripper.mjs"`; under
+//     the shared tokenizer it is present. See this file's own test for the
+//     pinned per-file proof.
+//   - `apps/android/src/platform/file-picker.ts` declares a MIME-type
+//     wildcard string literal, `pattern === "*/*"` — the middle two
+//     characters of that THREE-character string are `/`, `*`, read by the
+//     old block-first pass (which never tracks string state) as a block
+//     comment opener partway through a live string. It then swallows real
+//     code — the rest of `matchesAccept`, all of `toPickedFile`, and more —
+//     up to the next unrelated `*/` far later in the file. This is not
+//     this module's own scan target (`isTrackedModuleFile` covers it, but
+//     nothing in this walker's comment-stripping path is unique to import
+//     specifiers), and it is the identical defect
+//     `guard-no-legacy-schema-reader.mjs` shares before this same task's
+//     migration — see that module's header for the same file used there.
+//
+// `stripComments` is now the shared, order-independent tokenizer imported
+// from `./source-comment-stripper.mjs` (a single left-to-right scan that
+// tracks CODE/COMMENT/STRING state as it goes, so neither collision above
+// is possible), re-exported here so `orphan-modules.test.mjs` keeps
+// importing it from this module rather than reaching into the shared file
+// directly.
+export { stripComments };
 
 // --- (1) specifier extraction: named, bare side-effect, barrel, dynamic ---
 

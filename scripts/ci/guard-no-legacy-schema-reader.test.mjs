@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { findLegacySchemaReaderViolations } from "./guard-no-legacy-schema-reader.mjs";
+import {
+  findLegacySchemaReaderViolations,
+  stripComments,
+  stripCommentsAndStrings,
+  stripStringLiterals,
+} from "./guard-no-legacy-schema-reader.mjs";
 import { isScannedPath } from "./run-guard-no-legacy-schema-reader.mjs";
 
 test("passes on ordinary code that never mentions version or the envelope fields", () => {
@@ -362,4 +368,144 @@ test("running the real guard against the real, committed tree exits 0 today", ()
     { encoding: "utf8" },
   );
   assert.match(result, /guard-no-legacy-schema-reader: OK/);
+});
+
+// --- T252: migrated to the shared, order-independent tokenizer -----------
+// This file's own `stripComments` used to be a hand-rolled BLOCK-first
+// regex pair, composed as `stripStringLiterals(stripComments(source))` —
+// the exact `stripStringLiterals`/`STRING_LITERAL_TO_ERASE`/
+// `stripCommentsAndStrings` trio T244 already fixed in
+// `guard-capability-prose.mjs`, copied here verbatim. Block-first has no
+// string-literal awareness, so a `/*`-shaped two-character sequence
+// anywhere in the raw text — inside a live string, not only inside a `//`
+// comment — is misread as a block comment's opener and swallows real code
+// up to an unrelated `*/` far later in the file, which is exactly the
+// shape a version-1-envelope reader could hide inside undetected.
+
+test('stripComments does not let a `/*`-shaped sequence inside a string literal swallow real code (apps/android/src/platform/file-picker.ts\'s real `"*/*"` MIME wildcard)', () => {
+  const source = [
+    "function matchesAccept(mimeType, accept) {",
+    "  return accept.some((pattern) => {",
+    '    if (pattern === "*/*") return true;',
+    "    return mimeType === pattern;",
+    "  });",
+    "}",
+    "",
+    "/** An unrelated later JSDoc block. */",
+    "export function readLegacyEnvelope(envelope) {",
+    "  if (envelope.version === 1) {",
+    "    return envelope.hosts;",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const stripped = stripComments(source);
+
+  // Before T252 (this file's own then-shipped block-first stripComments):
+  // the "*/*" string's own `/*` was misread as a block comment's opener,
+  // and the match's CLOSING delimiter turned out to be the unrelated
+  // JSDoc block's own real "*/" a few lines down — so everything strictly
+  // BETWEEN those two points (the rest of matchesAccept's real body) was
+  // silently deleted, while text after the JSDoc's own terminator
+  // (readLegacyEnvelope and everything in it) survived either way. The
+  // line inside that swallowed span is the one that actually
+  // discriminates old order from the fix.
+  assert.match(stripped, /return mimeType === pattern;/);
+  assert.match(stripped, /function\s+readLegacyEnvelope/);
+  assert.match(stripped, /envelope\.version\s*===\s*1/);
+  assert.match(stripped, /envelope\.hosts/);
+
+  // And the real guard's own detection logic, run through the full
+  // stripCommentsAndStrings composition, now actually sees this file as a
+  // violation — proving the fix reaches the guard's real behaviour, not
+  // just the stripping helper in isolation.
+  const violations = findLegacySchemaReaderViolations([
+    { path: "apps/android/src/platform/fixture-legacy-reader.ts", content: source },
+  ]);
+  assert.equal(violations.length, 1);
+  assert.deepEqual(violations[0].fields, ["hosts"]);
+});
+
+test('T252: apps/android/src/platform/file-picker.ts\'s real code around its "*/*" wildcard is no longer swallowed by comment-stripping order', () => {
+  const filePickerPath = fileURLToPath(
+    new URL("../../apps/android/src/platform/file-picker.ts", import.meta.url),
+  );
+  const content = readFileSync(filePickerPath, "utf8");
+
+  // Before T252, block-first stripComments swallowed hundreds of real
+  // characters here — the rest of matchesAccept, all of toPickedFile, and
+  // more real declarations — because of this file's own real
+  // `pattern === "*/*"` string. Every one of these is a real, later
+  // top-level declaration the old order deleted along with it.
+  const stripped = stripComments(content);
+  assert.match(stripped, /function\s+toPickedFile/);
+  assert.match(stripped, /function\s+permissionDenialSentinel/);
+  assert.match(stripped, /function\s+createAndroidFilePicker/);
+  assert.match(stripped, /function\s+createUnavailableFilePicker/);
+});
+
+test("erase-literals (stripCommentsAndStrings) and preserve-literals (stripComments) stay two different, separately-callable behaviours", () => {
+  const source = [
+    'const url = "https://example.com/*/glob";',
+    "// a real comment",
+    'export const label = "hosts and drafts";',
+  ].join("\n");
+
+  const preserved = stripComments(source);
+  const erased = stripCommentsAndStrings(source);
+  const stringsOnly = stripStringLiterals(source);
+
+  // stripComments alone: comment gone, every string's content intact.
+  assert.equal(preserved.includes("a real comment"), false);
+  assert.match(preserved, /"https:\/\/example\.com\/\*\/glob"/);
+  assert.match(preserved, /"hosts and drafts"/);
+
+  // stripStringLiterals alone: comment text is untouched (it is not a
+  // string literal), but every string's VALUE is erased.
+  assert.equal(stringsOnly.includes("a real comment"), true);
+  assert.equal(stringsOnly.includes("hosts and drafts"), false);
+  assert.match(stringsOnly, /const url = ""/);
+
+  // stripCommentsAndStrings: both the comment AND every string's value
+  // are gone — calling it directly proves the composition still does
+  // strictly more than stripComments alone, not that it collapsed into
+  // the same function.
+  assert.equal(erased.includes("a real comment"), false);
+  assert.equal(erased.includes("hosts and drafts"), false);
+  assert.notEqual(erased, preserved);
+});
+
+// --- T252's own acceptance criterion, this guard's own shape: PER FILE ---
+// Mirrors `guard-no-duplicate-permission-state.test.mjs`'s "every real
+// apps/android/src file whose raw text has a top-level `type X =` line
+// still has one after stripComments, checked per file" — same heuristic,
+// applied to this guard's own scan scope (both directories
+// `isScannedPath` admits) and to a raw, never-comment-stripped detector
+// for a real top-level declaration: any line starting with `export`.
+const RAW_TOP_LEVEL_EXPORT_LINE = /^[ \t]*export\s/m;
+
+test("every real file in this guard's own scan scope whose raw text has a top-level export line still has one after stripComments, checked per file", () => {
+  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const tracked = execFileSync("git", ["ls-files"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\n")
+    .filter(Boolean)
+    .filter((path) => isScannedPath(path));
+
+  assert.ok(tracked.length > 100, "expected many files in this guard's own scan scope");
+
+  const filesWithNoSurvivingExport = [];
+  for (const path of tracked) {
+    const content = readFileSync(`${repoRoot}${path}`, "utf8");
+    if (!RAW_TOP_LEVEL_EXPORT_LINE.test(content)) continue;
+    const cleaned = stripComments(content);
+    if (!RAW_TOP_LEVEL_EXPORT_LINE.test(cleaned)) filesWithNoSurvivingExport.push(path);
+  }
+
+  assert.deepEqual(
+    filesWithNoSurvivingExport,
+    [],
+    "every one of these files' raw text starts a line with `export`, so it must still be" +
+      " there after stripComments — losing it for any of these means comment stripping" +
+      " silently ate a real declaration",
+  );
 });

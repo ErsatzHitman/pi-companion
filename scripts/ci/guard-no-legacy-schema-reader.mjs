@@ -5,6 +5,37 @@
 // (`run-guard-no-legacy-schema-reader.mjs`'s `isScannedPath` is the exact
 // scope check).
 //
+// T252: `stripComments` below used to hand-roll its own BLOCK-first regex
+// pair here — `source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm,
+// "")` — the exact order T244 proved defective in `guard-capability-
+// prose.mjs`, `guard-no-node-builtin-in-web-bundle.mjs` and `guard-no-
+// duplicate-permission-state.mjs`: zero string-literal awareness means any
+// `/*`-shaped two-character sequence in a string or a `//` comment's own
+// prose is misread as a block comment's opener, and the pass runs forward
+// to the FIRST real `*/` anywhere later in the file — silently deleting
+// real code in between. Reproduced directly against a real file inside
+// THIS guard's own scan scope: `apps/android/src/platform/file-picker.ts`
+// declares a MIME wildcard string literal, `pattern === "*/*"` — the
+// middle two characters of that three-character string are `/` and `*`,
+// which the old block-first pass reads as a block-comment opener partway
+// through a live string and then swallows real code (the rest of
+// `matchesAccept`, all of `toPickedFile`, and more) up to an unrelated
+// `*/` far later in the file. A real version-1-envelope reader hiding in a
+// span like that would be invisible to `findLegacySchemaReaderViolations`
+// — not a disclosed scope limit like the ones this file's own "What this
+// deliberately does NOT catch" section lists, but a stripping bug, which
+// is exactly why this task exists. `stripComments` is now the shared, order-independent
+// tokenizer from `./source-comment-stripper.mjs` (one left-to-right scan
+// that tracks CODE/COMMENT/STRING state, so neither collision above is
+// possible); `stripStringLiterals`/`STRING_LITERAL_TO_ERASE`/
+// `stripCommentsAndStrings` below are UNCHANGED — this file's verbatim
+// copy of `guard-capability-prose.mjs`'s own second, string-erasing pass —
+// and still compose as `stripStringLiterals(stripComments(source))`, so
+// the two behaviours (comments-only-stripped vs. comments-and-strings-
+// erased) stay exactly as separate as they were next door. See this
+// file's own test for the pinned per-file proof and for direct calls
+// proving that separation held.
+//
 // The prohibition this enforces is written down in
 // `apps/android/src/platform/offline/versioned-import.test.ts`'s own doc
 // comment (T42B2) and in `docs/frontend-data-migration.md` §2/§3: Phase 0
@@ -108,17 +139,24 @@
 // generic-linter mistake this task's brief explicitly warns against
 // building.
 //
-// Pure, dependency-free check function only. `run-guard-no-legacy-schema-
-// reader.mjs` is the CLI entry point CI actually runs; this module stays
-// import-safe so `guard-no-legacy-schema-reader.test.mjs` can seed
-// fixtures without touching the real working tree.
+// Pure, dependency-free check function only (beyond the shared, equally
+// pure `./source-comment-stripper.mjs` — see T252 near `stripComments`
+// above). `run-guard-no-legacy-schema-reader.mjs` is the CLI entry point CI
+// actually runs; this module stays import-safe so `guard-no-legacy-schema-
+// reader.test.mjs` can seed fixtures without touching the real working
+// tree.
+
+import { stripComments } from "./source-comment-stripper.mjs";
 
 /** The three fields a §3 envelope carries besides `version`/`exportedAt`/`meta`. */
 export const ENVELOPE_FIELD_NAMES = ["hosts", "drafts", "attachments"];
 
-function stripComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-}
+// T252: this file's own header explains why `stripComments` moved to the
+// shared tokenizer. Re-exported (as the other four T244/T252 migrations
+// do) so `guard-no-legacy-schema-reader.test.mjs` can pin the per-file
+// collision directly, and so its own real-tree denial-scan sweep can call
+// it without reaching into `./source-comment-stripper.mjs` a second time.
+export { stripComments };
 
 // Mirrors guard-capability-prose.mjs's STRING_LITERAL_TO_ERASE: a denying
 // (or, here, a merely-descriptive) SENTENCE can live inside a string
@@ -129,11 +167,22 @@ function stripComments(source) {
 // accidental match.
 const STRING_LITERAL_TO_ERASE = /(["'`])(?:\\.|(?!\1)[^\\\r\n])*\1/g;
 
-function stripStringLiterals(source) {
+// Exported only so this file's own test can prove, by calling both
+// functions directly against the same input, that `stripComments`
+// (comments gone, every string/template literal's content preserved
+// verbatim) and `stripCommentsAndStrings` (comments AND string-literal
+// VALUES gone) stayed two genuinely different behaviours after this
+// task's migration — collapsing them into one would be a real, silent
+// regression: `hasVersionDiscriminant`/`fieldsReadFrom` below run against
+// `stripCommentsAndStrings`'s output specifically because a real reader's
+// `version === 1` check must still be visible even when it is spelled out
+// inside what LOOKS like a string in a test fixture, which only the erase
+// pass, not the preserve-only pass, guarantees.
+export function stripStringLiterals(source) {
   return source.replace(STRING_LITERAL_TO_ERASE, '""');
 }
 
-function stripCommentsAndStrings(source) {
+export function stripCommentsAndStrings(source) {
   return stripStringLiterals(stripComments(source));
 }
 

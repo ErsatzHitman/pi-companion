@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   computeEntryPoints,
   extractSpecifiers,
@@ -269,4 +272,119 @@ test("a file with no importer and none of the six protections is reported as an 
   );
 
   assert.deepEqual(result.orphans, ["apps/web/src/features/genuinely-dead.ts"]);
+});
+
+// --- T252: migrated to the shared, order-independent tokenizer -----------
+// This file's own `stripComments` used to be a hand-rolled BLOCK-first
+// regex pair — the order T244 proved defective next door in
+// `guard-capability-prose.mjs`, `guard-no-node-builtin-in-web-bundle.mjs`
+// and `guard-no-duplicate-permission-state.mjs`. See this module's own
+// header comment for the two real, in-tree files that reproduce the
+// collision directly.
+
+test("T252: guard-capability-prose.mjs's real ./source-comment-stripper.mjs import is no longer swallowed by comment-stripping order", () => {
+  const content = readFileSync(
+    fileURLToPath(new URL("./guard-capability-prose.mjs", import.meta.url)),
+    "utf8",
+  );
+
+  // Before T252 (this module's own then-shipped block-first stripComments):
+  // extractSpecifiers(content) did not contain this specifier at all. Two
+  // of this file's own header lines cascade into the real collision: a
+  // `//` comment reading `` `packaging/**` `` (whose `/*` closes early,
+  // by accident, on an unrelated later `*/`) leaves a SECOND `//` comment's
+  // `` `packages/*/src` `` / `` `apps/*/src` `` glob text to open its own
+  // false block, which then runs forward and swallows this file's real
+  // `import { stripComments as sharedStripComments } from
+  // "./source-comment-stripper.mjs";` statement along with everything else
+  // up to an unrelated JSDoc block far later in the file — the real edge
+  // orphan-modules.mjs's own walker needs to see this file as depending on
+  // ./source-comment-stripper.mjs was invisible to it purely because of
+  // comment-stripping order. This is the real, in-tree file; a hand-
+  // shortened fixture could not be made to reproduce the exact two-stage
+  // cascade without becoming the file itself.
+  assert.ok(
+    extractSpecifiers(content).includes("./source-comment-stripper.mjs"),
+    "extractSpecifiers must find this file's real ./source-comment-stripper.mjs import",
+  );
+});
+
+test('stripComments does not let a `/*`-shaped sequence inside a string literal swallow real code (apps/android/src/platform/file-picker.ts\'s real `"*/*"` MIME wildcard)', () => {
+  const source = [
+    "function matchesAccept(mimeType, accept) {",
+    "  return accept.some((pattern) => {",
+    '    if (pattern === "*/*") return true;',
+    "    return mimeType === pattern;",
+    "  });",
+    "}",
+    "",
+    "/** An unrelated later JSDoc block. */",
+    "function toPickedFile(name) {",
+    "  return { name };",
+    "}",
+  ].join("\n");
+
+  const stripped = stripComments(source);
+
+  // Before T252, old block-first stripComments misread the "/*" hiding
+  // inside the "*/*" string as a block comment's opener and swallowed
+  // everything up to the JSDoc's OWN "*/" terminator further down —
+  // deleting the rest of matchesAccept's real body, including this line,
+  // without ever touching `function toPickedFile` (which sits after that
+  // terminator and survives either way — not itself a discriminating
+  // assertion).
+  assert.match(stripped, /return mimeType === pattern;/);
+  assert.match(stripped, /function\s+toPickedFile/);
+  assert.match(stripped, /return\s*\{\s*name\s*\}/);
+});
+
+// --- T252's own acceptance criterion, this walker's own shape: PER FILE ---
+// Mirrors `guard-declared-root-dependencies.test.mjs`'s "every real
+// scripts/ci file whose raw text has a top-level import line yields at
+// least one specifier, checked per file" — same heuristic, applied to this
+// walker's own `extractSpecifiers` instead of that guard's
+// `extractImportSpecifiers`, and widened to every real tracked module file
+// this walker itself scans (`isTrackedModuleFile`'s extension set), not
+// just `scripts/ci`.
+const RAW_TOP_LEVEL_IMPORT_LINE = /^[ \t]*import\s/m;
+
+test("every real tracked module file whose raw text has a top-level import line yields at least one specifier through extractSpecifiers, checked per file", () => {
+  const repoRoot = fileURLToPath(new URL(".", import.meta.url)).replace(
+    /scripts[\\/]ci[\\/]?$/,
+    "",
+  );
+  const tracked = execFileSync("git", ["ls-files"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\n")
+    .filter(Boolean)
+    .filter((path) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path) && !path.endsWith(".d.ts"))
+    // Test fixture files intentionally embed import-SHAPED text that names
+    // files which do not exist on disk, to exercise some OTHER guard's own
+    // parser under test — not real edges this walker should reason about.
+    // Excluding them here mirrors `guard-declared-root-dependencies.mjs`'s
+    // own documented scope decision for the identical reason.
+    .filter(
+      (path) =>
+        !path.endsWith(".test.ts") && !path.endsWith(".test.tsx") && !path.endsWith(".test.mjs"),
+    );
+
+  assert.ok(tracked.length > 100, "expected many tracked module files");
+
+  const filesWithRawImportLine = tracked.filter((path) => {
+    const content = readFileSync(`${repoRoot}${path}`, "utf8");
+    return RAW_TOP_LEVEL_IMPORT_LINE.test(content);
+  });
+  assert.ok(filesWithRawImportLine.length > 100, "expected many files with a real import line");
+
+  const filesWithNoExtractedSpecifier = filesWithRawImportLine.filter((path) => {
+    const content = readFileSync(`${repoRoot}${path}`, "utf8");
+    return extractSpecifiers(content).length === 0;
+  });
+
+  assert.deepEqual(
+    filesWithNoExtractedSpecifier,
+    [],
+    "every one of these files' raw text starts a line with `import`, so extractSpecifiers must" +
+      " return at least one specifier for each — an empty result for any of them means comment" +
+      " stripping silently ate a real import",
+  );
 });
