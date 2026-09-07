@@ -502,6 +502,7 @@ that recomputation has to be domain-specific:
 | T240   | Make server test:unit reproducibly green under file parallelism                 | phase-9   | daemon           | P9-W22 | T225                                                                  |
 | T241   | Correct the log bridge fixture's virtualized-log description                    | phase-9   | protocol         | P9-W23 | T226                                                                  |
 | T242   | Rule on superseded mechanism names in reference-only docs                       | phase-9   | docs             | P9-W24 | T226                                                                  |
+| T243   | Close the archive/snapshot interleaving that drops archivedAt                   | phase-9   | daemon           | P9-W25 | none                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -543,8 +544,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**454 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W8
-merge gate — the commit that filed `T241` and `T242`, two rows past the **452** counted at
+**455 tasks** (distinct IDs counted directly from the table above), recounted just after the
+P9-W8 merge gate — the commit that filed `T243`, one row past the **454** filed at that
+gate with `T241` and `T242`, three past the **452** counted at
 the P9-W7 gate, four past the **450** counted at
 the P9-W6 gate, three past the **449** counted at the P9-W5
 gate, four past the **446**
@@ -556,12 +558,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 233 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 234 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 24 (+18). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 25 (+19). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 24. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 25. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -785,6 +787,7 @@ the task details always agree.
 | P9-W22 | T240 (filed by the P9-W7 gate; three runs, three results).               | 1     |
 | P9-W23 | T241 (filed by the P9-W8 gate; one fixture string).                      | 1     |
 | P9-W24 | T242 (filed by the P9-W8 gate; a policy, not an edit).                   | 1     |
+| P9-W25 | T243 (turned main red once; a real interleaving, not a flake).           | 1     |
 
 ---
 
@@ -8513,6 +8516,54 @@ chosen — `docs/pi-extension-compatibility.md`'s `log` row.
 - [ ] The policy is stated in `CLAUDE.md`, not just applied to this one row
 - [ ] The two renderer comments' citation of §3.3 is consistent with whichever rule is chosen
 - [ ] No reference-only document is edited without the edit being marked as an annotation
+
+#### T243 — Close the archive/snapshot interleaving that drops archivedAt
+
+`labels: phase-9, area: daemon` · `wave: P9-W25` · `depends-on: none`
+
+**This turned `main` red.** CI run `34119345005` at `4c9aabd` failed
+`server-tests (windows-latest)` on one test of 247:
+`src/server/hub/execution-session.websocket.test.ts` > "Hub archives a running execution's
+Paseo-created worktree", with
+`AssertionError: expected { requestId: 'archive-worktree', ... } to match object
+{ success: true, error: null, ... }` and the received value carrying
+`error: "Agent missing archivedAt after archive: <id>"`. Re-running that job on the identical
+commit passed, and the commit under test touched only `apps/web`, `apps/android`, `plan.md`,
+`docs/` and one `scripts/ci` guard — no `packages/server` file. So it is timing-sensitive, and
+it is not the wave's.
+
+**It is not a flake in the test, though — there is a mechanism, and it is in shipped code.**
+`lifecycle-command.ts`'s archive path throws that message when `agentStorage.get()` returns a
+record with no `archivedAt` after `agentManager.archiveAgent()` returned. Inside
+`archiveAgent`, `markRecordArchived` upserts the record WITH `archivedAt`, and only then
+`closeAgent` runs, which reaches `persistSnapshot` → `AgentStorage.applySnapshot`.
+
+`applySnapshot` already knows about this hazard and guards it — its own comment says
+`archivedAt` is not part of the `ManagedAgent` snapshot, so a naive projection would wipe it,
+and it copies `existing.archivedAt` onto the new record. **That guard covers the sequential
+case only.** `applySnapshot` is a read-modify-write (`waitForPendingWrite` → `get` → build →
+`upsert`), so a CONCURRENT `applySnapshot` that captured `existing` BEFORE
+`markRecordArchived`'s upsert writes back a record with no `archivedAt`, undoing it. This test
+archives a still-RUNNING agent (`prompt: "sleep 30"`), which is exactly what supplies the
+concurrent writer; on an unloaded machine the interleaving does not happen.
+
+**Do not fix this by making the test wait, retry, or poll for `archivedAt`.** That hides a
+real last-write-wins window behind a slower test, and the daemon has the same window in
+production whenever an agent is archived while it is still streaming.
+
+Establish the interleaving first — a deterministic test that interposes a concurrent
+`applySnapshot` around the archived upsert should fail before any fix and pass after. Then
+close the window itself: serialise per-agent writes so a read-modify-write cannot straddle
+another write, or make `archivedAt` a field the snapshot projection cannot clear rather than
+one it re-copies. Whichever is chosen, say why the other was not.
+
+Owns: `packages/server/src/server/agent/agent-storage.ts`,
+`packages/server/src/server/agent/agent-manager.ts`'s archive and close paths, and their
+tests.
+
+- [ ] A test reproduces the interleaving deterministically, and was watched to fail first
+- [ ] The fix closes the write window, rather than making the caller retry or wait
+- [ ] The rejected alternative is named, with the reason
 
 #### T32A1 — Build the Android connect form
 
