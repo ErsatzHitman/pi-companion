@@ -21,12 +21,25 @@ import { findSigningMaterialViolations } from "./guard-signing-material.mjs";
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 // Generic binary-asset extensions this repository legitimately tracks in
-// quantity, skipped before any content READ purely so this guard does not
-// waste time trying to UTF-8-decode images/fonts/audio. This is NOT a
-// security-relevant exclusion: every path — regardless of this list — still
-// goes through `findSigningMaterialViolations`'s name-based checks below,
-// and none of these extensions can ever satisfy `SIGNING_MATERIAL_EXTENSIONS`
-// or `SIGNING_MATERIAL_FILENAMES` (deliberately disjoint sets).
+// quantity, skipped before any content READ so this guard does not waste time
+// trying to UTF-8-decode images/fonts/audio.
+//
+// This list DOES narrow the content check, and the narrowing is real: a PEM
+// private key pasted into a tracked `key.zip`, `key.jar` or `key.pdf` is not
+// caught here, while the same bytes under `key.txt` are. Measured at the P9-W5
+// merge gate by tracking the identical header under both extensions: `.txt`
+// reported a violation, `.zip` reported none. The name-based checks are
+// unaffected — every path still goes through
+// `findSigningMaterialViolations`'s extension and basename checks, and none of
+// the extensions listed here can satisfy `SIGNING_MATERIAL_EXTENSIONS` or
+// `SIGNING_MATERIAL_FILENAMES` (deliberately disjoint sets).
+//
+// This is parity with `run-guard-secret-scan.mjs`, whose `BINARY_EXTENSIONS`
+// skips the same three, so it is not a regression — but it is a gap, and T237
+// owns deciding whether to read content on these (size-capped) or narrow the
+// list. (CORRECTED at the P9-W5 merge gate: this said "This is NOT a
+// security-relevant exclusion", which is true of the name checks and false of
+// the content check — the half that exists to catch a renamed keystore.)
 const SKIP_CONTENT_READ_EXTENSIONS = new Set([
   ".png",
   ".jpg",

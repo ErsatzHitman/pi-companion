@@ -25,10 +25,17 @@ skipped jobs named above are among them.
 ## 1. There is no `strategy:`/`matrix:` block in `ci.yml`
 
 `grep -c "strategy:" .github/workflows/ci.yml` returns `0`. What the T44A4
-acceptance criteria call "the full CI matrix" is **38 independently-declared
-jobs in one workflow file** (35 at the commit above; this task adds three —
+acceptance criteria call "the full CI matrix" is **39 independently-declared
+jobs in one workflow file** (35 at the commit above; T44A4 added three —
 `relay-tests`, `cli-tests`, `guard-workspace-test-coverage` — see §3 and
-§5), not a `matrix:` axis. A real `strategy: matrix:` block does exist, but
+§5, and T44B1 added `guard-signing-material`), not a `matrix:` axis.
+**Re-derive this rather than trusting it** — every wave that adds a job moves
+it, and it moved one wave after this sentence was written.
+(CORRECTED at the P9-W5 merge gate: this said **38**. It was exact
+when written and was falsified by the very next wave, by a job this document
+does not own. The two "35" figures elsewhere in this file are dated to run
+`34083431130` at `8a90eb1` and remain correct historical records — they are
+not this claim, and were deliberately left alone.) A real `strategy: matrix:` block does exist, but
 in a different workflow entirely: `android-maestro-e2e.yml`'s `maestro-e2e`
 job (`matrix: shard: ${{ fromJSON(needs.shard-matrix.outputs.shards) }}`,
 `fail-fast: false`) — see §2.
@@ -114,6 +121,7 @@ task never reads a live run).
 | `guard-version-drift`                         | always                                 | success                           |
 | `guard-secret-scan`                           | always                                 | success                           |
 | `guard-audit-baseline`                        | always (needs `npm ci`)                | success                           |
+| **`guard-signing-material`** (T44B1)          | always                                 | added by T44B1 — expected success |
 
 `full` is `true` on every push to `main` (see `changes` job's own comment:
 `github.event_name != 'pull_request'` already makes it true, before even

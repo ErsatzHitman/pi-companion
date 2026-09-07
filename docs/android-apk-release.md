@@ -94,19 +94,34 @@ other tasks are added).
   second half is a separate, independent control.
 - **`scripts/ci/guard-signing-material.mjs`** (pure check functions) +
   **`scripts/ci/run-guard-signing-material.mjs`** (CLI entry point, scans
-  `git ls-files`) + **`scripts/ci/guard-signing-material.test.mjs`** (21 `node --test`
-  cases). It fails when a TRACKED file's name matches a signing extension
+  `git ls-files`) + **`scripts/ci/guard-signing-material.test.mjs`** (20 `node --test`
+  cases, re-counted at the P9-W5 merge gate after it removed an inert
+  `MUTATION:` test — see the note left where that test stood). It fails when a TRACKED file's name matches a signing extension
   (`.keystore`, `.jks`, `.p12`, `.pfx`, `.pepk`, `.apk`, `.aab`,
   `.mobileprovision`) or a reserved basename (`google-services.json`,
   `credentials.json`) regardless of content or directory, and independently when
-  ANY tracked file's content contains a PEM private-key header (reusing
-  `guard-secret-scan.mjs`'s own `private-key-block` pattern) — so a keystore
-  renamed to hide its extension, or a raw key pasted into an unrelated file, is
-  still caught by content. See that module's own header for the full reasoning,
+  a tracked file's content contains a PEM private-key header (reusing
+  `guard-secret-scan.mjs`'s own `private-key-block` pattern) — so a raw key
+  pasted into an unrelated text file is still caught by content.
+
+  **The content half does not reach every tracked file.**
+  `run-guard-signing-material.mjs`'s `SKIP_CONTENT_READ_EXTENSIONS` returns
+  before reading, so a PEM key under `key.zip`, `key.jar` or `key.pdf` is caught
+  only by name — which those three extensions do not trigger. Measured at the
+  P9-W5 merge gate by tracking the identical header twice: as `.txt` the guard
+  reported a violation, as `.zip` it reported none. This is parity with
+  `guard-secret-scan.mjs`, so it is not a regression, but it is a gap and T237
+  owns it. (CORRECTED at the P9-W5 merge gate: this said the guard fires when
+  "ANY tracked file's content contains a PEM private-key header", and named "a
+  keystore renamed to hide its extension" as caught by content. A `.jks`
+  renamed to `.zip` is precisely the case the skip list drops.)
+
+  See that module's own header for the full reasoning,
   including why this is a new, dedicated guard rather than a change to
   `guard-secret-scan.mjs`'s skip list (a binary keystore is not valid UTF-8, so
   unblocking its extension there would not have helped — its own `catch { continue;
 }` on a decode failure would have silently skipped it anyway).
+
 - **`.github/workflows/ci.yml`**'s new `guard-signing-material` job, unconditional
   (same placement discipline as `guard-secret-scan`, right beside it), invoking
   `node scripts/ci/run-guard-signing-material.mjs`.
@@ -119,14 +134,22 @@ can re-run to convince themselves the guard is real):
 ```bash
 # 1. A real tracked keystore-shaped file:
 echo "scratch" > apps/android/release.keystore
-git add apps/android/release.keystore
+# -f is required: this same commit added `*.keystore` to .gitignore, so a plain
+# `git add` exits 1 with "The following paths are ignored by one of your
+# .gitignore files". That is the ignore rule working, not the guard failing — the
+# guard's whole point is that an ignore rule cannot untrack what is already tracked.
+git add -f apps/android/release.keystore
 node scripts/ci/run-guard-signing-material.mjs   # exits 1, names the file
 git restore --staged apps/android/release.keystore
 rm apps/android/release.keystore
 
-# 2. A real tracked file carrying a PEM private-key header under an unrelated name:
-node -e "require('fs').writeFileSync('docs/scratch-pem-fixture.md', '-----BEGIN RSA PRIVATE KEY-----\n...')"
-git add docs/scratch-pem-fixture.md
+# 2. A real tracked file carrying a PEM private-key header under an unrelated name.
+#    The header is assembled from three pieces so THIS document does not itself
+#    become a match — the same technique guard-signing-material.test.mjs and
+#    docs/security-and-version-drift.md §3.1 already use. The file written is
+#    byte-identical to the contiguous form, so the proof is unchanged.
+node -e "const h='-----BEGIN '+'RSA PRIVATE KEY'+'-----'; require('fs').writeFileSync('docs/scratch-pem-fixture.md', h+'\n...')"
+git add -f docs/scratch-pem-fixture.md
 node scripts/ci/run-guard-signing-material.mjs   # exits 1, names the file and line
 git restore --staged docs/scratch-pem-fixture.md
 rm docs/scratch-pem-fixture.md
@@ -135,7 +158,7 @@ rm docs/scratch-pem-fixture.md
 node scripts/ci/run-guard-clean-working-tree.mjs   # exits 0
 ```
 
-This task ran exactly this sequence (both directions) against the real tree before
+This task ran this sequence (both directions) against the real tree before
 writing this record: both fixtures produced exit 1 naming the correct file (and, for
 the PEM case, the correct line); both cleanups produced exit 0 on
 `run-guard-signing-material.mjs` and on `run-guard-clean-working-tree.mjs`
@@ -395,8 +418,10 @@ Store submission path today.
 
 ## 6. Baselines this task confirmed itself
 
-- `node --test scripts/ci/*.test.mjs` — all pass (615 tests including this task's
-  new 21, at the commit this task produced).
+- `node --test scripts/ci/*.test.mjs` — all pass (614 tests including this task's
+  new 20, re-measured at the P9-W5 merge gate after it removed one inert test.
+  Do not trust this pair as current: every wave that adds a guard moves it,
+  and the command above re-derives both in one run.)
 - `./node_modules/.bin/oxfmt --check .` — clean (this task's own new test file
   needed one `oxfmt` pass before this was true; re-run and confirmed clean
   afterward).

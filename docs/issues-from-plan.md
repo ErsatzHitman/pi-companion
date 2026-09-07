@@ -494,6 +494,9 @@ that recomputation has to be domain-specific:
 | T232   | Register the workspace-test-coverage stale-allowlist walk in CAPABILITIES       | phase-9   | tooling          | P9-W14 | T44A4                                                                 |
 | T233   | Wire or allowlist cli's test:local and server's test:integration                | phase-9   | ci               | P9-W15 | T44A4                                                                 |
 | T234   | Decide whether protocol's and web's Linux-only CI coverage is intended          | phase-9   | ci               | P9-W16 | T44A4                                                                 |
+| T235   | Give apps/android a per-release versionCode so a second APK installs            | phase-9   | android          | P9-W17 | T44B1                                                                 |
+| T236   | Settle whether the EAS remote archive carries the locally-built dist/           | phase-9   | ci               | P9-W18 | T44B1                                                                 |
+| T237   | Close or document guard-signing-material's content-read skip list               | phase-9   | tooling          | P9-W19 | T44B1                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -535,8 +538,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**446 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W4
-merge gate — the commit that filed `T232`, `T233` and `T234`, three rows past the **443**
+**449 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W5
+merge gate — the commit that filed `T235`, `T236` and `T237`, three rows past the **446**
+counted at the P9-W4 gate, six past the **443**
 counted at the P9-W3 gate, six past the **440**
 counted at the P9-W2 gate, four past the **439** counted at the P9-W1
 gate, seven rows past the **436**
@@ -544,12 +548,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 225 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 228 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 16 (+10). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 19 (+13). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 16. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 19. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -738,7 +742,10 @@ the task details always agree.
 |        | relay-tests claimed no build was needed while one test reads             |       |
 |        | a gitignored dist/, and two prose claims were false. Filed               |       |
 |        | T232-T234.                                                               |       |
-| P9-W5  | T44B1                                                                    | 1     |
+| P9-W5  | T44B1 — landed at the P9-W5 gate (KEEP-WITH-FIX): the                    | 1     |
+|        | enforcement is real and fires both ways, but the wave's own new          |       |
+|        | guard and the previously-green secret scan both went red on the          |       |
+|        | commit that added them. Filed T235-T237.                                 |       |
 | P9-W6  | T44B2                                                                    | 1     |
 | P9-W7  | T225 (filed by the P9-W1 gate; a rationale, not a new assertion).        | 1     |
 | P9-W8  | T226 (filed by the P9-W1 gate; a product decision, not a guard).         | 1     |
@@ -750,6 +757,10 @@ the task details always agree.
 | P9-W14 | T232 (filed by the P9-W4 gate; the T215 precedent, one entry).           | 1     |
 | P9-W15 | T233 (filed by the P9-W4 gate; the new guard cannot see it).             | 1     |
 | P9-W16 | T234 (filed by the P9-W4 gate; a decision, not a code change).           | 1     |
+| P9-W17 | T235 (filed by the P9-W5 gate; blocks every second install).             | 1     |
+| P9-W18 | T236 (filed by the P9-W5 gate; owner-blocked on EXPO_TOKEN).             | 1     |
+| P9-W19 | T237 (filed by the P9-W5 gate; a real gap, measured, not a               | 1     |
+|        | regression — parity with guard-secret-scan's own skip list).             |       |
 
 ---
 
@@ -8243,6 +8254,90 @@ Owns: `docs/ci-matrix.md`, and `.github/workflows/ci.yml` only if the decision a
 
 - [ ] The Windows/Linux split is a recorded decision with a stated reason
 - [ ] Any job added is justified by that reasoning, not by symmetry
+
+#### T235 — Give apps/android a per-release versionCode so a second APK installs
+
+`labels: phase-9, area: android` · `wave: P9-W17` · `depends-on: T44B1`
+
+`apps/android/app.config.ts` declares `version: "0.1.0"` and no `android.versionCode`, and no
+profile in `apps/android/eas.json` sets `"autoIncrement"`. Confirmed at the P9-W5 merge gate:
+`grep -n versionCode apps/android/app.config.ts` exits 1.
+
+So every tagged release builds the same `0.1.0` at `versionCode 1`. Android refuses to install
+an APK whose `versionCode` is not greater than the installed one, so the SECOND internal build
+a tester receives fails with `INSTALL_FAILED_VERSION_DOWNGRADE` — and it fails on the
+tester's device, not in CI, which is the expensive place to find it. T44B2 (verify clean
+installs and document rollback) walks straight into this.
+
+The smallest fix is `"autoIncrement": true` on the `production-apk` profile, which makes EAS
+own the counter. Decide deliberately between that and a tag-derived `versionCode`: EAS's
+counter lives in EAS, so it is a second source of truth against the git tag, which is the
+shape T230 exists to close elsewhere. Whichever you pick, write down why in the same commit.
+
+Owns: `apps/android/app.config.ts` and `apps/android/eas.json`. Nothing else.
+
+- [ ] Two consecutive tagged builds produce strictly increasing `versionCode`s
+- [ ] The choice between EAS auto-increment and a tag-derived value is written down
+- [ ] The reasoning names where the value's single source of truth lives
+
+#### T236 — Settle whether the EAS remote archive carries the locally-built dist/
+
+`labels: phase-9, area: ci` · `wave: P9-W18` · `depends-on: T44B1`
+
+**Owner-blocked.** `android-apk-release.yml` builds `protocol`, `design-tokens`, `highlight`
+and `frontend-core` on the runner before `eas build`, but EAS builds from an archive it
+assembles and uploads — it does not necessarily carry gitignored `dist/` output. If it does
+not, the remote build resolves those workspaces through package `exports` that point at
+directories the archive lacks.
+
+This is the stale-`dist` family that has now produced three separate defects in this phase
+(T44A2's misordered typecheck, T44A4's "no build step is needed", and this), but it is the one
+member nobody here can settle: it needs a real `eas build:inspect --stage archive` run, which
+needs `EXPO_TOKEN`. Measured at the P9-W5 gate so the next reader does not re-measure: there is
+no `.easignore` anywhere in the tree, and `apps/android/package.json` declares no
+`eas-build-*` hook script.
+
+If the archive lacks the built output, an `eas-build-post-install` hook that runs the same four
+builds is the fix. Do not add the hook speculatively — an unnecessary remote rebuild costs
+EAS minutes on every release and hides the real answer.
+
+Owns: `apps/android/package.json`'s scripts and `.github/workflows/android-apk-release.yml`.
+
+- [ ] The archive's contents are inspected on a real build, not assumed
+- [ ] The result is recorded in `docs/android-apk-release.md` either way
+- [ ] A hook is added only if the inspection shows one is needed
+
+#### T237 — Close or document guard-signing-material's content-read skip list
+
+`labels: phase-9, area: tooling` · `wave: P9-W19` · `depends-on: T44B1`
+
+`run-guard-signing-material.mjs`'s `SKIP_CONTENT_READ_EXTENSIONS` returns before reading a
+file, so the PEM content check never runs on `.zip`, `.jar`, `.pdf` and the other binary-asset
+extensions in that set. Measured at the P9-W5 merge gate by tracking the identical PEM header
+twice: as `docs/gate-w27-scratch.txt` the guard reported a violation; as
+`docs/gate-w27-scratch.zip` it reported none. The pure matcher
+(`findSigningMaterialViolations`) does catch both — the loss happens in the CLI wiring above
+it, which is the catalogue's "a proof aimed at the primitive when the behaviour lives in the
+wiring above it".
+
+**This is not a regression.** It is parity with `guard-secret-scan.mjs`, whose
+`BINARY_EXTENSIONS` skips the same three, and the name-based checks are unaffected. The three
+comments that claimed the list was "NOT a security-relevant exclusion" were corrected at that
+gate; what is left is the behaviour decision.
+
+Decide one of: read content on those extensions with the existing 5 MiB size cap and accept
+the decode failures (`.zip`/`.jar` are not valid UTF-8, so the existing `catch` already handles
+them — check whether that makes the skip list pointless rather than protective); or narrow the
+list to the extensions that genuinely cannot hold a pasted key. Either way **add a CLI-level
+test** — today's suite exercises only the pure matcher, which is exactly why this survived.
+Consider whether `guard-secret-scan.mjs` deserves the same treatment in the same wave.
+
+Owns: `scripts/ci/guard-signing-material.mjs`, `scripts/ci/run-guard-signing-material.mjs`,
+their test, and `docs/android-apk-release.md` §2.2.
+
+- [ ] A PEM key under a skipped extension is either caught, or documented as out of scope
+- [ ] A CLI-level test covers the skip list, not only the matcher
+- [ ] The decision is proven by a firing that was watched, not asserted
 
 #### T32A1 — Build the Android connect form
 

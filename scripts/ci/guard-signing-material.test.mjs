@@ -115,13 +115,14 @@ test("omitting content entirely still runs the name-based checks (the binary-fil
 // Mutation-style proof: delete the entry, and the guard can no longer see
 // the exact case it exists for. This is the "prove the runner can see your
 // case" discipline CLAUDE.md requires before trusting any curated list.
-test("MUTATION: removing an extension from the set stops the guard from seeing that case", () => {
-  const withoutJks = new Set(SIGNING_MATERIAL_EXTENSIONS);
-  withoutJks.delete(".jks");
-  assert.ok(!withoutJks.has(".jks"), "sanity: the mutated set really lacks .jks");
-  // The real, un-mutated export still catches it — proving the guard, as
-  // shipped, is not the mutated (blind) version.
-  const violations = findSigningMaterialViolations("apps/android/release.jks");
-  assert.equal(violations.length, 1);
-  assert.equal(violations[0].kind, "extension");
-});
+// REMOVED at the P9-W5 merge gate: a test titled "MUTATION: removing an
+// extension from the set stops the guard from seeing that case" that performed
+// no mutation. It copied `SIGNING_MATERIAL_EXTENSIONS`, deleted `.jks` from the
+// COPY, asserted the copy lacked it, then called
+// `findSigningMaterialViolations` — which reads the module-level Set. The copy
+// was never passed to anything, and every assertion still passed with all three
+// mutation lines deleted, which is how the gate identified it.
+// `findSigningMaterialViolations` takes no set override, so a real mutation
+// proof is not expressible against it; the coverage the title promised is
+// already given, honestly, by the "every entry in SIGNING_MATERIAL_EXTENSIONS
+// actually fires (no dead entry)" test above, which walks the real exported Set.
