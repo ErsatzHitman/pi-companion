@@ -512,6 +512,8 @@ that recomputation has to be domain-specific:
 | T251   | Extend guard-declared-workspace-deps to packages/relay                          | phase-9   | tooling          | P9-W32 | T230, T227                                                            |
 | T252   | Migrate the last two scripts/ci comment strippers to the shared tokenizer       | phase-9   | tooling          | P9-W33 | T244                                                                  |
 | T253   | Re-derive shipped source's citations of reference-only documents                | phase-9   | docs             | P9-W34 | T242                                                                  |
+| T254   | Decide whether isAppSourcePath should admit apps/\*/app.config.ts               | phase-9   | tooling          | P9-W35 | T246, T247                                                            |
+| T255   | Pin the Android release-tag guard's shapes to the workflow's own trigger        | phase-9   | tooling          | P9-W36 | T247                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -849,6 +851,10 @@ the task details always agree.
 |        | both using the order T244 proved defective).                             |       |
 | P9-W34 | T253 (filed by the P9-D gate; the criterion T242 could not               | 1     |
 |        | satisfy inside its own Owns line).                                       |       |
+| P9-W35 | T254 (filed by the P9-E gate; T246 widened the shipped side              | 1     |
+|        | only, so app.config.ts can declare but never deny).                      |       |
+| P9-W36 | T255 (filed by the P9-E gate; the tag shapes T247 covers are             | 1     |
+|        | asserted only in test titles, never read from the workflow).             |       |
 
 ---
 
@@ -8999,6 +9005,89 @@ git ls-files 'apps/*/src/**' 'packages/*/src/**' | grep -E '\.(ts|tsx|js|jsx|mjs
 - [ ] `rpc-types.ts`'s three "decision record" citations point at `plan.md`, and `plan.md` states those decisions before the repoint lands
 - [ ] No reference-only document is edited (T242's frozen rule still binds)
 - [ ] Any test asserting a repointed comment string is updated in the same commit
+
+#### T254 — Decide whether isAppSourcePath should admit apps/\*/app.config.ts
+
+`labels: phase-9, area: tooling` · `wave: P9-W35` · `depends-on: T246, T247`
+
+T246 widened `run-guard-capability-prose.mjs`'s **`isShippedSourcePath`** with
+`APP_ROOT_CONFIG_PATTERN = /^apps\/[^/]+\/app\.config\.ts$/`, so a capability declared in an
+app-root config file can finally count as shipped. It deliberately did not touch
+**`isAppSourcePath`**, the denial-scan side. Measured at the P9-E merge gate by calling both
+exported predicates, not by reading the regex:
+
+```
+apps/android/app.config.ts   isAppSourcePath=false   isShippedSourcePath=true
+```
+
+**The consequence is concrete, and this wave produced an instance of it.** That file can now
+_declare_ a capability but can never be caught _denying_ one — including a denial of the
+capability it is itself about. T247 shipped `checkAndroidReleaseTagVersion`, and
+`app.config.ts`'s own decision record carried a live "GAP FILED … nothing enforces that a
+human actually bumps `version` before pushing a new release tag" block describing exactly the
+step T247 had just shipped. The two sibling runbooks carried the same claim and are both in
+`isAppSourcePath`'s scope; only this one was invisible. The gate corrected the block by hand
+(it is now a `GAP CLOSED by T247 (P9-E)` note) and registered T247's capability, whose entry
+comment records the asymmetry and points here.
+
+Decide it once and write the decision where the next gate reads it. Admitting the pattern on
+the denial side is the obvious symmetry, but it is not free and must be measured, not
+assumed: `app.config.ts` is a long, deliberately narrative decision record, and the P9-E gate
+already found one place where the two sides interact — T246's own entry comment reasons about
+avoiding a phrase collision with that file's prose, a collision that is impossible **today
+only because** `isAppSourcePath` returns `false` for it. Widening makes that reasoning
+load-bearing rather than hypothetical, so every registered entry's phrases must be re-checked
+against the real file before the widening lands. A refusal is a legitimate outcome if it is
+written down with its reason; what is not acceptable is leaving the asymmetry undocumented in
+the predicate itself.
+
+Owns: `scripts/ci/run-guard-capability-prose.mjs`, its test, and — if the decision is to
+widen — `apps/android/app.config.ts` only to the extent any real collision requires. No wave
+P9-E task owned `app.config.ts`, which is why its now-closed gap block sat uncorrected until
+the gate.
+
+- [ ] The decision is recorded next to `isAppSourcePath`, naming which of the two predicates admits `apps/*/app.config.ts` and why
+- [ ] If widened: every existing `CAPABILITIES` entry's phrases are re-run against the real `app.config.ts`, and the guard still exits 0
+- [ ] If widened: a firing is watched on a scratchpad-restored copy of that file, then restored, `git status --porcelain` empty
+- [ ] If refused: the reason is written where a future gate re-proposing the widening will read it first
+
+#### T255 — Pin the Android release-tag guard's shapes to the workflow's own trigger
+
+`labels: phase-9, area: tooling` · `wave: P9-W36` · `depends-on: T247`
+
+T247's `RELEASE_TAG_PREFIXES = ["android-v", "v"]` must cover every tag shape
+`.github/workflows/android-apk-release.yml`'s `push: tags:` trigger fires on, or a real
+release fails `unrecognized-tag-shape` for a tag CI itself accepted. The set is correct
+today — the P9-E gate derived it from the real trigger block (`["v*", "android-v*"]`) and
+watched every shape run — but **nothing in the repository pins the two together.**
+
+Measured at that gate: `.github/workflows/android-apk-release.yml` appears twice in
+`scripts/ci/guard-android-release-tag-version.test.mjs`, and **both occurrences are inside
+`test(...)` titles** — the file is never read. Two tests are titled "…the 'v' prefix
+`android-apk-release.yml`'s push trigger fires on" while asserting only against the guard's
+own hardcoded constant. That is this repository's recurring "a check that passes for a
+different reason than its title claims" shape, one level down: the titles promise agreement
+with the workflow and deliver agreement with a literal.
+
+It fails closed, so this is drift risk rather than a false pass — an uncovered shape is
+rejected loudly, not silently released. But adding a third glob to the trigger (a
+`release-*` convention, say) would make every such tag fail the guard with nothing noticing
+until a release attempt.
+
+Parse the workflow's `push: tags:` globs and assert `RELEASE_TAG_PREFIXES` covers each, so
+the test goes red when the trigger grows a shape the guard does not know. Prove the pin
+fires: add a third glob to a scratchpad copy of the workflow, watch the test fail naming it,
+restore from that copy (never `git checkout --`), confirm green and `git status --porcelain`
+empty. While there, retitle the two tests to say what they actually assert if the pin does
+not subsume them.
+
+Owns: `scripts/ci/guard-android-release-tag-version.test.mjs`. Not the guard itself and not
+the workflow — neither needs to change for the pin to exist.
+
+- [ ] The test reads `.github/workflows/android-apk-release.yml` and derives the shapes from its real `push: tags:` block
+- [ ] Every derived shape is asserted covered by `RELEASE_TAG_PREFIXES`, and an added glob makes the test fail
+- [ ] The firing is watched against a scratchpad copy and restored, with the tree clean afterward
+- [ ] No test title claims agreement with the workflow that the test does not actually check
 
 #### T32A1 — Build the Android connect form
 

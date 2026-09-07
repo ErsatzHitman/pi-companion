@@ -3705,3 +3705,114 @@ test("T246: on the real, committed tree, the new entry is shipped and the full d
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
+
+// P9-E merge gate, registering T247's capability. Four cases: each of the
+// two denying shapes that were live in the tree when T247 landed fires, and the
+// CORRECTED wording the gate replaced them with does not. The third case is a
+// fixture rather than a `readCommittedFile` read of the two runbooks on purpose:
+// this test has to pass in the same run that first commits those corrections,
+// and `readCommittedFile` reads `HEAD`, which at that moment still carries the
+// false sentences. What it pins is the WORDING of the correction, which is the
+// part a future edit could break.
+test("P9-E gate: a live 'nothing fails a release that tags X while Y' sentence is flagged once T247 is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-android-release-tag-version.mjs",
+      content:
+        "export function stripReleaseTagPrefix(tag) { return tag; }\n" +
+        "export function checkAndroidReleaseTagVersion(input) { return null; }\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "`versionCode` is derived from `version`, not from the git tag, and " +
+        "nothing fails a release that tags `v0.2.0` while `app.config.ts` still " +
+        "declares `0.1.0`.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "docs/some-other-doc.md");
+  assert.equal(
+    violations[0].capability,
+    "Android release tag/version agreement enforced in CI (checkAndroidReleaseTagVersion)",
+  );
+});
+
+test("P9-E gate: the 'nothing enforces that a human actually bumps version' wording also fires", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-android-release-tag-version.mjs",
+      content:
+        "export function stripReleaseTagPrefix(tag) { return tag; }\n" +
+        "export function checkAndroidReleaseTagVersion(input) { return null; }\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "GAP FILED: nothing enforces that a human actually bumps `version` " +
+        "before pushing a new release tag.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "Android release tag/version agreement enforced in CI (checkAndroidReleaseTagVersion)",
+  );
+});
+
+test("P9-E gate: the P9-E gate's CORRECTED quotations of both denials do not trip the entry", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-android-release-tag-version.mjs",
+      content:
+        "export function stripReleaseTagPrefix(tag) { return tag; }\n" +
+        "export function checkAndroidReleaseTagVersion(input) { return null; }\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/clean-install-and-rollback.md",
+      content:
+        '**CORRECTED at the P9-E merge gate.** This said "nothing fails a ' +
+        "release that tags `v0.2.0` while `app.config.ts` still declares " +
+        '`0.1.0`". T247 landed that exact check earlier in this same wave.\n',
+    },
+    {
+      path: "docs/android-release-notes.md",
+      content:
+        'GAP CLOSED by T247 (P9-E). This block previously said "GAP FILED ... ' +
+        "nothing enforces that a human actually bumps `version` before pushing " +
+        'a new release tag".\n',
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("P9-E gate: on the real, committed tree, T247's capability resolves as shipped", () => {
+  const real = readCommittedFile("scripts/ci/guard-android-release-tag-version.mjs");
+  const shipped = findShippedCapabilities([
+    { path: "scripts/ci/guard-android-release-tag-version.mjs", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name ===
+        "Android release tag/version agreement enforced in CI (checkAndroidReleaseTagVersion)",
+    ),
+    "T247's capability is no longer declared in guard-android-release-tag-version.mjs:" +
+      " either checkAndroidReleaseTagVersion/stripReleaseTagPrefix were renamed," +
+      " or scripts/ci left isShippedSourcePath's scope",
+  );
+});

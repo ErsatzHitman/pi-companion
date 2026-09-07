@@ -126,14 +126,24 @@ Two separate things are blocking this, and they are different problems:
    Android signing keys held by Expo's build service). Neither exists yet.
    `docs/android-apk-release.md` §4 is the exact, numbered checklist for the
    owner to produce the first one.
-2. **Even once an APK exists, installing a SECOND one over the first will fail
-   today**, with an error Android phones show as
-   `INSTALL_FAILED_VERSION_DOWNGRADE`. Every build made from this codebase
-   currently claims to be the exact same version internally, no matter which
-   tag it was built from, so Android's package manager refuses to treat a new
-   one as an upgrade. This is filed and not yet fixed — see §B.6. **Practical
-   consequence for you:** the first install on a given phone will work; before
-   installing an update, uninstall the old one first (§A.4 covers this).
+2. **Installing a SECOND APK over the first fails whenever the two declare the
+   same `version`**, with an error Android phones show as
+   `INSTALL_FAILED_VERSION_DOWNGRADE`. A build's internal `versionCode` is
+   derived from `apps/android/app.config.ts`'s own semver `version` string, so
+   two builds cut from the same `version` share a `versionCode` and Android's
+   package manager refuses to treat the second as an upgrade. Bumping
+   `version` before cutting a release tag is what avoids it, and since T247 a
+   release whose tag disagrees with that string fails CI rather than building
+   — see §B.6. **Practical consequence for you:** installing an update built
+   from a bumped `version` now works; two builds of the SAME `version` still
+   need the old one uninstalled first (§A.4 covers this).
+
+   **CORRECTED at the P9-E merge gate.** This said "Every build made from this
+   codebase currently claims to be the exact same version internally, no matter
+   which tag it was built from" and "This is filed and not yet fixed". T235
+   shipped `computeVersionCodeFromSemver` in `apps/android/app.config.ts`, so
+   the `versionCode` has been derived from `version` since then; the collision
+   survives only between two builds that declare the SAME `version`.
 
 **Once an APK exists**, installing it (from a computer with the Android
 developer tools, with the phone connected by USB and "USB debugging" enabled
@@ -261,14 +271,14 @@ already running on this laptop before you do anything above:
 
 ### A.6 Support — common problems and what they mean
 
-| What you see                                                                 | What it means                                                                         | What to do                                                                                                                                                                       |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `'paseo' is not recognized` / `command not found`                            | npm's global bin folder isn't on your `PATH`                                          | Run `npm config get prefix`, add that folder (its `bin` subfolder on Mac/Linux) to `PATH`, open a new terminal                                                                   |
-| `paseo daemon status` shows nothing responding                               | No daemon is running                                                                  | Only start one deliberately (see §A.5 if this machine might already run one)                                                                                                     |
-| A daemon won't start, and the terminal mentions the port is already in use   | Something (possibly another daemon) already owns that port                            | Do not force it. Run `paseo daemon status` first to see if it's actually this project's own daemon already running — if so, you don't need to start a second one                 |
-| `INSTALL_FAILED_VERSION_DOWNGRADE` installing the app                        | Every build currently reports the same internal version (a known, filed issue — §B.6) | Uninstall the existing app first, then install the new one                                                                                                                       |
-| The app shows connected but nothing happens when you send a message          | Usually a daemon-reachability problem, not an app bug                                 | Confirm `paseo daemon status` shows the daemon reachable from the same laptop; confirm the phone is on the same network or paired the way the app's own connect screen describes |
-| Uninstalling the CLI, then reinstalling it, seems to "remember" old settings | Expected — see §A.4 step 4. Your data directory was never removed                     | Only delete it (§A.4 step 5) if you're sure nothing else needs it                                                                                                                |
+| What you see                                                                 | What it means                                                                     | What to do                                                                                                                                                                       |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'paseo' is not recognized` / `command not found`                            | npm's global bin folder isn't on your `PATH`                                      | Run `npm config get prefix`, add that folder (its `bin` subfolder on Mac/Linux) to `PATH`, open a new terminal                                                                   |
+| `paseo daemon status` shows nothing responding                               | No daemon is running                                                              | Only start one deliberately (see §A.5 if this machine might already run one)                                                                                                     |
+| A daemon won't start, and the terminal mentions the port is already in use   | Something (possibly another daemon) already owns that port                        | Do not force it. Run `paseo daemon status` first to see if it's actually this project's own daemon already running — if so, you don't need to start a second one                 |
+| `INSTALL_FAILED_VERSION_DOWNGRADE` installing the app                        | Both builds declare the same `version`, so both get the same `versionCode` (§B.6) | Uninstall the existing app first, then install the new one                                                                                                                       |
+| The app shows connected but nothing happens when you send a message          | Usually a daemon-reachability problem, not an app bug                             | Confirm `paseo daemon status` shows the daemon reachable from the same laptop; confirm the phone is on the same network or paired the way the app's own connect screen describes |
+| Uninstalling the CLI, then reinstalling it, seems to "remember" old settings | Expected — see §A.4 step 4. Your data directory was never removed                 | Only delete it (§A.4 step 5) if you're sure nothing else needs it                                                                                                                |
 
 ---
 
@@ -502,12 +512,22 @@ and that is deliberate rather than an omission — see §3.2 of
 under `"appVersionSource": "local"`.
 
 One collision remains, and this is the place to stand for it: `versionCode`
-is derived from `version`, not from the git tag, and nothing fails a release
-that tags `v0.2.0` while `app.config.ts` still declares `0.1.0`. That build
-reproduces the previous `versionCode`, and Android's package manager refuses
-an APK whose `versionCode` is not strictly greater than the one already on
-the device — the `INSTALL_FAILED_VERSION_DOWNGRADE` failure §A.3 and §A.6
-describe. Bump `version` in the same commit that you tag.
+is derived from `version`, not from the git tag. Since T247, a release whose
+tag disagrees with the `version` `app.config.ts` declares fails the release
+job before it builds — `scripts/ci/guard-android-release-tag-version.mjs`,
+run as a step in `android-apk-release.yml` — so tagging `v0.2.0` against a
+declared `0.1.0` is caught rather than shipped. What is still NOT automated
+is the bump itself: nothing writes the new `version` for you, and two
+deliberate builds of the same `version` still reproduce one `versionCode`,
+which Android's package manager refuses to install over itself — the
+`INSTALL_FAILED_VERSION_DOWNGRADE` failure §A.3 and §A.6 describe. Bump
+`version` in the same commit that you tag.
+
+**CORRECTED at the P9-E merge gate.** This said "nothing fails a release that
+tags `v0.2.0` while `app.config.ts` still declares `0.1.0`". T247 landed that
+exact check earlier in this same wave (`9952651`), which is what made the
+sentence false; the sibling claim in `docs/android-apk-release.md` §3.2 was
+corrected in T247's own follow-up commit and this one was missed.
 
 **CORRECTED at the P9-A merge gate.** This said there was "no
 `android.versionCode` anywhere in that file (`grep -n "versionCode"

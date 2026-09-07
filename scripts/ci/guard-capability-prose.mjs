@@ -1138,15 +1138,68 @@ export const CAPABILITIES = [
     // pre-T235 state at length and carries no `HISTORICAL_QUOTE_MARKERS`
     // trigger of its own) — describing the absence of the DERIVATION
     // itself (a hardcoded or defaulted `versionCode` untied to the app's
-    // own `version`), never the separate, still-real, permanent limit both
-    // runbooks go on to state truthfully: that nothing yet fails a release
-    // whose git TAG disagrees with the `version` `app.config.ts` declares
-    // (T247's gap, not this capability's).
+    // own `version`), never the separate limit both runbooks went on to
+    // state: that nothing fails a release whose git TAG disagrees with the
+    // `version` `app.config.ts` declares (T247's gap, not this
+    // capability's). CORRECTED at the P9-E merge gate: this said that limit
+    // was "still-real, permanent", which T247 falsified earlier in this same
+    // wave by shipping `checkAndroidReleaseTagVersion`. The phrasing
+    // separation this paragraph describes is still correct and still
+    // deliberate — the two capabilities are distinct, and each now has its
+    // own entry — only the claim that T247's gap was permanent was wrong.
     name: "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)",
     methodNames: ["computeVersionCodeFromSemver"],
     denyingPhrases: [
       /apps\/android\/app\.config\.ts (?:does not|never) derives? (?:its|the) `?versionCode`? from (?:its own |the app'?s own )?semver `?version`?/i,
       /every tagged (?:android )?release (?:therefore )?ships the same `?versionCode`?/i,
+    ],
+  },
+  {
+    // Registered at the P9-E merge gate, for T247, which shipped in the
+    // same wave). T247 added the release-tag/version agreement check but did
+    // not register it here, and that omission was deliberate rather than an
+    // oversight: T246 was editing this exact file in the same wave, and
+    // CLAUDE.md's T215 and T228 sections both record what happens when two
+    // tasks serially edit `CAPABILITIES` (T222 and T223 contending over the
+    // same member). The gate is the first point at which one owner holds the
+    // whole file, so the entry lands here.
+    //
+    // NOT a forward guard: a live denial of this exact capability existed in
+    // THREE places the moment T247 landed, and all three were corrected in
+    // the same commit that adds this entry rather than before it, which is
+    // why the RED proof below could use one of them directly instead of a
+    // synthetic sentence. `docs/android-apk-release.md` §3.2 was corrected by
+    // T247's own follow-up (`efbfb98`); `docs/clean-install-and-rollback.md`
+    // §B.6 said the same thing in almost the same words and was missed, and
+    // `apps/android/app.config.ts`'s decision record carried a "GAP FILED ...
+    // nothing enforces that a human actually bumps `version` before pushing a
+    // new release tag" block describing the very step T247 shipped. Only the
+    // first two are reachable by the denial scan: `isAppSourcePath` admits
+    // `docs/**` but returns FALSE for `apps/android/app.config.ts` even after
+    // T246's widening, which touched `isShippedSourcePath` only. That
+    // asymmetry is real and is filed as T254 — this entry cannot catch a
+    // denial in the one file the capability is ABOUT.
+    //
+    // `methodNames`: both names measured directly against the real tree — each
+    // is declared in exactly one file, `guard-android-release-tag-version.mjs`,
+    // which `isShippedSourcePath` already admits under `scripts/ci` (T156's
+    // widening). A flat OR-list, not T168's AND-group: either name alone is
+    // unique and specific enough, the same reasoning
+    // `findUndeclaredRootDependencies` gives for its own bare name.
+    //
+    // `denyingPhrases`: worded to catch the TAG-DISAGREEMENT claim only, and
+    // deliberately narrow enough not to trip on the two adjacent statements
+    // that remain TRUE and are stated in both runbooks after the correction:
+    // that nothing automates the `version` bump itself, and that two builds
+    // declaring the same `version` still share a `versionCode`. Neither is
+    // this capability's; conflating them would make the entry fire on correct
+    // prose, which is how a curated entry gets disabled within two waves.
+    name: "Android release tag/version agreement enforced in CI (checkAndroidReleaseTagVersion)",
+    methodNames: ["checkAndroidReleaseTagVersion", "stripReleaseTagPrefix"],
+    denyingPhrases: [
+      /nothing (?:fails|blocks|stops|rejects) a release (?:job |build )?(?:that|whose) tags? .{0,100}?(?:while|disagrees|does not match)/i,
+      /no (?:CI )?(?:step|check|guard) (?:fails|blocks|rejects) a release whose (?:git )?tag disagrees with/i,
+      /nothing enforces that (?:a human |the owner |someone )?actually bumps `?version`? before (?:pushing|cutting) a (?:new )?release tag/i,
     ],
   },
 ];

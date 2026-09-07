@@ -118,9 +118,10 @@ const isDevelopmentClient = process.env["APP_VARIANT"] === "development";
  * meant to move in lockstep with that string — bumping `version` before
  * cutting a release tag is the same discipline any semver-tagged project
  * already requires, and this task does not add a new one. Nothing here
- * automates that bump; if the owner wants CI to enforce "the tag matches
- * `version`", that is a workflow change and out of this task's
- * `app.config.ts`/`eas.json`-only scope — filed below as a gap.
+ * automates that bump; enforcing "the tag matches `version`" was a workflow
+ * change and out of this task's `app.config.ts`/`eas.json`-only scope. T247
+ * has since made that enforcement real — see the note replacing the gap
+ * below.
  *
  * TWO EDGE CASES THE TASK NAMES EXPLICITLY:
  *
@@ -142,14 +143,17 @@ const isDevelopmentClient = process.env["APP_VARIANT"] === "development";
  *   mint a new one. This is idempotent rebuild behaviour, not a collision to
  *   guard against.
  *
- * GAP FILED, owned by whoever next touches `android-apk-release.yml` (not
- * this task — workflow files belong to a different task this wave): nothing
+ * GAP CLOSED by T247 (P9-E). This block previously said "GAP FILED ... nothing
  * enforces that a human actually bumps `version` before pushing a new release
- * tag. A CI step that fails the release job when
- * `apps/android/app.config.ts`'s `version` does not match `${{ env.RELEASE_TAG }}`
- * (stripped of its `v`/`android-v` prefix) would close that, but it requires
- * editing `.github/workflows/android-apk-release.yml`, which this task's
- * `Owns:` line does not include.
+ * tag", and described the fix as a CI step failing the release job when this
+ * file's `version` does not match the release tag stripped of its
+ * `v`/`android-v` prefix. T247 shipped exactly that:
+ * `scripts/ci/guard-android-release-tag-version.mjs`, run as a step in
+ * `.github/workflows/android-apk-release.yml` before `npm ci`, which exits 1
+ * naming both values when they disagree and also rejects a release tag with
+ * no recognized shape. What remains unautomated is only the bump itself —
+ * nothing writes the new `version` for you; the tag/version disagreement this
+ * block used to permit is now a hard failure.
  */
 const version = "0.1.0";
 
