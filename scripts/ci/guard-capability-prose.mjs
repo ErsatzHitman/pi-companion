@@ -167,10 +167,14 @@ const COMPACTION_FILES_READ_FIELD =
 const COMPACTION_FILES_MODIFIED_FIELD =
   /\bfilesModified\??\s*:\s*(?:readonly\s+)?(?:string\[\]|ReadonlyArray<string>)/;
 
-// T183: a `RegExp` member here, not for T169's disambiguation reason (a bare
-// `findBuildOrderViolations` collides with nothing — see the capability's own
-// doc comment below), but for PERFORMANCE. `isGroupMemberDeclared` only
-// memoizes the comment-stripped source for `RegExp` members
+// T183 (HISTORICAL — see CLOSED (T184) and CORRECTED (T222 gate) below):
+// from T183 until T223 replaced it with the bare string below, this member
+// was a `RegExp`. At the time it was chosen, that was NOT for T169's
+// disambiguation reason (a bare `findBuildOrderViolations` collides with
+// nothing — see the capability's own doc comment below) but for
+// PERFORMANCE, for the reason the rest of this paragraph records.
+// `isGroupMemberDeclared` only memoizes the comment-stripped source for
+// `RegExp` members
 // (`isRegexMemberDeclared`'s `strippedSourceCache`); a plain string member
 // runs `isCapabilityMemberDeclared` — a fresh `stripComments` call, no
 // caching — on every (appFile, shippedFile) pair the "is this shipped?"
@@ -214,14 +218,35 @@ const COMPACTION_FILES_MODIFIED_FIELD =
 // this capability shipped?" once per capability, over the FULL
 // `shippedFiles` list, before `appFiles` is walked at all, exactly as
 // predicted above. There is no more per-appFile `evidencePool` and no
-// more ~905×1204 walk for this (or any) entry: the member being a
-// `RegExp` still matters for the reasons T169 gave (disambiguating a
-// same-file, same-name collision), but the position of this capability's
-// sole match within the shipped-file list no longer affects runtime at
-// all, since that list is now walked exactly once regardless of how many
-// appFiles exist. Measured directly on the real, committed tree:
-// `node scripts/ci/run-guard-capability-prose.mjs` at **0.8s**, down from
-// the 4m3-4m5s this entry's own numbers describe.
+// more ~905×1204 walk for this (or any) entry, which is what retired the
+// PERFORMANCE rationale the paragraph above measured.
+//
+// CORRECTED (T222 gate): this block used to go on to say that, even with
+// the walk above gone, "the member being a `RegExp` still matters for the
+// reasons T169 gave (disambiguating a same-file, same-name collision)".
+// That was never true for this member, and T221 established it directly:
+// a bare `findBuildOrderViolations` collides with nothing in this tree
+// (see the capability's own doc comment below for the measurement), so
+// T169's disambiguation reason was dead on arrival here, independently of
+// the algorithm change above. With BOTH rationales ever offered for the
+// `RegExp` form now dead — performance retired by T184 above,
+// disambiguation never live per T221 — nothing argued for keeping the
+// brittle `RegExp` form, and T223 replaced it with the bare string
+// `"findBuildOrderViolations"` below: a strict superset of declaration
+// shapes for this member (see the capability's own doc comment for the
+// const-arrow refactor that the old `RegExp` silently failed to match).
+//
+// The 4m3-4m5s -> **0.8s** speedup this block used to cite from the T184
+// change is also not restated here: `run-guard-capability-prose.mjs`'s
+// wall-clock time moves with the size of the tracked file corpus every
+// wave, the same reason CLAUDE.md's test-count and shipped-files-count
+// paragraphs stopped pinning a figure — a runtime number here would need
+// the same re-measurement every wave to stay honest. Measured directly on
+// this tree at the T222 gate, three foreground runs of
+// `node scripts/ci/run-guard-capability-prose.mjs`: 1.257s, 1.228s,
+// 1.347s — order-of-a-second, not order-of-a-minute, which is the only
+// property this comment needs to assert; the exact figure will drift by
+// the next wave and is not worth re-pinning.
 const FIND_BUILD_ORDER_VIOLATIONS_MEMBER = "findBuildOrderViolations";
 
 // T215: T211 (`guard-run-guard-wiring.mjs`) added a dedicated walk over the
