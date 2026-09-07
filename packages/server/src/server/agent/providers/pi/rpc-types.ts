@@ -205,8 +205,8 @@ export interface PiSessionStats {
 // T51A: audited against the installed Pi's real `RpcSlashCommand`
 // (`dist/modes/rpc/rpc-types.d.ts:135-144`) and found to have two
 // pre-existing drifts, neither introduced by this task and neither fixed
-// here (see `docs/pi-extension-compatibility.md`'s T51A findings section
-// for the full disclosure):
+// here (see plan.md §4.2 "Pi RPC command mirror drift disclosure" for
+// the citable record):
 //  - `sourceInfo` is REQUIRED on Pi's real type; it is optional here.
 //  - `input?: { hint?: string }` does not exist on Pi's real type at all.
 //    Nothing in this codebase reads `command.input` either (verified:
@@ -263,8 +263,8 @@ export type PiRpcCommand =
   // (installed Pi's `dist/modes/rpc/rpc-types.d.ts`, v0.84.1) — this arm
   // previously omitted `since`, a drift T51A disclosed but declined to fix
   // in its own commit to avoid colliding with this task's file (see
-  // `docs/pi-extension-compatibility.md`'s `get_entries` row). Proven
-  // against that same `.d.ts` field-for-field by
+  // plan.md §4.2 "Pi RPC command mirror drift disclosure" for the
+  // citable record). Proven against that same `.d.ts` field-for-field by
   // `rpc-types.pi-mirror.contract.test.ts`. `since` is not yet read or sent
   // by any caller (`PiCliRuntime.getEntries()` in `cli-runtime.ts` always
   // requests the full entry list) — closing the type drift here does not by
@@ -290,9 +290,8 @@ export type PiRpcCommand =
   // real need for a daemon-truth tree ever emerges, re-add this arm as
   // `{ id?: string; type: "get_tree" }` (no `targetId`, matching Pi
   // exactly) and give it a real caller in the same commit — do not restore
-  // it speculatively a second time. See
-  // `docs/pi-extension-compatibility.md`'s `get_tree` row for the decision
-  // record.
+  // it speculatively a second time. See plan.md §4.2 "Pi RPC command
+  // mirror drift disclosure" for the decision record.
   // Mirrored from Pi's `RpcCommand` union (installed Pi's
   // `dist/modes/rpc/rpc-types.d.ts`): forks the session by branching from a
   // specific transcript entry, matching `{ id?: string; type: "fork"; entryId: string }`.

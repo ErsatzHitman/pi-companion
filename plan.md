@@ -305,6 +305,31 @@ Replace provisional behavior with explicit rules:
 
 Revision handling is deterministic: discard a delta at or below the current revision; apply only `current + 1`; request a full state when a delta jumps ahead; accept a full state only when its revision is at least current. Ephemeral Pi UI state never enters the local durable cache. Durable snapshots arrive only through the normal timeline.
 
+#### Pi RPC command mirror drift disclosure
+
+`packages/server/src/server/agent/providers/pi/rpc-types.ts` hand-mirrors Pi's own RPC
+command surface against the installed Pi CLI's own type declarations. Three points in that
+mirror are decisions, not accidents, first recorded during the Phase 0 re-audit
+(`docs/pi-extension-compatibility.md` §9, "Pi RPC Mirror Audit — Findings (T51A)") and
+restated here as their citable home (T253):
+
+- **`get_tree` stays removed.** It was pulled (T142) once the audit found its entire runtime
+  path — `PiCliRuntime.getTree()`, `session-descriptor.ts`'s `tryGetTreeViaRpc` — had zero
+  production callers; the session tree that actually shipped is built client-side from a flat
+  summary list instead. If a real need for a daemon-truth tree ever emerges, re-add the arm
+  exactly as Pi's real one (`{ id?: string; type: "get_tree" }`, no `targetId`) and give it a
+  real caller in the same commit. Do not restore it speculatively a second time.
+- **`PiRpcSlashCommand.sourceInfo` stays optional.** It is required on Pi's real
+  `RpcSlashCommand` but optional on ours — a pre-existing drift found while auditing the type
+  (T51A), neither introduced nor fixed by that task, and left as disclosed rather than
+  tightened.
+- **`get_entries`'s `since` field was a disclosed drift and is now closed.** Pi's real arm is
+  `{ id?, type: "get_entries", since?: string }`; ours once omitted `since` (a drift T51A
+  disclosed but deferred to avoid colliding with a concurrent task's file). T99 closed it in
+  the same wave by mirroring the field exactly, proven field-for-field by
+  `rpc-types.pi-mirror.contract.test.ts`. `since` is not yet read or sent by any caller, so
+  closing the type drift did not by itself add incremental-fetch behavior.
+
 #### Session watcher and live tail
 
 Keep `pi-session-watcher.ts` and `pi-live-tail.ts`, but add tests around duplicate import races and long sessions. The live tail currently rereads and remaps the whole JSONL file on each change. Replace that with a byte offset or entry-id checkpoint before treating it as scalable for very long sessions.
@@ -368,6 +393,12 @@ Client-only data that may need export includes:
 The replica cache does not need migration because the daemon is authoritative. Push tokens may be re-registered.
 
 The export format must be versioned JSON and must not include daemon passwords or private relay keys unless encrypted. If there is no valuable legacy client data, skip this utility and re-pair the new applications.
+
+The Phase 0 audit (recorded in `docs/frontend-data-migration.md` §2/§3) found no legacy client
+data worth exporting and took that "skip and re-pair" branch: **reset, not migrate**. This
+repository adds no import path or schema migration for legacy drafts, hosts, or attachments
+(T42) — a fresh pairing starts with empty local state, and the daemon's own timeline remains
+the source of truth for everything else.
 
 ### 5.4 Build wiring is created fresh
 

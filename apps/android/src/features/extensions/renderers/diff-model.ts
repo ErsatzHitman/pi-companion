@@ -12,9 +12,9 @@
  * parsing that string, the same way `apps/web/src/features/extensions/
  * renderers/diff.tsx` (T29B3) does for its own full diff view.
  *
- * docs/pi-extension-compatibility.md §4's kind table names web's
- * treatment "full diff" and Android's "compact diff" — this module is
- * what "compact" means concretely: `buildDiffRenderModel` counts every
+ * plan.md §11.3's kind table names web's treatment "full diff view" and
+ * Android's "compact diff then full screen" — this module is what
+ * "compact" means concretely: `buildDiffRenderModel` counts every
  * `+`/`-` line in the *entire* parsed diff (so `added`/`removed` are
  * always correct, never just the visible slice's own count) but only
  * ever hands the view the changed (`+`/`-`) lines themselves — hunk

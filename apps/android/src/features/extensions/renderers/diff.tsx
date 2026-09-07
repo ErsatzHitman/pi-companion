@@ -1,8 +1,8 @@
 /**
  * `diff` kind renderer (plan.md §11.3, §11.7; T34B3) — "Unified changes",
  * rendered as Android's documented **compact diff**
- * (`docs/pi-extension-compatibility.md` §4's kind table: "full diff /
- * compact diff" — web gets the full syntax-highlighted body,
+ * (plan.md §11.3's kind table: "full diff view" / "compact diff then full
+ * screen" — web gets the full syntax-highlighted body,
  * `apps/web/src/features/extensions/renderers/diff.tsx`, T29B3; Android
  * gets this compact one).
  *

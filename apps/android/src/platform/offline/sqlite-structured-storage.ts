@@ -85,10 +85,10 @@ export const OFFLINE_CACHE_SQL = {
  * acceptance criterion "a malformed import is rejected safely").
  *
  * There is no versioned-JSON importer in this repository — see
- * `./migration-decision.test.ts` and `docs/frontend-data-migration.md`
- * §2/§3 for why (RESET/RE-PAIR; T42 never adds an import path). `put`
- * is nonetheless the one place any structured value — from today's real
- * callers, or a hypothetical future importer — actually reaches this
+ * `./migration-decision.test.ts` and plan.md §5.3 for why (RESET/RE-PAIR;
+ * T42 never adds an import path). `put` is nonetheless the one place any
+ * structured value — from today's real callers, or a hypothetical future
+ * importer — actually reaches this
  * cache, so it is where "malformed input" is a real vector: `put`
  * already refuses a secret-shaped value before it reaches the driver
  * (see `assertNotSecretShaped` above), and refuses (via `JSON.stringify`
