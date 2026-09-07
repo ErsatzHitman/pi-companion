@@ -3125,3 +3125,246 @@ test("T215: on the real, committed tree, both new entries are shipped and the fu
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
+
+// T228: five more forward-guard entries, one per guard T44A2/T44A3/T227
+// shipped without registering here (the identical `Owns`-line omission
+// T211/T213 made before T215 closed it). Each pair of tests below proves
+// the SAME two things T215's tests proved for its own two entries: the
+// entry can FIRE (fixture-level, a synthetic denying sentence once the
+// capability is "shipped"), and it does NOT collide with the real,
+// COMMITTED content of the guard file that ships it (never the working
+// copy — `readCommittedFile` reads through `git show HEAD:<path>`, so a
+// stray uncommitted edit to a guard file could never make either test
+// lie). A separate, manual RED/GREEN proof against real tracked files
+// (not these fixtures) is recorded in this task's own report, per the
+// task brief's "proven able to FIRE" requirement.
+
+function readCommittedFile(relativePath) {
+  return execFileSync("git", ["show", `HEAD:${relativePath}`], {
+    encoding: "utf8",
+    cwd: repoRoot,
+  });
+}
+
+test("T228: a live denying sentence about the route coverage cross-check is flagged once findRouteCoverageViolations is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-axe-route-coverage.mjs",
+      content:
+        "export function findRouteCoverageViolations({ declaredRoutes, manifestEntries }) {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "apps/web/src/routes/route-tree.ts",
+      content:
+        "// Nothing cross-checks route-tree.ts against the route-coverage manifest.\nexport {};\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "apps/web/src/routes/route-tree.ts");
+  assert.equal(
+    violations[0].capability,
+    "route coverage manifest cross-check (findRouteCoverageViolations)",
+  );
+});
+
+test("T228: guard-axe-route-coverage.mjs's own real committed header does not trip its new entry", () => {
+  const real = readCommittedFile("scripts/ci/guard-axe-route-coverage.mjs");
+  const shippedFiles = [{ path: "scripts/ci/guard-axe-route-coverage.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-axe-route-coverage.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === "route coverage manifest cross-check (findRouteCoverageViolations)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T228: a live denying sentence about workspace/wire-protocol version drift is flagged once the trio is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-version-drift.mjs",
+      content:
+        "export function findWorkspacePinDrift(workspaces) {}\n" +
+        "export function findWsHelloProtocolVersionDrift({ serverSource, clientSource }) {}\n" +
+        "export function findRelayProtocolVersionDrift({ protocolSource, relaySource }) {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "The relay protocol version literal can drift from packages/protocol constant with nothing to catch it.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "docs/some-other-doc.md");
+  assert.equal(
+    violations[0].capability,
+    "workspace pin and wire-protocol version drift detection (findWorkspacePinDrift/findWsHelloProtocolVersionDrift/findRelayProtocolVersionDrift)",
+  );
+});
+
+test("T228: guard-version-drift.mjs's own real committed header does not trip its new entry", () => {
+  const real = readCommittedFile("scripts/ci/guard-version-drift.mjs");
+  const shippedFiles = [{ path: "scripts/ci/guard-version-drift.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-version-drift.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "workspace pin and wire-protocol version drift detection (findWorkspacePinDrift/findWsHelloProtocolVersionDrift/findRelayProtocolVersionDrift)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T228: a live denying sentence about the secret scan is flagged once findSecretMatches is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-secret-scan.mjs",
+      content: "export function findSecretMatches(path, content) {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-example-fixture.mjs",
+      content:
+        "// No automated scan looks for a vendor-prefixed secret committed to this repository.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "scripts/ci/guard-example-fixture.mjs");
+  assert.equal(
+    violations[0].capability,
+    "committed secret-shaped credential scan (findSecretMatches)",
+  );
+});
+
+test("T228: guard-secret-scan.mjs's own real committed header does not trip its new entry", () => {
+  const real = readCommittedFile("scripts/ci/guard-secret-scan.mjs");
+  const shippedFiles = [{ path: "scripts/ci/guard-secret-scan.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-secret-scan.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) => v.capability === "committed secret-shaped credential scan (findSecretMatches)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T228: a live denying sentence about the audit baseline check is flagged once the pair is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-audit-baseline.mjs",
+      content:
+        "export function findUnbaselinedAdvisories(vulnerabilities, baseline) {}\n" +
+        "export function findStaleBaselineEntries(vulnerabilities, baseline) {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "packaging/docker/README.md",
+      content:
+        "Nothing reports when an npm audit baseline entry no longer matches a live advisory.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "packaging/docker/README.md");
+  assert.equal(
+    violations[0].capability,
+    "npm audit baseline enforcement (findUnbaselinedAdvisories/findStaleBaselineEntries)",
+  );
+});
+
+test("T228: guard-audit-baseline.mjs's own real committed header does not trip its new entry", () => {
+  const real = readCommittedFile("scripts/ci/guard-audit-baseline.mjs");
+  const shippedFiles = [{ path: "scripts/ci/guard-audit-baseline.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-audit-baseline.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "npm audit baseline enforcement (findUnbaselinedAdvisories/findStaleBaselineEntries)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T228: a live denying sentence about the root-manifest import check is flagged once findUndeclaredRootDependencies is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/guard-declared-root-dependencies.mjs",
+      content: "export function findUndeclaredRootDependencies(files, rootManifest) {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "apps/android/maestro/README.md",
+      content:
+        "Nothing checks that every scripts/ci import is declared in the root package.json.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "apps/android/maestro/README.md");
+  assert.equal(
+    violations[0].capability,
+    "root-manifest import declaration check (findUndeclaredRootDependencies)",
+  );
+});
+
+test("T228: guard-declared-root-dependencies.mjs's own real committed header does not trip its new entry", () => {
+  const real = readCommittedFile("scripts/ci/guard-declared-root-dependencies.mjs");
+  const shippedFiles = [{ path: "scripts/ci/guard-declared-root-dependencies.mjs", content: real }];
+  const appFiles = [{ path: "scripts/ci/guard-declared-root-dependencies.mjs", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability === "root-manifest import declaration check (findUndeclaredRootDependencies)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T228: on the real, committed tree, all five new entries are shipped and the full denial scan stays clean", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const relevant = [
+    "route coverage manifest cross-check (findRouteCoverageViolations)",
+    "workspace pin and wire-protocol version drift detection (findWorkspacePinDrift/findWsHelloProtocolVersionDrift/findRelayProtocolVersionDrift)",
+    "committed secret-shaped credential scan (findSecretMatches)",
+    "npm audit baseline enforcement (findUnbaselinedAdvisories/findStaleBaselineEntries)",
+    "root-manifest import declaration check (findUndeclaredRootDependencies)",
+  ];
+  const shippedNames = CAPABILITIES.filter((c) => relevant.some((name) => c.name === name)).map(
+    (c) => c.name,
+  );
+  assert.equal(shippedNames.length, 5);
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});

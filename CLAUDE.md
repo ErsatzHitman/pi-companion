@@ -374,6 +374,39 @@ each time, and restoring the file returned it to exit 0 with `git status --porce
 showing no diff. `guard-capability-prose.test.mjs` pins the same two firing cases at the
 fixture level, plus the two real-file non-collision cases and a full-tree clean-scan case.
 
+### T228: five more guard capabilities registered, for the identical reason
+
+T44A2 (`guard-axe-route-coverage.mjs`'s `findRouteCoverageViolations`), T44A3
+(`guard-version-drift.mjs`'s workspace-pin/wire-protocol-version-drift trio,
+`guard-secret-scan.mjs`'s `findSecretMatches`, and `guard-audit-baseline.mjs`'s
+unbaselined-advisory/stale-baseline-entry pair), and T227
+(`guard-declared-root-dependencies.mjs`'s `findUndeclaredRootDependencies`) each shipped the
+same capability CLASS this section's T215 entries did — a walk closing the "check that
+cannot fail" shape for its own curated allowlist or manifest — and each registered nothing
+here, because none of their `Owns` lines covered this file. Five tasks across three waves
+made the identical omission; taken together as T228 rather than as separate follow-ups, for
+the exact reason T215 gave for keeping its own two entries apart while filing them
+together: two tasks serially editing this file is how T222 and T223 once ended up
+contending over the same member.
+
+Every one of the five ships in `scripts/ci`, which `isAppSourcePath` already admits — checked
+by calling the exported function on each guard's own path before writing a single phrase, not
+by reading a list of areas, per this file's own repeated caution about conflating
+`isAppSourcePath` with `isShippedSourcePath`. Each capability's `methodNames` is a plain,
+uniquely-declared function name, or — for the two guards exposing more than one function — a
+flat OR-list of such names: every one of the eight names involved was measured directly
+against the real tree and is declared in exactly one file, its own guard, so none needed
+T168's AND-group or T169's shape-anchored `RegExp` treatment the way `cancel` and `summary`
+once did. All five are FORWARD guards in T162's shape: no live denying sentence existed
+anywhere in scope for any of them, so each was proven able to fire by appending a sentence in
+its own wording to a real tracked file, confirming `run-guard-capability-prose.mjs` exits 1
+naming it, then restoring the file from a scratchpad copy (never `git checkout --`) and
+confirming exit 0 with `git status --porcelain` empty — never by weakening a phrase to catch
+something incidental. Each entry's phrases are worded away from the specific wording its own
+guard's header comment already uses to narrate the problem that guard solves — the same
+collision this section's T215 entries hit and resolved by rephrasing rather than by adding
+another exclusion, applied here to five more files rather than two.
+
 ## T217: a guard for count claims in committed prose was investigated and rejected
 
 Four consecutive merge gates removed a stale figure from committed prose: `CLAUDE.md`'s

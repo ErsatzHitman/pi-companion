@@ -868,6 +868,170 @@ export const CAPABILITIES = [
       /an? ALLOWLISTED_PATHS entry naming a (?:deleted|renamed|nonexistent|non-existent) (?:file|path) (?:cannot be (?:flagged|detected|caught)|goes unnoticed)/i,
     ],
   },
+  {
+    // T228 (filed by the P9-W2 merge gate; widened by P9-W3 and P9-W9): five
+    // guards shipped across three tasks without a `CAPABILITIES` entry, each
+    // for the identical reason T211/T213 hit before T215 closed it — the
+    // shipping task's `Owns` line never covered this file. This is the first
+    // of the five: T44A2 (P9-W2) shipped
+    // `scripts/ci/guard-axe-route-coverage.mjs`'s `findRouteCoverageViolations`,
+    // deriving the real route list from `apps/web/src/routes/route-tree.ts`
+    // and cross-checking it against `apps/web/e2e/fixtures/route-coverage-
+    // manifest.ts`'s `ROUTE_COVERAGE` in both directions (a declared route
+    // with no manifest entry; a manifest entry naming a route that no longer
+    // exists).
+    //
+    // FORWARD guard, T162's shape: `docs/`, `plan.md`, `apps/web/src` and
+    // `apps/web/e2e` were grepped for prose denying this capability at the
+    // P9-W2 gate and none was found, so there is no live sentence to prove
+    // this against — it was proven instead against a scratch copy of a real
+    // tracked file (see this task's own report for the exact file, sentence,
+    // and both exit codes) and pinned at the fixture level below.
+    //
+    // `methodNames`: a bare `findRouteCoverageViolations` is a full,
+    // camel-cased, uniquely-declared function name — measured directly
+    // across every `packages/*/src`, `apps/*/src`, and `scripts/ci` file:
+    // exactly one declaring file, `guard-axe-route-coverage.mjs` itself
+    // (its own `run-guard-axe-route-coverage.mjs` CLI entry point only
+    // imports and calls it, neither of which is a declaration shape
+    // `isCapabilityMemberDeclared` recognizes). No AND-group or `RegExp`
+    // shape-anchor is needed, the same reasoning `findBuildOrderViolations`
+    // and `findAppIdPackagePairingViolations` above give for their own bare
+    // names.
+    //
+    // `denyingPhrases`: worded to describe the absence of the CROSS-CHECK
+    // itself, never lifted from `guard-axe-route-coverage.mjs`'s own header
+    // narration (which describes "a check that cannot fail" and routes
+    // "silently cover[ing] fewer routes ... nobody remembers to add its
+    // sweep" — a risk this guard closes, not a denial that it exists).
+    name: "route coverage manifest cross-check (findRouteCoverageViolations)",
+    methodNames: ["findRouteCoverageViolations"],
+    denyingPhrases: [
+      /nothing (?:cross-checks|derives and cross-checks) route-tree\.ts against (?:the )?route-coverage manifest/i,
+      /a route (?:added to|declared in) route-tree\.ts with no route-coverage(?:-manifest)? entry (?:goes|is left) (?:undetected|unnoticed|unflagged)/i,
+      /a stale route-coverage(?:-manifest)? entry naming a route that no longer exists (?:goes|is) (?:undetected|unnoticed|uncaught)/i,
+    ],
+  },
+  {
+    // T228, second of five: T44A3 (P9-W3) shipped
+    // `scripts/ci/guard-version-drift.mjs` — `findWorkspacePinDrift` catches
+    // a `@picompanion/*` dependency pin whose version string no longer
+    // matches the target workspace's own `version` field;
+    // `findWsHelloProtocolVersionDrift` and `findRelayProtocolVersionDrift`
+    // catch the daemon/client and relay/protocol wire-version literal pairs
+    // drifting apart. One capability, three functions, all declared in the
+    // same file.
+    //
+    // FORWARD guard, same shape and same grep-before-registering discipline
+    // as the entry above; no live denial site was found for any of the
+    // three functions.
+    //
+    // `methodNames`: a flat list (OR across members), not an AND-group —
+    // T168's group shape exists for a bare name common enough elsewhere to
+    // self-certify as "shipped" (`cancel`, `summary`); measured directly,
+    // each of these three camel-cased names is declared in exactly one
+    // file, `guard-version-drift.mjs` itself, and nowhere else across every
+    // `packages/*/src`, `apps/*/src`, or `scripts/ci` file — so there is no
+    // collision for a group to guard against, the same measurement
+    // `findBuildOrderViolations` made for its own bare name.
+    //
+    // `denyingPhrases`: worded around the absence of the CHECK, never
+    // lifted from the guard's own header, which narrates the pre-fix risk
+    // in its own words ("sit unnoticed", "checked by eye", "agree only
+    // because nobody has edited either file").
+    name: "workspace pin and wire-protocol version drift detection (findWorkspacePinDrift/findWsHelloProtocolVersionDrift/findRelayProtocolVersionDrift)",
+    methodNames: [
+      "findWorkspacePinDrift",
+      "findWsHelloProtocolVersionDrift",
+      "findRelayProtocolVersionDrift",
+    ],
+    denyingPhrases: [
+      /nothing (?:checks|verifies) that an? @picompanion\/\* dependency pin(?:'s version)? (?:still )?matches the target workspace'?s own version field/i,
+      /the (?:ws-hello|websocket hello) protocol version literals? (?:can|could) diverge between client and server with nothing to (?:catch|flag) it/i,
+      /the relay(?:'s)? protocol version literal (?:can|could) drift from (?:packages\/protocol|the protocol package)'?s? constant with nothing to (?:catch|flag) it/i,
+    ],
+  },
+  {
+    // T228, third of five: T44A3 (P9-W3) also shipped
+    // `scripts/ci/guard-secret-scan.mjs`'s `findSecretMatches`, a curated
+    // vendor-prefix scan (AWS/GitHub/Slack/Google/Stripe/npm token shapes,
+    // PEM private-key headers) over every tracked file.
+    //
+    // FORWARD guard, same discipline as the two entries above.
+    //
+    // `methodNames`: a bare `findSecretMatches` is uniquely declared in
+    // `guard-secret-scan.mjs` — measured directly; `guard-signing-
+    // material.mjs` and `run-guard-secret-scan.mjs` both only IMPORT and
+    // CALL it (`import { findSecretMatches } from "./guard-secret-
+    // scan.mjs";` matches none of `isCapabilityMemberDeclared`'s four
+    // declaration shapes: no colon follows the name inside the import's
+    // brace list, so the interface-property pattern does not fire either).
+    //
+    // `denyingPhrases`: worded around the absence of the SCAN, never
+    // lifted from the guard's own header, which explains what it
+    // deliberately does NOT catch (an unprefixed secret, one split across a
+    // concatenation) — those are disclosed real limits, not a denial that
+    // the scan exists at all, and this entry must never forbid them.
+    name: "committed secret-shaped credential scan (findSecretMatches)",
+    methodNames: ["findSecretMatches"],
+    denyingPhrases: [
+      /no (?:automated |executable )?(?:guard|scan|check) (?:looks for|scans for|detects) a vendor-prefixed (?:secret|credential|token) committed (?:to|in) this repository/i,
+      /a committed (?:AWS|GitHub|Slack|Stripe|npm) (?:access )?(?:key|token) would go (?:undetected|unnoticed) in ci/i,
+    ],
+  },
+  {
+    // T228, fourth of five: T44A3 (P9-W3) also shipped
+    // `scripts/ci/guard-audit-baseline.mjs` — `findUnbaselinedAdvisories`
+    // fails the build on any `npm audit` advisory not already covered by
+    // the reasoned `AUDIT_BASELINE`; `findStaleBaselineEntries` reports (but
+    // does not fail on) a baseline entry with no matching live advisory.
+    //
+    // FORWARD guard, same discipline as the entries above.
+    //
+    // `methodNames`: a flat list, not an AND-group, for the same reason as
+    // the version-drift entry above — both names are uniquely declared in
+    // `guard-audit-baseline.mjs` and nowhere else, measured directly.
+    //
+    // `denyingPhrases`: worded around the absence of the BASELINE CHECK,
+    // never lifted from the guard's own header, which explains why a
+    // baseline is used instead of a bare `--audit-level` gate and discloses
+    // a real, permanent blind spot (two advisories sharing an identical
+    // package/severity/range) — a disclosed limit, not a denial the check
+    // exists, and this entry must never forbid it.
+    name: "npm audit baseline enforcement (findUnbaselinedAdvisories/findStaleBaselineEntries)",
+    methodNames: ["findUnbaselinedAdvisories", "findStaleBaselineEntries"],
+    denyingPhrases: [
+      /a new npm audit advisory (?:outside|not covered by) the baseline would (?:pass|land) (?:silently|unnoticed|undetected)/i,
+      /nothing reports when an? (?:npm audit )?baseline entry no longer (?:matches|has) a live advisory/i,
+    ],
+  },
+  {
+    // T228, fifth of five: T227 (P9-W9) shipped
+    // `scripts/ci/guard-declared-root-dependencies.mjs`'s
+    // `findUndeclaredRootDependencies` — every third-party import in
+    // `scripts/ci`'s production `.mjs` files must be declared by the ROOT
+    // `package.json`, closing the same "resolves only by hoisting" shape
+    // T194 closed for a workspace-only package one level up.
+    //
+    // FORWARD guard, same discipline as the entries above; T227's own brief
+    // records that no live denying prose existed for this capability either.
+    //
+    // `methodNames`: a bare `findUndeclaredRootDependencies` is a full,
+    // uniquely-declared function name, measured directly the same way as
+    // the entries above.
+    //
+    // `denyingPhrases`: worded around the absence of the DECLARATION CHECK,
+    // never lifted from the guard's own header, which narrates the FIXED
+    // `vite` defect in the past tense and already carries a `CORRECTED (at
+    // the P9-W9 merge gate)` marker of its own for an unrelated correction —
+    // this entry's phrases are independent of both.
+    name: "root-manifest import declaration check (findUndeclaredRootDependencies)",
+    methodNames: ["findUndeclaredRootDependencies"],
+    denyingPhrases: [
+      /nothing checks that (?:every )?scripts\/ci import is declared (?:by|in) the root package\.json/i,
+      /an undeclared third-party import in scripts\/ci (?:would|could) keep resolving by hoisting with nothing to (?:catch|flag) it/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
