@@ -56,11 +56,143 @@ import acceptedFileMimeTypes from "./src/features/share/accepted-file-mime-types
  */
 const isDevelopmentClient = process.env["APP_VARIANT"] === "development";
 
+/**
+ * T235 (docs/issues-from-plan.md) — decision record for how `android.versionCode`
+ * below is produced, kept beside the code it governs rather than only in the
+ * task ledger, per that task's "write the reasoning into the file you change"
+ * requirement.
+ *
+ * THE DEFECT: this file declared `version: "0.1.0"` and no `android.versionCode`
+ * at all, and no `eas.json` profile set `"autoIncrement"`. Every tagged release
+ * therefore built the identical `versionCode 1`. Android refuses to install an
+ * APK whose `versionCode` is not strictly greater than the one already on the
+ * device, so the SECOND internal build a tester receives fails with
+ * `INSTALL_FAILED_VERSION_DOWNGRADE` on the tester's device.
+ *
+ * TWO CANDIDATES WERE WEIGHED:
+ *
+ * 1. `"autoIncrement": true` on `eas.json`'s `production-apk` profile — the
+ *    smallest possible diff. REJECTED, for a reason sharper than "it is a
+ *    second source of truth against the git tag" (the general T230 shape):
+ *    `eas.json`'s `cli.appVersionSource` here is `"local"` (unchanged by this
+ *    task), and EAS's own documented behaviour for `autoIncrement` under
+ *    `"local"` is to bump the versionCode IN THE LOCAL PROJECT FILES after a
+ *    build and leave committing that change back to git as the caller's job —
+ *    it does not push, and it does not track a durable counter of its own.
+ *    `.github/workflows/android-apk-release.yml`'s `publish-android-apk` job
+ *    checks out an IMMUTABLE git tag fresh for every run
+ *    (`ref: ${{ env.RELEASE_TAG }}`) and never commits or pushes anything back
+ *    to that tag or to `main`. So the bumped value would live only in that
+ *    run's ephemeral runner and vanish when the job ends; the next tagged
+ *    release starts over from whatever `versionCode` is committed AT ITS OWN
+ *    tag — the same base this file declares, since nothing ever wrote the
+ *    increment back — and would build the same `versionCode` again, not a
+ *    strictly greater one. `"autoIncrement": true` under `"local"` source does
+ *    not merely add a second source of truth here; given this repository's
+ *    specific immutable-tag, no-push-back CI trigger, it does not accumulate
+ *    at all, so it would not durably fix the defect it exists to fix.
+ *
+ *    (The alternative half of this candidate, switching
+ *    `cli.appVersionSource` to `"remote"` so EAS's servers hold a durable
+ *    counter that survives ephemeral checkouts, was also rejected: that
+ *    counter lives entirely on EAS's servers, shared across every profile and
+ *    every trigger — including a `workflow_dispatch` run pointed at an
+ *    arbitrary tag — so the sequence of versionCodes it produces no longer
+ *    corresponds 1:1 with this repository's release tags, and nothing in this
+ *    git history records which counter value shipped with which tag.)
+ *
+ * 2. A tag-derived `versionCode`, computed deterministically from this file's
+ *    own semver `version` string via `computeVersionCodeFromSemver` below.
+ *    CHOSEN. It needs no new state anywhere — not in EAS, not threaded through
+ *    `.github/workflows/android-apk-release.yml`'s job env (which this task
+ *    may not edit, and which would not reach a remote EAS build unless
+ *    declared in an `eas.json` profile's own `env` block regardless — EAS
+ *    evaluates `app.config.ts` on its OWN build machine against the uploaded
+ *    archive, not the GitHub Actions runner's shell environment). It is
+ *    reproducible from `git show <tag>:apps/android/app.config.ts` alone, with
+ *    no EAS API call required to know what versionCode a given tag will
+ *    build.
+ *
+ * SINGLE SOURCE OF TRUTH: the `version` string declared a few lines below in
+ * this same file. This repository's release tags (`v*`, `android-v*`) are
+ * meant to move in lockstep with that string — bumping `version` before
+ * cutting a release tag is the same discipline any semver-tagged project
+ * already requires, and this task does not add a new one. Nothing here
+ * automates that bump; if the owner wants CI to enforce "the tag matches
+ * `version`", that is a workflow change and out of this task's
+ * `app.config.ts`/`eas.json`-only scope — filed below as a gap.
+ *
+ * TWO EDGE CASES THE TASK NAMES EXPLICITLY:
+ *
+ * - A build that is not from a release tag (the `development` and `preview`
+ *   EAS profiles, or a `workflow_dispatch` run against a non-release ref):
+ *   still gets a deterministic `versionCode` from whatever `version` is
+ *   checked out at that commit. Two such ad hoc builds from the same
+ *   commit/version therefore share a versionCode — acceptable, because those
+ *   profiles are for internal ad hoc testing rather than the sequential
+ *   install chain this defect is about (only `production-apk` is what
+ *   `android-apk-release.yml` builds and testers install serially); a same-
+ *   versionCode reinstall already requires `adb install -r`/uninstall-first
+ *   regardless of how that versionCode was produced, so this is a pre-existing
+ *   Android behaviour, not a new failure mode.
+ * - A re-run of the same tag (e.g. `android-apk-release.yml`'s
+ *   `workflow_dispatch` input re-pointed at an already-built tag): produces
+ *   the identical `versionCode`, by design — the tag's `version` has not
+ *   changed, so rebuilding it should reproduce the same release identity, not
+ *   mint a new one. This is idempotent rebuild behaviour, not a collision to
+ *   guard against.
+ *
+ * GAP FILED, owned by whoever next touches `android-apk-release.yml` (not
+ * this task — workflow files belong to a different task this wave): nothing
+ * enforces that a human actually bumps `version` before pushing a new release
+ * tag. A CI step that fails the release job when
+ * `apps/android/app.config.ts`'s `version` does not match `${{ env.RELEASE_TAG }}`
+ * (stripped of its `v`/`android-v` prefix) would close that, but it requires
+ * editing `.github/workflows/android-apk-release.yml`, which this task's
+ * `Owns:` line does not include.
+ */
+const version = "0.1.0";
+
+/**
+ * Deterministic `major.minor.patch` -> Android `versionCode` mapping. See the
+ * decision record above for why this exists instead of `eas.json`'s
+ * `"autoIncrement"`.
+ *
+ * Scheme: `major * 1_000_000 + minor * 1_000 + patch`. Google Play's ceiling
+ * on `versionCode` is 2_100_000_000, so this leaves headroom for `major` up
+ * to 2099 with `minor`/`patch` each under 1000 — comfortably wider than this
+ * project will plausibly reach, without needing to revisit the scheme.
+ */
+function computeVersionCodeFromSemver(semver: string): number {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(semver);
+  if (match === null) {
+    throw new Error(
+      `apps/android/app.config.ts: "version" must be a plain "major.minor.patch" string to derive an Android versionCode from it; got ${JSON.stringify(semver)}.`,
+    );
+  }
+  const [, majorText, minorText, patchText] = match;
+  const major = Number(majorText);
+  const minor = Number(minorText);
+  const patch = Number(patchText);
+  if (minor >= 1000 || patch >= 1000) {
+    throw new Error(
+      `apps/android/app.config.ts: versionCode derivation caps "minor" and "patch" at 999 each (got ${minor}.${patch} from ${JSON.stringify(semver)}); widen computeVersionCodeFromSemver's multipliers before releasing this version.`,
+    );
+  }
+  const versionCode = major * 1_000_000 + minor * 1_000 + patch;
+  if (!Number.isSafeInteger(versionCode) || versionCode <= 0 || versionCode > 2_100_000_000) {
+    throw new Error(
+      `apps/android/app.config.ts: derived Android versionCode ${versionCode} is out of range for ${JSON.stringify(semver)}.`,
+    );
+  }
+  return versionCode;
+}
+
 const config: ExpoConfig = {
   name: isDevelopmentClient ? "Pi Companion (Dev)" : "Pi Companion",
   slug: "pi-companion",
   scheme: "picompanion",
-  version: "0.1.0",
+  version,
   orientation: "default",
   userInterfaceStyle: "automatic",
   // No `newArchEnabled` toggle either: it does not appear anywhere in the
@@ -73,6 +205,9 @@ const config: ExpoConfig = {
   platforms: ["android"],
   android: {
     package: isDevelopmentClient ? "sh.picompanion.debug" : "sh.picompanion",
+    // T235: derived from `version` above, never hand-maintained — see the
+    // decision record above `computeVersionCodeFromSemver` for why.
+    versionCode: computeVersionCodeFromSemver(version),
     // No `edgeToEdgeEnabled` toggle: the installed `@expo/config-types`
     // (57.0.2, resolved from the actually-installed `expo` 57.0.18 — newer
     // than this package.json's declared `^54.0.18` range, T116) dropped the
