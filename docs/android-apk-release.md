@@ -222,34 +222,44 @@ attribution is wrong.
 ### 3.2 Version: one source, not two (checked, not assumed)
 
 `apps/android/eas.json`'s `"appVersionSource": "local"` means EAS reads the app
-version from `apps/android/app.config.ts`'s own `version: "0.1.0"` field (and the
-implicit `android.versionCode`, which is not set anywhere in `app.config.ts` —
-confirmed by `grep -n "versionCode" apps/android/app.config.ts`, no match — so Expo
-defaults it to `1`) rather than computing it from anything remote. Neither
+version from `apps/android/app.config.ts`'s own `version` field, and its
+`android.versionCode` from the same file, rather than computing either from
+anything remote.
+
+**CORRECTED at the P9-A merge gate.** This said `android.versionCode` "is not set
+anywhere in `app.config.ts` — confirmed by `grep -n "versionCode"
+apps/android/app.config.ts`, no match — so Expo defaults it to `1`". True when
+written; T235 landed that field at the P9-A wave, deriving it from this file's own
+semver through `computeVersionCodeFromSemver`, so the same grep now matches and Expo
+defaults nothing. Neither
 `eas.json` nor `app.config.ts` reads the release workflow's `$RELEASE_TAG` (the git
 tag that triggered the run) at all — `grep -n "RELEASE_TAG\|GITHUB_REF\|process.env"
 apps/android/app.config.ts` finds none of those.
 
-This makes the BUILD deterministic (the same tag always produces the same declared
-app version — good for reproducibility, the letter of this criterion) but means the
-git tag and the app's own declared version are two independent, disconnected
-identifiers: tagging `v0.2.0` and `v0.3.0` both produce an APK internally declared
-`0.1.0` / `versionCode 1`. Practically, since neither `eas.json` nor
-`"autoIncrement"` is set on the `production-apk` profile, `versionCode` never
-increases release over release — this does not break criterion three (a clean
-checkout still reproduces the same output for the same tag) but it does mean
-Android's package manager cannot distinguish two different tagged releases from
-each other, and will refuse to install one over the other as an update
-(`INSTALL_FAILED_VERSION_DOWNGRADE`) once a device already has a copy installed.
-This is the same "two sources of truth for a version" shape CLAUDE.md's T230 note
-names elsewhere. **Filed as a gap, not fixed**: `apps/android/app.config.ts` is not
-in this task's Owns line (only `.github/workflows/android-apk-release.yml`,
-`.gitignore`, `apps/android/eas.json`, a new `scripts/ci` guard, and this doc are).
-The concrete fix: bump `version`/set an explicit `android.versionCode` per release,
-or set `"autoIncrement": true` on the `production-apk` profile (EAS then increments
-`versionCode` itself on every build using that profile) — the second is the
-smaller, more mechanical change and does not require deriving anything from the git
-tag at all.
+This makes the BUILD deterministic: the same tag always produces the same declared
+app version, which is the letter of this criterion. `versionCode` now moves with
+that version — T235 derives it as `major * 1_000_000 + minor * 1_000 + patch`, so
+`0.1.0` builds `1000` and `0.2.0` builds `2000`, and Android can tell two tagged
+releases apart.
+
+What remains two independent identifiers is the git TAG and the declared `version`.
+Nothing fails a release that tags `v0.2.0` while `app.config.ts` still says `0.1.0`;
+that release rebuilds the previous `versionCode` and collides on the device exactly
+as before (`INSTALL_FAILED_VERSION_DOWNGRADE`). Bump `version` in the same commit you
+tag. Enforcing that mechanically is filed separately, and the check has to run on the
+GitHub runner: EAS evaluates `app.config.ts` on its own build machine and never sees
+the runner's environment.
+
+**CORRECTED at the P9-A merge gate.** This said `versionCode` "never increases
+release over release" and that Android "will refuse to install one over the other as
+an update" — both true when written, both falsified by T235. It also gave the
+concrete fix as setting `"autoIncrement": true` on the `production-apk` profile,
+calling it "the smaller, more mechanical change". **Do not restore that
+suggestion.** Under `"appVersionSource": "local"` EAS increments the version in the
+checkout's own files, and `.github/workflows/android-apk-release.yml` builds a
+detached tag checkout and never commits or pushes anything back — so the bump would
+live and die on the ephemeral runner and never accumulate. T235's decision record in
+`app.config.ts` records the same finding.
 
 **CORRECTED: this previously said "for whoever owns `app.config.ts` next (T44B2 or
 a new task)".** T44B2's own `Owns:` line is `docs/` only, so it was never going to

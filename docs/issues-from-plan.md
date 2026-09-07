@@ -504,6 +504,8 @@ that recomputation has to be domain-specific:
 | T242   | Rule on superseded mechanism names in reference-only docs                       | phase-9   | docs             | P9-W24 | T226                                                                  |
 | T243   | Close the archive/snapshot interleaving that drops archivedAt                   | phase-9   | daemon           | P9-W25 | none                                                                  |
 | T244   | Replace the four hand-rolled comment strippers with one tokenizer               | phase-9   | tooling          | P9-W26 | T227                                                                  |
+| T246   | Decide whether isShippedSourcePath should see app-root config files             | phase-9   | tooling          | P9-W27 | T228                                                                  |
+| T247   | Fail an Android release whose tag disagrees with app.config.ts version          | phase-9   | ci               | P9-W28 | T235                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -545,8 +547,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**456 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W9
-merge gate — the commit that filed `T244`, one row past the **455** counted just after the
+**458 tasks** (distinct IDs counted directly from the table above), recounted at the P9-A
+merge gate — the commit that filed `T246` and `T247`, two rows past the **456** filed at
+the P9-W9 gate with `T244`, three past the **455** counted just after the
 P9-W8 gate, two past the **454** filed at that
 gate with `T241` and `T242`, three past the **452** counted at
 the P9-W7 gate, four past the **450** counted at
@@ -560,12 +563,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 235 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 237 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 26 (+20). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 28 (+22). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 26. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 28. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -784,23 +787,36 @@ the task details always agree.
 |        | tests titled "are shipped" resolved shippedness by filtering             |       |
 |        | CAPABILITIES by name, reading no file. One shared predicate              |       |
 |        | now serves the guard and both tests. No new tasks filed.                 |       |
-| P9-W11 | T229 (filed by the P9-W3 gate; look every SHA up, never guess).          | 1     |
+| P9-W11 | T229 — landed in wave P9-A (KEEP): 63 tag-pinned refs, not the           | 1     |
+|        | ledger's stale 56. All 88 uses: lines now SHA-pinned with a              |       |
+|        | version comment; the one annotated tag was peeled to its                 |       |
+|        | commit, re-resolved twice at the gate.                                   |       |
 | P9-W12 | T230 (filed by the P9-W3 gate; needs the Workers packaging answer).      | 1     |
 | P9-W13 | T231 (owner-blocked: needs npm install for a semver-major bump)          | 1     |
 | P9-W14 | T232 (filed by the P9-W4 gate; the T215 precedent, one entry).           | 1     |
 | P9-W15 | T233 (filed by the P9-W4 gate; the new guard cannot see it).             | 1     |
 | P9-W16 | T234 (filed by the P9-W4 gate; a decision, not a code change).           | 1     |
-| P9-W17 | T235 (filed by the P9-W5 gate; blocks every second install).             | 1     |
+| P9-W17 | T235 — landed in wave P9-A (KEEP): versionCode derived from the          | 1     |
+|        | file's own semver, not EAS autoIncrement, which cannot                   |       |
+|        | accumulate under appVersionSource local. Falsified two                   |       |
+|        | runbooks, both corrected at the gate. Left T247 open.                    |       |
 | P9-W18 | T236 (filed by the P9-W5 gate; owner-blocked on EXPO_TOKEN).             | 1     |
 | P9-W19 | T237 (filed by the P9-W5 gate; a real gap, measured, not a               | 1     |
 |        | regression — parity with guard-secret-scan's own skip list).             |       |
 | P9-W20 | T238 (filed by the P9-W6 gate; a naming decision, ownerless).            | 1     |
 | P9-W21 | T239 (filed by the P9-W7 gate; comments only, no behaviour).             | 1     |
 | P9-W22 | T240 (filed by the P9-W7 gate; three runs, three results).               | 1     |
-| P9-W23 | T241 (filed by the P9-W8 gate; one fixture string).                      | 1     |
+| P9-W23 | T241 — landed in wave P9-A (KEEP): description rewritten from            | 1     |
+|        | both renderers, which slice to 200 before mounting. No test              |       |
+|        | asserted the old string, and none was added to justify it.               |       |
 | P9-W24 | T242 (filed by the P9-W8 gate; a policy, not an edit).                   | 1     |
-| P9-W25 | T243 (turned main red once; a real interleaving, not a flake).           | 1     |
+| P9-W25 | T243 — landed in wave P9-A (KEEP): per-agent runExclusive around         | 1     |
+|        | every read-modify-write, replacing waitForPendingWrite. The              |       |
+|        | new test was watched failing on unmodified base code at the              |       |
+|        | gate, in a worktree, not taken from the report.                          |       |
 | P9-W26 | T244 (filed by the P9-W9 gate; four guards, one shared bug).             | 1     |
+| P9-W27 | T246 (filed by the P9-A gate; widen the scope or refuse it).             | 1     |
+| P9-W28 | T247 (filed by the P9-A gate; the one gap T235 left open).               | 1     |
 
 ---
 
@@ -8624,6 +8640,80 @@ that is a finding to report, not to absorb.
 - [ ] Both collisions are proven to fail before the fix and pass after, on real files
 - [ ] Every file with a real import still yields a specifier, asserted per file
 - [ ] No guard's set of reported violations changes, and that is shown rather than assumed
+
+#### T246 — Decide whether isShippedSourcePath should see app-root config files
+
+`labels: phase-9, area: tooling` · `wave: P9-W27` · `depends-on: T228`
+
+**Measured at the P9-A merge gate by executing the real exported predicates, not by
+reading a scope list:**
+
+```
+apps/android/app.config.ts          isAppSourcePath=false  isShippedSourcePath=false
+docs/android-apk-release.md         isAppSourcePath=true   isShippedSourcePath=false
+docs/clean-install-and-rollback.md  isAppSourcePath=true   isShippedSourcePath=false
+```
+
+T235 shipped `computeVersionCodeFromSemver` in `apps/android/app.config.ts` and
+falsified two runbooks that asserted the capability was absent — the T124 shape
+`guard-capability-prose.mjs` exists to catch. It could not catch it, and would not catch
+the next one. `isShippedSourcePath` requires `<pkg-or-app>/src/` or `scripts/ci`, and
+`app.config.ts` sits at the app ROOT, outside `src/`.
+
+**The asymmetry is the whole point.** The DENIAL side already works: both stale docs are
+in scope. Only the shipping side is blind. So an entry registered today would exit 0
+forever no matter how false the docs became — item ten of the check-that-cannot-fail
+catalogue, an entry in a curated list whose runner's scope can never see the case.
+**Do not register the entry without the widening.**
+
+Either widen `SHIPPED_SRC_PATTERN` to admit `apps/*/app.config.ts` and THEN register
+the entry, proving it fires before trusting it, or record a will-not-widen decision
+saying app-root config declares no capability worth protecting — so the next gate does
+not re-propose an inert entry. Whichever is chosen, say why the other was rejected.
+
+If you widen: `app.config.ts` is a config file that Expo evaluates, so check what else
+the widened pattern admits before you trust it, and what the orphan-module and
+capability scans do with those files.
+
+Owns: `scripts/ci/run-guard-capability-prose.mjs`, `scripts/ci/guard-capability-prose.mjs`,
+its test, and `CLAUDE.md`'s T124 section. **Nothing else.**
+
+- [ ] The predicates are executed on the real paths, and the output is quoted
+- [ ] If widened, the entry is watched firing before it is trusted
+- [ ] If not widened, the refusal is written down where the next gate will read it
+
+#### T247 — Fail an Android release whose tag disagrees with app.config.ts version
+
+`labels: phase-9, area: ci` · `wave: P9-W28` · `depends-on: T235`
+
+T235 derives `android.versionCode` from `apps/android/app.config.ts`'s own semver
+`version`, which fixes the second-install collision for any two releases that declare
+different versions. **It does not make anyone bump `version`.** Tagging `v0.2.0` while
+the file still says `0.1.0` rebuilds the previous `versionCode`, and the device refuses
+it with `INSTALL_FAILED_VERSION_DOWNGRADE` — the original defect, reached by a
+different route. T235's own in-file decision record names this as the one gap it leaves.
+
+Fail the build instead. A step in `.github/workflows/android-apk-release.yml`'s
+`publish-android-apk` job that strips the tag's `v`/`android-v` prefix and compares it
+with the `version` the config declares, failing loudly when they differ.
+
+**The constraint T235 recorded, and the reason a naive fix does not work: the check must
+run on the GitHub runner.** EAS evaluates `app.config.ts` on its own build machine and
+never sees the runner's shell environment, so nothing inside `app.config.ts` can read
+`RELEASE_TAG` — which is also why T235 derived from `version` rather than from the tag
+in the first place. Read that decision record before choosing an approach.
+
+Decide whether the comparison belongs inline in the workflow or in a `scripts/ci` guard
+with its own test. A guard is testable here; an inline step is not. Say which and why.
+
+Owns: `.github/workflows/android-apk-release.yml` and any new `scripts/ci` guard it
+calls, plus that guard's test. **Not `app.config.ts`** — if the fix needs a change
+there, that is a finding to report, not to make.
+
+- [ ] A tag/version mismatch fails the job, watched failing on a real mismatch
+- [ ] A matching pair passes, watched passing
+- [ ] The prefix handling covers every tag shape the workflow actually triggers on
+- [ ] The runner-versus-EAS-machine constraint is stated in whatever ships
 
 #### T32A1 — Build the Android connect form
 

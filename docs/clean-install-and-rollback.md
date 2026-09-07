@@ -480,22 +480,30 @@ uninstall, which is exactly what §A.4 step 4 states.
 
 ### B.6 The Android second-install collision (T235) — named here, not discovered later
 
-`apps/android/app.config.ts:63` declares `version: "0.1.0"` with no
+`apps/android/app.config.ts` sets `android.versionCode` from its own semver
+`version` through `computeVersionCodeFromSemver`, so two releases carrying
+different `version` strings build different `versionCode`s and install over
+one another. No profile in `apps/android/eas.json` sets `"autoIncrement"`,
+and that is deliberate rather than an omission — see §3.2 of
+`docs/android-apk-release.md` for why that route cannot durably increment
+under `"appVersionSource": "local"`.
+
+One collision remains, and this is the place to stand for it: `versionCode`
+is derived from `version`, not from the git tag, and nothing fails a release
+that tags `v0.2.0` while `app.config.ts` still declares `0.1.0`. That build
+reproduces the previous `versionCode`, and Android's package manager refuses
+an APK whose `versionCode` is not strictly greater than the one already on
+the device — the `INSTALL_FAILED_VERSION_DOWNGRADE` failure §A.3 and §A.6
+describe. Bump `version` in the same commit that you tag.
+
+**CORRECTED at the P9-A merge gate.** This said there was "no
 `android.versionCode` anywhere in that file (`grep -n "versionCode"
-apps/android/app.config.ts` — no match, confirmed at this commit), and no
-profile in `apps/android/eas.json` sets `"autoIncrement"`. Every tagged
-release therefore ships the same `versionCode` (Expo defaults an unset one
-to `1`), and Android's package manager refuses to install an APK whose
-`versionCode` is not strictly greater than the one already on the device —
-the `INSTALL_FAILED_VERSION_DOWNGRADE` failure §A.3 and §A.6 describe. This
-is filed as **T235** (`docs/issues-from-plan.md`, wave `P9-W17`,
-`depends-on: T44B1`, owning `apps/android/app.config.ts` and
-`apps/android/eas.json`) and is unfixed as of this commit — confirmed by
-reading both files directly, not only by trusting the ledger entry. This
-task's own `Owns:` line is `docs/` only, so it cannot fix `app.config.ts`;
-it can only make sure the collision is named precisely, in the place a
-reader will actually be standing when it happens (§A.3, §A.6), rather than
-left for them to rediscover on a phone with `adb logcat` open.
+apps/android/app.config.ts` — no match, confirmed at this commit)", that
+"every tagged release therefore ships the same `versionCode`", and that T235
+was "unfixed as of this commit — confirmed by reading both files directly".
+All three were true when written and were falsified by T235, which landed in
+the P9-A wave — including the clause advertising that the claim had been
+checked by direct reading rather than trusted from the ledger.
 
 ### B.7 The `paseo` naming — checked against both plan.md and the reference checkout, not assumed
 
