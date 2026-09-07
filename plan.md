@@ -757,13 +757,17 @@ The ten v1 kinds remain:
 | `panel`    | Composed focused view             | rail, popover, or inline panel | sheet, inline card, or screen |
 | `progress` | Determinate or indeterminate work | status/rail progress           | compact or pinned progress    |
 | `roster`   | Agents, roles, keys, tasks        | persistent list with actions   | pinned list or full sheet     |
-| `log`      | Streaming lines                   | virtualized log                | tail-following list           |
+| `log`      | Streaming lines                   | tail-capped log                | tail-following list           |
 | `markdown` | Rich textual content              | web markdown renderer          | native markdown renderer      |
 | `diff`     | Unified changes                   | full diff view                 | compact diff then full screen |
 | `form`     | Structured questions              | dialog or rail form            | sheet or full screen          |
 | `composer` | Replace or prefill draft          | composer update with undo      | composer update with undo     |
 
 A `panel` composes other kinds. Do not add a new wire kind for every extension.
+
+`log`'s presentation on both platforms is a cap on how many of the payload's lines are
+ever mounted (§14.5's 200-line budget), not a scrolling render-window virtualization —
+there is nothing to window over once the mount itself is capped (T226).
 
 ### 11.4 Renderer registry
 
@@ -1150,7 +1154,12 @@ Set budgets in CI once the first vertical slice exists:
 - web session route `/h/:serverId/session/:agentId`: under 500 KiB gzip for initial JavaScript and CSS, excluding lazy terminal/editor/diff chunks;
 - local live-event-to-paint p95: under 100 ms on web and 200 ms on a Pixel 8 API 35 reference emulator;
 - transcript: 10,000 timeline items without rendering more than a bounded window;
-- extension log: virtualize above 200 lines;
+- extension log: cap the mounted line count to 200 on both platforms — a payload/mount
+  bound, not a scrolling render-window virtualization (that is the transcript bullet
+  above's concern, for a different and much larger list); real extensions already tail
+  their own log payloads at 200 in practice (the `loop` extension), so this is a bound
+  already met on the wire, not a target to grow toward (T226: web previously capped at
+  500, decided down to match Android's 200);
 - no bridge update rate above 20 messages per second per agent;
 - the mechanism for the paint budget is a frame clock supplied through a platform interface:
   core batches pending rows into one application per tick, and the live streaming item is

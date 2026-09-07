@@ -47,22 +47,38 @@
 //    10,000 rows"). Both run in their workspace's ordinary vitest suite.
 //
 // 5. **Extension log: virtualize above 200 lines.** MEASURABLE STATICALLY
-//    IN CI TODAY, but the two platforms disagree with each other and with
-//    the letter of this bullet, which this task discloses rather than
-//    gates (fixing it is a product decision for whichever task owns
-//    `apps/web/src/features/extensions/` or the bridge contract, both out
-//    of this task's scope). Android bounds a `log` element to the bridge
-//    contract's own default tail of exactly 200 lines
-//    (`apps/android/src/features/extensions/renderers/renderers-model.test.ts`,
-//    "bounds the log to the bridge contract's default tail of 200 lines").
-//    Web's `apps/web/src/features/extensions/renderers/log.tsx` instead
-//    caps to `DEFAULT_LOG_TAIL = 500` and its own doc comment says this is
-//    deliberately "not full list virtualization" because the payload
-//    already arrives pre-bounded on the wire (plan.md §11.4). Neither is
-//    "wrong" on its own terms, but the 500-vs-200 mismatch and "cap the
-//    payload" vs "virtualize the render" are two different mechanisms
-//    answering the same budget bullet — filed here, not fixed, since this
-//    task owns CI files only.
+//    IN CI TODAY, and ALREADY MEASURED AND GATED — RESOLVED, not merely
+//    disclosed, as of T226. Both platforms now share one threshold and one
+//    mechanism: a cap on how many of the payload's `lines` are ever
+//    mounted (200, when the payload names no `tail` of its own), not a
+//    scrolling render-window virtualization — see plan.md §14.5 and §11.3
+//    for the recorded product decision. Android:
+//    `apps/android/src/features/extensions/renderers/renderers-model.test.ts`
+//    ("bounds the log to the bridge contract's default tail of 200 lines"),
+//    asserting the named `DEFAULT_LOG_TAIL` export from `log-model.ts`, not
+//    a repeated literal. Web:
+//    `apps/web/src/features/extensions/renderers/log-markdown-composer.test.tsx`
+//    ("bounds the log to the shared default tail of 200 lines"), asserting
+//    the same-named `DEFAULT_LOG_TAIL` export from `log.tsx`. Both run in
+//    their workspace's ordinary vitest suite; no new check was added to
+//    THIS guard, because the thing being verified — that a named constant
+//    equals a value — is not a bundle-size measurement this file's Vite
+//    manifest reading has any way to see, the same reason item 4, 6 and 7
+//    above are gated by each platform's own suite rather than by this
+//    file.
+//    (RESOLVED at T226, which also fixed this classification's own
+//    citation of "plan.md §11.4" for the payload-arrives-pre-bounded
+//    rationale: that citation belongs to §11.4's "payload size limits"
+//    bullet, which is correct as far as it goes, but the disagreement this
+//    item used to describe — the `log` row's Web/Android presentation
+//    cells — lives in §11.3's frozen-bridge-vocabulary table, not §11.4.
+//    Before T226: web capped at `DEFAULT_LOG_TAIL = 500` while Android
+//    capped at 200, and plan.md §11.3's table called web's presentation
+//    "virtualized log" while Android's was "tail-following list" — two
+//    thresholds and two named mechanisms for one budget bullet. T226
+//    lowered web's constant to 200 and reworded §11.3's `log`/Web cell to
+//    "tail-capped log" to match what the code actually does on both
+//    platforms.)
 //
 // 6. **No bridge update rate above 20 messages/second per agent.**
 //    MEASURABLE STATICALLY IN CI TODAY, and ALREADY PINNED — by exact
@@ -130,9 +146,10 @@
 // Net: seven of the eight items above are already measured and gated
 // (six pre-existing, plus this task's new #1), and one (#3, the Android
 // emulator paint budget) genuinely cannot be measured in this environment
-// and is disclosed rather than faked. #5 (extension log) is measured, but
-// the two platforms' real behavior disagrees with each other and with the
-// letter of that bullet, and is disclosed rather than silently reconciled.
+// and is disclosed rather than faked. #5 (extension log) was disclosed as
+// a genuine cross-platform disagreement until T226 resolved it (one
+// threshold, one mechanism, recorded in plan.md); it is now measured and
+// gated like the others, not merely disclosed.
 //
 // The eight items above are NOT one-to-one with §14.5's eight bullets,
 // and the totals matching is a coincidence: §14.5's frame-clock-mechanism

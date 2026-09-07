@@ -7,8 +7,26 @@
  * absent) — not full list virtualization, which is the transcript's own
  * concern (T28A6), applied to a different, much larger list. A `log`
  * element's payload already arrives pre-bounded on the wire in practice
- * (plan.md §11.4 payload size cap), so a simple slice-and-scroll region is
- * sufficient here.
+ * (plan.md §11.4 payload size limits), so a simple slice-and-scroll region
+ * is sufficient here.
+ *
+ * `DEFAULT_LOG_TAIL` is **200**, matching
+ * `apps/android/src/features/extensions/renderers/log-model.ts`'s constant
+ * of the same name. Until T226, this file capped at 500 while Android
+ * capped at 200 — two thresholds and, per plan.md §11.3's `log` row's own
+ * wording, two named mechanisms ("virtualized log" for web) answering the
+ * same plan.md §14.5 budget bullet. T226 resolved both: the mechanism on
+ * *both* platforms is this payload/mount cap, not a scrolling render
+ * window (real windowed virtualization, the kind the transcript uses, has
+ * nothing to recycle here because the payload is already small — see
+ * below), and the threshold is 200, because that is the number plan.md
+ * §14.5 itself states and the number real extensions already emit: the
+ * `loop` extension's own log section already tail-caps at 200 lines on the
+ * wire (`docs/pi-extension-compatibility.md` §3.3, `loop` row, "`log`
+ * tail-200"). Raising the web cap to 500 bought nothing observable — no
+ * shipped extension sends a log payload anywhere near that long — while
+ * costing more mounted DOM nodes than necessary for the one platform with
+ * the most headroom to spare. See plan.md §14.5 for the recorded decision.
  */
 import { CodeBlock } from "../../../ui/primitives/index.js";
 import type { PiUiElementRendererProps } from "../registry.js";
@@ -16,7 +34,7 @@ import { ElementActionsRow } from "./element-actions.js";
 import "./renderers.css";
 
 /** Cap applied when the payload does not specify its own `tail` hint. */
-const DEFAULT_LOG_TAIL = 500;
+export const DEFAULT_LOG_TAIL = 200;
 
 export function LogRenderer({
   element,

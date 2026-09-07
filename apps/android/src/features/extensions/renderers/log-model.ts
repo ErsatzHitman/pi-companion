@@ -5,12 +5,17 @@
  * mounted, to the payload's own `tail` hint or a default when the payload
  * carries none — not full list virtualization, which is the transcript's
  * own concern (a different, much larger list). The default is **200**,
- * not the web renderer's 500
- * (`apps/web/src/features/extensions/renderers/log.tsx`): the bridge
+ * the same value and the same mechanism as the web renderer's
+ * `DEFAULT_LOG_TAIL`
+ * (`apps/web/src/features/extensions/renderers/log.tsx`) since T226
+ * resolved that pre-T226 mismatch (web capped at 500): the bridge
  * contract itself already caps a log at tail-200 in practice (the `loop`
  * extension's own log section — `docs/pi-extension-compatibility.md` §3.3,
- * `loop` row, "`log` tail-200"), and a bounded native list view is the
- * scarcer resource on a phone screen than in a browser tab.
+ * `loop` row, "`log` tail-200"), so 200 is the number both plan.md §14.5
+ * states and real extensions already emit, and a bounded native list view
+ * is the scarcer resource on a phone screen than in a browser tab — so the
+ * tighter number costs web nothing while protecting Android. See plan.md
+ * §14.5 for the recorded decision.
  *
  * Kept free of any React Native import so it is unit testable in this
  * workspace (see `status-model.ts`'s note and `../registry.test.ts`).

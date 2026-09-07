@@ -9,6 +9,7 @@ import type { PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 import { PiUiElementView } from "../registry-view.js";
 import { piUiRendererRegistry } from "../registry.js";
 import "./index.js";
+import { DEFAULT_LOG_TAIL } from "./log.js";
 
 /**
  * T29A3 — render the `log`, `markdown`, and `composer` kinds. Acceptance
@@ -118,6 +119,27 @@ describe("log renderer", () => {
     expect(screen.getByText(/line 49/)).toBeTruthy();
     expect(screen.queryByText(/^line 0$/)).toBeNull();
     expect(screen.getByText(/Showing last 10 of 50 lines/)).toBeTruthy();
+  });
+
+  it("bounds the log to the shared default tail of 200 lines when the payload names no tail", () => {
+    expect(DEFAULT_LOG_TAIL).toBe(200);
+    const manyLines = Array.from({ length: 250 }, (_, i) => `line ${i + 1}`);
+    view({
+      ...logElement,
+      payload: { kind: "log", lines: manyLines, mono: false },
+    } as PiUiElement);
+
+    // Only the newest DEFAULT_LOG_TAIL lines are ever mounted — the oldest
+    // 50 of 250 are dropped, matching the Android render model's default
+    // (`apps/android/src/features/extensions/renderers/log-model.ts`,
+    // `DEFAULT_LOG_TAIL`; both are 200 as of T226 — plan.md §14.5).
+    expect(screen.getByText("line 250")).toBeTruthy();
+    expect(screen.getByText("line 51")).toBeTruthy();
+    expect(screen.queryByText("line 50")).toBeNull();
+    expect(screen.queryByText(/^line 1$/)).toBeNull();
+    expect(
+      screen.getByText(/Showing last 200 of 250 lines \(50 earlier lines hidden\)\./),
+    ).toBeTruthy();
   });
 
   it("respects mono: false by rendering a plain list instead of a code block", () => {

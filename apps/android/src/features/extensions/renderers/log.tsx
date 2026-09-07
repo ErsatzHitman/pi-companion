@@ -9,10 +9,10 @@
  * unit tested; this file is the native mapping onto `ScrollView`/`Text`.
  *
  * "Bounded and scrollable": `log-model.ts` never hands this component more
- * than the effective tail's worth of lines (200 by default — see that
- * module's note on why this differs from the web renderer's 500), and
- * those lines sit inside a height-capped `ScrollView` rather than growing
- * the page indefinitely.
+ * than the effective tail's worth of lines (200 by default — the same
+ * value as the web renderer's `DEFAULT_LOG_TAIL` since T226; see that
+ * module's note), and those lines sit inside a height-capped `ScrollView`
+ * rather than growing the page indefinitely.
  *
  * TalkBack: the title is a header, the region carries an
  * `accessibilityLabel` naming it as this element's output, and each line
