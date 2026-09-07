@@ -72,8 +72,23 @@ other tasks are added).
 - `scripts/ci/run-guard-secret-scan.mjs`'s `BINARY_EXTENSIONS` set (T44A3) already
   contained `".keystore"`, `".jks"`, `".apk"`, `".aab"` — files with those
   extensions were skipped before any content read, by design (that guard exists to
-  scan TEXT for vendor-prefixed token shapes; see its own module header). Confirm:
-  `grep -n '"\.keystore"\|"\.jks"\|"\.apk"\|"\.aab"' scripts/ci/run-guard-secret-scan.mjs`.
+  scan TEXT for vendor-prefixed token shapes; see its own module header). Confirm
+  against the pre-T248 tree:
+  `git show 9851876:scripts/ci/run-guard-secret-scan.mjs | grep -n '"\.keystore"\|"\.jks"'`.
+
+  **CORRECTED at the P9-F merge gate.** The `Confirm:` command here used to read the
+  file at the CURRENT commit, and stopped working the moment T248 deleted
+  `BINARY_EXTENSIONS` earlier in the same wave — it now returns nothing and exits 1,
+  which reads to the next person as "the gap this section describes never existed".
+  It is pinned to `9851876` above because §2.1 is explicitly a record of what was
+  measured _before this task_, and that measurement is still accurate about the tree
+  it was taken from. What is no longer true is the present-tense implication:
+  `run-guard-secret-scan.mjs` now reads every tracked file's content through
+  `readContentForScan`, subject only to `MAX_SCANNED_BYTES`, so no extension is
+  skipped by any guard today. The reason `guard-signing-material.mjs` still exists is
+  unchanged — it asks an extension/filename-first question that needs no content
+  decode, and so catches a keystore whatever its bytes decode to.
+
 - `.gitignore` had no entry naming any signing-material extension or filename.
   Confirm against the pre-task tree: `git show 8c8497e:.gitignore | grep -i
 'jks\|keystore\|p12\|pfx\|pepk\|mobileprovision\|google-services\|credentials'`

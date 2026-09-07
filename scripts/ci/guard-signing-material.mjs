@@ -6,10 +6,20 @@
 // T44B1's own acceptance criterion "Signing material is not present in the
 // repository" had ZERO enforcement before this guard, and the one existing
 // guard whose job sounds like it should cover this — `guard-secret-scan.mjs`
-// (T44A3) — cannot, by construction. Its CLI entry point
-// (`run-guard-secret-scan.mjs`) skips a file by EXTENSION before ever
-// reading it, and that skip list (`BINARY_EXTENSIONS`) explicitly names
-// `.keystore`, `.jks`, `.apk` and `.aab`. Separately, this repository's
+// (T44A3) — could not, by construction, at the time this guard was written:
+// its CLI entry point (`run-guard-secret-scan.mjs`) skipped a file by
+// EXTENSION before ever reading it, and that skip list (`BINARY_EXTENSIONS`)
+// explicitly named `.keystore`, `.jks`, `.apk` and `.aab`.
+//
+// (CORRECTED at the P9-F merge gate. This said all of that in the PRESENT
+// tense — "skips a file by EXTENSION before ever reading it, and that skip
+// list (`BINARY_EXTENSIONS`) explicitly names `.keystore`, `.jks`, `.apk`
+// and `.aab`". T248 deleted `BINARY_EXTENSIONS` outright earlier in this
+// same wave: `run-guard-secret-scan.mjs` now reads every tracked file's
+// content through `readContentForScan`, subject only to `MAX_SCANNED_BYTES`.
+// The reason this guard exists is UNCHANGED and is stated below — an
+// extension/filename-first question needs no content decode at all — but the
+// sentence above described a mechanism that no longer exists.) Separately, this repository's
 // `.gitignore` had no entry for any signing extension before this task
 // (`grep -n "jks\|keystore\|\.p12" .gitignore` returned nothing). So a real
 // keystore committed under any of those four extensions would have been
@@ -20,8 +30,9 @@
 // elsewhere).
 //
 // This is a NEW, dedicated guard rather than a change to
-// `guard-secret-scan.mjs`'s own `BINARY_EXTENSIONS`, because the two checks
-// answer different questions. `guard-secret-scan.mjs` asks "does this TEXT
+// `guard-secret-scan.mjs`'s own extension handling (its `BINARY_EXTENSIONS`
+// set at the time; deleted by T248), because the two checks answer different
+// questions. `guard-secret-scan.mjs` asks "does this TEXT
 // file's CONTENT look like a live credential" — a poor fit for a binary
 // keystore, whose secret is a key entry in a container format, not a PEM
 // block sitting in text. This guard asks an extension/filename-first

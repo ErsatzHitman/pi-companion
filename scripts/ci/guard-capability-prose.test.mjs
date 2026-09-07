@@ -3954,3 +3954,122 @@ test("P9-E gate: on the real, committed tree, T247's capability resolves as ship
       " or scripts/ci left isShippedSourcePath's scope",
   );
 });
+
+// P9-F merge gate, registering T248's capability. T248 deleted
+// `BINARY_EXTENSIONS` and shipped `readContentForScan` while three sites in
+// `isAppSourcePath` scope still asserted the skip list existed. Both denying
+// shapes below were LIVE on `main` at `80785b9`; the third case pins the
+// CORRECTED wording the gate replaced them with, and the fourth pins that a
+// different guard's own legitimate `BINARY_EXTENSIONS` set is not caught.
+test("P9-F gate: a live skips-a-file-by-extension claim about guard-secret-scan is flagged", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-secret-scan.mjs",
+      content: "export function readContentForScan(absolutePath) { return null; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-signing-material.mjs",
+      content:
+        "// Its CLI entry point (run-guard-secret-scan.mjs) skips a file by " +
+        "EXTENSION before ever reading it, and that skip list names .keystore.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "scripts/ci/guard-signing-material.mjs");
+  assert.equal(
+    violations[0].capability,
+    "guard-secret-scan reads every tracked file's content (readContentForScan)",
+  );
+});
+
+test("P9-F gate: the BINARY_EXTENSIONS-skip-list-explicitly-excludes wording also fires", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-secret-scan.mjs",
+      content: "export function readContentForScan(absolutePath) { return null; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: ".github/workflows/ci.yml",
+      content:
+        "# its BINARY_EXTENSIONS skip list explicitly excludes .keystore, .jks,\n" +
+        "# .apk and .aab from ever being scanned.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "guard-secret-scan reads every tracked file's content (readContentForScan)",
+  );
+});
+
+test("P9-F gate: the CORRECTED quotations of both denials do not trip the entry", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-secret-scan.mjs",
+      content: "export function readContentForScan(absolutePath) { return null; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "scripts/ci/guard-signing-material.mjs",
+      content:
+        "// (CORRECTED at the P9-F merge gate. This said all of that in the\n" +
+        "// PRESENT tense: skips a file by EXTENSION before ever reading it,\n" +
+        "// and that skip list (BINARY_EXTENSIONS) explicitly names .keystore.)\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("P9-F gate: another guard own legitimate BINARY_EXTENSIONS set is not caught", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-secret-scan.mjs",
+      content: "export function readContentForScan(absolutePath) { return null; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "scripts/ci/run-guard-no-node-builtin-in-web-bundle.mjs",
+      content:
+        "const BINARY_EXTENSIONS = new Set([woff2Ext]);\n" +
+        "// This guard skips a file by extension because a font cannot import a\n" +
+        "// node: builtin.\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("P9-F gate: on the real committed tree, T248 capability resolves as shipped", () => {
+  const real = readCommittedFile("scripts/ci/run-guard-secret-scan.mjs");
+  const shipped = findShippedCapabilities([
+    { path: "scripts/ci/run-guard-secret-scan.mjs", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name ===
+        "guard-secret-scan reads every tracked file's content (readContentForScan)",
+    ),
+    "T248 capability is no longer declared in run-guard-secret-scan.mjs:" +
+      " either readContentForScan was renamed, or scripts/ci left" +
+      " isShippedSourcePath scope",
+  );
+});

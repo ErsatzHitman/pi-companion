@@ -1267,6 +1267,57 @@ export const CAPABILITIES = [
       /guard-signing-material(?:\.mjs)? (?:cannot|can'?t|does not|never) (?:reads?|scans?) (?:a|the) (?:\.jks|\.keystore|\.apk|\.aab|keystore|binary) file'?s? content for a pem header/i,
     ],
   },
+  {
+    // Registered at the P9-F merge gate, for T248, which shipped in the same
+    // wave. T248 deleted `run-guard-secret-scan.mjs`'s `BINARY_EXTENSIONS`
+    // set and replaced the extension-gated read with `readContentForScan`,
+    // so the guard now reads every tracked file's content subject only to
+    // `MAX_SCANNED_BYTES`. It registered nothing here — and unlike T247's
+    // omission one wave earlier, this one had no contention excuse: T249 was
+    // editing this file in the same wave for the same class of defect, which
+    // is the exact reason the gate is the one place both can be reconciled.
+    //
+    // NOT a forward guard. Three live denials existed in `isAppSourcePath`
+    // scope the moment T248 landed, all corrected in the commit that adds
+    // this entry: `guard-signing-material.mjs`'s header (present tense,
+    // "skips a file by EXTENSION before ever reading it, and that skip list
+    // (`BINARY_EXTENSIONS`) explicitly names `.keystore`, `.jks`, `.apk` and
+    // `.aab`"), `.github/workflows/ci.yml`'s `guard-signing-material` job
+    // comment (same claim, same tense), and `docs/android-apk-release.md`
+    // §2.1, whose own `Confirm:` command grepped the CURRENT file for those
+    // four extensions and had silently started returning nothing. The first
+    // two are what the RED proof below used; the doc's defect was the broken
+    // command rather than a denying sentence, and was fixed by pinning the
+    // command to the pre-T248 commit.
+    //
+    // `methodNames`: `readContentForScan` is a bare, uniquely-declared
+    // exported function name — measured across the whole tree, exactly one
+    // declaring file, `scripts/ci/run-guard-secret-scan.mjs`, which
+    // `isShippedSourcePath` admits under `scripts/ci` (T156's widening). A
+    // single non-group member; no AND-group and no shape-anchored `RegExp`
+    // is needed, the same reasoning `findSecretMatches` gives next door.
+    //
+    // `denyingPhrases`: every phrase is SCOPED TO THIS GUARD BY NAME, which
+    // is not decoration. `run-guard-no-node-builtin-in-web-bundle.mjs`
+    // declares its own, entirely legitimate `BINARY_EXTENSIONS` set and
+    // correctly says so in prose; an unscoped phrase about skipping files by
+    // extension would fire on that file's true statement, which is how a
+    // curated entry gets disabled within two waves. The phrases are also
+    // worded away from `run-guard-secret-scan.mjs`'s own past-tense removal
+    // narration ("this guard used to skip a `BINARY_EXTENSIONS` set"), which
+    // carries no `HISTORICAL_QUOTE_MARKERS` trigger of its own — "used to
+    // say" is a marker, "used to skip" is not — and which the denial scan
+    // does read, since `isAppSourcePath` returns true for that path.
+    // Confirmed by running all three phrases over every tracked `scripts/ci`,
+    // `docs/**` and workflow file after the corrections: zero hits.
+    name: "guard-secret-scan reads every tracked file's content (readContentForScan)",
+    methodNames: ["readContentForScan"],
+    denyingPhrases: [
+      /(?:run-)?guard-secret-scan(?:\.mjs)?[^.]{0,120}?(?:skips|excludes|will not read|never reads) (?:a )?file[^.]{0,60}?by extension/i,
+      /`?BINARY_EXTENSIONS`? skip list (?:explicitly )?(?:excludes|names)/i,
+      /(?:run-)?guard-secret-scan(?:\.mjs)?[^.]{0,140}?(?:does not|never|cannot) reads? (?:the )?(?:content|bytes) of/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

@@ -50,16 +50,31 @@ function listTrackedFiles() {
 //     traded away real coverage.
 //   - The read cost of the 24 tracked files the old set used to skip
 //     (8 `.png`, 8 `.ttf`, 8 `.woff2`; the largest is
-//     `apps/android/assets/fonts/Inter-700.ttf` at 344,072 bytes) is not
-//     measurable above run-to-run noise: timing `findSecretMatches` over
-//     every tracked file, 5 runs each, with the old skip set applied versus
-//     removed, gave means of 181.4ms (with skip) and 190.0ms (without) — an
-//     ~8.6ms difference smaller than the 30ms spread already present across
-//     the 5 "with skip" runs alone. Scanning all 24 files produced zero
-//     false positives (0 violations both ways). The existing
+//     `apps/android/assets/fonts/Inter-700.ttf` at 344,072 bytes) is real,
+//     consistently positive, and small enough not to matter. The durable,
+//     machine-independent figure is the byte share, because a timing on one
+//     laptop tells the next reader nothing: those 24 files are 2,285,566 of
+//     25,652,943 tracked bytes, or 8.91% (2.18 MiB of 24.46 MiB), which is
+//     what a few percent of added wall time on a scan measured in tens of
+//     milliseconds looks like. Measured, interleaved, 7 runs each way after
+//     a warm-up: 106.1ms mean with the skip against 117.8ms without, a
+//     +11.7ms difference whose ranges do not overlap at all (with-skip max
+//     112.6ms below without-skip min 114.2ms). Scanning all 24 files
+//     produced zero false positives (0 violations both ways). The existing
 //     `MAX_SCANNED_BYTES` cap below already bounds the worst case
 //     regardless of extension, exactly as it does for the signing-material
 //     guard.
+//
+//     (CORRECTED at the P9-F merge gate. This said the cost was "not
+//     measurable above run-to-run noise", quoting an ~8.6ms difference as
+//     "smaller than the 30ms spread already present across the 5 'with
+//     skip' runs alone". That does not reproduce: re-measured twice at the
+//     gate, interleaved and warmed, the difference EXCEEDS the with-skip
+//     spread and the two ranges separate cleanly. The conclusion — remove
+//     the skip — is unchanged and correct; only the argument recorded for
+//     the next reader was wrong, and a wrong argument is what a later wave
+//     re-derives at cost. The cost is ~10ms and 8.91% of bytes: negligible
+//     against the coverage it buys, not invisible.)
 //
 // So: every tracked file's content is now read (subject to the size cap),
 // with no extension-based skip.

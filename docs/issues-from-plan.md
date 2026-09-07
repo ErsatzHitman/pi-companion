@@ -514,6 +514,9 @@ that recomputation has to be domain-specific:
 | T253   | Re-derive shipped source's citations of reference-only documents                | phase-9   | docs             | P9-W34 | T242                                                                  |
 | T254   | Decide whether isAppSourcePath should admit apps/\*/app.config.ts               | phase-9   | tooling          | P9-W35 | T246, T247                                                            |
 | T255   | Pin the Android release-tag guard's shapes to the workflow's own trigger        | phase-9   | tooling          | P9-W36 | T247                                                                  |
+| T256   | Re-scope source-comment-stripper's four-guards safety claim to its callers      | phase-9   | tooling          | P9-W37 | T252                                                                  |
+| T257   | Make guard-dockerignore-depth mean the same thing locally and in CI             | phase-9   | tooling          | P9-W38 | none                                                                  |
+| T258   | Decide test:integration's three e2e files under a Pi-only registry              | phase-9   | server           | P9-W39 | T250                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -855,6 +858,12 @@ the task details always agree.
 |        | only, so app.config.ts can declare but never deny).                      |       |
 | P9-W36 | T255 (filed by the P9-E gate; the tag shapes T247 covers are             | 1     |
 |        | asserted only in test titles, never read from the workflow).             |       |
+| P9-W37 | T256 (filed by the P9-F gate; a safety claim scoped to four              | 1     |
+|        | guards, now relied on by seven, one of them whole-tree).                 |       |
+| P9-W38 | T257 (filed by the P9-F gate; the guard walks ignored disk               | 1     |
+|        | state, so its local verdict disagrees with CI's).                        |       |
+| P9-W39 | T258 (filed by the P9-F gate; T250 measured the cause and                | 1     |
+|        | correctly refused the product-scope call it implies).                    |       |
 
 ---
 
@@ -9089,6 +9098,127 @@ the workflow — neither needs to change for the pin to exist.
 - [ ] Every derived shape is asserted covered by `RELEASE_TAG_PREFIXES`, and an added glob makes the test fail
 - [ ] The firing is watched against a scratchpad copy and restored, with the tree clean afterward
 - [ ] No test title claims agreement with the workflow that the test does not actually check
+
+#### T256 — Re-scope source-comment-stripper's "four guards" safety claim to its seven callers
+
+`labels: phase-9, area: tooling` · `wave: P9-W37` · `depends-on: T252`
+
+`scripts/ci/source-comment-stripper.mjs` line 141 reads: _"no production file scanned by any of
+the four guards contains a genuinely ambiguous case (checked as part of this task's before/after
+diff on every real file each guard scans, not assumed)"._
+
+**That is a safety claim, not a headcount.** It records a regex-vs-division ambiguity
+verification whose stated coverage is four guards' scan scopes. The module now has **seven**
+callers:
+
+```
+guard-android-release-tag-version    guard-capability-prose
+guard-declared-root-dependencies     guard-no-duplicate-permission-state
+guard-no-legacy-schema-reader        guard-no-node-builtin-in-web-bundle
+orphan-modules
+```
+
+`git log -S` places the fifth caller at `9952651` (**T247, wave P9-E**), so the sentence was
+already stale before P9-F; T252 made it stale by three. T252 disclosed the headcount but
+characterised it as "a minor undercount, not a false safety claim". It is a safety claim.
+
+**The scope that actually matters is `orphan-modules.mjs`.** It walks **every tracked module
+file** — roughly 2,247 of them — which is far wider than anything T244's before/after diff
+covered. The other two additions are narrow by comparison.
+
+Either re-run the ambiguity check across the three scopes added since T244 and update the
+sentence to say seven, or re-scope the sentence to name only the coverage that was actually
+verified and state plainly that later callers inherit the tokenizer without inheriting that
+verification. **Do not simply change "four" to "seven"** — that would assert a verification
+nobody performed, which is worse than the stale number.
+
+Owns: `scripts/ci/source-comment-stripper.mjs` and its test.
+
+- [ ] The sentence names a coverage that was actually measured, and says which
+- [ ] If re-run: the method is stated and `orphan-modules.mjs`'s whole-tree scope is included
+- [ ] If re-scoped: the sentence says explicitly that later callers do not inherit the check
+- [ ] No caller count is restated anywhere it will go stale again on the next caller
+
+#### T257 — Make guard-dockerignore-depth's verdict mean the same thing locally and in CI
+
+`labels: phase-9, area: tooling` · `wave: P9-W38` · `depends-on: none`
+
+`scripts/ci/run-guard-dockerignore-depth.mjs` walks the **real disk** for nested occurrences of
+each `.dockerignore` pattern, and does not exclude `.gitignore`d paths. Every merge gate that
+runs the full runner sweep therefore sees it red locally and has to prove the failure is noise.
+
+Measured at the P9-F gate, on one commit:
+
+| Where                             | Nested occurrences found                                         | Verdict                 |
+| --------------------------------- | ---------------------------------------------------------------- | ----------------------- |
+| Live working tree at `e179341`    | `.github, node_modules, *.tsbuildinfo, dist, .tmp, test-results` | **exit 1** on `".tmp/"` |
+| Clean `git worktree` of `e179341` | `.github`                                                        | **exit 0**              |
+
+`ci.yml` runs it after `checkout` + `setup-node` with **no** `npm ci`, so CI always sees a clean
+disk and always passes. This is the mirror image of the stale-`dist` trap `CLAUDE.md` warns
+about — there, local green hid CI red; here, local red hides nothing but costs every gate the
+time to re-derive it.
+
+Either filter the disk walk by `.gitignore` (so the local verdict means what the CI verdict
+means), or — if walking untracked state is deliberate, which is arguable, since a developer's
+own `.dockerignore` mistakes are worth catching — state in the guard's header that its local
+verdict is only meaningful on a clean checkout, and that CI's is authoritative. Whichever is
+chosen, the standing "expected local failure" list every gate carries should shrink by one.
+
+Owns: `scripts/ci/guard-dockerignore-depth.mjs`, `scripts/ci/run-guard-dockerignore-depth.mjs`,
+their test.
+
+- [ ] The guard's local and CI verdicts agree on a clean checkout, or the header says why they cannot
+- [ ] The `.tmp`/`dist`/`test-results`/`node_modules` false family no longer fires from ignored paths
+- [ ] A real `.dockerignore` depth defect is still caught — watched firing, restored from a scratchpad copy
+- [ ] No gate needs to carry this runner as an expected local failure any more
+
+#### T258 — Decide test:integration's three e2e files under a Pi-only provider registry
+
+`labels: phase-9, area: server` · `wave: P9-W39` · `depends-on: T250`
+
+T250 measured the `Unknown provider: claude` cause end to end and the P9-F gate re-derived every
+link independently. The chain is not a bug in the test harness; it is the product's own scope
+asserting itself:
+
+- `packages/protocol/src/provider-manifest.ts:38` — `AGENT_PROVIDER_DEFINITIONS` has exactly one
+  entry, `id: "pi"`; `DEV_AGENT_PROVIDER_DEFINITIONS` is `[]`.
+- `provider-snapshot-manager.ts:443` `buildRegistry()` — `const definition = registry[provider];
+if (!definition) continue;` silently drops every `extraClients` fake whose id is not already a
+  builtin key.
+- `fake-agent-client.ts:1269` `createTestAgentClients()` returns `claude` / `codex` / `opencode`
+  — none a key in a Pi-only registry, so all three are discarded.
+- `resolveRefreshProviders` (`:908`) intersects the request against `getProviderIds()` =
+  `["pi"]`, yielding `[]`.
+- `warmUpSnapshotForCwd` (`:240`) — `if (options.providers && providers?.length === 0) return;`
+  returns before `refreshProviders`, so the snapshot entry stays `undefined`.
+- `provider-catalog-session.ts:187`/`:242` emit `Unknown provider: ${msg.provider}`.
+
+`plan.md` line 99 says "a Pi-only daemon and provider" and line 174 lists non-Pi agent providers
+under non-goals. So the three e2e files assert against providers this product deliberately does
+not have.
+
+**T250 correctly refused to decide this** — it is a product-scope call, not a test fix, and its
+`Owns` line did not cover the manifest. The two options are not equivalent:
+
+1. **Reintroduce non-Pi providers into `AGENT_PROVIDER_DEFINITIONS`** (or into
+   `DEV_AGENT_PROVIDER_DEFINITIONS`, which is narrower). This contradicts `plan.md`'s stated
+   non-goal and needs `plan.md` amended first, since `plan.md` governs.
+2. **Rescope all three e2e files to `"pi"`**, with a Pi fake in `fake-agent-client.ts`. Keeps the
+   product scope intact; costs whatever coverage the three files' multi-provider assertions were
+   buying, which must be enumerated before it is given up.
+
+Decide, and only then is "wire `test:integration` into CI" a question anyone can answer — that
+remains T250's original subject and is still open.
+
+Owns: the three `*.e2e.test.ts` files `test:integration` runs,
+`packages/server/src/server/test-utils/fake-agent-client.ts`, and — only under option 1 —
+`packages/protocol/src/provider-manifest.ts` and the `plan.md` section that would have to change.
+
+- [ ] The decision names which option and why the other lost
+- [ ] Under option 2, the coverage given up is enumerated before it is given up
+- [ ] Under option 1, `plan.md` is amended first, in the same commit or before it
+- [ ] The three files pass locally, run one at a time in the foreground, with the command and exit code recorded
 
 #### T32A1 — Build the Android connect form
 
