@@ -701,7 +701,8 @@ the task details always agree.
 |        | Both KEEP; the gate widened T219's policy from a list to a shape.        |       |
 | P8-W19 | T221 (filed by the P8-W18 gate; pre-existing, not this wave's).          | 1     |
 |        | KEEP; the answer was that NEITHER cited rationale is live.               |       |
-| P8-W20 | T223 (filed by the P8-W19 gate; a real check-cannot-fail shape)          | 1     |
+| P8-W20 | T223 (filed by the P8-W19 gate; a real check-cannot-fail shape).         | 1     |
+|        | KEEP; the gate restored the RegExp branch's lost mutation coverage.      |       |
 | P8-W21 | T222 (filed by the P8-W19 gate; runs after T223 owns the member)         | 1     |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
@@ -7793,7 +7794,8 @@ Owns: the `CLOSED (T184)` block and the `FIND_BUILD_ORDER_VIOLATIONS_MEMBER` doc
 
 - [ ] The block no longer claims T169's reason is live for this member, and says which reason (if
       any) is
-- [ ] The 0.8s figure is re-measured by you in the foreground and either updated with what you
+- [ ] The `T183:` opener on `FIND_BUILD_ORDER_VIOLATIONS_MEMBER`'s doc comment is fixed too
+      (it still calls the member a `RegExp` chosen for performance; T223 made it a bare string).- [ ] The 0.8s figure is re-measured by you in the foreground and either updated with what you
       observed or removed
 - [ ] A reader following the entry's pointer into this block is not handed a contradiction
 - [ ] `node --test scripts/ci/*.test.mjs` is all-pass and

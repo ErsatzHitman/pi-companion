@@ -2289,7 +2289,7 @@ test("T147/T184: the same fixture DOES flag once a real declaration exists elsew
 
 test("T184: a bare-string member's declaration check is also immune to a property-shaped string literal", () => {
   // The same protection also holds for the RegExp member path (T169's
-  // CONTROLLER_CANCEL_MEMBER; see the "T169" tests above for that half) —
+  // CONTROLLER_CANCEL_MEMBER; the "T223 gate" test below is that half) —
   // findCapabilityDenialViolations's isGroupMemberDeclared runs BOTH
   // member shapes against the same comments-and-strings-stripped source.
   // This fixture exercises the bare-string half through the real
@@ -2309,6 +2309,39 @@ test("T184: a bare-string member's declaration check is also immune to a propert
     "// the guard checks that the build order matches packages/server/package.json prepack.\n";
   const shippedFiles = [{ path: "scripts/ci/guard-docker-packaging-paths.mjs", content }];
   const appFiles = [{ path: "scripts/ci/guard-docker-packaging-paths.mjs", content }];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T223 gate: a RegExp member's declaration check is immune to a string literal that matches it", () => {
+  // T223 moved FIND_BUILD_ORDER_VIOLATIONS_MEMBER to a bare string, which
+  // moved the fixture above off `isGroupMemberDeclared`'s `member instanceof
+  // RegExp` branch and left that branch with no executable coverage at all:
+  // measured at the P8-W20 merge gate, mutating `? member.test(cleaned)` to
+  // `? member.test(file.content)` kept the whole scripts/ci suite green and
+  // the runner at exit 0. This keeps the branch covered, through the real
+  // remaining RegExp member (`CONTROLLER_CANCEL_MEMBER`): a
+  // `cancel: () => void` that exists ONLY inside a string literal must not
+  // mark the transfer-cancellation capability as shipped, so the denying
+  // sentence below stays allowed. Under the mutation the literal survives
+  // stripping, the group resolves shipped, and the sentence is reported.
+  const shippedFiles = [
+    {
+      path: "apps/web/src/features/files/use-file-download.ts",
+      content: `
+export const DOC_EXAMPLE = "cancel: () => void";
+export function useFileDownload(options) {
+  return {};
+}
+`,
+    },
+  ];
+  const appFiles = [
+    {
+      path: "apps/web/src/features/files/file-download-action.tsx",
+      content: "There is no way to cancel an in-flight transfer once it begins.",
+    },
+  ];
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
