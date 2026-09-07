@@ -43,15 +43,24 @@
 //
 // ## Comments are stripped before parsing, string literals are not
 //
-// `guard-no-legacy-app-tree.mjs`'s own header comment contains the literal
-// example text `from "@getpaseo/client"`, `require("packages/app/src/...")`
-// and `import("@getpaseo/app")` — genuine doc-comment prose describing what
-// its OWN pattern matches, not a real import. `stripComments` below erases
+// `guard-no-legacy-app-tree.mjs`'s own header comment quotes import-shaped
+// example text naming the legacy package scope and the legacy app path —
+// genuine doc-comment prose describing what its OWN pattern matches, not a
+// real import. `stripComments` below erases
 // `/* */` and `//` comment text before any extraction pattern runs (mirrors
 // `guard-capability-prose.mjs`'s own `stripComments`), so a doc comment
 // quoting example import syntax can never be mistaken for a real one. String
 // literals are deliberately NOT stripped — the whole point is to read the
 // specifier inside a real import statement's own string literal.
+//
+// That guard, by contrast, scans RAW text and allowlists its own path, so the
+// same quotation is safe there and was NOT safe here. Quoting it in this file
+// turned `guard-no-legacy-app-tree` red on the very commit that introduced this
+// comment, breaking `main`. Describe those shapes; do not reproduce them — the
+// same rule `docs/security-and-version-drift.md` applies to secret-shaped
+// literals, for the same reason: a file's own explaining example is still text
+// in the file. (CORRECTED at the P9-W9 merge gate: this comment previously
+// reproduced that guard's three example specifiers verbatim.)
 //
 // Pure, dependency-free check functions only.
 // `run-guard-declared-root-dependencies.mjs` is the CLI entry point.

@@ -776,7 +776,9 @@ the task details always agree.
 |        | lockfile moved together so npm ci stays safe, and the new guard          |       |
 |        | fires on its own motivating case with no allowlist — but the             |       |
 |        | assertion protecting that case could not fail. Filed T244 and            |       |
-|        | widened T228 to a fifth capability.                                      |       |
+|        | widened T228 to a fifth capability. The wave's own guard header          |       |
+|        | also quoted a legacy specifier and turned guard-no-legacy-app-tree       |       |
+|        | red on main; fixed in the gate commit's follow-up.                       |       |
 | P9-W10 | T228 (filed by the P9-W2 gate; widened by the P9-W3 gate to four).       | 1     |
 | P9-W11 | T229 (filed by the P9-W3 gate; look every SHA up, never guess).          | 1     |
 | P9-W12 | T230 (filed by the P9-W3 gate; needs the Workers packaging answer).      | 1     |
