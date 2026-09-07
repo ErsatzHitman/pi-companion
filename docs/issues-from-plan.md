@@ -498,6 +498,8 @@ that recomputation has to be domain-specific:
 | T236   | Settle whether the EAS remote archive carries the locally-built dist/           | phase-9   | ci               | P9-W18 | T44B1                                                                 |
 | T237   | Close or document guard-signing-material's content-read skip list               | phase-9   | tooling          | P9-W19 | T44B1                                                                 |
 | T238   | Decide whether the published CLI binary keeps the name paseo                    | phase-9   | docs             | P9-W20 | T44B2                                                                 |
+| T239   | Replace the coalescer comment's four file:line citations with symbols           | phase-9   | daemon           | P9-W21 | T225                                                                  |
+| T240   | Make server test:unit reproducibly green under file parallelism                 | phase-9   | daemon           | P9-W22 | T225                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -539,8 +541,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**450 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W6
-merge gate — the commit that filed `T238`, one row past the **449** counted at the P9-W5
+**452 tasks** (distinct IDs counted directly from the table above), recounted at the P9-W7
+merge gate — the commit that filed `T239` and `T240`, two rows past the **450** counted at
+the P9-W6 gate, three past the **449** counted at the P9-W5
 gate, four past the **446**
 counted at the P9-W4 gate, six past the **443**
 counted at the P9-W3 gate, six past the **440**
@@ -550,12 +553,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 229 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 231 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 20 (+14). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 22 (+16). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 20. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 22. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -753,7 +756,10 @@ the task details always agree.
 |        | usable, but the runbook's FIRST command told a non-expert to             |       |
 |        | expect `added 1 package` from an install that resolves a few             |       |
 |        | hundred, and two citations named the wrong source. Filed T238.           |       |
-| P9-W7  | T225 (filed by the P9-W1 gate; a rationale, not a new assertion).        | 1     |
+| P9-W7  | T225 — landed at the P9-W7 gate (KEEP-WITH-FIX): the comment             | 1     |
+|        | is more accurate than the spec it implements — it states what the        |       |
+|        | window does NOT bound — but one citation was off by one and one          |       |
+|        | scope claim was false as written. Filed T239-T240.                       |       |
 | P9-W8  | T226 (filed by the P9-W1 gate; a product decision, not a guard).         | 1     |
 | P9-W9  | T227 (filed by the P9-W1 gate; the T194 shape, one wave's work).         | 1     |
 | P9-W10 | T228 (filed by the P9-W2 gate; widened by the P9-W3 gate to four).       | 1     |
@@ -768,6 +774,8 @@ the task details always agree.
 | P9-W19 | T237 (filed by the P9-W5 gate; a real gap, measured, not a               | 1     |
 |        | regression — parity with guard-secret-scan's own skip list).             |       |
 | P9-W20 | T238 (filed by the P9-W6 gate; a naming decision, ownerless).            | 1     |
+| P9-W21 | T239 (filed by the P9-W7 gate; comments only, no behaviour).             | 1     |
+| P9-W22 | T240 (filed by the P9-W7 gate; three runs, three results).               | 1     |
 
 ---
 
@@ -8378,6 +8386,70 @@ separate task — this one decides and records.
 - [ ] The decision is recorded where a reader meets the command name, not only in metadata
 - [ ] The reasoning names the `$PASEO_HOME` migration cost explicitly
 - [ ] If the name is kept, `CLAUDE.md`'s naming rule is reconciled with it in writing
+
+#### T239 — Replace the coalescer comment's four file:line citations with symbols
+
+`labels: phase-9, area: daemon` · `wave: P9-W21` · `depends-on: T225`
+
+T225's header comment on `AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS` cites four sources by line
+number: `plan.md:1154`, `agent-manager.ts:653`, `agent-manager.ts:655-658` and
+`bootstrap.ts:834`. All four were re-read at the P9-W7 merge gate and are correct today. The
+`655-658` range is correct only because that gate fixed it — it landed as `654-658`, and 654
+is the `timers: { setTimeout, clearTimeout },` line, not the `onFlush` wiring the sentence
+describes. **A citation that was already off by one on the day it shipped is the argument:**
+any edit above any of those lines silently converts a correct citation into a confident false
+claim about a file this repository contains, which is Phase 9's stated defect pattern, and
+nothing in the tree goes red when it happens.
+
+Decide once, for the repository, and apply it here: either cite **symbol names** (`AgentManager`'s
+coalescer construction, `bootstrap.ts`'s `new AgentManager`, §14.5's bridge-rate bullet) and
+delete the numbers, or add a curated guard that resolves each cited `file:line` and fails when
+that line no longer contains the named text.
+
+**Prefer the first.** A guard here is a check whose cost is paid every wave to protect prose
+that reads fine without numbers, and this repository has twice built a curated guard whose
+scope could not see the case it was built for. If you nevertheless build the guard, prove it
+fires on a real drifted citation before you trust it, and register nothing whose runner cannot
+see the file it guards.
+
+Owns: `packages/server/src/server/agent/agent-stream-coalescer.ts`'s header comment, and — only
+if the guard route is chosen — that guard's own `scripts/ci` files. **Comments only in the
+coalescer: no behaviour change, no change to the pinned 60.**
+
+- [ ] The chosen policy is stated in the commit, not just applied
+- [ ] Every remaining citation resolves to what it claims, checked by running it
+- [ ] If a guard is built, a real drifted citation was watched to fail it
+
+#### T240 — Make server test:unit reproducibly green under file parallelism
+
+`labels: phase-9, area: daemon` · `wave: P9-W22` · `depends-on: T225`
+
+`npm run test:unit --workspace=@picompanion/server` produced **three different results in three
+consecutive runs** during P9-W7, on the same commit: the implementer reported exit 0; the
+verifier got exit 1 with one failure (`hub-cli-contract.test.ts`); the merge gate got exit 1
+with four (`terminal-activity-route.test.ts` failing on `EBUSY: resource busy or locked,
+rmdir`, plus 30 s timeouts in `github-service.test.ts`, `daemon-executions.test.ts` and
+`hub-cli-contract.test.ts`). **Zero assertion failures in any of the three.** All four files
+passed together in isolation under `--no-file-parallelism` (`4 passed`, 102 tests, exit 0).
+
+The cause is contention in the parallel lane: subprocess-daemon harnesses and temp-directory
+suites race under a hard 30 s `testTimeout`, with Windows file locking on top. The cost is not
+theoretical — it consumed a full verifier session that still could not resolve it, and it
+makes T225's own acceptance criterion ("`npm run test:unit ...` is all-pass") locally
+unsatisfiable as written, which invites the next implementer to report a green they did not
+get.
+
+Move the subprocess-harness suites into the existing `test:unit:serial` lane, or raise their
+per-test timeout — measure which, do not guess. Whichever is chosen, state in `CLAUDE.md`'s
+"Working locally" section whether that criterion means the local command or CI.
+**Do not close this by deleting or `skip`-ing a test** — `packages/server/CLAUDE.md` forbids it.
+
+Owns: `packages/server/package.json`'s test scripts and its vitest config, plus `CLAUDE.md`'s
+"Working locally" section. No test file's assertions.
+
+- [ ] The same command run three times on one commit gives the same result three times
+- [ ] The fix is chosen from a measurement of which suites actually contend, not by guess
+- [ ] No test is deleted or skipped, and no timeout is raised without saying why here
 
 #### T32A1 — Build the Android connect form
 
