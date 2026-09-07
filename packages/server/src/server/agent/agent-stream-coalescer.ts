@@ -1,28 +1,36 @@
 import type { AgentProvider, AgentStreamEvent, AgentTimelineItem } from "./agent-sdk-types.js";
 
 /**
- * plan.md §14.5 budgets "no bridge update rate above 20 messages per second per agent"
- * (plan.md:1154). This constant is what delivers that budget for a single continuously
+ * plan.md §14.5's bridge-rate bullet budgets "no bridge update rate above 20 messages per
+ * second per agent". This constant is what delivers that budget for a single continuously
  * streaming timeline entry: while events for the same assistant_message/reasoning text
  * stream (or the same running tool_call) keep arriving, they collapse into one buffered
  * entry per window (see collapseEntries below), and that entry produces exactly one
  * onFlush call every windowMs — so that stream's own flush cadence is capped at
  * 1000 / 60 ≈ 16.67 messages/sec, under the 20/sec ceiling. Each onFlush call reaches the
- * bridge as one dispatched event: AgentManager's onFlush wiring
- * (agent-manager.ts:655-658) calls recordAndDispatchTimelineItem, which calls
+ * bridge as one dispatched event: the `onFlush` callback AgentManager passes when it
+ * constructs its `agentStreamCoalescer` field (`new AgentStreamCoalescer({...})` in its
+ * constructor) calls its private `recordAndDispatchTimelineItem`, which calls
  * dispatchStream once per invocation.
  *
- * This is the value production actually runs with: AgentManager falls back to it
- * (agent-manager.ts:653) whenever `agentStreamCoalesceWindowMs` is not supplied, and its
- * only production construction site, bootstrap.ts's `new AgentManager({...})` (around
- * bootstrap.ts:834), does not supply it. `agentStreamCoalesceWindowMs` occurs nowhere
- * else in the tree: its declaration (agent-manager.ts:266) and that fallback are the
- * only two sites, so no caller - production or test - has ever supplied it, and every
- * construction that passes a non-default `windowMs` to this class is in
- * `agent-stream-coalescer.test.ts`. (CORRECTED at the P9-W7 merge gate: this said
- * "every override of `windowMs` found in this package", which is a wider scope than
- * the sentence's subject and false at it - `voice-session.ts`, `runtime-metrics.ts`
- * and `websocket-server.ts` all assign a non-test `windowMs` for unrelated types.)
+ * This is the value production actually runs with: that same construction falls back to
+ * it (`options.agentStreamCoalesceWindowMs ?? AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS`)
+ * whenever `agentStreamCoalesceWindowMs` is not supplied, and its only production
+ * construction site, bootstrap.ts's `new AgentManager({...})` call, does not supply it.
+ * `agentStreamCoalesceWindowMs` occurs nowhere else in the tree: its declaration on the
+ * `AgentManagerOptions` interface and that fallback are the only two sites, so no caller -
+ * production or test - has ever supplied it, and every construction that passes a
+ * non-default `windowMs` to this class is in `agent-stream-coalescer.test.ts`. (CORRECTED
+ * at the P9-W7 merge gate: this said "every override of `windowMs` found in this
+ * package", which is a wider scope than the sentence's subject and false at it -
+ * `voice-session.ts`, `runtime-metrics.ts` and `websocket-server.ts` all assign a
+ * non-test `windowMs` for unrelated types. CORRECTED again at T239: this comment's own
+ * four file:line citations (plan.md:1154, agent-manager.ts:653, agent-manager.ts:655-658,
+ * bootstrap.ts:834) were replaced with symbol names, because `plan.md:1154` had already
+ * drifted onto an unrelated performance-budget bullet by the time T239 re-read it - see
+ * `docs/issues-from-plan.md`'s T239 section for the policy this repository is choosing:
+ * cite symbols here, not line numbers, since a guard that resolves file:line citations
+ * would pay a per-wave cost to protect prose that reads fine without them.)
  *
  * What this window does NOT bound: flushBuffer (below) calls onFlush once per collapsed
  * entry, not once per flush, so a single window that accumulates several entries that do
