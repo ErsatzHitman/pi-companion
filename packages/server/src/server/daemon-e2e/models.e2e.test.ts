@@ -2,6 +2,13 @@ import { describe, test, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { createDaemonTestContext } from "../test-utils/index.js";
 
+// NOT part of `npm run test:unit`; run via `test:integration`, which stays unwired in
+// CI. Its Claude case fails against `createTestAgentClients()`'s fakes with
+// `Unknown provider: claude` — this repository's provider registry is Pi-only
+// (plan.md §1.2/§2.3), so "claude" is never a key in it. Measured cause and disposition
+// (T250): `.github/workflows/ci.yml`'s server-tests job comment and
+// `docs/ci-matrix.md`'s backend section.
+
 function isBinaryInstalled(binary: string): boolean {
   try {
     const out = execFileSync("which", [binary], { encoding: "utf8" }).trim();

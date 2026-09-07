@@ -770,6 +770,57 @@ jobs:
   # not the blocker here — `test-utils/paseo-daemon.ts` binds
   # `127.0.0.1:0` (OS-assigned), never a fixed port. See
   # `docs/ci-matrix.md` §4 for the fuller writeup.
+  #
+  # T250 measured the real cause, by reading the path from
+  # `createTestPaseoDaemon` to the snapshot, not by guessing: this
+  # repository's provider registry is Pi-only (plan.md §1.2/§2.3 —
+  # `non-Pi agent providers` is a stated non-goal, and
+  # `AGENT_PROVIDER_DEFINITIONS` in
+  # `packages/protocol/src/provider-manifest.ts` lists exactly one entry,
+  # `"pi"`). `ProviderSnapshotManager.buildRegistry()` only lets an
+  # `extraClients` fake override a provider's `fetchCatalog` when that
+  # provider id is ALREADY a key in the builtin registry
+  # (`if (!definition) continue;`); "claude"/"codex"/"opencode" never are,
+  # so the three fakes `createTestAgentClients()` builds are silently
+  # dropped and no snapshot entry for them can ever exist.
+  # `getProviderSnapshotEntryForRead`'s warm-up then filters the requested
+  # provider through `resolveRefreshProviders`, which intersects it against
+  # `getProviderIds()` (= `["pi"]`) and returns empty, so
+  # `warmUpSnapshotForCwd` returns immediately without ever calling
+  # `refreshProviders` — the entry stays undefined and the handler emits
+  # `Unknown provider: <id>`. Ruled out, not merely disbelieved: the
+  # provider list is not "empty by construction" (it has one real entry,
+  # `"pi"`) and nothing about this is a catalog-session refactor — the
+  # three `test:integration` e2e files
+  # (`src/server/daemon-e2e/models.e2e.test.ts`,
+  # `src/server/daemon-e2e/live-preferences.e2e.test.ts`,
+  # `src/server/agent/model-catalog.e2e.test.ts`) test only
+  # "claude"/"codex"/"opencode", never "pi", and predate this repository's
+  # provider-scope narrowing to Pi-only — they were carried over from
+  # Paseo's multi-provider daemon and never adapted.
+  #
+  # The suite cannot be made to pass against the fakes as written without
+  # either (a) reintroducing non-Pi providers into
+  # `AGENT_PROVIDER_DEFINITIONS`, which directly contradicts plan.md §2.3's
+  # non-goal, or (b) rewriting all three files to exercise the one real
+  # provider ("pi") with a new fake added to
+  # `packages/server/src/server/test-utils/fake-agent-client.ts` — a file
+  # T250's `Owns:` line does not cover, and a decision about what this
+  # suite should even assert that belongs to whoever picks that up next,
+  # not to this comment. Confirmed still red against the fakes at T250:
+  #   cd packages/server && npx vitest run --maxWorkers=1 \
+  #     src/server/agent/model-catalog.e2e.test.ts
+  # exits non-zero with the same three `Unknown provider: <id>` failures.
+  # `test-utils/claude-auth.ts` (`seedClaudeAuth`) and
+  # `test-utils/claude-config.ts` (`useTempClaudeConfigDir`) — named above
+  # as dead, zero-call-site helpers kept alive only by the `test-utils/
+  # index.ts` barrel re-export — are deleted by T250, not wired: no test
+  # anywhere in this repository ever spawns a real "claude"-provider
+  # `AgentClient` to seed credentials for, and the one real Claude
+  # integration this repository has
+  # (`src/terminal/agent-hooks/claude/claude.real.e2e.test.ts`) exercises
+  # the ambient, already-configured `claude` CLI directly rather than an
+  # isolated temp `CLAUDE_CONFIG_DIR`.
 
   server-tests-ubuntu:
     name: server-tests (ubuntu-latest)

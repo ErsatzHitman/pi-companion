@@ -250,6 +250,49 @@ run test:unit --workspace=@picompanion/server` — **not** the package's own
   this suite; the other half — why the fake-client daemon answers
   `Unknown provider` — is the open question the correction above hands to
   T250.
+  **T250 measured the answer, by reading the path from
+  `createTestPaseoDaemon` to the snapshot, not by guessing.** This
+  repository's provider registry is Pi-only: plan.md §1.2 calls it "a
+  Pi-only daemon and provider" and §2.3 lists "non-Pi agent providers" as
+  a stated non-goal, and `AGENT_PROVIDER_DEFINITIONS` in
+  `packages/protocol/src/provider-manifest.ts` has exactly one entry,
+  `"pi"`. `ProviderSnapshotManager.buildRegistry()` only lets an
+  `extraClients` fake override a provider already present in that builtin
+  registry (`if (!definition) continue;` in its merge loop) —
+  "claude"/"codex"/"opencode" never are keys in it, so the three fakes
+  `createTestAgentClients()` builds are silently discarded and no
+  snapshot entry for them is ever created. The read path then confirms
+  it: `getProviderSnapshotEntryForRead`'s warm-up passes the requested
+  provider through `resolveRefreshProviders`, which intersects it against
+  `getProviderIds()` (`["pi"]` only) and gets back an empty list, so
+  `warmUpSnapshotForCwd` returns before calling `refreshProviders` at
+  all — the entry stays undefined and the handler emits
+  `Unknown provider: <id>`. Both of the brief's other candidates are
+  ruled out, not merely disbelieved: the provider list is not empty by
+  construction (it has one real member, `"pi"`), and nothing here is a
+  catalog-session refactor — the three `test:integration` files test only
+  "claude"/"codex"/"opencode" and never "pi", which is a leftover premise
+  from Paseo's multi-provider daemon that was never updated when this
+  repository's registry narrowed to Pi-only.
+  **The suite still does not pass against the fakes, and cannot without a
+  scope decision outside this task**: fixing it would mean either
+  reintroducing non-Pi providers into `AGENT_PROVIDER_DEFINITIONS`
+  (contradicts the §2.3 non-goal directly) or rewriting all three files
+  to exercise the one real provider with a new fake added to
+  `fake-agent-client.ts` — a file T250's `Owns:` line does not cover, and
+  a decision about what this suite should assert once it is Pi-only, left
+  to whoever picks that up. Confirmed still red at T250:
+  `cd packages/server && npx vitest run --maxWorkers=1
+  src/server/agent/model-catalog.e2e.test.ts` exits non-zero with the
+  same three `Unknown provider: <id>` failures observed above.
+  `test-utils/claude-auth.ts` (`seedClaudeAuth`) and
+  `test-utils/claude-config.ts` (`useTempClaudeConfigDir`) are deleted by
+  T250 rather than wired: nothing in this repository spawns a real
+  "claude"-provider `AgentClient` that would need seeded credentials, and
+  the one real Claude integration test this repository has
+  (`src/terminal/agent-hooks/claude/claude.real.e2e.test.ts`) exercises
+  the ambient, already-configured `claude` CLI directly rather than an
+  isolated temp `CLAUDE_CONFIG_DIR`.
 - `protocol-client-tests` (ubuntu-latest only): `@picompanion/client` and
   `@picompanion/highlight`, alongside protocol.
 - **`relay-tests` (T44A4, new).** `@picompanion/relay` had a real `"test":
