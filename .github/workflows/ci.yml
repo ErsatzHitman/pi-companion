@@ -1108,3 +1108,66 @@ jobs:
 
       - name: Fail on an unwired run-guard runner, or a stale allowlist entry (missing runner or now-wired)
         run: node scripts/ci/run-guard-run-guard-wiring.mjs
+
+  # T44A3 (plan.md §13 phase 9, "Complete ... version-drift checks";
+  # docs/security-and-version-drift.md is the findings register this job's
+  # own passing/failing result feeds). Unconditional, alongside
+  # guard-legacy-paths et al. above: a stale `@picompanion/*` version pin or
+  # a diverging wire-protocol literal is a standing repository invariant,
+  # not something scoped to one changed directory. See
+  # scripts/ci/guard-version-drift.mjs for the three checked axes (workspace
+  # dependency pins vs. their targets' own versions; the daemon/client
+  # WS-hello protocol version literal; protocol/relay's own duplicated
+  # relay-wire-version literal) and the axes it deliberately does not check.
+  guard-version-drift:
+    name: guard / no version drift between workspace pins, protocol, client and daemon
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on a stale @picompanion/* version pin or a diverging protocol/client/daemon wire-version literal
+        run: node scripts/ci/run-guard-version-drift.mjs
+
+  # T44A3. Unconditional — a committed credential is a standing risk
+  # regardless of which directory changed. See scripts/ci/guard-secret-scan.mjs
+  # for the curated pattern list and its disclosed scope (no generic entropy
+  # scanning, no history scan — tracked-tree-only, by design).
+  guard-secret-scan:
+    name: guard / no committed file matches a curated secret pattern
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail when a tracked file matches a curated, high-signal secret pattern
+        run: node scripts/ci/run-guard-secret-scan.mjs
+
+  # T44A3. Needs `npm ci` first (npm audit reads the real, installed
+  # dependency tree) and network access to npm's advisory registry, so this
+  # is not folded into the unconditional guards above. See
+  # scripts/ci/guard-audit-baseline.mjs for why this is a documented
+  # baseline diff rather than a bare `npm audit --audit-level=...` gate, and
+  # docs/security-and-version-drift.md for the full, reasoned findings
+  # register every baseline entry traces back to.
+  guard-audit-baseline:
+    name: guard / npm audit findings stay inside the documented baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Fail when npm audit reports an advisory outside the documented baseline
+        run: node scripts/ci/run-guard-audit-baseline.mjs
