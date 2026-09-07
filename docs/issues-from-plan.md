@@ -707,7 +707,8 @@ the task details always agree.
 |        | KEEP; the gate restored the RegExp branch's lost mutation coverage.      |       |
 | P8-W21 | T222 (filed by the P8-W19 gate; runs after T223 owns the member).        | 1     |
 |        | KEEP; the gate cut a precedent it cited that does not exist.             |       |
-| P8-W22 | T224 (filed by the P8-W21 gate; pre-existing, not this wave's)           | 1     |
+| P8-W22 | T224 (filed by the P8-W21 gate; pre-existing, not this wave's).          | 1     |
+|        | KEEP; the gate cut a re-trigger firing that could not have happened.     |       |
 | P8-W8  | T59 (owner-deferred: VPS)                                                | 1     |
 | P9-W1  | T44A1                                                                    | 1     |
 | P9-W2  | T44A2                                                                    | 1     |

@@ -434,25 +434,51 @@ elsewhere. **Not built.** Revisit only if a NEW count claim is found stale in a 
 guard could actually see — `isAppSourcePath`'s own scope: `apps/web/src` and
 `apps/android/src`, `scripts/ci`, `packaging/**`, `docs/**`, `.github/workflows/*.yml`
 and `apps/android/maestro/*.md` — and the fifth gate is tempted to re-propose a generic
-version rather than fixing that one site by hand. Two caveats on that condition, both of
+version rather than fixing that one site by hand. Three caveats on that condition, all of
 which make it narrower than it looks. `packages/*/src` is NOT in it: that is
 `isShippedSourcePath`'s scope, and conflating the two is the exact error T147 and T216 each
-had to close. And `docs/issues-from-plan.md` is excluded by
+had to close. `docs/issues-from-plan.md` is excluded by
 `DOCS_LEDGER_DENIAL_EXCLUSIONS`, so the running tallies flagged above as the likeliest
 drift site can never satisfy this condition — if one of them goes stale, fix it by hand;
-no guard was ever going to see it. (CORRECTED at the P8-W17 merge gate: this listed
+no guard was ever going to see it. And this guard's OWN three files —
+`guard-capability-prose.mjs`, its test, and `run-guard-capability-prose.mjs` — are excluded
+by `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`, so nothing in them can satisfy the condition
+either, however much count-shaped prose they carry. `scripts/ci` being listed above does
+not reach them. **Check a specific path by calling `isAppSourcePath` on it, not by reading
+this list.** (CORRECTED at the P8-W17 merge gate: this listed
 `packages/*/src` as in scope and omitted `packaging/**`. Both were checked against the real
-exported function, not inferred.)
+exported function, not inferred. CORRECTED again at the P8-W22 merge gate: it said two
+caveats and omitted the self-referential one, which is what led T224 to record a firing
+that could not have happened.)
 
-**T224: the re-trigger condition above has now fired, once, by hand.** The site was
-`findCapabilityDenialViolations`'s own T184 cache comment in
-`scripts/ci/guard-capability-prose.mjs` — inside `isAppSourcePath`'s scope — claiming
-"roughly 8 capabilities × ~1200 files today". A merge gate reading the comment noticed
-"today", ran the guard, and found both numbers already wrong (measure it yourself; do not
-copy a number from this paragraph — see the standing rule above this section). It was
-found by a human-in-the-loop reading a comment, not by any matcher, which is exactly the
-kind of hit this section already said would not overturn the rejection. **This does not
-change the conclusion**: fix the one site by hand (drop the figures rather than date them,
-per the standing rule two sections up), and do not build the generic guard on the strength
-of this single hand-found hit. The condition to actually revisit would be a **matcher**
-independently surfacing a live count claim in-scope — not another hand-found one.
+**T224: a stale count claim was found and fixed, and the re-trigger condition above did NOT
+fire.** The site was `findCapabilityDenialViolations`'s own T184 cache comment in
+`scripts/ci/guard-capability-prose.mjs`, claiming "roughly 8 capabilities × ~1200 files
+today" when the runner reported twelve groups. A merge gate reading the comment noticed
+"today", ran the guard, and fixed the site by dropping both figures — the sentence's point
+("trivial either way") never needed them. Dating them, the way T218 dated this same
+directory's shipped-file counts, would also have been defensible; dropping is cheaper and
+this is the fifth time a gate has chosen it.
+
+**Why the condition did not fire, and why that makes the door close harder rather than
+softer.** That file is the first of the three entries in
+`SELF_REFERENTIAL_DENIAL_EXCLUSIONS`, and `isAppSourcePath`'s first line returns `false`
+for anything in that set — verified by executing the exported predicate at the P8-W22
+gate, not inferred: `isAppSourcePath` returns `false` for that path and
+`isShippedSourcePath` returns `true`. The condition is defined as `isAppSourcePath`'s
+scope, so a site the denial scan is blind to by design cannot satisfy it. That means a
+generic guard built on that scope would have been **structurally incapable** of finding
+this claim — the "entry in a curated list whose runner's scope can never see the case"
+shape this repository keeps re-finding. So this hit is not weak evidence for building the
+guard; it is evidence the scoped guard would have missed it. **The conclusion is
+unchanged: do not build it.** What would actually reopen the question is a matcher
+independently surfacing a live count claim at a path `isAppSourcePath` returns `true` for
+— call the function on the path before you believe it is in scope.
+
+(CORRECTED at the P8-W22 merge gate. This paragraph said the condition **had** fired, and
+located the site "inside `isAppSourcePath`'s scope"; both were false, by the T147/T216
+conflation the caveat above names. It also said the gate "found both numbers already
+wrong": only the capability count was — eight against twelve — while `~1200` was a
+tilde-qualified approximation of a real 1219. And it attributed a hand-found-versus-
+matcher-found distinction to T217, which never draws one; that distinction is this gate's
+judgement, stated here as such.)
