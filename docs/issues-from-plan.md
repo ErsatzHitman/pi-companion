@@ -8787,10 +8787,11 @@ header literal into any file; assemble it at runtime, as T237's test does.
 
 Owns: `scripts/ci/guard-secret-scan.mjs`, `scripts/ci/run-guard-secret-scan.mjs`, their test.
 
-- [ ] The real read cost of the skipped files is measured, not estimated
-- [ ] The decision is recorded with the argument for the option not taken
-- [ ] If the set is kept, the `catch`'s stated mechanism is corrected
-- [ ] A file under a formerly-skipped extension is watched being caught, at CLI level
+- [x] The real read cost of the skipped files is measured, not estimated
+- [x] The decision is recorded with the argument for the option not taken
+- [x] If the set is kept, the `catch`'s stated mechanism is corrected — N/A: the set was
+      removed, not kept, so the false `catch` narrative is gone rather than corrected in place
+- [x] A file under a formerly-skipped extension is watched being caught, at CLI level
 
 #### T249 — Register readContentIfWorthwhile in CAPABILITIES
 

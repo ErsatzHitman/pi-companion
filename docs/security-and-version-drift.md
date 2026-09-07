@@ -301,6 +301,22 @@ wave — re-run by that gate rather than carried over):
 binary by extension or by failing UTF-8 decode — images, fonts, and
 similar; see `run-guard-secret-scan.mjs`'s `BINARY_EXTENSIONS`.
 
+**CORRECTED (T248): `BINARY_EXTENSIONS` no longer exists.** The premise
+above — that `readFileSync(path, "utf8")` fails to decode a binary file and
+that skipping fonts/images by extension was worth doing — was disproved the
+same way T237 disproved it next door for `run-guard-signing-material.mjs`:
+Node's UTF-8 decode never throws (it substitutes U+FFFD), so the guard's own
+`catch` never fired for the reason its comment claimed, and the real read
+cost of the 24 skipped files (largest: `apps/android/assets/fonts/
+Inter-700.ttf`, 344,072 bytes) measured within the noise of the scan itself
+(5 runs each: 181.4ms mean with the skip applied, 190.0ms mean without —
+an ~8.6ms difference smaller than the ~30ms spread already present across
+the "with skip" runs alone), with zero false positives either way. T248
+removed the set entirely; every tracked file's content is now read, subject
+only to the existing 5 MiB size cap. `run-guard-secret-scan.mjs` now
+reports every tracked file scanned, not just the non-skipped ones — re-run
+`node scripts/ci/run-guard-secret-scan.mjs` for the current figure.
+
 **Do not trust that pair of numbers as current** — the total is the tracked
 file count, so every wave that adds a file moves it. Re-derive instead:
 `node scripts/ci/run-guard-secret-scan.mjs` prints both figures, and
