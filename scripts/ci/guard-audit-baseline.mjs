@@ -75,6 +75,93 @@ const NO_INSTALL_REASON =
   "no fix exists without an npm install (a semver-major bump in every case here), and " +
   "this environment's permission classifier refuses npm install/npm ci — filed as an owner decision, not silently waived";
 
+// ## T231: the owner's unblock sequence, re-verified (not re-derived from
+// scratch) at commit cc3980ae45f7d8991a04243588782a5ebd50b7a8 on 2026-09-08.
+// `npm audit --json` runs without `npm install`/`npm ci` (it reads the
+// already-installed node_modules and package-lock.json; it does not modify
+// either) and was re-run in the foreground for this note: still 36
+// advisories, 0 critical / 10 high / 23 moderate / 3 low, and the SERVER_
+// BACKEND_OWNER/ANDROID_TOOLCHAIN_OWNER split below is still exactly 7/29 —
+// the P9-W3 gate's figures were re-confirmed, not assumed. `node
+// scripts/ci/run-guard-audit-baseline.mjs` exits 0 today. This section is
+// the one place that sequence lives; docs/security-and-version-drift.md §2
+// records the baseline's origin and disclosed limitation but not an ordered
+// command list, and this task's `Owns:` line does not reach `package.json`
+// or the lockfile, so nothing here may be executed by an agent — only read
+// by the owner.
+//
+// Take the SERVER seven first — ordinary minor/major bumps, independent of
+// the Expo question, verifiable by this repository's own unit/typecheck
+// gates with no device needed:
+//
+//   1. `npm install --workspace=@picompanion/server` after widening the
+//      `express` range in that workspace's package.json to a version with
+//      no advisory (`npm audit --json`'s own `fixAvailable` marks
+//      `express`/`body-parser`/`qs` as `true` — a non-major bump; `qs` and
+//      `body-parser` are transitive through `express` and need no direct
+//      edit). This alone should clear 3 of the 7 (body-parser, express, qs).
+//   2. Bump `ai` (direct dep, pinned `5.0.78`) to the `fixAvailable` target
+//      `7.0.93` — a semver-major jump; read that package's own migration
+//      notes before landing it, since packages/server's actual call sites
+//      are not proven compatible here. This should clear `ai` plus its two
+//      transitive advisories (`@ai-sdk/gateway`, `@ai-sdk/provider-utils`),
+//      4 of the 7.
+//   3. Bump `uuid` (direct dep, pinned `^9.0.1`) to the `fixAvailable`
+//      target `14.0.2` — five majors ahead; grep every `import ... from
+//      "uuid"` call site first, since that package's default-export shape
+//      has changed across majors before. This is the 7th.
+//   4. After each bump: `npm run build --workspace=@picompanion/server`,
+//      `npm run typecheck --workspace=@picompanion/server`, and
+//      `npm run test:unit --workspace=@picompanion/server` three times in a
+//      row on one commit (this repository's own T240 rule for that
+//      workspace's test suite). Then re-run
+//      `node scripts/ci/run-guard-audit-baseline.mjs`: the 7 SERVER_BACKEND_
+//      OWNER entries should print as STALE ("likely fixed or withdrawn"),
+//      which is this guard's non-failing "safe to prune" signal — prune
+//      those 7 lines from AUDIT_BASELINE below in the SAME commit as the
+//      bump, never left dangling. If `run-guard-audit-baseline.mjs` instead
+//      FAILS naming a package still in this list, the bump did not fully
+//      clear that advisory (a different range, or a new one) — treat that
+//      as a new, unreviewed finding, not something to re-baseline reflexively.
+//
+// Take the EXPO/ANDROID 29 second. Every one of their `fixAvailable`s points
+// at `expo@57.0.20` (this app pins `^54.0.18`, three majors back) or a
+// satellite package's own major bump. This is NOT clearable by a typecheck
+// and a vitest run alone: an Expo SDK major bump changes native module
+// versions, Metro's own bundling, and Android Gradle/NDK expectations that
+// only a real device or emulator run can prove — the identical blocker
+// T208 names for this repository's `android-maestro-e2e.yml` (EXPO_TOKEN
+// plus a real dispatched run). Do not treat a green `apps/android`
+// `npx vitest run` as sufficient evidence the bump is safe.
+//
+//   1. Follow the official Expo SDK 54→57 upgrade guide for
+//      `apps/android` (the `expo`, `expo-*`, `@react-navigation/*`, and
+//      Metro-chain packages listed under ANDROID_TOOLCHAIN_OWNER below all
+//      move together; `npx expo install --fix` after the `expo` pin itself
+//      is bumped is the standard mechanism for keeping satellites aligned,
+//      but read the guide's own breaking-change list first — SDK bumps of
+//      this size have moved config-plugin and asset-resolution behavior
+//      before).
+//   2. Build and dispatch a real device/emulator run
+//      (`android-maestro-e2e.yml`, or an EAS build plus a manual install) —
+//      this is the acceptance evidence for the Android half, not a local
+//      typecheck.
+//   3. Re-run `npm audit --json` after the bump and diff it against this
+//      file's ANDROID_TOOLCHAIN_OWNER entries by hand before touching
+//      anything: an SDK bump this large can both fix old advisories and
+//      introduce new ones on packages that did not previously appear here.
+//      Then run `node scripts/ci/run-guard-audit-baseline.mjs` the same way
+//      as the server half — expect the 29 entries to report STALE, prune
+//      them from AUDIT_BASELINE in the same commit as the bump, and treat
+//      any FAILURE (a package `run-guard-audit-baseline.mjs` still reports
+//      as unbaselined) as a new finding requiring its own reasoned entry,
+//      never a reflex re-baseline.
+//
+// In both halves: a baseline entry is only ever deleted here once the bump
+// that fixes it has landed and been verified by the gates above — per this
+// task's own acceptance criterion, no advisory may be dropped from
+// AUDIT_BASELINE without being fixed.
+
 /** @type {AuditBaselineEntry[]} */
 export const AUDIT_BASELINE = [
   {
