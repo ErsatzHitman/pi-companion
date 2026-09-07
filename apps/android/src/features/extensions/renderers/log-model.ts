@@ -10,9 +10,8 @@
  * (`apps/web/src/features/extensions/renderers/log.tsx`) since T226
  * resolved that pre-T226 mismatch (web capped at 500): the bridge
  * contract itself already caps a log at tail-200 in practice (the `loop`
- * extension's own log section — `docs/pi-extension-compatibility.md` §3.3,
- * `loop` row, "`log` tail-200"), so 200 is the number both plan.md §14.5
- * states and real extensions already emit, and a bounded native list view
+ * extension's own log section), so 200 is the number plan.md §14.5 both
+ * states and records as "already met on the wire", and a bounded native list view
  * is the scarcer resource on a phone screen than in a browser tab — so the
  * tighter number costs web nothing while protecting Android. See plan.md
  * §14.5 for the recorded decision.

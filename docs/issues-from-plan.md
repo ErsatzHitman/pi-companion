@@ -510,6 +510,8 @@ that recomputation has to be domain-specific:
 | T249   | Register readContentIfWorthwhile in CAPABILITIES                                | phase-9   | tooling          | P9-W30 | T237, T232                                                            |
 | T250   | Make test:integration wire-able or retire its dead auth helpers                 | phase-9   | server           | P9-W31 | T233                                                                  |
 | T251   | Extend guard-declared-workspace-deps to packages/relay                          | phase-9   | tooling          | P9-W32 | T230, T227                                                            |
+| T252   | Migrate the last two scripts/ci comment strippers to the shared tokenizer       | phase-9   | tooling          | P9-W33 | T244                                                                  |
+| T253   | Re-derive shipped source's citations of reference-only documents                | phase-9   | docs             | P9-W34 | T242                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -843,6 +845,10 @@ the task details always agree.
 |        | reason T233 committed — and the remedy it named would not help).         |       |
 | P9-W32 | T251 (filed by the P9-C gate; the gap T230 named as the reason           | 1     |
 |        | a relay→protocol import cannot be added safely).                         |       |
+| P9-W33 | T252 (filed by the P9-D gate; two strippers T244 did not own,            | 1     |
+|        | both using the order T244 proved defective).                             |       |
+| P9-W34 | T253 (filed by the P9-D gate; the criterion T242 could not               | 1     |
+|        | satisfy inside its own Owns line).                                       |       |
 
 ---
 
@@ -8893,6 +8899,106 @@ Owns: `scripts/ci/guard-declared-workspace-deps.mjs`, its runner and test,
 - [ ] A watched firing on an undeclared relay import, at CLI level, restored from a scratchpad copy
 - [ ] The `CAPABILITIES` entry is proven to fire before it is trusted
 - [ ] T230's "does not scan `packages/relay`" sentence is corrected in the same commit
+
+#### T252 — Migrate the last two scripts/ci comment strippers to the shared tokenizer
+
+`labels: phase-9, area: tooling` · `wave: P9-W33` · `depends-on: T244`
+
+T244 replaced four hand-rolled `stripComments` regex pairs with
+`scripts/ci/source-comment-stripper.mjs`, after proving both orderings collide: line-first
+eats a block comment's own `*/`, block-first eats real code that follows a `//` comment
+containing `/*`-shaped text. Two more copies were not in its `Owns:` line and still use the
+**block-first** order T244 proved defective:
+
+- `scripts/ci/orphan-modules.mjs:85` (`export function stripComments`)
+- `scripts/ci/guard-no-legacy-schema-reader.mjs:119`, plus that file's verbatim copy of
+  `guard-capability-prose.mjs`'s `stripStringLiterals`/`STRING_LITERAL_TO_ERASE`/
+  `stripCommentsAndStrings` trio — the exact shape T244 just fixed next door.
+
+**Measured at the P9-D merge gate, against the real shipped `extractSpecifiers`**, not
+asserted: ten tracked files yield a different specifier set under `orphan-modules.mjs`'s
+stripper than under the correct tokenizer. Four lose a real static import edge, including
+T244's own new module:
+
+```
+guard-capability-prose.mjs              MISSED ["./source-comment-stripper.mjs"]
+run-guard-declared-workspace-deps.mjs   MISSED [..., "./guard-declared-workspace-deps.mjs"]
+run-guard-format-check-per-commit.mjs   MISSED [..., "./guard-format-check-per-commit.mjs"]
+run-guard-web-session-bundle-budget.mjs MISSED [..., "vite", "./guard-web-session-bundle-budget.mjs"]
+```
+
+**The consequence is latent, not firing, and this task must be justified as correctness
+rather than as a count change.** `CONVENTION_ENTRY_DIR_SEGMENTS` (line 143) contains
+`"scripts"`, so every `scripts/ci/*` file is an entry point regardless of its in-edges, and
+a lost edge cannot orphan anything today. The orphan count 26/26 is **not** inflated —
+verified by running the runner at this wave's base and at its tip. The risk is that
+`orphan-modules.mjs` is the engine behind the ceiling gate and its own doc comment already
+concedes it is "not a full tokenizer"; the first module placed outside a convention entry
+directory inherits the defect silently. For `guard-no-legacy-schema-reader.mjs`, the P9-D
+gate measured 97 files inside its own scan scope producing different cleaned text under
+block-first — its verdict is OK today, so nothing is currently hidden, but a real legacy
+schema reader sitting in a swallowed span would be invisible.
+
+Prove each migration the way T244 did: pin a per-file case that the old order destroys and
+the tokenizer preserves, then mutate the module back to the old pair and watch the new tests
+fail, restoring from a scratchpad copy (never `git checkout --`) and confirming
+`git status --porcelain` empty. Neither guard's verdict may move, and the orphan ceiling
+must stay at or below its committed value.
+
+Owns: `scripts/ci/orphan-modules.mjs`, `scripts/ci/guard-no-legacy-schema-reader.mjs`, and
+both files' tests.
+
+- [ ] Both files import the shared tokenizer; no hand-rolled `stripComments` remains in `scripts/ci` outside `guard-capability-prose.mjs`'s thin wrapper
+- [ ] The ten-file specifier-set divergence measured above goes to zero
+- [ ] Each migration carries a per-file pin the old order fails and the tokenizer passes, proven by mutation
+- [ ] `run-orphan-modules.mjs` and `run-guard-no-legacy-schema-reader.mjs` report the same verdict before and after
+
+#### T253 — Re-derive shipped source's citations of reference-only documents
+
+`labels: phase-9, area: docs` · `wave: P9-W34` · `depends-on: T242`
+
+T242 ruled that reference-only documents are frozen, and added the corollary to `CLAUDE.md`:
+**never cite one as authority for a current product fact or decision** — a code comment
+justifying today's behaviour by pointing at one is a defect the moment it does so, and the
+fix is to restate the fact in `plan.md` and cite that instead. T242's `Owns:` line covered
+`CLAUDE.md` only, so the corollary landed with the tree still violating it.
+
+**Measured at the P9-D merge gate:** 19 non-test files under `apps/*/src` and
+`packages/*/src` cite a reference-only document. The gate fixed the two the T242 checklist
+names by name — `apps/android/src/features/extensions/renderers/log-model.ts` and
+`apps/web/src/features/extensions/renderers/log.tsx`, both of which cited
+`docs/pi-extension-compatibility.md` §3.3 for the `loop` extension's tail-200 behaviour, a
+fact `plan.md` §14.5 already states in its own words ("a bound already met on the wire, not
+a target to grow toward"). The remaining 17 need judgement this task owns.
+
+**Not every citation is a violation, and the task must sort them rather than sweep them.**
+The corollary bans citing a reference-only file as _authority for a current fact or
+decision_; it explicitly still permits reading these files for behaviour. A fixture whose
+comment says it is _modelled on_ the Phase 0 re-audit is recording provenance — where the
+fixture came from — which is exactly what the audit is for. The sharpest violations are the
+ones naming a reference-only file as the decision record itself, of which
+`packages/server/src/server/agent/providers/pi/rpc-types.ts` carries three, e.g. line 294:
+"See `docs/pi-extension-compatibility.md`'s `get_tree` row for the decision record."
+
+Those three have **no citable home yet**. Unlike the renderers, there is no `plan.md`
+sentence to point at — the decision (restore `get_tree` only with a real caller in the same
+commit; the two disclosed `sourceInfo`/`since` drifts) exists only inside the audit. So this
+task's real work is to write those decisions into `plan.md` first, then repoint the
+comments. Do not repoint a comment at a `plan.md` section that does not yet say the thing.
+
+Owns: the 19 files the grep below lists, and whichever `plan.md` sections gain the restated
+facts.
+
+```bash
+git ls-files 'apps/*/src/**' 'packages/*/src/**' | grep -E '\.(ts|tsx|js|jsx|mjs)$' \
+  | grep -v '\.test\.' | xargs grep -l -E \
+  'pi-extension-compatibility\.md|frontend-data-migration\.md|T0[234]-provenance\.md'
+```
+
+- [ ] Every remaining citation is classified as provenance (kept) or authority (repointed), with the classification recorded
+- [ ] `rpc-types.ts`'s three "decision record" citations point at `plan.md`, and `plan.md` states those decisions before the repoint lands
+- [ ] No reference-only document is edited (T242's frozen rule still binds)
+- [ ] Any test asserting a repointed comment string is updated in the same commit
 
 #### T32A1 — Build the Android connect form
 

@@ -22,8 +22,8 @@
  * below), and the threshold is 200, because that is the number plan.md
  * §14.5 itself states and the number real extensions already emit: the
  * `loop` extension's own log section already tail-caps at 200 lines on the
- * wire (`docs/pi-extension-compatibility.md` §3.3, `loop` row, "`log`
- * tail-200"). Raising the web cap to 500 bought nothing observable — no
+ * wire — plan.md §14.5 states that too, calling it "a bound already met on
+ * the wire, not a target to grow toward". Raising the web cap to 500 bought nothing observable — no
  * shipped extension sends a log payload anywhere near that long — while
  * costing more mounted DOM nodes than necessary for the one platform with
  * the most headroom to spare. See plan.md §14.5 for the recorded decision.

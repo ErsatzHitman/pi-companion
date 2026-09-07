@@ -556,9 +556,16 @@ correct; it is now a recorded decision instead of an unexamined fact.
 
 - **The product code under test is a guarded impossibility for this class of
   bug.** `guard-no-node-builtin-in-web-bundle` already fails the build if any
-  `apps/web/src` file imports a Node builtin — exactly where a path-separator
-  or `os.EOL`-flavored bug would have to live to reach the shipped bundle a
-  Playwright spec drives in a real Chromium browser. A platform-specific
+  module _reachable from_ `apps/web/src/main.tsx` imports a Node builtin — it
+  is a real import-graph walk from the production entry, not a whole-directory
+  scan, which is exactly the right scope here: reachable-from-the-entry is
+  precisely where a path-separator or `os.EOL`-flavored bug would have to live
+  to reach the shipped bundle a Playwright spec drives in a real Chromium
+  browser. (CORRECTED at the P9-D merge gate: this said "if any `apps/web/src`
+  file imports a Node builtin", which overstates the guard — its own output
+  reads "no node: builtin reachable from `apps/web/src/main.tsx`", and an
+  unreachable file would not be caught. The argument is unaffected, because an
+  unreachable file is by definition not in the bundle the specs drive.) A platform-specific
   defect in the code these specs actually exercise is not merely unlikely;
   CI already refuses to let it exist.
 - **The daemon-on-Windows surface plan.md §15.4 actually names already has
