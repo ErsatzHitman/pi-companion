@@ -1,6 +1,6 @@
 {
   "kind": "log",
-  "description": "Streaming lines shown as a virtualized log. Example: the advisor extension's activity log.",
+  "description": "Streaming lines, tail-capped to at most 200 mounted lines by default on both platforms — a payload/mount bound, not a scrolling render-window virtualization (T226; plan.md §11.3, §14.5). Example: the advisor extension's activity log.",
   "planRef": "plan.md §11.3 (log), §11.7 (advisor)",
   "frames": [
     {
