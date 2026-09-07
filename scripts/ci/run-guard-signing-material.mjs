@@ -13,7 +13,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { findSigningMaterialViolations } from "./guard-signing-material.mjs";
 
@@ -143,4 +143,16 @@ function main() {
   process.exitCode = 1;
 }
 
-main();
+// P9-B merge gate: T237 made this module importable (its test imports
+// `readContentIfWorthwhile`), but left `main()` running at module scope, so an
+// import re-scanned every tracked file and — on a real violation — would set
+// `process.exitCode = 1` from that import. `node --test` then reports the test
+// FILE as failed with every test inside it passing and nothing naming the
+// cause. Every other runner a `scripts/ci` test imports already guards this way
+// (`run-guard-capability-prose`, `run-guard-no-legacy-schema-reader`,
+// `run-guard-server-test-typecheck-ceiling`); this one did not. `pathToFileURL`
+// rather than a string compare because `process.argv[1]` is a `D:\...` path on
+// Windows.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

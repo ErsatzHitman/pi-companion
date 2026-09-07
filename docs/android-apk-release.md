@@ -150,11 +150,22 @@ other tasks are added).
   old skip set is reintroduced and as real content once it is not, and only the
   latter is what ships.
 
-  See that module's own header for the full reasoning,
-  including why this is a new, dedicated guard rather than a change to
-  `guard-secret-scan.mjs`'s skip list (a binary keystore is not valid UTF-8, so
-  unblocking its extension there would not have helped — its own `catch { continue;
-}` on a decode failure would have silently skipped it anyway).
+  See that module's own header for the full reasoning, including why this is a
+  new, dedicated guard rather than a change to `guard-secret-scan.mjs`'s skip
+  list: the two answer different questions, and only this one asks an
+  extension/filename-first question that needs no content decode at all.
+
+  **CORRECTED at the P9-B merge gate.** This gave the reason as "a binary
+  keystore is not valid UTF-8, so unblocking its extension there would not have
+  helped — its own `catch { continue; }` on a decode failure would have silently
+  skipped it anyway", forty lines below this same commit's own correction of that
+  premise. `readFileSync(path, "utf8")` does not throw on invalid UTF-8; Node
+  substitutes U+FFFD, so the decode succeeds and that `catch` never runs.
+  Measured at the gate: a 2056-byte file carrying the real JKS magic FE ED FE ED
+  and deliberately invalid UTF-8 decoded to 2056 characters without throwing. Do
+  not restore the "would not have helped" reasoning — unblocking the extension
+  there WOULD have reached the file's content. The reason the guards stay
+  separate is the one now given above.
 
 - **`.github/workflows/ci.yml`**'s new `guard-signing-material` job, unconditional
   (same placement discipline as `guard-secret-scan`, right beside it), invoking

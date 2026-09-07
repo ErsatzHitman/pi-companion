@@ -55,7 +55,11 @@ compatibility" column above, for the same reason `$PASEO_HOME` and every `PASEO_
 environment variable do: it is the command a user types to reach the exact daemon data that
 already lives under `$PASEO_HOME`, on the same default port, using the same environment
 variable name. Renaming only the command while keeping the environment variable and the data
-directory named `paseo` would put one system under three names instead of one.
+directory named `paseo` would leave one system under two names — `picompanion` on the command,
+`paseo` in the environment variable and the data directory — where it has one today. (This
+said "three names instead of one" while `docs/clean-install-and-rollback.md` §A.2 said two for
+the identical scenario, one commit apart; corrected at the P9-B merge gate. Two is right —
+three is the number of PLACES the name appears, not the number of names.)
 
 The migration cost is the reason this is not a close call. Renaming the `bin` entry does not
 move or touch `$PASEO_HOME` itself — that directory is kept either way, and this decision

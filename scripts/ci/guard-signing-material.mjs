@@ -22,17 +22,28 @@
 // This is a NEW, dedicated guard rather than a change to
 // `guard-secret-scan.mjs`'s own `BINARY_EXTENSIONS`, because the two checks
 // answer different questions. `guard-secret-scan.mjs` asks "does this TEXT
-// file's CONTENT look like a live credential" — a question that is
-// meaningless for a binary keystore: a real `.jks`/`.keystore` file is not
-// valid UTF-8, so even with the extension unblocked,
-// `run-guard-secret-scan.mjs`'s own `readFileSync(..., "utf8")` call would
-// throw and its `catch { continue; }` would silently skip the very file the
-// unblocking was meant to protect (verified by reading that file's `main()`
-// above — the decode failure is treated identically to "not a text file worth
-// scanning"). This guard asks a different, extension/filename-first
+// file's CONTENT look like a live credential" — a poor fit for a binary
+// keystore, whose secret is a key entry in a container format, not a PEM
+// block sitting in text. This guard asks an extension/filename-first
 // question — "is a file NAMED like signing material tracked at all" — which
-// needs no content decode and so catches a binary keystore regardless of
-// what bytes it holds.
+// needs no content decode at all, and so catches a keystore whatever its
+// bytes decode to.
+//
+// (CORRECTED at the P9-B merge gate. This said the two guards had to stay
+// apart because "a real `.jks`/`.keystore` file is not valid UTF-8, so even
+// with the extension unblocked, `run-guard-secret-scan.mjs`'s own
+// `readFileSync(..., "utf8")` call would throw and its `catch { continue; }`
+// would silently skip the very file the unblocking was meant to protect",
+// and marked that "verified by reading that file's `main()` above". It is
+// false, and T237's own commit measured the opposite one file away in this
+// same wave without updating this sentence. `readFileSync(path, "utf8")`
+// does not throw on invalid UTF-8 — Node substitutes U+FFFD — so the decode
+// SUCCEEDS and that `catch` never runs. Re-measured at the gate: a
+// 2056-byte file carrying the real JKS magic FE ED FE ED followed by
+// deliberately invalid UTF-8 decoded to 2056 characters with `threw =
+// false`, and did not round-trip back to the original bytes. "Verified by
+// reading" is how the claim survived four waves; nobody ran it. The
+// separation above is the real reason and does not rest on it.)
 //
 // The one thing this guard deliberately SHARES with `guard-secret-scan.mjs`
 // is its "private-key-block" PEM-header pattern, reused verbatim via
@@ -41,10 +52,16 @@
 // pasted key inside a config file, ...) is still caught by CONTENT even when
 // its name gives no warning by itself. That is also why this guard's own
 // content check does not itself skip `.jks`/`.keystore`/`.apk`/`.aab` the
-// way `guard-secret-scan.mjs`'s CLI does — see `run-guard-signing-
-// material.mjs` for the (much narrower) skip list this guard actually uses,
-// which only exists for read-performance on assets that could never satisfy
-// EITHER check here.
+// way `guard-secret-scan.mjs`'s CLI does — this guard's CLI skips no
+// extension at all, and reads every tracked file it can.
+//
+// (CORRECTED at the P9-B merge gate. This pointed the reader at "the (much
+// narrower) skip list this guard actually uses, which only exists for
+// read-performance on assets that could never satisfy EITHER check here".
+// T237 deleted that set in this same wave, so following the pointer now
+// lands on a comment recording that it used to exist. The sentence never
+// names `SKIP_CONTENT_READ_EXTENSIONS`, which is why an identifier grep for
+// the removal missed it.)
 //
 // ## What this deliberately does NOT catch
 //

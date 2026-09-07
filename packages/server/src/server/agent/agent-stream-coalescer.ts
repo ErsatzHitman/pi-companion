@@ -27,10 +27,14 @@ import type { AgentProvider, AgentStreamEvent, AgentTimelineItem } from "./agent
  * non-test `windowMs` for unrelated types. CORRECTED again at T239: this comment's own
  * four file:line citations (plan.md:1154, agent-manager.ts:653, agent-manager.ts:655-658,
  * bootstrap.ts:834) were replaced with symbol names, because `plan.md:1154` had already
- * drifted onto an unrelated performance-budget bullet by the time T239 re-read it - see
- * `docs/issues-from-plan.md`'s T239 section for the policy this repository is choosing:
- * cite symbols here, not line numbers, since a guard that resolves file:line citations
- * would pay a per-wave cost to protect prose that reads fine without them.)
+ * drifted onto an unrelated performance-budget bullet by the time T239 re-read it. The
+ * policy T239 chose, and the one this comment now follows: cite symbols here, not line
+ * numbers, since a guard that resolves file:line citations would pay a per-wave cost to
+ * protect prose that reads fine without them. No guard was built. The redirect this
+ * sentence carried, to `docs/issues-from-plan.md`'s T239 section "for the policy this
+ * repository is choosing", was dropped at the P9-B merge gate: that section is the frozen
+ * brief, which weighs two options, says "Prefer the first" and leaves its boxes unticked.
+ * It is where the question was posed, not where it was answered.)
  *
  * What this window does NOT bound: flushBuffer (below) calls onFlush once per collapsed
  * entry, not once per flush, so a single window that accumulates several entries that do

@@ -506,6 +506,8 @@ that recomputation has to be domain-specific:
 | T244   | Replace the four hand-rolled comment strippers with one tokenizer               | phase-9   | tooling          | P9-W26 | T227                                                                  |
 | T246   | Decide whether isShippedSourcePath should see app-root config files             | phase-9   | tooling          | P9-W27 | T228                                                                  |
 | T247   | Fail an Android release whose tag disagrees with app.config.ts version          | phase-9   | ci               | P9-W28 | T235                                                                  |
+| T248   | Apply T237's measurement to guard-secret-scan's binary skip list                | phase-9   | tooling          | P9-W29 | T237                                                                  |
+| T249   | Register readContentIfWorthwhile in CAPABILITIES                                | phase-9   | tooling          | P9-W30 | T237, T232                                                            |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -547,8 +549,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                             | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                             | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**458 tasks** (distinct IDs counted directly from the table above), recounted at the P9-A
-merge gate — the commit that filed `T246` and `T247`, two rows past the **456** filed at
+**460 tasks** (distinct IDs counted directly from the table above), recounted at the P9-B
+merge gate — the commit that filed `T248` and `T249`, two rows past the **458** recounted at
+the P9-A merge gate, which filed `T246` and `T247`, two past the **456** filed at
 the P9-W9 gate with `T244`, three past the **455** counted just after the
 P9-W8 gate, two past the **454** filed at that
 gate with `T241` and `T242`, three past the **452** counted at
@@ -563,12 +566,12 @@ counted at the P8-W21 gate, five past the **435** counted at the P8-W19
 gate, six past the **433** counted at the
 P8-W18 gate and seven past the **432** T219 verified at
 `9bc08d0413975f77f82c0fa92282854381b0f19f`, and up from the **221** this line
-previously claimed. That is not new phases (both counts run P0 through P9): it is 237 tasks filed as follow-up work
+previously claimed. That is not new phases (both counts run P0 through P9): it is 239 tasks filed as follow-up work
 within phases already open when "221" was written: P4 81 → 84 (+3), P5 51 → 127 (+76), P6
-20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 28 (+22). See the tallies
+20 → 103 (+83), P7 14 → 19 (+5), P8 5 → 53 (+48), P9 6 → 30 (+24). See the tallies
 note above this table for why that is expected and how to keep this figure honest rather than
 silently overwriting it again. Phase distribution at this count: P0 17, P1 9, P2 10, P3 4, P3.5
-4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 28. The previous line's merged/remaining split is
+4, P4 84, P5 127, P6 103, P7 19, P8 53, P9 30. The previous line's merged/remaining split is
 dropped here rather than recomputed: this table carries no status column, so "merged" cannot be
 verified by reading the table alone, only by cross-referencing which tasks have actually landed
 elsewhere — a mixing of concerns this line should not reintroduce.
@@ -793,7 +796,10 @@ the task details always agree.
 |        | commit, re-resolved twice at the gate.                                   |       |
 | P9-W12 | T230 (filed by the P9-W3 gate; needs the Workers packaging answer).      | 1     |
 | P9-W13 | T231 (owner-blocked: needs npm install for a semver-major bump)          | 1     |
-| P9-W14 | T232 (filed by the P9-W4 gate; the T215 precedent, one entry).           | 1     |
+| P9-W14 | T232 — landed in wave P9-B (KEEP): the entry's methodNames is a          | 1     |
+|        | RegExp over the real stale walk, not a string literal the                |       |
+|        | comment stripper erases. Fired at the gate from docs/ on a               |       |
+|        | phrase the implementer never used, then restored.                        |       |
 | P9-W15 | T233 (filed by the P9-W4 gate; the new guard cannot see it).             | 1     |
 | P9-W16 | T234 (filed by the P9-W4 gate; a decision, not a code change).           | 1     |
 | P9-W17 | T235 — landed in wave P9-A (KEEP): versionCode derived from the          | 1     |
@@ -801,10 +807,19 @@ the task details always agree.
 |        | accumulate under appVersionSource local. Falsified two                   |       |
 |        | runbooks, both corrected at the gate. Left T247 open.                    |       |
 | P9-W18 | T236 (filed by the P9-W5 gate; owner-blocked on EXPO_TOKEN).             | 1     |
-| P9-W19 | T237 (filed by the P9-W5 gate; a real gap, measured, not a               | 1     |
-|        | regression — parity with guard-secret-scan's own skip list).             |       |
-| P9-W20 | T238 (filed by the P9-W6 gate; a naming decision, ownerless).            | 1     |
-| P9-W21 | T239 (filed by the P9-W7 gate; comments only, no behaviour).             | 1     |
+| P9-W19 | T237 — landed in wave P9-B (KEEP-WITH-FIX): the skip list is             | 1     |
+|        | gone and every tracked file is read. Left three prose sites              |       |
+|        | asserting the decode would throw — it does not — and an                  |       |
+|        | unguarded main() in a module its own test imports; all four              |       |
+|        | fixed at the gate. Filed T248 and T249.                                  |       |
+| P9-W20 | T238 — landed in wave P9-B (KEEP): the bin name stays paseo.             | 1     |
+|        | Nothing under packages/cli moved. Recorded in plan.md §1.1               |       |
+|        | and the runbook §A.2, where a reader meets the name.                     |       |
+| P9-W21 | T239 — landed in wave P9-B (KEEP): four file:line citations              | 1     |
+|        | replaced with symbols. The wave proved its own policy —                  |       |
+|        | T238's plan.md edit moved the cited bullet 1163 → 1200 while             |       |
+|        | the wave was open, so a renumbered citation would have                   |       |
+|        | shipped false.                                                           |       |
 | P9-W22 | T240 (filed by the P9-W7 gate; three runs, three results).               | 1     |
 | P9-W23 | T241 — landed in wave P9-A (KEEP): description rewritten from            | 1     |
 |        | both renderers, which slice to 200 before mounting. No test              |       |
@@ -817,6 +832,10 @@ the task details always agree.
 | P9-W26 | T244 (filed by the P9-W9 gate; four guards, one shared bug).             | 1     |
 | P9-W27 | T246 (filed by the P9-A gate; widen the scope or refuse it).             | 1     |
 | P9-W28 | T247 (filed by the P9-A gate; the one gap T235 left open).               | 1     |
+| P9-W29 | T248 (filed by the P9-B gate; the same false premise, one                | 1     |
+|        | file over — and this one still skips 24 tracked files).                  |       |
+| P9-W30 | T249 (filed by the P9-B gate; T232's own omission class,                 | 1     |
+|        | committed by the wave that closed it for someone else).                  |       |
 
 ---
 
@@ -8714,6 +8733,80 @@ there, that is a finding to report, not to make.
 - [ ] A matching pair passes, watched passing
 - [ ] The prefix handling covers every tag shape the workflow actually triggers on
 - [ ] The runner-versus-EAS-machine constraint is stated in whatever ships
+
+#### T248 — Apply T237's measurement to guard-secret-scan's binary skip list
+
+`labels: phase-9, area: tooling` · `wave: P9-W29` · `depends-on: T237`
+
+T237 removed `run-guard-signing-material.mjs`'s `SKIP_CONTENT_READ_EXTENSIONS` after measuring
+that no extension in it was safe to skip. `run-guard-secret-scan.mjs` still has the equivalent
+set, and still carries the premise T237 disproved.
+
+**Measured at the P9-B merge gate, not assumed.** `run-guard-secret-scan.mjs` reports
+`2465 of 2489 tracked files scanned` — 24 tracked files are skipped by extension today
+(8 `.png`, 8 `.ttf`, 8 `.woff2`; no `.zip`/`.jar`/`.pdf` is currently tracked). Its
+`catch { continue; // Not decodable as UTF-8 — treat as binary… }` rests on the same claim the
+gate corrected next door: `readFileSync(path, "utf8")` **does not throw** on invalid UTF-8, so
+that `catch` does not fire for the reason its comment gives. A 2056-byte file carrying the real
+JKS magic FE ED FE ED and deliberately invalid UTF-8 decoded to 2056 characters with
+`threw = false`.
+
+T237's own brief said "Consider whether `guard-secret-scan.mjs` deserves the same treatment in
+the same wave", and its commit body recommends this follow-up explicitly. It was out of scope
+there: the file is in no `Owns` line of that wave.
+
+Decide, and record the decision either way. Removing the set is not automatically right — the
+argument that carried for the signing guard was that its extensions could hide a PEM block, and
+the trade is read cost against coverage. Measure the real cost on the 24 files (the largest is
+`apps/android/assets/fonts/Inter-700.ttf` at 344,072 bytes) rather than estimating it, and say
+what the skip is actually buying. If the set stays, the `catch`'s comment must still be
+corrected: it currently explains itself with a mechanism that does not happen.
+
+Whatever ships must be proven the way T237's was — a CLI-level test with real files on disk, and
+a watched firing on a file under a formerly-skipped extension. Never write a contiguous PEM
+header literal into any file; assemble it at runtime, as T237's test does.
+
+Owns: `scripts/ci/guard-secret-scan.mjs`, `scripts/ci/run-guard-secret-scan.mjs`, their test.
+
+- [ ] The real read cost of the skipped files is measured, not estimated
+- [ ] The decision is recorded with the argument for the option not taken
+- [ ] If the set is kept, the `catch`'s stated mechanism is corrected
+- [ ] A file under a formerly-skipped extension is watched being caught, at CLI level
+
+#### T249 — Register readContentIfWorthwhile in CAPABILITIES
+
+`labels: phase-9, area: tooling` · `wave: P9-W30` · `depends-on: T237, T232`
+
+T237 shipped a capability — `readContentIfWorthwhile`, newly exported from
+`run-guard-signing-material.mjs` and declared in exactly one file — and registered nothing in
+`guard-capability-prose.mjs`'s `CAPABILITIES`. This is the same omission class T232 closed for
+somebody else **one commit earlier in the same wave**. `isShippedSourcePath` on that path
+returns `true`, executed at the gate, so an entry would not be inert.
+
+**An entry would have caught the wave's headline finding.** Two of the three false-premise sites
+the P9-B gate corrected — `guard-signing-material.mjs`'s pointer to a skip list that no longer
+exists, and `docs/android-apk-release.md` §2.2's "would not have helped" — are exactly the shape
+a denying phrase catches, and both were live on `main` at `4c60f18`.
+
+That creates an ordering problem this task must handle deliberately: **the gate has since fixed
+all three sites**, so the live cases are gone. Do not treat their absence as evidence the entry
+is unnecessary. Prove the entry fires the way T232's was proven — restore one corrected sentence
+into a real tracked in-scope file from a scratchpad copy, watch
+`run-guard-capability-prose.mjs` exit 1 naming this capability, then restore. Never
+`git checkout --`.
+
+Word the phrases away from the guard's own header narration, which now discusses the skip list's
+removal at length in past tense. Compare DE-WRAPPED — strip `//` gutters and collapse whitespace
+— because today's line wrapping is not protection. A single non-group member is enough:
+`readContentIfWorthwhile` is a real function name, uniquely declared, not a string literal the
+comment stripper erases.
+
+Owns: `scripts/ci/guard-capability-prose.mjs` and its test. **Do not restate any COUNT in
+`CLAUDE.md`**, and do not touch the three sites the gate corrected.
+
+- [ ] The entry is watched firing, against real committed content, before it is trusted
+- [ ] The phrases are checked de-wrapped against the guard's own historical narration
+- [ ] `run-guard-capability-prose.mjs` exits 0 on the real tree afterward, tree clean
 
 #### T32A1 — Build the Android connect form
 
