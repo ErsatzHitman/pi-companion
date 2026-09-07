@@ -1,0 +1,275 @@
+// T44A1: CI guard — the web session route (`/h/:serverId/session/:agentId`,
+// `apps/web/src/routes/host-session.tsx`) must ship under the plan.md
+// §14.5 budget: "web session route ... under 500 KiB gzip for initial
+// JavaScript and CSS, excluding lazy terminal/editor/diff chunks."
+//
+// ## T44A1's classification of every plan.md §14.5 budget
+//
+// This is the deliverable T44A1's brief calls for before any gate is
+// built: which of §14.5's budgets can be measured in this environment
+// (no browser, no device, no `npm install`), and which cannot. Measured
+// on `HEAD` at the time this file was written; each bullet names the real
+// evidence, not an assumption.
+//
+// 1. **Web session route, <500 KiB gzip initial JS+CSS, excluding lazy
+//    terminal/editor/diff chunks.** MEASURABLE STATICALLY IN CI TODAY —
+//    this file and `run-guard-web-session-bundle-budget.mjs` are that
+//    gate. Measured (see this task's report): **244,393 bytes (238.67
+//    KiB) gzip**, well inside the 512,000-byte (500 KiB) budget.
+//
+// 2. **Live-event-to-paint p95 <100 ms on web.** MEASURABLE STATICALLY IN
+//    CI TODAY, and ALREADY MEASURED AND GATED — not a gap this task
+//    needed to fill. `apps/web/src/platform/frame-clock.paint-budget.test.tsx`
+//    (T45A3) drives the real `FrameClock` + `TimelineCoalescer` +
+//    `Transcript` stack at 100 simulated updates/second under fake timers
+//    and asserts the p95 bound directly; it runs as part of `apps/web`'s
+//    ordinary vitest suite, which `web-tests` in `.github/workflows/ci.yml`
+//    already runs on every push. No new gate was added for this bullet.
+//
+// 3. **The same budget at 200 ms on a Pixel 8 API 35 reference emulator.**
+//    NOT MEASURABLE HERE — this requires a real Android emulator (or
+//    device) and an actual paint pipeline; nothing in this repository's CI
+//    or this workstation can produce that measurement, and T208 is already
+//    on record as owner-blocked on `EXPO_TOKEN` plus an emulator for the
+//    same reason. Not silently dropped: this is the one §14.5 bullet this
+//    task leaves entirely unmeasured, and it stays that way until a real
+//    device/emulator run exists (T44A4's CI matrix or a dedicated Android
+//    perf task would be the place, not a proxy invented here).
+//
+// 4. **Transcript: 10,000 timeline items without an unbounded render
+//    window.** MEASURABLE STATICALLY IN CI TODAY, and ALREADY MEASURED AND
+//    GATED on both platforms. Web:
+//    `apps/web/src/features/transcript/transcript.test.tsx` ("renders a
+//    10,000-item transcript within a bounded DOM window"). Android:
+//    `apps/android/src/features/transcript/transcript-window-model.test.ts`
+//    ("asserts the exact retained-row count and hidden-older count at
+//    10,000 rows"). Both run in their workspace's ordinary vitest suite.
+//
+// 5. **Extension log: virtualize above 200 lines.** MEASURABLE STATICALLY
+//    IN CI TODAY, but the two platforms disagree with each other and with
+//    the letter of this bullet, which this task discloses rather than
+//    gates (fixing it is a product decision for whichever task owns
+//    `apps/web/src/features/extensions/` or the bridge contract, both out
+//    of this task's scope). Android bounds a `log` element to the bridge
+//    contract's own default tail of exactly 200 lines
+//    (`apps/android/src/features/extensions/renderers/renderers-model.test.ts`,
+//    "bounds the log to the bridge contract's default tail of 200 lines").
+//    Web's `apps/web/src/features/extensions/renderers/log.tsx` instead
+//    caps to `DEFAULT_LOG_TAIL = 500` and its own doc comment says this is
+//    deliberately "not full list virtualization" because the payload
+//    already arrives pre-bounded on the wire (plan.md §11.4). Neither is
+//    "wrong" on its own terms, but the 500-vs-200 mismatch and "cap the
+//    payload" vs "virtualize the render" are two different mechanisms
+//    answering the same budget bullet — filed here, not fixed, since this
+//    task owns CI files only.
+//
+// 6. **No bridge update rate above 20 messages/second per agent.**
+//    MEASURABLE STATICALLY IN CI TODAY, structurally true but NOT
+//    DIRECTLY GATED by any dedicated assertion today — a real gap, filed
+//    rather than silently left implicit or worked around with a new
+//    `packages/server/src` test this task cannot own.
+//    `packages/server/src/server/agent/agent-stream-coalescer.ts`'s
+//    `AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS = 60` coalesces same-agent
+//    stream deltas into at most one flush per 60 ms window
+//    (`1000 / 60 ≈ 16.67` flushes/sec, under the 20/sec budget by
+//    construction), and `agent-stream-coalescer.test.ts` /
+//    `agent-manager-stream-coalescing.test.ts` cover the coalescer's
+//    correctness — but neither test, nor anything else this task found,
+//    asserts the derived rate bound itself (e.g. "windowMs must stay
+//    >= 50"), so a future change to that one constant could silently
+//    raise the real rate above budget with nothing failing. Owner: whoever
+//    next touches `packages/server/src/server/agent/agent-stream-coalescer.ts`
+//    (out of this task's `CI workflow files` + `scripts/ci` scope) — the
+//    seam is a one-line assertion in that file's own test:
+//    `assert.ok(AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS >= 50)`.
+//
+// 7. **Terminal 4 MiB soft / 8 MiB hard backpressure.** MEASURABLE
+//    STATICALLY IN CI TODAY, and ALREADY MEASURED AND GATED.
+//    `packages/server/src/terminal/terminal-session-controller.test.ts`
+//    and `packages/server/src/server/websocket/encrypted-relay-socket.test.ts`
+//    exercise the real soft/hard backpressure thresholds defined in
+//    `terminal-session-controller.ts` and `physical-socket.ts`; both run
+//    in `@picompanion/server`'s ordinary test suite.
+//
+// 8. **Reconnect restores cached content immediately and starts
+//    authoritative catch-up within one second of socket readiness.**
+//    MEASURABLE STATICALLY IN CI TODAY, and ALREADY MEASURED AND GATED.
+//    `apps/web/src/platform/lifecycle-resume-reconciliation.test.ts`
+//    (T46A3) asserts the one-second reconciliation trigger against the
+//    real resume-controller stack; it runs in `apps/web`'s ordinary vitest
+//    suite.
+//
+// Net: of §14.5's eight budgets, six are already measured and gated
+// (five pre-existing, plus this task's new #1), one (#3, the Android
+// emulator paint budget) genuinely cannot be measured in this environment
+// and is disclosed rather than faked, and one (#6, the bridge rate) is
+// measurable but currently ungated — filed above with the exact one-line
+// fix and its owner, per this task's `Do not fill in files owned by a
+// different task` scope boundary. #5 (extension log) is measured but the
+// two platforms' real behavior disagrees with each other and is disclosed
+// rather than silently reconciled.
+//
+// ## Why this needs a real Vite manifest, not a directory-size heuristic
+//
+// `apps/web`'s route tree (`src/routes/route-tree.ts`) code-splits every
+// screen behind `lazyRouteComponent(() => import(...))` (T15/T25). A
+// fresh navigation to the session route therefore loads: the app's shared
+// entry chunk (React, the router, shared UI primitives — always paid,
+// every route) PLUS the session screen's own chunk — and nothing else,
+// because Vite/Rolldown only ever bundles a module into a chunk reachable
+// by a STATIC import edge. The terminal screen (xterm), the file/diff
+// screen (CodeMirror + `@picompanion/highlight`) and every other screen
+// are each behind their OWN `import()`, so they never enter the session
+// screen's static closure — that is the actual mechanism §14.5's
+// "excluding lazy terminal/editor/diff chunks" clause is describing, not
+// an exemption this guard has to apply by hand.
+//
+// A directory-size or whole-`dist`-size check cannot tell any of this
+// apart: it would count the terminal/editor chunks (measured at this
+// guard's calibration commit: xterm alone is 331 KB raw / 83 KB gzip,
+// `@picompanion/highlight`'s syntax-highlight data is 708 KB raw / 234 KB
+// gzip) as part of "the session route's" cost, which is exactly the
+// double-count §14.5 says NOT to make. So this guard reads Vite's own
+// `.vite/manifest.json` (`build.manifest: true`) — the same module graph
+// Vite used to decide chunking — and walks only STATIC `imports` edges
+// from two roots: the entry (`index.html`) and the session screen's own
+// module (`SESSION_ROUTE_MODULE_KEY`). `dynamicImports` edges are never
+// followed; that is what keeps terminal/editor/diff out.
+//
+// ## Calibration, measured at `HEAD` via a real throwaway `vite build`
+//
+// `run-guard-web-session-bundle-budget.mjs` runs an actual `vite build`
+// (with `build.manifest: true`, to a scratch `outDir` — it never touches
+// `apps/web/dist`, the artifact `scripts/build-daemon-web-ui.mjs` and the
+// packaging steps around it depend on) against the real, checked-in
+// `apps/web/vite.config.ts`, then gzips (`zlib.gzipSync`, level 9) every
+// file this module's `listInitialAssetFiles` resolves and sums the
+// compressed bytes. See this task's report for the exact measured
+// number and the file-by-file breakdown — no number in this file's
+// thresholds is invented or copied from a different run.
+//
+// ## Fails loudly, never silently, on a graph it cannot resolve
+//
+// If `ENTRY_HTML_KEY` or `SESSION_ROUTE_MODULE_KEY` is missing from a
+// manifest, `listInitialAssetFiles` THROWS rather than returning an empty
+// or partial set — an empty set here would silently report "0 bytes,
+// budget met", which is the exact "check that cannot fail" shape
+// catalogued repeatedly in this repository (a route rename or a route
+// tree restructure must break this guard loudly, not go quiet). See
+// `guard-web-session-bundle-budget.test.mjs` for the fixture-level proof
+// (a manifest missing the route key throws) and this task's report for
+// the real-build RED/GREEN proof (moving the budget, not the code).
+export const ENTRY_HTML_KEY = "index.html";
+
+/** The session screen's manifest key — the Vite-relative module path
+ * `apps/web/src/routes/screens/host-session-screen.tsx` resolves to. This
+ * is the one piece of this module that a route-tree refactor could move;
+ * see the module header above for why a missing key throws instead of
+ * silently measuring nothing. */
+export const SESSION_ROUTE_MODULE_KEY = "src/routes/screens/host-session-screen.tsx";
+
+/** plan.md §14.5: "under 500 KiB gzip for initial JavaScript and CSS,
+ * excluding lazy terminal/editor/diff chunks." KiB is binary (1024), not
+ * the decimal "KB" some tooling uses — 500 * 1024, not 500 * 1000. */
+export const SESSION_BUNDLE_BUDGET_BYTES = 500 * 1024;
+
+/**
+ * @typedef {{
+ *   file?: string,
+ *   isEntry?: boolean,
+ *   css?: string[],
+ *   imports?: string[],
+ *   dynamicImports?: string[],
+ * }} ViteManifestEntry
+ * @typedef {Record<string, ViteManifestEntry>} ViteManifest
+ */
+
+/**
+ * Walks a Vite manifest's STATIC `imports` graph (never `dynamicImports`)
+ * starting from `rootKeys`, and returns every reachable entry's `file`
+ * (its emitted JS chunk) plus every `css` file it lists — deduplicated,
+ * in first-seen order. Throws if any root key is absent from the
+ * manifest, since a missing root means this guard cannot see the real
+ * graph at all (see module header).
+ *
+ * @param {ViteManifest} manifest
+ * @param {string[]} rootKeys
+ * @returns {string[]} asset file paths (JS and CSS), deduplicated
+ */
+export function collectStaticClosureAssets(manifest, rootKeys) {
+  const seenKeys = new Set();
+  const assetFiles = [];
+  const seenAssetFiles = new Set();
+  const queue = [];
+
+  for (const rootKey of rootKeys) {
+    if (!Object.hasOwn(manifest, rootKey)) {
+      throw new Error(
+        `guard-web-session-bundle-budget: manifest has no entry for "${rootKey}" — the route ` +
+          "tree or entry html may have moved. This guard must not silently measure an empty " +
+          "graph; update SESSION_ROUTE_MODULE_KEY (or ENTRY_HTML_KEY) to match.",
+      );
+    }
+    queue.push(rootKey);
+  }
+
+  function addAsset(file) {
+    if (file && !seenAssetFiles.has(file)) {
+      seenAssetFiles.add(file);
+      assetFiles.push(file);
+    }
+  }
+
+  while (queue.length > 0) {
+    const key = queue.shift();
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+
+    const entry = manifest[key];
+    if (!entry) continue; // an `imports` edge Vite recorded but this manifest lacks — skip, don't throw.
+
+    addAsset(entry.file);
+    for (const cssFile of entry.css ?? []) addAsset(cssFile);
+
+    // Deliberately `imports` only — never `dynamicImports`. That is the
+    // entire mechanism this guard relies on to exclude the terminal,
+    // file-editor and diff chunks; see module header.
+    for (const importedKey of entry.imports ?? []) {
+      if (!seenKeys.has(importedKey)) queue.push(importedKey);
+    }
+  }
+
+  return assetFiles;
+}
+
+/**
+ * The full set of asset files (JS + CSS) a fresh navigation to the web
+ * session route must fetch before it can paint: the shared entry closure
+ * plus the session screen's own closure.
+ *
+ * @param {ViteManifest} manifest
+ * @returns {string[]}
+ */
+export function listInitialAssetFiles(manifest) {
+  return collectStaticClosureAssets(manifest, [ENTRY_HTML_KEY, SESSION_ROUTE_MODULE_KEY]);
+}
+
+/**
+ * @param {number} totalGzipBytes
+ * @param {number} [budgetBytes]
+ * @returns {{ ok: boolean, totalGzipBytes: number, budgetBytes: number, message: string }}
+ */
+export function checkSessionBundleBudget(
+  totalGzipBytes,
+  budgetBytes = SESSION_BUNDLE_BUDGET_BYTES,
+) {
+  const ok = totalGzipBytes <= budgetBytes;
+  const fmtKiB = (bytes) => (bytes / 1024).toFixed(2);
+  const message = ok
+    ? `OK — ${totalGzipBytes} byte(s) (${fmtKiB(totalGzipBytes)} KiB) gzip, within the ` +
+      `${budgetBytes} byte(s) (${fmtKiB(budgetBytes)} KiB) budget.`
+    : `FAILED — ${totalGzipBytes} byte(s) (${fmtKiB(totalGzipBytes)} KiB) gzip exceeds the ` +
+      `${budgetBytes} byte(s) (${fmtKiB(budgetBytes)} KiB) budget by ` +
+      `${totalGzipBytes - budgetBytes} byte(s).`;
+  return { ok, totalGzipBytes, budgetBytes, message };
+}

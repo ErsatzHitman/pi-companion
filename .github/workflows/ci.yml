@@ -735,6 +735,21 @@ jobs:
         if: ${{ hashFiles('scripts/build-daemon-web-ui.mjs') != '' }}
         run: node scripts/ci/run-guard-daemon-web-ui-bundled.mjs
 
+      # T44A1 (plan.md §14.5): "web session route ... under 500 KiB gzip for
+      # initial JavaScript and CSS, excluding lazy terminal/editor/diff
+      # chunks." This runs its OWN separate `vite build` (with
+      # `build.manifest: true`, into a scratch temp directory — it never
+      # touches `apps/web/dist` itself, which the steps above and below
+      # depend on) to read the real Vite/Rolldown module graph and measure
+      # only the session route's static-import closure. See
+      # scripts/ci/guard-web-session-bundle-budget.mjs for why a manifest is
+      # what makes the "excluding lazy ... chunks" clause a checked fact
+      # rather than a hand-applied exemption, and this task's report for the
+      # measured number and the real RED/GREEN proof.
+      - name: Guard / web session route stays under the §14.5 gzip budget
+        if: ${{ hashFiles('scripts/build-daemon-web-ui.mjs') != '' }}
+        run: node scripts/ci/run-guard-web-session-bundle-budget.mjs
+
       - name: Skip (build-daemon-web-ui.mjs not present yet, see T18)
         if: ${{ hashFiles('scripts/build-daemon-web-ui.mjs') == '' }}
         run: echo "scripts/build-daemon-web-ui.mjs not present yet (T18); skipping dry-run."
