@@ -34,6 +34,29 @@ const SHIPPED_SRC_PATTERN = /^(?:packages|apps)\/[^/]+\/src\//;
 // `scripts/ci` is the directory that holds guards; a scratch or one-off
 // script directory elsewhere under `scripts/` is not shipped source.
 const SCRIPTS_CI_SRC_PATTERN = /^scripts\/ci\//;
+// T246: the shipped-source scan required `<pkg-or-app>/src/` or
+// `scripts/ci`, so a capability declared in an app-ROOT config file — one
+// Expo (or another app tool) evaluates directly, outside `src/` — was
+// invisible to it. T235 shipped `computeVersionCodeFromSemver` in
+// `apps/android/app.config.ts` and falsified two runbooks that asserted the
+// capability was absent; the DENIAL side already saw both runbooks
+// (`isAppSourcePath` admits `docs/**`), but the SHIPPING side could never
+// see the file the capability actually lives in, so a `CAPABILITIES` entry
+// for it would have exited 0 forever no matter how false the docs became —
+// the P9-A merge gate measured exactly that (`isAppSourcePath=false`,
+// `isShippedSourcePath=false` for `apps/android/app.config.ts`).
+//
+// Curated to the single demonstrated shape, not `apps/*/*.ts` at large:
+// `apps/<name>/app.config.ts` only. Measured directly against `git
+// ls-files` at authorship: exactly one file matches —
+// `apps/android/app.config.ts` — because `apps/web` has no `app.config.ts`
+// of its own (it is a Vite app; its equivalent root config,
+// `vite.config.ts`, is a build-tool config with no analogous "capability
+// worth protecting" identified, and is deliberately NOT included here per
+// this task's narrow scope). If a second app ever grows an `app.config.ts`,
+// this pattern picks it up the same way `SHIPPED_SRC_PATTERN` above already
+// generalizes across every `<pkg-or-app>/src/` without hardcoding each one.
+const APP_ROOT_CONFIG_PATTERN = /^apps\/[^/]+\/app\.config\.ts$/;
 const APP_SRC_PREFIXES = ["apps/web/src/", "apps/android/src/"];
 // T156: `.mjs` added because `scripts/ci`'s guards are plain ESM `.mjs`
 // modules, not `.ts`/`.tsx`.
@@ -73,15 +96,19 @@ function isTestSourcePath(path) {
 /**
  * Whether `path` counts as "shipped" real source for deciding if a
  * capability is actually real today — any package or app's `src/`
- * directory, or (T156) `scripts/ci` — excluding test files (a fake/mock
- * under a `.test.ts`/`.test.mjs` must never be able to make the guard
- * believe a capability is real). Exported so `guard-capability-prose.test.mjs`
- * can prove the widened scope directly, not by re-deriving an equivalent
- * regex.
+ * directory, (T156) `scripts/ci`, or (T246) an app-root `app.config.ts` —
+ * excluding test files (a fake/mock under a `.test.ts`/`.test.mjs` must
+ * never be able to make the guard believe a capability is real; an
+ * `app.config.ts` is never a test file, so `isTestSourcePath` is a no-op
+ * for it, checked anyway for uniformity with the other two patterns).
+ * Exported so `guard-capability-prose.test.mjs` can prove the widened scope
+ * directly, not by re-deriving an equivalent regex.
  */
 export function isShippedSourcePath(path) {
   return (
-    (SHIPPED_SRC_PATTERN.test(path) || SCRIPTS_CI_SRC_PATTERN.test(path)) &&
+    (SHIPPED_SRC_PATTERN.test(path) ||
+      SCRIPTS_CI_SRC_PATTERN.test(path) ||
+      APP_ROOT_CONFIG_PATTERN.test(path)) &&
     hasSourceExtension(path) &&
     !isTestSourcePath(path)
   );

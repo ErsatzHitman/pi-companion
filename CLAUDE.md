@@ -471,6 +471,51 @@ guard's header comment already uses to narrate the problem that guard solves —
 collision this section's T215 entries hit and resolved by rephrasing rather than by adding
 another exclusion, applied here to five more files rather than two.
 
+### T246: `isShippedSourcePath` widened to admit an app-root config file
+
+T235 shipped `computeVersionCodeFromSemver` in `apps/android/app.config.ts` and falsified two
+runbooks asserting the capability did not exist — the exact shape this guard exists to catch.
+It could not catch it: `isShippedSourcePath` required `<pkg-or-app>/src/` or `scripts/ci`, and
+`app.config.ts` sits at the app ROOT, outside `src/`. The DENIAL side already worked
+(`isAppSourcePath` admits `docs/**`); only the SHIPPING side was blind, so a `CAPABILITIES`
+entry registered before this fix would have exited 0 forever no matter how false the docs
+became — the check-that-cannot-fail shape one directory further out than T147 and T156 each
+closed it.
+
+**Decision: WIDEN, then register — not a will-not-widen refusal.** The refusal was
+considered and rejected: it is the right answer only when app-root config declares no
+capability worth protecting, and here it plainly does — `computeVersionCodeFromSemver` is a
+real, named, uniquely-declared function, not a bare config value with nothing behind it. A
+will-not-widen note would have had to argue that fact away, and it is not true. `run-guard-
+capability-prose.mjs` gained `APP_ROOT_CONFIG_PATTERN`, matching exactly
+`apps/<name>/app.config.ts` — curated to the one demonstrated shape, not `apps/*/*.ts` at
+large. Measured directly against `git ls-files` before trusting it: exactly one file
+matches, `apps/android/app.config.ts` — `apps/web` has no `app.config.ts` of its own (it is a
+Vite app), and its nearest analogue, `vite.config.ts`, is a build-tool config with no
+identified capability worth protecting, so it stays deliberately excluded. If a future app
+grows its own `app.config.ts`, this pattern already generalizes to it, the same way
+`SHIPPED_SRC_PATTERN` generalizes across every `<pkg-or-app>/src/` without hardcoding each
+workspace by name.
+
+A new `CAPABILITIES` entry ("Android versionCode derived from app.config.ts's own semver
+(computeVersionCodeFromSemver)") was registered in the same change and watched firing before
+being trusted, per this file's own "prove the runner can see your case" rule: a sentence in
+this entry's own phrasing — never lifted from `app.config.ts`'s own decision record, which
+narrates the pre-fix state at length and carries no historical-quotation marker of its own —
+appended to a scratchpad-restored copy of a real tracked file made `run-guard-capability-
+prose.mjs` exit 1 naming exactly this capability; restoring the file from the scratchpad copy
+(never `git checkout --`) returned it to exit 0 with `git status --porcelain` empty. The two
+runbooks T235 falsified were already carrying a `CORRECTED at the P9-A merge gate` marker
+directly before each quoted false sentence, so neither trips the new entry on the real,
+committed tree — confirmed directly, not assumed.
+
+The widening is narrow enough that nothing else moved: `apps/web/vite.config.ts`,
+`apps/android/eas.json`, `apps/android/babel.config.js`, and `apps/android/metro.config.js`
+all stay outside `isShippedSourcePath`'s scope, unchanged. The import-graph orphan walker
+(`scripts/ci/orphan-modules.mjs`) is a separate scan with its own, already-correct treatment
+of `app.config.ts` as a non-src entry point, predating this task and untouched by it either
+way.
+
 ## T217: a guard for count claims in committed prose was investigated and rejected
 
 Four consecutive merge gates removed a stale figure from committed prose: `CLAUDE.md`'s

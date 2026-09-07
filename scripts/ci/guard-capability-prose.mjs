@@ -1098,6 +1098,57 @@ export const CAPABILITIES = [
       /a workspace (?:that a workflow|a workflow) now (?:genuinely )?tests can (?:still|also) (?:sit|remain) in the allowlist (?:unnoticed|undetected)/i,
     ],
   },
+  {
+    // T246: `run-guard-capability-prose.mjs`'s `isShippedSourcePath` used to
+    // require `<pkg-or-app>/src/` or `scripts/ci`, so a capability declared
+    // in an app-ROOT config file — `apps/android/app.config.ts`, evaluated
+    // by Expo directly rather than imported from `src/` — was invisible to
+    // it. T235 shipped `computeVersionCodeFromSemver` there and falsified
+    // two runbooks that asserted the capability was absent; the DENIAL side
+    // already saw both (`isAppSourcePath` admits `docs/**`), but the
+    // SHIPPING side could not, so any entry registered before the widening
+    // would have exited 0 forever no matter how false the docs became. This
+    // entry exists only because `run-guard-capability-prose.mjs`'s
+    // `APP_ROOT_CONFIG_PATTERN` (added in the same commit) closes that gap.
+    //
+    // Not a FORWARD guard in the usual sense: a live denial of this exact
+    // capability DID exist, in the two runbooks T235 falsified — but both
+    // were already corrected (with a `CORRECTED at the P9-A merge gate`
+    // marker directly before each quoted false sentence) before this entry
+    // was written, so neither trips it today. Confirmed directly: the guard
+    // stays at exit 0 with this entry registered and both runbooks in the
+    // real, committed tree — see this task's own report for the exact
+    // command and output. The RED/GREEN proof below instead uses a
+    // scratchpad-restored copy of a third, unrelated tracked file (never
+    // `apps/android/app.config.ts`, which this task's scope excludes, and
+    // never one of the two runbooks, whose live text is the CORRECTED
+    // quotations this entry must not trip on) — see this task's own report
+    // for the exact file, sentence, and both exit codes.
+    //
+    // `methodNames`: a bare `computeVersionCodeFromSemver` is a full,
+    // camel-cased function name — measured directly across every
+    // `packages/*/src`, `apps/*/src`, `scripts/ci`, and (T246)
+    // `apps/*/app.config.ts` file: exactly one declaring file,
+    // `apps/android/app.config.ts` itself. No AND-group or `RegExp`
+    // shape-anchor is needed, the same reasoning `findBuildOrderViolations`
+    // and `findRouteCoverageViolations` give for their own bare names.
+    //
+    // `denyingPhrases`: worded in this entry's own phrasing, never lifted
+    // from `app.config.ts`'s own decision record (which narrates the
+    // pre-T235 state at length and carries no `HISTORICAL_QUOTE_MARKERS`
+    // trigger of its own) — describing the absence of the DERIVATION
+    // itself (a hardcoded or defaulted `versionCode` untied to the app's
+    // own `version`), never the separate, still-real, permanent limit both
+    // runbooks go on to state truthfully: that nothing yet fails a release
+    // whose git TAG disagrees with the `version` `app.config.ts` declares
+    // (T247's gap, not this capability's).
+    name: "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)",
+    methodNames: ["computeVersionCodeFromSemver"],
+    denyingPhrases: [
+      /apps\/android\/app\.config\.ts (?:does not|never) derives? (?:its|the) `?versionCode`? from (?:its own |the app'?s own )?semver `?version`?/i,
+      /every tagged (?:android )?release (?:therefore )?ships the same `?versionCode`?/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

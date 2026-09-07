@@ -3554,3 +3554,154 @@ test("T244: the real, committed tree's full denial scan is unchanged by the shar
   assert.equal(findShippedCapabilities(shippedFiles).length, CAPABILITIES.length);
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
+
+// T246: `isShippedSourcePath` used to require `<pkg-or-app>/src/` or
+// `scripts/ci`, so a capability declared in an app-ROOT config file was
+// invisible to it — measured directly at the P9-A merge gate:
+// `apps/android/app.config.ts` (where T235 shipped
+// `computeVersionCodeFromSemver`) returned `isShippedSourcePath = false`
+// even though both runbooks denying it returned `isAppSourcePath = true`.
+// `APP_ROOT_CONFIG_PATTERN` closes that one gap, curated to the single
+// demonstrated shape (`apps/<name>/app.config.ts`), and this file's own new
+// `CAPABILITIES` entry registers the capability the widening exists to let
+// through — proven able to fire against a real tracked file (with the
+// change reverted afterward, never via `git checkout --`) and recorded in
+// this task's own report.
+
+test("T246: apps/android/app.config.ts is shipped source; the two runbooks that once denied its capability stay app-source-only", () => {
+  assert.equal(isShippedSourcePath("apps/android/app.config.ts"), true);
+  assert.equal(isAppSourcePath("apps/android/app.config.ts"), false);
+
+  assert.equal(isShippedSourcePath("docs/android-apk-release.md"), false);
+  assert.equal(isAppSourcePath("docs/android-apk-release.md"), true);
+
+  assert.equal(isShippedSourcePath("docs/clean-install-and-rollback.md"), false);
+  assert.equal(isAppSourcePath("docs/clean-install-and-rollback.md"), true);
+});
+
+test("T246: the widened pattern is curated to app.config.ts, not every apps/*-root file", () => {
+  // apps/web has no app.config.ts of its own (it is a Vite app); its
+  // nearest analogue, vite.config.ts, is deliberately NOT admitted — this
+  // task's brief scopes the widening to the one demonstrated shape, and a
+  // build-tool config with no identified capability worth protecting is
+  // not that shape.
+  assert.equal(isShippedSourcePath("apps/web/vite.config.ts"), false);
+  // Sibling app-root files that are not app.config.ts stay excluded too.
+  assert.equal(isShippedSourcePath("apps/android/eas.json"), false);
+  assert.equal(isShippedSourcePath("apps/android/babel.config.js"), false);
+  assert.equal(isShippedSourcePath("apps/android/metro.config.js"), false);
+});
+
+test("T246: a live denying sentence about computeVersionCodeFromSemver is flagged once it is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/app.config.ts",
+      content: "function computeVersionCodeFromSemver(semver) { return 0; }\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "apps/android/app.config.ts does not derive its versionCode from its own semver version.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].path, "docs/some-other-doc.md");
+  assert.equal(
+    violations[0].capability,
+    "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)",
+  );
+});
+
+test("T246: the second denyingPhrase (the 'every tagged release' wording) also fires", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/app.config.ts",
+      content: "function computeVersionCodeFromSemver(semver) { return 0; }\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "Every tagged Android release ships the same versionCode.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)",
+  );
+});
+
+test("T246: apps/android/app.config.ts's own real committed decision record does not trip its new entry", () => {
+  const real = readCommittedFile("apps/android/app.config.ts");
+  const shippedFiles = [{ path: "apps/android/app.config.ts", content: real }];
+  const appFiles = [{ path: "apps/android/app.config.ts", content: real }];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T246: the two real runbooks' CORRECTED quotations of the old denial do not trip the new entry", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/app.config.ts",
+      content: readCommittedFile("apps/android/app.config.ts"),
+    },
+  ];
+  const appFiles = [
+    {
+      path: "docs/android-apk-release.md",
+      content: readCommittedFile("docs/android-apk-release.md"),
+    },
+    {
+      path: "docs/clean-install-and-rollback.md",
+      content: readCommittedFile("docs/clean-install-and-rollback.md"),
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles }).filter(
+    (v) =>
+      v.capability ===
+      "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)",
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("T246: on the real, committed tree, the new entry is shipped and the full denial scan stays clean", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = tracked
+    .filter(isAppSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+
+  const capabilityName =
+    "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)";
+  const shippedNames = findShippedCapabilities(shippedFiles).map((c) => c.name);
+  assert.ok(
+    shippedNames.includes(capabilityName),
+    "T246's capability is no longer declared in any shipped file: either" +
+      " computeVersionCodeFromSemver was removed from apps/android/app.config.ts," +
+      " or APP_ROOT_CONFIG_PATTERN has stopped matching it",
+  );
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
