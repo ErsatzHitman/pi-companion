@@ -383,11 +383,11 @@ unbaselined-advisory/stale-baseline-entry pair), and T227
 (`guard-declared-root-dependencies.mjs`'s `findUndeclaredRootDependencies`) each shipped the
 same capability CLASS this section's T215 entries did — a walk closing the "check that
 cannot fail" shape for its own curated allowlist or manifest — and each registered nothing
-here, because none of their `Owns` lines covered this file. Five tasks across three waves
-made the identical omission; taken together as T228 rather than as separate follow-ups, for
-the exact reason T215 gave for keeping its own two entries apart while filing them
-together: two tasks serially editing this file is how T222 and T223 once ended up
-contending over the same member.
+here, because none of their `Owns` lines covered this file. Five guards across three tasks
+and three waves made the identical omission; taken together as T228 rather than as separate
+follow-ups, for the exact reason T215 gave for keeping its own two entries apart while
+filing them together: two tasks serially editing this file is how T222 and T223 once ended
+up contending over the same member.
 
 Every one of the five ships in `scripts/ci`, which `isAppSourcePath` already admits — checked
 by calling the exported function on each guard's own path before writing a single phrase, not

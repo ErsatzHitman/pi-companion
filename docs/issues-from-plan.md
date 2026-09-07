@@ -779,7 +779,11 @@ the task details always agree.
 |        | widened T228 to a fifth capability. The wave's own guard header          |       |
 |        | also quoted a legacy specifier and turned guard-no-legacy-app-tree       |       |
 |        | red on main; fixed in the gate commit's follow-up.                       |       |
-| P9-W10 | T228 (filed by the P9-W2 gate; widened by the P9-W3 gate to four).       | 1     |
+| P9-W10 | T228 — landed at the P9-W10 gate (KEEP-WITH-FIX): all five entries       | 1     |
+|        | fire and none collides with its own guard's header, but both             |       |
+|        | tests titled "are shipped" resolved shippedness by filtering             |       |
+|        | CAPABILITIES by name, reading no file. One shared predicate              |       |
+|        | now serves the guard and both tests. No new tasks filed.                 |       |
 | P9-W11 | T229 (filed by the P9-W3 gate; look every SHA up, never guess).          | 1     |
 | P9-W12 | T230 (filed by the P9-W3 gate; needs the Workers packaging answer).      | 1     |
 | P9-W13 | T231 (owner-blocked: needs npm install for a semver-major bump)          | 1     |
@@ -8079,7 +8083,7 @@ so entries for them would be live rather than inert:
   `findStaleBaselineEntries`.
 
 **Widened again at the P9-W9 merge gate, to a fifth.** T227 shipped `scripts/ci/guard-declared-root-dependencies.mjs`'s `findUndeclaredRootDependencies`
-— every third-party import in `scripts/ci` must be declared by the ROOT manifest — and registered nothing, for the identical reason: its `Owns` line covers the root `package.json` and the new guard, not `guard-capability-prose.mjs`. That is the FIFTH task to make this omission. It ships in `scripts/ci`, so an entry is live, not inert. **Take it in this wave too**, as its own single non-group member, for the reason the next paragraph gives — and word its phrases so they are not lifted from that guard's own header, which narrates the fixed `vite` defect in the past tense and carries no `HISTORICAL_QUOTE_MARKERS` trigger.
+— every third-party import in `scripts/ci` must be declared by the ROOT manifest — and registered nothing, for the identical reason: its `Owns` line covers the root `package.json` and the new guard, not `guard-capability-prose.mjs`. That is the fifth GUARD to ship with this omission and the third TASK to make it (T44A3 shipped three of the five on its own); count guards when you are counting entries to write, and tasks when you are counting `Owns` lines that went wrong. It ships in `scripts/ci`, so an entry is live, not inert. **Take it in this wave too**, as its own single non-group member, for the reason the next paragraph gives — and word its phrases so they are not lifted from that guard's own header, which narrates the fixed `vite` defect in the past tense and carries no `HISTORICAL_QUOTE_MARKERS` trigger.
 
 Do all four in this one wave rather than filing a second task with an identical `Owns`
 line: two tasks serially editing `guard-capability-prose.mjs` is how T222 and T223 ended up

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   CAPABILITIES,
   findCapabilityDenialViolations,
+  findShippedCapabilities,
   isCapabilityMemberDeclared,
 } from "./guard-capability-prose.mjs";
 import { isAppSourcePath, isShippedSourcePath } from "./run-guard-capability-prose.mjs";
@@ -3118,10 +3119,21 @@ test("T215: on the real, committed tree, both new entries are shipped and the fu
     "stale allowlist entries (stale-missing-runner",
     "stale allowlist entries (findStaleAllowlistViolations",
   ];
-  const shippedNames = CAPABILITIES.filter((c) =>
-    relevant.some((fragment) => c.name.includes(fragment)),
-  ).map((c) => c.name);
-  assert.equal(shippedNames.length, 2);
+  // Resolve shippedness from the TREE, through the guard's own predicate. This
+  // filtered `CAPABILITIES` by name until the P9-W10 merge gate — a filter over
+  // the static array imported at the top of this file, which reads no file at
+  // all. It could only fail if someone renamed an entry in the same commit,
+  // never if the capability it protects was deleted from the tree.
+  const shippedNames = findShippedCapabilities(shippedFiles)
+    .map((c) => c.name)
+    .filter((name) => relevant.some((fragment) => name.includes(fragment)));
+  assert.equal(
+    shippedNames.length,
+    2,
+    "one of T215's two capabilities is no longer declared in any shipped" +
+      " file: either the guard it protects was removed, or its `methodNames`" +
+      " token has stopped matching the real declaration",
+  );
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });
@@ -3361,10 +3373,22 @@ test("T228: on the real, committed tree, all five new entries are shipped and th
     "npm audit baseline enforcement (findUnbaselinedAdvisories/findStaleBaselineEntries)",
     "root-manifest import declaration check (findUndeclaredRootDependencies)",
   ];
-  const shippedNames = CAPABILITIES.filter((c) => relevant.some((name) => c.name === name)).map(
-    (c) => c.name,
+  // Resolve shippedness from the TREE, through the guard's own predicate — see
+  // the note on T215's equivalent assertion above. Proven at the P9-W10 merge
+  // gate: renaming `findRouteCoverageViolations`'s declaration out of
+  // `guard-axe-route-coverage.mjs` left the name-filter version of this test at
+  // `# pass 149, # fail 0` with the capability genuinely gone; through
+  // `findShippedCapabilities` the same mutation drops this count to 4.
+  const shippedNames = findShippedCapabilities(shippedFiles)
+    .map((c) => c.name)
+    .filter((name) => relevant.includes(name));
+  assert.equal(
+    shippedNames.length,
+    5,
+    "one of T228's five capabilities is no longer declared in any shipped" +
+      " file: either the guard it protects was removed, or its `methodNames`" +
+      " token has stopped matching the real declaration",
   );
-  assert.equal(shippedNames.length, 5);
 
   assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
 });

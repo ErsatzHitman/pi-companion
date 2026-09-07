@@ -1239,6 +1239,82 @@ function flattenProse(source) {
 }
 
 /**
+ * Resolves which of `capabilities` are actually SHIPPED by `shippedFiles` — the
+ * exact question `findCapabilityDenialViolations` asks before it will treat a
+ * denying phrase as a violation, and the reason an unshipped capability's
+ * "this does not exist yet" prose is correct rather than stale.
+ *
+ * Extracted at the P9-W10 merge gate so the guard and its tests answer that
+ * question with ONE implementation. Before this, two tests titled "... are
+ * shipped" computed shippedness as `CAPABILITIES.filter(c => names.includes(
+ * c.name))` — a filter over the static array declared directly above them, which
+ * reads the tree not at all. Proven inert at that gate rather than argued:
+ * renaming `findRouteCoverageViolations`'s declaration out of
+ * `guard-axe-route-coverage.mjs` left the whole file at `# pass 149, # fail 0`,
+ * with the capability genuinely gone. A test that reimplements this predicate
+ * would carry the same hazard one level down, so it is exported instead.
+ *
+ * @param {{ path: string, content: string }[]} shippedFiles
+ * @param {typeof CAPABILITIES} [capabilities]
+ * @returns {typeof CAPABILITIES} the subset that is declared somewhere in `shippedFiles`
+ */
+export function findShippedCapabilities(shippedFiles, capabilities = CAPABILITIES) {
+  // T184: comments-and-strings-stripped source, memoized ONCE per shipped
+  // file object and reused by every capability's shipped-resolution check
+  // — the same file is never re-cleaned. T169's `RegExp` group members and
+  // T147's bare-name members now share this one cache (previously only the
+  // `RegExp` path was cached; the bare-name path went through
+  // `isCapabilityMemberDeclared`'s own uncached internal strip on every
+  // call). Since this pass no longer runs once per appFile, the cache no
+  // longer needs to survive an O(appFiles) multiplier to pay for itself —
+  // it now backs a walk over `shippedFiles` alone, run once per capability
+  // group — a number of groups times a number of shipped files, both of
+  // which grow every wave and are trivial at any size either has reached
+  // so far — but keeping it means a shipped file already cleaned for one
+  // capability is never re-cleaned for the next.
+  const cleanedSourceCache = new WeakMap();
+  function cleanedSource(file) {
+    let cleaned = cleanedSourceCache.get(file);
+    if (cleaned === undefined) {
+      cleaned = stripCommentsAndStrings(file.content);
+      cleanedSourceCache.set(file, cleaned);
+    }
+    return cleaned;
+  }
+  function isGroupMemberDeclared(file, member) {
+    const cleaned = cleanedSource(file);
+    return member instanceof RegExp
+      ? member.test(cleaned)
+      : declarationPatternsFor(member).some((pattern) => pattern.test(cleaned));
+  }
+  // T168: a token may be a plain member (OR across members/files) or an
+  // array AND-group requiring every member in it to be declared in the
+  // SAME shipped file — see the `Capability` typedef above. T169: a
+  // member in either form may itself be a `RegExp` (see
+  // `isGroupMemberDeclared`).
+  //
+  // T184: resolved ONCE per capability, over the full `shippedFiles` list
+  // with no per-appFile exclusion — this is both the blindness fix (see
+  // this function's doc comment) and the performance fix: the old
+  // `evidencePool.some(...)` walk ran once per (capability, appFile) pair,
+  // so a capability whose sole evidence sorts near the end of a ~1200-file
+  // list paid nearly the full scan for every one of ~900 appFiles (T183's
+  // own doc comment measured this at ~6m for a single such entry). This
+  // walk now runs exactly once per capability regardless of how many
+  // appFiles exist.
+  function isCapabilityShipped(capability) {
+    return capability.methodNames.some((token) => {
+      const members = Array.isArray(token) ? token : [token];
+      return shippedFiles.some((file) =>
+        members.every((member) => isGroupMemberDeclared(file, member)),
+      );
+    });
+  }
+
+  return capabilities.filter((capability) => isCapabilityShipped(capability));
+}
+
+/**
  * @param {{ shippedFiles: { path: string, content: string }[], appFiles: { path: string, content: string }[] }} input
  *   `shippedFiles` should be every non-test source file under any
  *   `packages/*\/src` or `apps/*\/src` (T147: widened from
@@ -1311,61 +1387,10 @@ function flattenProse(source) {
 export function findCapabilityDenialViolations({ shippedFiles, appFiles }) {
   const violations = [];
 
-  // T184: comments-and-strings-stripped source, memoized ONCE per shipped
-  // file object and reused by every capability's shipped-resolution check
-  // — the same file is never re-cleaned. T169's `RegExp` group members and
-  // T147's bare-name members now share this one cache (previously only the
-  // `RegExp` path was cached; the bare-name path went through
-  // `isCapabilityMemberDeclared`'s own uncached internal strip on every
-  // call). Since this pass no longer runs once per appFile, the cache no
-  // longer needs to survive an O(appFiles) multiplier to pay for itself —
-  // it now backs a walk over `shippedFiles` alone, run once per capability
-  // group — a number of groups times a number of shipped files, both of
-  // which grow every wave and are trivial at any size either has reached
-  // so far — but keeping it means a shipped file already cleaned for one
-  // capability is never re-cleaned for the next.
-  const cleanedSourceCache = new WeakMap();
-  function cleanedSource(file) {
-    let cleaned = cleanedSourceCache.get(file);
-    if (cleaned === undefined) {
-      cleaned = stripCommentsAndStrings(file.content);
-      cleanedSourceCache.set(file, cleaned);
-    }
-    return cleaned;
-  }
-  function isGroupMemberDeclared(file, member) {
-    const cleaned = cleanedSource(file);
-    return member instanceof RegExp
-      ? member.test(cleaned)
-      : declarationPatternsFor(member).some((pattern) => pattern.test(cleaned));
-  }
-  // T168: a token may be a plain member (OR across members/files) or an
-  // array AND-group requiring every member in it to be declared in the
-  // SAME shipped file — see the `Capability` typedef above. T169: a
-  // member in either form may itself be a `RegExp` (see
-  // `isGroupMemberDeclared`).
-  //
-  // T184: resolved ONCE per capability, over the full `shippedFiles` list
-  // with no per-appFile exclusion — this is both the blindness fix (see
-  // this function's doc comment) and the performance fix: the old
-  // `evidencePool.some(...)` walk ran once per (capability, appFile) pair,
-  // so a capability whose sole evidence sorts near the end of a ~1200-file
-  // list paid nearly the full scan for every one of ~900 appFiles (T183's
-  // own doc comment measured this at ~6m for a single such entry). This
-  // walk now runs exactly once per capability regardless of how many
-  // appFiles exist.
-  function isCapabilityShipped(capability) {
-    return capability.methodNames.some((token) => {
-      const members = Array.isArray(token) ? token : [token];
-      return shippedFiles.some((file) =>
-        members.every((member) => isGroupMemberDeclared(file, member)),
-      );
-    });
-  }
-
-  for (const capability of CAPABILITIES) {
-    if (!isCapabilityShipped(capability)) continue; // not yet real — prose disclosing its absence is true today
-
+  // Every capability reaching this loop is shipped. `findShippedCapabilities`
+  // has already dropped the ones that are not yet real — for those, prose
+  // disclosing their absence is true today and must not be reported.
+  for (const capability of findShippedCapabilities(shippedFiles)) {
     for (const { path, content } of appFiles) {
       const flat = flattenProse(content);
 
