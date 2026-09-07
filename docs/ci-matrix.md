@@ -146,6 +146,8 @@ to write down rather than smooth over — where that coverage stops.
   filesystem and process code that does have Windows jobs, but this is a
   real, disclosed gap in the letter of "the matrix covers protocol" on
   Windows specifically.
+- **Decided at T234 (§9): this is deliberate, not an oversight.** See §9 for
+  the reasoning and the evidence behind it.
 
 ### Core (`@picompanion/frontend-core`)
 
@@ -176,6 +178,8 @@ typecheck --workspace=@picompanion/frontend-core` then `npm run test
   browser client itself is not platform-pinned the same way), but it is
   still real, single-platform coverage for the heaviest part of this
   suite, not "the matrix covers web" without qualification.
+- **Decided at T234 (§9): this is deliberate, not an oversight.** See §9 for
+  the reasoning and the evidence behind it.
 
 ### Android (`@picompanion/android`)
 
@@ -478,3 +482,131 @@ Per its own `Owns:` line: no `apps/*/src`, no `packages/*/src`, no
 this task (§2). `nix-checks`/`docker-checks` stay path-conditional (§6). No
 job anywhere had a `continue-on-error`, `|| true`, widened `if:`, narrowed
 path filter, skipped test, or loosened assertion added to reach green.
+
+---
+
+## 9. T234: the protocol/web Linux-only split is a decision — KEEP
+
+`docs/issues-from-plan.md` T234, filed against §4's Protocol and Web findings
+above: two areas run Linux-only while `plan.md` §15.4 frames the daemon this
+product talks to as Windows-primary. This section is the recorded decision
+those findings pointed at as still open. **Re-derived fresh, not trusted from
+this file's own older numbers** (§1 already warns that every prior job count
+here was exact only for its own commit): at `cc3980ae45f7d8991a04243588782a5ebd50b7a8`
+(`git rev-parse HEAD`), `grep -c "runs-on:" .github/workflows/ci.yml` → **40**
+(up from 35 at T44A4's commit, 38 and 39 at later gates — the count keeps
+moving, per §1, and none of those older figures should be restated as
+current). `grep -n "runs-on: windows-latest"` still names exactly three:
+`frontend-core-tests-windows`, `web-unit-tests-windows`,
+`server-tests-windows`. `protocol-client-tests` and `web-tests` (the
+Playwright/axe/performance-budget suite) are still `ubuntu-latest`-only, and
+`web-unit-tests-windows` still runs the jsdom suite alone. The asymmetry is
+unchanged in shape since T44A4 recorded it; only the surrounding job count
+has moved.
+
+**Decision: KEEP. Linux-only is correct for both `protocol-client-tests` and
+`web-tests`'s Playwright/axe/performance-budget suite. No job added, and
+`.github/workflows/ci.yml` is untouched by this task.** This is not
+"symmetry doesn't matter" — CLAUDE.md's own task brief explicitly rules out
+adding Windows jobs to make the table look even. It is that neither suite's
+test surface can reach any of the three concrete Windows-only failure
+classes this repository has real, catalogued evidence for (its own
+CLAUDE.md: hardcoded path separators, CRLF surviving from committed content,
+and file-locking races from a real subprocess racing a temp-directory
+delete), checked directly against each package's source rather than assumed.
+
+### `packages/protocol`
+
+- **No subprocess, ever.** `grep -rn "child_process\|spawn(" packages/protocol/src --include="*.ts" | grep -v "\.test\.ts"`
+  returns nothing — the one raw hit for those keywords anywhere in the
+  package (`branch-slug.test.ts`) is a regex literal inside a test that
+  asserts `branch-slug.ts` does _not_ import `child_process`, the opposite
+  of real usage. The file-locking/`EBUSY` class needs a real spawned process
+  racing a `rmSync`/`rm` of a temp directory (see CLAUDE.md's
+  `HubRelationshipHarness`/`terminal-activity-route.test.ts` paragraph); this
+  package never spawns anything, so that class cannot occur here.
+- **Exactly one file touches the filesystem at all**: `src/fixtures/index.ts`,
+  and it only _reads_ static, committed JSON fixtures
+  (`readFileSync`/`readdirSync`), built through `node:path`'s `dirname`/
+  `join` — the OS-aware functions — never a hand-built `` `${a}/${b}` ``
+  string. It never writes and never creates or deletes anything, so there is
+  no reachable "hardcoded `/` breaks on Windows" bug of the kind this
+  repository has actually hit elsewhere: `path.join`'s Windows output
+  (backslash-joined) is exactly what Windows `fs.readFileSync` expects
+  natively.
+- **The one file that models Windows console behavior in the domain
+  sense is still platform-independent to run.** `src/terminal-key-input.ts`'s
+  `WIN32_LEFT_ALT_PRESSED`, `win32ControlKeyState`, and
+  `encodeWin32EnterKeyInput` encode real ConPTY win32-input-mode escape
+  sequences, but every one of them is pure string/number computation gated
+  by a caller-supplied `options.inputMode.win32InputMode` flag — never by
+  `process.platform` or any other OS query. `ubuntu-latest` executes the
+  identical JavaScript `windows-latest` would; the function's _subject_ is
+  Windows, but its _execution_ has no OS dependency for a test runner to
+  exercise differently.
+- **CRLF is not reachable either.** The fixtures `src/fixtures/index.ts`
+  reads are plain JSON, kept LF by `.gitattributes`' `* text=auto eol=lf`
+  regardless of checkout platform, and `JSON.parse` does not care about line
+  endings in whitespace outside string literals in any case.
+
+None of the three classes apply. Linux-only protocol coverage was already
+correct; it is now a recorded decision instead of an unexamined fact.
+
+### `web-tests` (Playwright, axe, performance budgets)
+
+- **The product code under test is a guarded impossibility for this class of
+  bug.** `guard-no-node-builtin-in-web-bundle` already fails the build if any
+  `apps/web/src` file imports a Node builtin — exactly where a path-separator
+  or `os.EOL`-flavored bug would have to live to reach the shipped bundle a
+  Playwright spec drives in a real Chromium browser. A platform-specific
+  defect in the code these specs actually exercise is not merely unlikely;
+  CI already refuses to let it exist.
+- **The daemon-on-Windows surface plan.md §15.4 actually names already has
+  Windows coverage, in the layer that owns it.** The E2E fixtures spin up
+  `@picompanion/server` (`apps/web/e2e/fixtures/daemon.ts`'s
+  `createPaseoDaemon`) and serve the packaged web-UI bundle
+  (`preview-server.ts` via `scripts/build-daemon-web-ui.mjs`). That package's
+  static-asset-serving code — `packages/server/src/server/web-ui.ts`, covered
+  by `web-ui.test.ts` and `web-ui-serve.test.ts` — is not excluded from
+  `test:unit:parallel`, so both `server-tests-ubuntu` **and**
+  `server-tests-windows` already run it today. Adding a second, far heavier
+  browser-driven path to Windows would re-prove the same daemon-serving
+  surface a second time, not cover something new.
+- **The E2E harness's own real-subprocess/temp-directory shape is the exact
+  pattern CLAUDE.md's own test-count paragraph names as a source of
+  Windows-only flakiness — infra risk to accept for no matching benefit, not
+  a reason to add the job.** `startIsolatedDaemon` in `daemon.ts` calls
+  `mkdtemp`/`rm` on real temp directories every run (checked: it already
+  passes `{ maxRetries: 3, retryDelay: 100 }` to `rm`, evidence its authors
+  already anticipated exactly this Windows file-handle-release race), and
+  `preview-server.ts` shells out via `execFile` to run
+  `scripts/build-daemon-web-ui.mjs`. That is the same "a real spawned
+  subprocess and/or a temp directory it then deletes... contending... for
+  CPU and (on Windows) file-handle release" shape CLAUDE.md's paragraph
+  documents, in this exact repository, as producing failures with **zero
+  assertion failures** — the signature of contention, not a caught defect.
+  The retries lower that risk without removing it. Running the single
+  heaviest, slowest job in this workflow a second time on `windows-latest`
+  would add real CI minutes and a non-zero chance of exactly that
+  contention-flavored noise, in exchange for coverage of a surface (the
+  bullet above) that already has a correctly-scoped Windows job.
+- **The layer that would actually catch an accidental OS-sensitive
+  assumption creeping into `apps/web/src` already runs on Windows.**
+  `web-unit-tests-windows` (T49) is the jsdom half of this same suite, fast
+  and free of the subprocess/tempdir shape above, and it already runs on
+  `windows-latest` today for exactly the daemon-primary-host reasoning T49's
+  own header cites.
+
+What makes all three classes unreachable through these two layers, stated
+directly: neither does hand-built path-string concatenation with a hardcoded
+separator; neither depends on the line endings of any file it reads at test
+time; and the one place either suite spawns a real subprocess against a real
+temp directory (`web-tests`'s own E2E harness) is test infrastructure whose
+Windows-only failure mode is noise CLAUDE.md already catalogues, not a
+product defect this suite exists to catch — and the product-facing surface
+that harness depends on (`@picompanion/server`'s static-asset serving) is
+already covered on Windows, correctly, by `server-tests-windows`.
+
+No job was added. This section, and the two `Decided at T234` cross-
+references in §4, are the only changes T234 makes to this file;
+`.github/workflows/ci.yml` is untouched.
