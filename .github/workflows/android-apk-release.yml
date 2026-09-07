@@ -55,6 +55,16 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
 
+      # T247: fail loudly, before any build step runs, when this tag
+      # disagrees with apps/android/app.config.ts's own "version" — see
+      # scripts/ci/guard-android-release-tag-version.mjs for the checked
+      # rule and the reason this cannot live inside app.config.ts itself
+      # (EAS evaluates that file on its own build machine, which never sees
+      # this runner's RELEASE_TAG). No `npm ci` needed first: this guard is
+      # dependency-free Node, run against the already-checked-out tag.
+      - name: Guard — release tag matches app.config.ts version
+        run: node scripts/ci/run-guard-android-release-tag-version.mjs
+
       - run: npm ci
 
       # Build frontend-core's own dependency chain so `apps/android`'s build
