@@ -528,6 +528,7 @@ that recomputation has to be domain-specific:
 | T267   | Reclassify rpc-types.ts's get_commands citation and close T253's ledger         | phase-9   | docs             | P9-W48 | T261                                                                  |
 | T268   | Restore pronoun coverage to T265's anchored phrases                             | phase-9   | tooling          | P9-W49 | T265                                                                  |
 | T269   | Stop citing shipped source by line number, and guard it                         | phase-9   | tooling          | P9-W50 | none                                                                  |
+| T272   | Close the prose-form line-number population T269 never measured                 | phase-9   | docs             | P9-W51 | T269                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -897,6 +898,8 @@ the task details always agree.
 |        | pronoun form stale prose actually uses).                                 |       |
 | P9-W50 | T269 (filed by the P9-J gate; one commit rotted five                     | 1     |
 |        | line-number citations, one of them on arrival).                          |       |
+| P9-W51 | T272 (filed by the P9-K gate; the rule forbids a prose                   | 1     |
+|        | form its own recovery grep cannot find).                                 |       |
 
 ---
 
@@ -9873,6 +9876,66 @@ Owns: whichever of `scripts/ci` gains the guard, plus `CLAUDE.md` if the rule ro
 - [ ] The decision names guard-or-rule and argues against the other
 - [ ] If a guard: it fires on a real rotted citation, watched, and its capability is registered
 - [ ] If a rule: it is written where authors read it, and the existing population is fixed
+
+#### T272 — Close the prose-form line-number population T269's rule forbids but never measured
+
+`labels: phase-9, area: docs` · `wave: P9-W51` · `depends-on: T269`
+
+T269 ruled that shipped prose cites by symbol name, never by line number, and its own rule text
+says so explicitly: "Writing it as `path.ts` line NNN, or a bare line NNN, is exactly what this
+rule forbids." Its measurement, its conversion, and the re-run grep it recorded for future waves
+all matched **only the two backtick-fenced shapes**. The unfenced prose form was never counted,
+never converted, and is not findable by the recovery procedure the rule ships with — so the rule
+forbids a class its own grep cannot see.
+
+Measured at the P9-K merge gate, outside the ledger:
+
+```
+git grep -noiE '\b(at |on |see )?lines? ~?[0-9]{2,4}(-[0-9]+)?\b' HEAD \
+  -- 'packages/*/src/*' 'apps/*/src/*' 'scripts/ci/*' 'docs/*' 'plan.md' \
+  ':!docs/issues-from-plan.md'
+```
+
+**33 hits.** Not all are citations — re-classify each before converting:
+
+| Site                                                                                                                | Hits | First read                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------ |
+| `docs/agent-configuration-surface.md`                                                                               | 10   | real citations; one already dead (below)                                                                     |
+| `docs/android-apk-release.md`                                                                                       | 1    | real citation                                                                                                |
+| `scripts/ci/guard-capability-prose.mjs`                                                                             | 2    | `guard-docker-packaging-paths.mjs (~line 30)` / `(~line 160)` — real, and in a file T269's own commit edited |
+| `packages/frontend-core/.../scenarios/{pi-goal,subagents,workflows}.ts`                                             | 4    | real citations into Pi's own source                                                                          |
+| `packages/server/**`, `apps/**` test files, `scripts/ci/ci-routing.test.mjs`, `guard-web-session-bundle-budget.mjs` | 16   | mostly rendered-log fixture content (`"line 51"` as a _value_), not citations — classify and say so          |
+
+**One is already rotted**, which is the rule's own motivating failure mode live in the tree:
+`docs/agent-configuration-surface.md` cited `` `docs/issues-from-plan.md` line 1454 `` for T28B5.
+Line 1454 is a **blank line** inside an unrelated phase-3.5 section; T28B5's real row is line 160.
+Fixed at the P9-K gate by dropping the number — the sentence already names the task — but that
+one edit does not close the class.
+
+Note `docs/agent-configuration-surface.md` is **not** on the frozen reference-only list, so
+unlike `docs/pi-extension-compatibility.md` it was always in scope to fix, and was missed only
+because the measurement's regex could not see it.
+
+Do **not** build a guard. T269's measurement already settled that question for the fenced form,
+and this population is smaller and shares the identical semantic-drift failure mode: a script
+can tell whether line NNN exists, not whether it still says what the prose claims. Every one of
+the 12 wrong citations T269 found resolved to a valid, in-bounds line.
+
+Verify each target before converting — at least one has already drifted, and converting a wrong
+citation to a symbol name would launder a false claim into a durable-looking one.
+
+Finally, extend the recorded re-run grep in `CLAUDE.md`'s T269 section to cover the prose form,
+so the rule's own recovery procedure can find what the rule forbids. The P9-K gate added a
+pointer to this task there; replace it with the finished grep.
+
+Owns: the listed files, plus `CLAUDE.md`'s T269 closing paragraph.
+
+- [ ] Every one of the 33 hits is classified as citation or non-citation, with the reason
+- [ ] Each real citation's target is resolved and read BEFORE conversion; drifted claims corrected
+- [ ] `docs/agent-configuration-surface.md`'s remaining 9 and `docs/android-apk-release.md`'s 1 are converted
+- [ ] `guard-capability-prose.mjs`'s two are converted, or argued as non-citations
+- [ ] `CLAUDE.md`'s recorded re-run grep matches the prose form, replacing the P9-K pointer
+- [ ] No guard is built, and the reason is stated
 
 #### T32A1 — Build the Android connect form
 

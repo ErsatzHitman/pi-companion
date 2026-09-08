@@ -724,10 +724,23 @@ that could actually catch drift here is semantic (does the cited line still say 
 prose claims), which a script cannot judge the way `guard-capability-prose.mjs` judges a
 capability's presence.
 
-**What was fixed and what was deliberately left.** All 105 non-ledger citations outside
-one frozen file were converted to symbol-name citations in the same commit that added
-this rule, correcting the underlying claim wherever the resolved content had actually
-drifted (most of the 12 wrong ones above). Left un-converted, each for a stated reason:
+**What was fixed and what was deliberately left.** The non-ledger citations were converted
+to symbol-name citations in the same commit that added this rule, correcting the underlying
+claim wherever the resolved content had actually drifted (most of the 12 wrong ones above)
+— all but nine of them, across FOUR exemption classes, not one.
+
+(CORRECTED at the P9-K merge gate. This said "**All 105** non-ledger citations **outside
+one frozen file** were converted", which the list immediately below it contradicts two
+sentences later: four of the nine survivors sit outside that frozen file. Re-derived by
+executing the section's own grep against both committed trees and reading every remaining
+hit one at a time: 105 non-ledger hits at the base commit, of which one — `git-remote.ts`'s
+`:60443`, a port number in a `GitRemoteLocation` doc comment — was never a citation, so 104
+real; 9 real citations remain at HEAD; 95 were converted. The figure is dropped rather than
+re-pinned, per this file's own two "do not restate this count here" instructions. What
+matters to a reader is the exemption CLASSES, which are standing and which future prose can
+legitimately create again — not the arithmetic.)
+
+Left un-converted, each for a stated reason:
 `docs/issues-from-plan.md`'s citations (dated ledger narration, per the exclusion above);
 `docs/pi-extension-compatibility.md`'s five citations (this file is on the frozen,
 reference-only list two sections above — T242 forbids editing it even to fix a citation
@@ -750,6 +763,12 @@ for it, same as `isShippedSourcePath`), so any guard built on the `guard-capabil
 family could never police the two `plan.md` citations this task also fixed — a guard here
 would need its own, wider scope, for a check whose value this measurement showed is lower
 than its cost. If a future wave finds new line-number citations creeping back in, the fix
-is the same grep this section ran, not a standing check: ``grep -rnoE
+is the same grep this section ran, not a standing check — but note that grep matches only
+the two BACKTICK-FENCED shapes, and the rule above also forbids the unfenced prose form
+(`path.ts` line NNN, or a bare line NNN). That form was never measured by T269 and is
+still live in this tree: the P9-K merge gate found 33 hits outside the ledger, at least one
+already dead (`docs/agent-configuration-surface.md` cited a ledger line that is now blank,
+for a task whose row sits ~1300 lines away). Filed as T272, which owns both the conversion
+and the extension of the grep below to cover the prose form: ``grep -rnoE
 '`[A-Za-z0-9_./-]+\.(ts|tsx|js|jsx|mjs|md)(:[0-9]+(-[0-9]+)?)`' packages/*/src apps/*/src
 scripts/ci docs plan.md``, plus ``grep -rnoE '`:[0-9]+(-[0-9]+)?`'`` for the bare form.

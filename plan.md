@@ -308,10 +308,17 @@ Revision handling is deterministic: discard a delta at or below the current revi
 #### Pi RPC command mirror drift disclosure
 
 `packages/server/src/server/agent/providers/pi/rpc-types.ts` hand-mirrors Pi's own RPC
-command surface against the installed Pi CLI's own type declarations. Three points in that
-mirror are decisions, not accidents, first recorded during the Phase 0 re-audit
+command surface against the installed Pi CLI's own type declarations. The bullets below are
+decisions, not accidents, first recorded during the Phase 0 re-audit
 (`docs/pi-extension-compatibility.md` §9, "Pi RPC Mirror Audit — Findings (T51A)") and
-restated here as their citable home (T253):
+restated here as their citable home — the first three by T253, the fourth by T267.
+
+(CORRECTED at the P9-K merge gate. This read "**Three points** in that mirror" and
+attributed the whole set to T253. T267 appended a fourth bullet in the very commit that
+wrote "then repointed **this fourth one** the same way" into `CLAUDE.md`, so the two files
+that commit touched disagreed with each other about the count. The count is dropped rather
+than incremented, per this repository's T217/T224 precedent for a figure that goes stale on
+the next edit.)
 
 - **`get_tree` stays removed.** It was pulled (T142) once the audit found its entire runtime
   path — `PiCliRuntime.getTree()`, `session-descriptor.ts`'s `tryGetTreeViaRpc` — had zero
@@ -340,7 +347,17 @@ restated here as their citable home (T253):
   `{ id?: string; type: "get_commands" }` exactly and proven against it field-for-field by
   `rpc-types.pi-mirror.contract.test.ts` — rather than leave a shipped, production-relied-on
   command (T28B4's slash-command completion already depends on it) with no drift detection
-  of its own, the way the other eleven, uncalled request types were left.
+  of its own. The other eleven were left for two different reasons, not one: §9.2 excludes
+  four deliberately on product grounds — `bash` and `abort_bash` because this daemon owns
+  its own terminal, `export_html` because session export is declined, and
+  `get_last_assistant_text` as a redundant read path rather than a missing capability — and
+  defers the remaining seven only because no planned task depends on them yet. All eleven
+  are in fact uncalled today, but that is the deferral's reason, not the exclusions': those
+  four would stay excluded even if a caller appeared.
+
+  (CORRECTED at the P9-K merge gate. This read "the way the other eleven, uncalled request
+  types were left", giving one cause for eleven cases. Each was checked against §9.2's
+  verdict table one at a time: 1 mirrored, 4 excluded, 7 deferred.)
 
 #### Session watcher and live tail
 

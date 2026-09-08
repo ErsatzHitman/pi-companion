@@ -35,8 +35,8 @@ records exactly where that limit bites.
 Pi's `get_available_models` request (installed Pi's `rpc-types.d.ts`) returns
 `{ models: Model<any>[] }` — the full catalog, not just the active one. Our mirror
 carries this arm (`rpc-types.ts`; §9.2 marks it "Mirrored — Pre-existing") and it is
-wired end-to-end: T28B5 ("Add model and thinking-level selection",
-`docs/issues-from-plan.md` line 1454) built a real selection control in
+wired end-to-end: T28B5 ("Add model and thinking-level selection", in
+`docs/issues-from-plan.md`) built a real selection control in
 `apps/web/src/features/composer/`, proven by `use-model-thinking.test.ts`. `get_state`
 also returns the session's _current_ model (`RpcSessionState.model`, mirrored in
 `PiSessionState`). So both "what models exist" and "which one is active" already
