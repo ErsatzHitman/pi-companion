@@ -15,48 +15,41 @@
  * capture. Nothing to consult in that file any more — the shape it
  * established lives on here.
  *
- * **No audio-recording dependency is installed in this workspace.**
- * `apps/android/package.json` carries no `expo-audio` today (confirmed
- * via `ls node_modules | grep -i audio` at this task's start — nothing
- * matched under `apps/android/node_modules`; the repo-root hoist has
- * `expo-audio`/`expo-speech` only because some *other* worktree's
- * install put them there, not this app's), and this task may not run
- * `npm install`. `createUnavailableVoiceCapturePort` below is
- * therefore this module's only production implementation. (The
- * precedent this once cited, `mic-permission-port.ts`'s identically
- * shaped `createUnavailableMicPermissionPort`, was deleted by T94 —
- * `../notifications/push-registration-port.ts` and
- * `../composer/attachment-source-port.ts` still follow the same
- * pattern.)
+ * **T276: a real capture implementation now exists.** The owner
+ * installed `expo-audio@~1.0.13` (resolves 1.0.16) at `fad6be1` for
+ * this exact task — see `docs/issues-from-plan.md`'s T276 section,
+ * which settles the dependency question and forbids re-opening it. The
+ * real port is `createExpoAudioVoiceCapturePort`
+ * (`./expo-audio-voice-capture-port.ts`), deliberately **not**
+ * declared in this file: that module's own top-level `import ...  from
+ * "expo-audio"` transitively imports `react-native` (`ExpoAudio.js`
+ * imports `Platform`), which is exactly the "RN-in-vitest limitation"
+ * this repository's `CLAUDE.md` catalogues — any test importing a
+ * module that reaches `react-native` fails. Keeping that import out of
+ * *this* file is what keeps `createUnavailableVoiceCapturePort` below,
+ * and every test that imports it, `react-native`-free.
+ * `Composer.tsx` now defaults `voiceCapture` to the real port; this
+ * file's `createUnavailableVoiceCapturePort` remains exported as an
+ * explicit, honest "no capture" choice — a caller that wants voice
+ * entry deliberately disabled (or a test standing in for one) still
+ * has it, but it is no longer this build's *only* production
+ * `VoiceCapturePort`, and no longer the default.
  *
- * To wire a real capture port once available (version pinned exactly
- * per *this app's own* installed `expo`
- * (`apps/android/node_modules/expo/bundledNativeModules.json`, not the
- * differently-versioned `expo` hoisted into the repo root from other
- * worktrees' installs — the same note
- * `../notifications/push-registration-port.ts` carries):
+ * `expo-audio-voice-capture-port.ts`'s own header covers: why
+ * `expo-file-system` (mentioned as available in T276's brief) is
+ * NOT used for reading the finished clip or deleting a cancelled one
+ * (measured, not assumed — that package is not actually a declared
+ * dependency of `apps/android`, and the only copy that resolves from
+ * this app's source tree today is a different SDK generation's stray
+ * hoist); the REQUESTED vs. MEASURED recording format distinction
+ * T276's brief requires; and the one disclosed gap this task leaves
+ * (a cancelled recording's file is not deleted from device storage).
  *
- *   npm install --workspace=@picompanion/android expo-audio@~1.1.1
- *
- * — then implement `start`/`stop`/`cancel` against `expo-audio`'s
- * `AudioModule.RecordingPresets` + `useAudioRecorder`/
- * `AudioRecorder.record()`/`.stop()`, and either:
- *
- *  1. resolve `stop()` with `{ kind: "audio", audioBase64, format }`
- *     read from the recorder's output file via `expo-file-system`,
- *     for a daemon that transcribes server-side (see this directory's
- *     `README`-equivalent note in `voice-model.ts`'s header on why
- *     that is the wire shape this repo's protocol already expects —
- *     `packages/protocol/src/messages.ts`'s `VoiceAudioChunkMessage` /
- *     `TranscriptionResultMessage`, and
- *     `packages/client/src/daemon-client.ts`'s
- *     `sendVoiceAudioChunk`/`setVoiceMode`); or
- *  2. resolve `stop()` with `{ kind: "transcript", text }` directly,
- *     if an on-device speech-to-text module is added instead (none is
- *     installed or evaluated by this task).
- *
- * `voice-model.ts` accepts either outcome kind already — see that
- * module's header for what this wave actually does with each.
+ * `voice-model.ts` accepts either `VoiceCaptureOutcome` kind already —
+ * see that module's header for what this wave actually does with
+ * each. T276 ships the real `"audio"`-producing capture; closing the
+ * `"raw-audio-unsupported"` dead end on the receiving side is T277's
+ * job, not this one (T276's brief is explicit about that boundary).
  */
 import type { PermissionPort } from "../composer/permission-recovery.js";
 
@@ -91,7 +84,13 @@ export interface VoiceCapturePort extends PermissionPort {
   cancel(): Promise<void>;
 }
 
-/** This build's only production `VoiceCapturePort` — see module docstring. */
+/**
+ * An explicit "no capture" `VoiceCapturePort` — no longer this build's
+ * only production implementation (T276 added
+ * `createExpoAudioVoiceCapturePort`, `./expo-audio-voice-capture-port.ts`,
+ * now `Composer.tsx`'s default), but still a real, honest choice for a
+ * caller that wants voice entry disabled outright. See module docstring.
+ */
 export function createUnavailableVoiceCapturePort(): VoiceCapturePort {
   return {
     async getPermissionStatus() {

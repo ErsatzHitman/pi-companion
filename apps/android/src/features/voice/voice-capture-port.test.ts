@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createUnavailableVoiceCapturePort } from "./voice-capture-port";
 
-describe("createUnavailableVoiceCapturePort — this build's only production VoiceCapturePort", () => {
+describe("createUnavailableVoiceCapturePort — an explicit 'no capture' VoiceCapturePort (no longer the only or default production one — see expo-audio-voice-capture-port.test.ts for T276's real port)", () => {
   it("reports unavailable for both permission reads, without prompting anything", async () => {
     const port = createUnavailableVoiceCapturePort();
     expect(await port.getPermissionStatus()).toBe("unavailable");

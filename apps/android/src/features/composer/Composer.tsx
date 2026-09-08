@@ -74,9 +74,10 @@ import {
 } from "./turn-status-model";
 import { TurnStatusBanner } from "./TurnStatusBanner";
 import {
-  createUnavailableVoiceCapturePort,
+  createExpoAudioVoiceCapturePort,
   createVoiceCaptureController,
   IDLE_VOICE_STATE,
+  VoiceCaptureIndicator,
   type VoiceCaptureController,
   type VoiceCancelOutcome,
   type VoiceCapturePort,
@@ -226,15 +227,20 @@ export interface ComposerProps {
   cameraCapture?: CameraCapturePort;
   /**
    * T70: the actual recorder behind the mic action — T33B7 deliberately
-   * left "recording itself" for a later task; this is that task. When
-   * granted, pressing the mic toggles a real `VoiceCaptureController`
-   * (`../voice/voice-model.ts`) built over the SAME `outbox`/
-   * `sessionId`/`onSubmit` a text send already uses (below), so a voice
-   * transcript reaches the identical durable outbox entry, not a second
-   * queue — see `../voice/voice-model.ts`'s header on why that mattered.
-   * Optional, defaults to `createUnavailableVoiceCapturePort()` — no
-   * audio-recording dependency is installed in this workspace (see that
-   * module's doc comment for the exact install command).
+   * left "recording itself" for a later task; T276 is the task that
+   * shipped it. When granted, pressing the mic toggles a real
+   * `VoiceCaptureController` (`../voice/voice-model.ts`) built over the
+   * SAME `outbox`/`sessionId`/`onSubmit` a text send already uses
+   * (below), so a voice transcript reaches the identical durable outbox
+   * entry, not a second queue — see `../voice/voice-model.ts`'s header
+   * on why that mattered. Optional, defaults to
+   * `createExpoAudioVoiceCapturePort()` (T276) — a real, `expo-audio`-
+   * backed recorder; see that module's own header for the dependency
+   * decision, the REQUESTED-vs-MEASURED recording-format disclosure,
+   * and the one gap it discloses (a cancelled recording's file is not
+   * deleted). `createUnavailableVoiceCapturePort` (`../voice/voice-
+   * capture-port.ts`) remains available for a caller that wants voice
+   * entry explicitly disabled; it is no longer this prop's default.
    *
    * This is now the ONLY OS-permission port the mic action resolves
    * through (T83, `mic-press-model.ts`): `VoiceCapturePort` already
@@ -245,7 +251,11 @@ export interface ComposerProps {
    * see `mic-press-model.ts`'s header for the double-prompt bug this
    * closed (T70 had filed it as a seam here; T83 is the fix, not just
    * the same object passed to two props, which would still have
-   * resolved permission twice).
+   * resolved permission twice). T276's real port never calls either
+   * permission method from its own `start()` — see that module's header
+   * and `expo-audio-voice-capture-port.test.ts`'s own counting-bindings
+   * proof — so this invariant holds for the real recorder exactly as it
+   * did for the unavailable one.
    */
   voiceCapture?: VoiceCapturePort;
   /**
@@ -481,7 +491,7 @@ export function Composer({
     [attachmentSource],
   );
   const resolvedVoiceCapture = useMemo(
-    () => voiceCapture ?? createUnavailableVoiceCapturePort(),
+    () => voiceCapture ?? createExpoAudioVoiceCapturePort(),
     [voiceCapture],
   );
   const resolvedCameraCapture = useMemo(
@@ -1042,14 +1052,29 @@ export function Composer({
 
   // T70: what the voice status row (below) shows, or `null` to render
   // nothing — computed once here rather than three times inline in JSX.
-  const voiceStatusDisplay: { text: string; tone: StatusTone } | null =
-    voiceState.status === "recording"
-      ? { text: "Recording…", tone: "info" }
-      : voiceState.status === "processing"
-        ? { text: "Processing…", tone: "info" }
-        : voiceOutcome !== null
-          ? voiceOutcomeDisplay(voiceOutcome)
-          : null;
+  // T276: while a capture is actually in progress, this is no longer
+  // text at all — see `VoiceCaptureIndicator`'s own doc comment for why
+  // "recording" and "processing" get two different, wordless glyphs
+  // instead. The settled-outcome case (idle, with something to report —
+  // sent/failed/empty/unsupported/cancelled) is unchanged: that is an
+  // announcement of what already happened, not a continuous status
+  // label, so it keeps rendering through `StatusIndicator` exactly as
+  // before.
+  const voiceOutcomeDisplayValue: { text: string; tone: StatusTone } | null =
+    voiceOutcome !== null ? voiceOutcomeDisplay(voiceOutcome) : null;
+  const voiceStatusDisplay:
+    | { kind: "indicator"; status: "recording" | "processing" }
+    | { kind: "outcome"; text: string; tone: StatusTone }
+    | null =
+    voiceState.status === "recording" || voiceState.status === "processing"
+      ? { kind: "indicator", status: voiceState.status }
+      : voiceOutcomeDisplayValue !== null
+        ? {
+            kind: "outcome",
+            text: voiceOutcomeDisplayValue.text,
+            tone: voiceOutcomeDisplayValue.tone,
+          }
+        : null;
 
   const composerTestId = testId ?? "composer";
 
@@ -1162,12 +1187,19 @@ export function Composer({
             presses the mic). */}
         {voiceStatusDisplay !== null ? (
           <View style={styles.turnControlsRow} testID={`${composerTestId}-voice-status`}>
-            <StatusIndicator
-              label="Voice"
-              tone={voiceStatusDisplay.tone}
-              statusText={voiceStatusDisplay.text}
-              testId={`${composerTestId}-voice-status-indicator`}
-            />
+            {voiceStatusDisplay.kind === "indicator" ? (
+              <VoiceCaptureIndicator
+                status={voiceStatusDisplay.status}
+                testId={`${composerTestId}-voice-status-indicator`}
+              />
+            ) : (
+              <StatusIndicator
+                label="Voice"
+                tone={voiceStatusDisplay.tone}
+                statusText={voiceStatusDisplay.text}
+                testId={`${composerTestId}-voice-status-indicator`}
+              />
+            )}
             {voiceState.status === "recording" ? (
               <Button
                 kind="danger"

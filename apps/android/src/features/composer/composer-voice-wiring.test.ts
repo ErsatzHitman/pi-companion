@@ -68,9 +68,9 @@ describe("Composer.tsx really drives a real VoiceCaptureController from the mic 
     );
   });
 
-  it("resolvedVoiceCapture defaults to createUnavailableVoiceCapturePort(), not a live-looking stub", () => {
+  it("T276: resolvedVoiceCapture now defaults to createExpoAudioVoiceCapturePort(), the real recorder — no longer the unavailable stub", () => {
     expect(code).toMatch(
-      /resolvedVoiceCapture\s*=\s*useMemo\(\s*\(\)\s*=>\s*voiceCapture\s*\?\?\s*createUnavailableVoiceCapturePort\(\)/,
+      /resolvedVoiceCapture\s*=\s*useMemo\(\s*\(\)\s*=>\s*voiceCapture\s*\?\?\s*createExpoAudioVoiceCapturePort\(\)/,
     );
   });
 
@@ -119,6 +119,18 @@ describe("Composer.tsx really drives a real VoiceCaptureController from the mic 
   it("the voice status row is real UI, gated on a real computed display value — not permanently hidden or permanently shown", () => {
     expect(code).toMatch(/voiceStatusDisplay !== null \? \(/);
     expect(code).toMatch(/<StatusIndicator[\s\S]{0,120}?statusText=\{voiceStatusDisplay\.text\}/);
+  });
+
+  // T276: a settled outcome (idle, something to report) still renders
+  // through `StatusIndicator` — proven above — but an ACTIVE capture
+  // ("recording"/"processing") no longer does. This is the mic control's
+  // waveform-only requirement: proven here as "the branch exists and
+  // mounts the real component", with `voice-capture-indicator.test.ts`
+  // owning the glyph's own visual/accessibility contract.
+  it("T276: an active capture (recording/processing) renders VoiceCaptureIndicator instead of StatusIndicator text", () => {
+    expect(code).toMatch(
+      /voiceStatusDisplay\.kind === "indicator" \? \(\s*<VoiceCaptureIndicator\s+status=\{voiceStatusDisplay\.status\}/,
+    );
   });
 
   it("the Cancel control only renders while actually recording, not while idle/processing", () => {

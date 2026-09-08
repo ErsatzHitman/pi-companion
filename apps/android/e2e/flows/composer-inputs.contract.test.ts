@@ -39,12 +39,18 @@ import { assertVisibleTextsAfterEachTap, parseMaestroSteps } from "./maestro-yam
  * This file deliberately never asserts that `features/voice` or
  * `features/share` are *unimported* — CLAUDE.md's standing rule against
  * a negative assertion that "pins an unfinished thing shut" applies
- * exactly here: those barrels not being mounted yet is a fact about
+ * exactly here: those barrels not being mounted yet was a fact about
  * `T32S12`'s and the native-module task's unfinished work, not a
  * regression this suite should fail the moment either lands. Instead it
- * positively asserts what each barrel's own unavailable-port
- * implementation actually does today (still honest, still a safe
- * default) — see the "blocked modes stay honest" describe block below.
+ * positively asserts what each barrel's own port implementation
+ * actually does today — see the "blocked modes stay honest" describe
+ * block below. **T276 (plan.md §9.2) is exactly that landing, for
+ * voice**: `features/voice` shipped a real, `expo-audio`-backed
+ * `VoiceCapturePort` and `Composer.tsx` now defaults to it, so the mic
+ * half of the "blocked modes" framing below is no longer honest and was
+ * updated in the same commit that made it false — see that describe
+ * block's own comment. `features/share` is unaffected by T276 and still
+ * genuinely unavailable.
  *
  * Mutation-checked (see the wave report for the exact mutations, their
  * failures, and the byte-identical restores, `diff`-verified): the
@@ -207,7 +213,7 @@ describe("composer-inputs.yaml anchors exist in source", () => {
     });
   });
 
-  describe("mic and attach buttons are live and honest, but the capture/pick they gate is blocked", () => {
+  describe("mic and attach buttons are live and honest; attach's picking is still blocked, mic's capture no longer is (T276)", () => {
     it('the mic ComposerIconAction carries testId="${composerTestId}-mic"', () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
       expect(code).toMatch(
@@ -232,11 +238,24 @@ describe("composer-inputs.yaml anchors exist in source", () => {
       );
     });
 
-    it('describePermissionRecovery(kind, "unavailable") is exactly the banner text the flow asserts for both', () => {
+    it('describePermissionRecovery("photos", "unavailable") is exactly the banner text the flow asserts for attach', () => {
       const photos = describePermissionRecovery("photos", "unavailable");
       expect(`${photos.title}. ${photos.message}`).toBe(
         COMPOSER_INPUTS_FLOW.attachmentUnavailableBannerText,
       );
+    });
+
+    // T276: mic no longer resolves "unavailable" by default (that state
+    // is reserved for a caller that explicitly disables voice, which
+    // nothing does at this mount) — `describePermissionRecovery`'s own
+    // mic copy still exists and is still correct, it is just no longer
+    // what THIS flow's mic path reaches. `COMPOSER_INPUTS_FLOW.
+    // micUnavailableBannerText` is kept (describes real, valid product
+    // copy `PermissionRecoveryNotice kind="microphone"` still renders
+    // for a real "unavailable" port), but this file no longer claims
+    // the yaml asserts it — see the "read from disk" describe block
+    // below for the positive proof that it does not.
+    it('describePermissionRecovery("microphone", "unavailable") still renders real, valid copy — just not what this flow\'s mic path reaches any more', () => {
       const mic = describePermissionRecovery("microphone", "unavailable");
       expect(`${mic.title}. ${mic.message}`).toBe(COMPOSER_INPUTS_FLOW.micUnavailableBannerText);
     });
@@ -249,7 +268,7 @@ describe("composer-inputs.yaml anchors exist in source", () => {
     });
   });
 
-  describe("blocked modes stay honest (voice recording, real attachment picking, share intent) — not exercised by this flow", () => {
+  describe("blocked modes stay honest (real attachment picking, share intent) — not exercised by this flow", () => {
     // T94: mic permission itself is resolved through `VoiceCapturePort`
     // alone (T83 collapsed the double OS-prompt bug onto this one port;
     // the standalone `mic-permission-port.ts`/`MicPermissionPort` module
@@ -269,10 +288,18 @@ describe("composer-inputs.yaml anchors exist in source", () => {
     // `not.toMatch(/resolvedMicPermission/)` against `Composer.tsx`'s
     // own top-level function, and its own comment records the
     // reintroduce-and-revert mutation that confirmed it bites.
-    it("features/voice's only production capture port is the unavailable one (no expo-audio installed)", () => {
-      const code = readCode("../../src/features/voice/voice-capture-port.ts");
-      expect(code).toMatch(/export function createUnavailableVoiceCapturePort\(\)/);
-    });
+    //
+    // CORRECTED (T276): this block used to include a "voice" case here —
+    // "features/voice's only production capture port is the unavailable
+    // one (no expo-audio installed)" — asserting
+    // `createUnavailableVoiceCapturePort` was the only production port
+    // in `voice-capture-port.ts`. T276 shipped a real, `expo-audio`-
+    // backed port in a sibling file and made that Composer.tsx's own
+    // default; the case moved to the "mic and attach buttons" describe
+    // block above (`describePermissionRecovery("microphone", ...)`'s two
+    // tests) and to the "read from disk" block below, which now proves
+    // the yaml itself no longer asserts the unavailable mic outcome.
+    // Voice is not one of this block's "blocked modes" any more.
 
     it("features/share's only production intent port is the unavailable one; there is no live receiver to send an intent to", () => {
       const code = readCode("../../src/features/share/share-intent-port.ts");
@@ -322,34 +349,42 @@ describe("composer-inputs.yaml anchors exist in source", () => {
       },
     );
 
-    it("asserts the mic/attach 'unavailable' banner copy exactly as describePermissionRecovery renders it today", () => {
+    it("asserts the attach 'unavailable' banner copy exactly as describePermissionRecovery renders it today", () => {
       const assertedTexts = steps
         .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
         .map((step) => step.text as string);
-      const mic = describePermissionRecovery("microphone", "unavailable");
       const photos = describePermissionRecovery("photos", "unavailable");
-      expect(
-        assertedTexts,
-        'composer-inputs.yaml should assert describePermissionRecovery("microphone", "unavailable")\'s real copy',
-      ).toContain(`${mic.title}. ${mic.message}`);
       expect(
         assertedTexts,
         'composer-inputs.yaml should assert describePermissionRecovery("photos", "unavailable")\'s real copy',
       ).toContain(`${photos.title}. ${photos.message}`);
     });
 
+    // T276: this is the positive half of the "blocked modes" correction
+    // above — proving, from the yaml's own real parsed steps rather than
+    // by assertion, that the mic "unavailable" outcome this flow used to
+    // assert is genuinely gone, not merely unasserted by accident.
+    it("T276: no longer asserts the mic 'unavailable' banner or its permission-notice id — that outcome is no longer this flow's real one", () => {
+      const assertedTexts = steps
+        .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
+        .map((step) => step.text as string);
+      const ids = steps.filter((step) => step.id !== undefined).map((step) => step.id as string);
+      const mic = describePermissionRecovery("microphone", "unavailable");
+      expect(assertedTexts).not.toContain(`${mic.title}. ${mic.message}`);
+      expect(ids).not.toContain(COMPOSER_INPUTS_FLOW.composerMicPermissionNotice);
+    });
+
     it("taps/asserts the entries container, composer-mic and composer-attach ids exactly as Composer.tsx names them", () => {
       // composer-mic/composer-attach are TAPPED (`tapOn`), not asserted
-      // visible by id — only their permission notices are asserted
-      // visible — so this reads ids off every step kind, not just
-      // `assertVisible`.
+      // visible by id — only attach's permission notice is asserted
+      // visible (mic's is not, since T276 — see above) — so this reads
+      // ids off every step kind, not just `assertVisible`.
       const ids = steps.filter((step) => step.id !== undefined).map((step) => step.id as string);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerRoot);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerEntriesContainer);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerMicButton);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerAttachButton);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerAttachmentPermissionNotice);
-      expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerMicPermissionNotice);
     });
 
     it("never names the production daemon's port, in any form including comments", () => {

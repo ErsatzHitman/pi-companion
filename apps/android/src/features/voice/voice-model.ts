@@ -22,17 +22,17 @@
  * architecture is: capture raw audio on-device, stream it to the
  * daemon, receive text back.
  *
- * This task cannot finish that path. Two independent blockers, both
- * named in this task's own brief:
- *
- *  1. No on-device audio-capture module is installed
- *     (`voice-capture-port.ts`'s header), so there is nothing to
- *     record with today.
- *  2. Even if there were, this task may not open a socket — Android has
- *     no live `DaemonClient` wired in anywhere yet (`Composer.tsx`'s own
- *     "no client yet" seam, already true for `turnService`) — so
- *     `sendVoiceAudioChunk` cannot be called from here even as a
- *     manual wiring exercise.
+ * This task could not finish that path, for one blocker named in this
+ * task's own brief: Android has no live `DaemonClient` wired in
+ * anywhere yet (`Composer.tsx`'s own "no client yet" seam, already true
+ * for `turnService`), so `sendVoiceAudioChunk` cannot be called from
+ * here even as a manual wiring exercise. **T276 (plan.md §9.2) closed
+ * the OTHER blocker this paragraph used to name**: a real, on-device
+ * audio-capture module now exists
+ * (`./expo-audio-voice-capture-port.ts`'s `createExpoAudioVoiceCapturePort`,
+ * `Composer.tsx`'s own default `voiceCapture` as of that task), so
+ * `port.stop()` really can resolve `{ kind: "audio", audioBase64,
+ * format }` today, not merely in shape.
  *
  * So this module is built to the *shape* the daemon-transcription path
  * implies (`VoiceCapturePort.stop()` may resolve `{ kind: "audio", ... }`
@@ -43,14 +43,15 @@
  * persisted, because "never write raw audio to plain storage" (this
  * task's own rule) rules out putting it in the outbox's
  * `StructuredStorage`-backed payload, and there is no live socket to
- * hand it to instead. **This is the literal "voice produces text
- * locally and the text goes through the existing prompt path" outcome
- * this task's brief calls a legitimate one** — with
- * `createUnavailableVoiceCapturePort` as this build's only production
- * port, "locally" is presently a no-op that never records anything;
+ * hand it to instead. T276's brief is explicit that closing this dead
+ * end (transcribing the real audio T276 now captures) is the NEXT
+ * task's job, not this module's — `requestStop`'s `"raw-audio-
+ * unsupported"` outcome is deliberately left exactly as it was;
  * `voice-model.test.ts` proves the *pipeline* (permission gate ->
  * capture -> outbox -> submit, and every cancel/background/race rule
- * below) against a scripted fake, not against a real microphone.
+ * below) against a scripted fake, not against a real microphone —
+ * unchanged by T276, which proves the real port separately, in
+ * `expo-audio-voice-capture-port.test.ts`.
  *
  * ## The core-outbox criterion
  *

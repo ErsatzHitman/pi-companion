@@ -1,5 +1,5 @@
 appId: ${APP_ID}
-name: "composer inputs — keyboard entry live; voice, attachment picking, and share intent blocked, named"
+name: "composer inputs — keyboard entry live; voice recording now real (permission-gated); attachment picking and share intent blocked, named"
 tags:
   - composer
 ---
@@ -14,24 +14,31 @@ tags:
 # identifier — see that file's own doc comment.
 #
 # ---------------------------------------------------------------------
-# THREE OF FOUR INPUT MODES STILL CANNOT BE EXERCISED HERE — but P5-W21
-# changed WHY, so the reasons below are restated rather than repeated.
-# Two claims that used to stand here were destroyed in that wave and are
-# now false: T70 wired a real `VoiceCaptureController` into
-# `Composer.tsx`'s mic button (over the same outbox/sessionId/onSubmit a
-# text send uses), and T69 mounted the share receiver at
-# `apps/android/src/app/share.tsx` over `AppCore.shareIntentPort`. What
-# is still true — and what this flow actually asserts — is one layer
-# lower: `createUnavailableVoiceCapturePort()` is the only production
-# `VoiceCapturePort` (no `expo-audio` installed), so pressing the mic
-# reaches the honest "unavailable" notice below rather than a recording;
-# and nothing yet navigates to `/share` automatically (filed against
-# T32S15 by T69), so no share can be reached from here. Attachment
-# *picking* is
-# similarly stubbed: `attachment-source-port.ts`'s own doc comment
-# records that no `expo-image-picker`/`expo-document-picker` dependency
-# is installed in this workspace, so `createUnavailableAttachmentSourcePort`
-# is its only production implementation.
+# TWO OF FOUR INPUT MODES STILL CANNOT BE EXERCISED HERE — T276 changed
+# WHY for voice, so the reasons below are restated rather than repeated.
+# T70 wired a real `VoiceCaptureController` into `Composer.tsx`'s mic
+# button (over the same outbox/sessionId/onSubmit a text send uses), and
+# T69 mounted the share receiver at `apps/android/src/app/share.tsx`
+# over `AppCore.shareIntentPort`. **T276 (plan.md §9.2) then made the
+# capture itself real**: `Composer.tsx` now defaults `voiceCapture` to
+# `createExpoAudioVoiceCapturePort()` (`../src/features/voice/expo-
+# audio-voice-capture-port.ts`), not the "unavailable" one — pressing
+# the mic on a real device now resolves microphone permission for real
+# (T83's one-resolution-per-press invariant unchanged) and, once
+# granted, actually records. This flow does NOT exercise that outcome:
+# a first-run permission check is `"undetermined"`, so `requestStart()`
+# prompts the OS's own native permission dialog, and this flow has no
+# `Maestro`-side handling for that dialog (no emulator/device/Maestro
+# binary exists in this wave either — same standing limitation the
+# paragraph above already names). So the MIC BUTTON section below only
+# proves the tap itself is live and real; it asserts nothing about what
+# follows, and says so at the point it stops. Nothing yet navigates to
+# `/share` automatically (filed against T32S15 by T69), so no share can
+# be reached from here. Attachment *picking* is similarly stubbed:
+# `attachment-source-port.ts`'s own doc comment records that no
+# `expo-image-picker`/`expo-document-picker` dependency is installed in
+# this workspace, so `createUnavailableAttachmentSourcePort` is its only
+# production implementation.
 #
 # So this flow proves what is actually true today, split into two
 # halves:
@@ -56,14 +63,18 @@ tags:
 #      delivered turn. Asserting "Sent" here would now be asserting a
 #      state this app cannot reach without a daemon. A paired run that
 #      reaches "Sent" is T59's (real device) to add.
-#      `handleMicPress`/`handleAttachPress` remain local no-ops. The mic and attach
-#      buttons are ALSO live (real, tappable, real testIds) — what's
-#      blocked is only what happens after the OS permission check: real
-#      recording and real file picking. This flow taps both and asserts
-#      their honest "unavailable" fallback, which IS real, shipped
-#      behavior (`permission-recovery.ts`'s `"unavailable"` state,
-#      distinct from a user's own `"denied"` choice) — never a
-#      completed voice capture or a completed pick.
+#      `handleAttachPress` remains a local no-op; `handleMicPress` is
+#      real end to end since T276 (see above). The mic and attach
+#      buttons are both live (real, tappable, real testIds), but they no
+#      longer share one outcome: attach still resolves the honest
+#      "unavailable" fallback, real, shipped behavior
+#      (`permission-recovery.ts`'s `"unavailable"` state, distinct from
+#      a user's own `"denied"` choice) — never a completed pick, since
+#      no picker package is installed. Mic no longer resolves
+#      "unavailable" at all (that state is now reserved for a caller
+#      that explicitly disables voice, which nothing does here) — a
+#      real device now shows the OS's own permission dialog, which this
+#      flow taps into but does not attempt to drive further (see above).
 #   2. SHARE INTENT — cannot be exercised at all, on a device or
 #      otherwise, and this flow does not try to fake one. `Composer`
 #      has no share-intent affordance of its own to begin with (a share
@@ -173,22 +184,24 @@ tags:
 - assertVisible:
     text: "Failed"
 
-# --- MIC BUTTON: live and tappable; the permission check behind it
-# --- resolves "unavailable" (no `expo-audio` installed —
-# --- ../e2e/flows/composer-inputs-contract.ts). This is voice entry's
-# --- OWN honest state, not a stand-in for a completed recording. T70
-# --- (P5-W21) DID wire T36D's `VoiceCaptureController` into this
-# --- button; what still blocks a real capture is one layer lower —
-# --- `createUnavailableVoiceCapturePort()` is the only production
-# --- `VoiceCapturePort`, and its `getPermissionStatus()` returns
-# --- "unavailable", so `requestStart()` refuses and feeds that same
-# --- state into the notice asserted below (see this file's header).
+# --- MIC BUTTON (T276): live and tappable, and — since T276 — backed by
+# --- a real `VoiceCapturePort` (`createExpoAudioVoiceCapturePort()`,
+# --- Composer.tsx's own default). A fresh install has never asked for
+# --- microphone permission, so `requestStart()`'s `resolvePermission`
+# --- reads "undetermined" and prompts the OS's own native permission
+# --- dialog (T83's one-resolution-per-press invariant: exactly once,
+# --- not twice). This flow stops at the tap: it asserts nothing about
+# --- that dialog or what follows it, because there is no
+# --- Maestro/device/emulator in this wave to drive or observe it (see
+# --- this file's header). A future device run (T59) must decide how to
+# --- handle the OS dialog (Maestro can tap system permission prompts by
+# --- id/text once one is actually on screen to inspect) and can then
+# --- assert the real outcome — recording, waveform-only per T276's own
+# --- product change (`voice-capture-indicator.tsx`; no more "unavailable"
+# --- text is possible here, since that state is reserved for a caller
+# --- that explicitly disables voice, which nothing does at this mount).
 - tapOn:
     id: "composer-mic"
-- assertVisible:
-    id: "composer-mic-permission-notice"
-- assertVisible:
-    text: "Microphone access unavailable. Microphone access isn't available in this build."
 
 # --- ATTACH BUTTON: same shape as mic — live, tappable, honest
 # --- "unavailable" fallback (no `expo-image-picker`/`expo-document-
