@@ -127,6 +127,47 @@ export interface CreateAgentCommandResult {
   initialPromptStarted: boolean;
   initialPromptError: unknown | null;
   createdWorktree?: CreatePaseoWorktreeWorkflowResult;
+  /**
+   * Resolves once the dispatch this call started (if any) has genuinely
+   * settled: the agent has left its busy state AND every persistence write
+   * that state transition queued has actually landed on disk.
+   *
+   * `createAgentCommand` returns as soon as the initial prompt's run has
+   * STARTED, not once it finishes (see `startCreatedAgentInitialPrompt` /
+   * `waitForAgentRunStartWithTimeout` in `../agent-prompt.ts`) -- while
+   * `AgentManager` keeps mutating and persisting the agent record in the
+   * background as the dispatched turn actually plays out (`emitState`'s
+   * `enqueueBackgroundPersist`, see `agent-manager.ts`). A caller with no use
+   * for that guarantee can simply never call this and pay nothing extra: it
+   * is a lazy handle, not work performed eagerly by every create.
+   *
+   * This is deterministic BY CONSTRUCTION, not by giving a race a wider
+   * margin to lose in: `AgentManager.emitState` always calls
+   * `enqueueBackgroundPersist` (which synchronously adds the write's tracking
+   * promise to `AgentManager`'s own background-task set) BEFORE it notifies
+   * any subscriber of the resulting state change. `waitForAgentEvent` with
+   * `waitForActive: true` is the already-public primitive for "tell me when
+   * this agent's current run leaves the busy state" -- used by this very
+   * file's own sibling tests for exactly that purpose -- so by the time its
+   * promise resolves, the write the terminal transition queued is already
+   * sitting in that background-task set, not still to arrive. Draining
+   * `agentManager.flush()` afterward therefore cannot miss it: nothing
+   * further will be added to it by this dispatch.
+   *
+   * Known, disclosed limit: `waitForAgentEvent` resolves EARLY on a pending
+   * permission request raised mid-turn (it does not distinguish "paused for
+   * permission" from "the turn is over"), so a dispatch that blocks on a
+   * permission before its terminal event can still leave a write to settle
+   * after this promise resolves. No prompt in this file's own fixtures
+   * reaches that path today (see `buildToolCallForPrompt` in
+   * `../../test-utils/fake-agent-client.ts` for what does), so it is not
+   * exercised here -- filed as a known gap rather than silently assumed
+   * away, per T280.
+   *
+   * See T280 (the P9-M gate's `await storage.flush()` alone was a partial
+   * measure that this replaces -- see this file's own tests for the history).
+   */
+  settleBackgroundDispatch: () => Promise<void>;
 }
 
 export type BoundCreateAgentCommand = (
@@ -192,6 +233,7 @@ export async function createAgentCommand(
   let liveSnapshot = snapshot;
   let initialPromptStarted = false;
   let initialPromptError: unknown | null = null;
+  let settleBackgroundDispatch: () => Promise<void> = () => Promise.resolve();
   if (input.kind === "mcp") {
     input.onCreated?.({ agentId: snapshot.id, createdWorktree: resolved.createdWorktree ?? null });
   }
@@ -200,6 +242,9 @@ export async function createAgentCommand(
     initialPromptStarted = sendResult.started;
     liveSnapshot = sendResult.liveSnapshot;
     initialPromptError = sendResult.error ?? null;
+    if (initialPromptStarted) {
+      settleBackgroundDispatch = () => waitForBackgroundDispatchToSettle(dependencies, snapshot.id);
+    }
   }
 
   if (input.kind === "mcp" && input.notifyOnFinish && input.callerAgentId && initialPromptStarted) {
@@ -219,8 +264,23 @@ export async function createAgentCommand(
     background: resolved.background,
     initialPromptStarted,
     initialPromptError,
+    settleBackgroundDispatch,
     ...(resolved.createdWorktree ? { createdWorktree: resolved.createdWorktree } : {}),
   };
+}
+
+// See `CreateAgentCommandResult.settleBackgroundDispatch`'s doc comment for
+// the determinism argument. Kept as a standalone function (rather than
+// inlined into the closure above) so its ordering -- wait for the run to
+// leave "busy", THEN drain the manager's background-task queue, THEN drain
+// storage's own write queue -- reads as one deliberate sequence.
+async function waitForBackgroundDispatchToSettle(
+  dependencies: CreateAgentCommandDependencies,
+  agentId: string,
+): Promise<void> {
+  await dependencies.agentManager.waitForAgentEvent(agentId, { waitForActive: true });
+  await dependencies.agentManager.flush();
+  await dependencies.agentStorage.flush();
 }
 
 async function resolveSessionCreateAgent(

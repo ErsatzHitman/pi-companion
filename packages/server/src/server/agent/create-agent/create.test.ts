@@ -215,9 +215,10 @@ test("session create stamps the requested workspaceId when no worktree setup run
   const workdir = mkdtempSync(join(tmpdir(), "create-agent-test-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
   const agentManager = createRealAgentManager(storage);
+  let settleBackgroundDispatch: () => Promise<void> = () => Promise.resolve();
 
   try {
-    const { snapshot } = await createAgentCommand(
+    const created = await createAgentCommand(
       {
         agentManager,
         agentStorage: storage,
@@ -234,37 +235,40 @@ test("session create stamps the requested workspaceId when no worktree setup run
         buildSessionConfig: async (config) => ({ sessionConfig: config }),
       },
     );
+    settleBackgroundDispatch = created.settleBackgroundDispatch;
 
-    const stored = await storage.get(snapshot.id);
+    const stored = await storage.get(created.snapshot.id);
     expect(stored?.workspaceId).toBe("ws-source");
   } finally {
     // `AgentStorage` queues record writes and exposes `flush()` to await them;
     // `writeFileAtomic` lands a `.<name>.<pid>.<ts>.<uuid>.tmp` sibling and then
-    // renames it. Without the flush, an in-flight write can create that temp
-    // file in `agents/` AFTER `rmSync` has already enumerated the directory,
-    // so the final `rmdir` fails with `ENOTEMPTY` and the whole file fails
-    // with ZERO assertion failures. Observed on CI at run 34205088229, the
-    // first failure in fifteen runs, on a commit touching no server file.
-    // Every production caller already awaits this (`bootstrap.ts`,
-    // `session.ts`, `test-utils/paseo-daemon.ts`); these tests did not.
-    // Measured, not assumed: these tests pass `background: true` with an
-    // `initialPrompt`, and this file's own sibling tests are named "exposes
-    // the created worktree BEFORE dispatching the initial prompt" and "keeps
-    // the prompt title AFTER the initial prompt settles" -- so the command
-    // returns while a dispatch that writes records is still running. That
-    // late write is what lands in `agents/` after `rmSync` enumerated it.
+    // renames it. Without awaiting the writes a dispatch queues, an in-flight
+    // write can create that temp file in `agents/` AFTER `rmSync` has already
+    // enumerated the directory, so the final `rmdir` fails with `ENOTEMPTY` and
+    // the whole file fails with ZERO assertion failures. Observed on CI at run
+    // 34205088229, the first failure in fifteen runs, on a commit touching no
+    // server file.
     //
-    // What this DOES NOT claim: `flush()` awaits the writes already queued
-    // when it snapshots `pendingWrites`, so a write queued after that point
-    // is still outside it. It closes the observed window and matches every
-    // production caller; it is not a proof that no ordering can lose. The
-    // deeper question -- whether the post-return dispatch should be
-    // awaitable by a test at all -- is filed as T280.
+    // CORRECTED at T280: this comment used to say `await storage.flush()`
+    // alone closed the observed window without proving it could not lose --
+    // "it closes the observed window... it is not a proof that no ordering
+    // can lose." That was true: `flush()` snapshots `pendingWrites` before
+    // awaiting it, so a write queued by a still-running dispatch AFTER that
+    // snapshot was still outside it, and the missing piece was
+    // `AgentManager`'s own background-persist queue, not `AgentStorage`'s.
+    // `settleBackgroundDispatch()` (returned by `createAgentCommand`, see its
+    // doc comment in `create.ts`) closes it for real: it awaits
+    // `AgentManager.waitForAgentEvent(..., { waitForActive: true })` --
+    // which cannot resolve until AFTER `emitState` has already queued this
+    // dispatch's last background persist, by construction, not by timing --
+    // then drains `AgentManager.flush()` and `AgentStorage.flush()`. Every
+    // one of this file's real-storage tests below calls it in place of the
+    // bare `storage.flush()` this comment used to describe.
     //
     // This is the T240 measure-the-source rule rather than a timeout bump:
     // it removes the write from the race instead of widening the window the
     // race has to lose in.
-    await storage.flush();
+    await settleBackgroundDispatch();
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -273,9 +277,10 @@ test("session create stamps the new worktree's workspaceId when a setup continua
   const workdir = mkdtempSync(join(tmpdir(), "create-agent-test-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
   const agentManager = createRealAgentManager(storage);
+  let settleBackgroundDispatch: () => Promise<void> = () => Promise.resolve();
 
   try {
-    const { snapshot } = await createAgentCommand(
+    const created = await createAgentCommand(
       {
         agentManager,
         agentStorage: storage,
@@ -296,11 +301,12 @@ test("session create stamps the new worktree's workspaceId when a setup continua
         }),
       },
     );
+    settleBackgroundDispatch = created.settleBackgroundDispatch;
 
-    const stored = await storage.get(snapshot.id);
+    const stored = await storage.get(created.snapshot.id);
     expect(stored?.workspaceId).toBe("ws-new-worktree");
   } finally {
-    await storage.flush(); // see the first such cleanup in this file for why
+    await settleBackgroundDispatch(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -310,6 +316,7 @@ test("mcp create stamps the new worktree's workspaceId, not the parent's", async
   const storage = new AgentStorage(join(workdir, "agents"), logger);
   const agentManager = createRealAgentManager(storage);
   const providerSnapshotManager = createProviderSnapshotManagerStub().manager;
+  let settleBackgroundDispatch: () => Promise<void> = () => Promise.resolve();
 
   try {
     const { snapshot: parent } = await createAgentCommand(
@@ -325,34 +332,36 @@ test("mcp create stamps the new worktree's workspaceId, not the parent's", async
       },
     );
 
-    const { snapshot: child } = await createAgentCommand(
-      {
-        agentManager,
-        agentStorage: storage,
-        logger,
-        providerSnapshotManager,
-        createPaseoWorktree: fakeWorktreeCreator({
-          repoRoot: workdir,
-          createdWorkspaceId: "ws-new-worktree",
-        }),
-      },
-      {
-        kind: "mcp",
-        provider: "codex/gpt-5.4",
-        title: "child",
-        initialPrompt: "do the thing",
-        background: true,
-        notifyOnFinish: false,
-        callerAgentId: parent.id,
-        worktree: { worktreeName: "feature", baseBranch: "main" },
-      },
-    );
+    const { snapshot: child, settleBackgroundDispatch: settleChildDispatch } =
+      await createAgentCommand(
+        {
+          agentManager,
+          agentStorage: storage,
+          logger,
+          providerSnapshotManager,
+          createPaseoWorktree: fakeWorktreeCreator({
+            repoRoot: workdir,
+            createdWorkspaceId: "ws-new-worktree",
+          }),
+        },
+        {
+          kind: "mcp",
+          provider: "codex/gpt-5.4",
+          title: "child",
+          initialPrompt: "do the thing",
+          background: true,
+          notifyOnFinish: false,
+          callerAgentId: parent.id,
+          worktree: { worktreeName: "feature", baseBranch: "main" },
+        },
+      );
+    settleBackgroundDispatch = settleChildDispatch;
 
     const storedChild = await storage.get(child.id);
     expect(storedChild?.workspaceId).toBe("ws-new-worktree");
     expect(child.cwd).toBe(join(workdir, "worktree", "packages", "core"));
   } finally {
-    await storage.flush(); // see the first such cleanup in this file for why
+    await settleBackgroundDispatch(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -371,9 +380,10 @@ test("mcp create exposes the created worktree before dispatching the initial pro
         lifecycle: ManagedAgent["lifecycle"] | null;
       }
     | undefined;
+  let settleBackgroundDispatch: () => Promise<void> = () => Promise.resolve();
 
   try {
-    await createAgentCommand(
+    const created = await createAgentCommand(
       {
         agentManager,
         agentStorage: storage,
@@ -402,10 +412,11 @@ test("mcp create exposes the created worktree before dispatching the initial pro
         },
       },
     );
+    settleBackgroundDispatch = created.settleBackgroundDispatch;
 
     expect(observed).toEqual({ createdWorktree, lifecycle: "idle" });
   } finally {
-    await storage.flush(); // see the first such cleanup in this file for why
+    await settleBackgroundDispatch(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -415,9 +426,10 @@ test("session create keeps the prompt title after the initial prompt settles", a
   const storage = new AgentStorage(join(workdir, "agents"), logger);
   const agentManager = createRealAgentManager(storage);
   const title = "Implement auth retries with backoff";
+  let settleBackgroundDispatch: () => Promise<void> = () => Promise.resolve();
 
   try {
-    const { snapshot } = await createAgentCommand(
+    const result = await createAgentCommand(
       {
         agentManager,
         agentStorage: storage,
@@ -435,16 +447,17 @@ test("session create keeps the prompt title after the initial prompt settles", a
         buildSessionConfig: async (config) => ({ sessionConfig: config }),
       },
     );
+    settleBackgroundDispatch = result.settleBackgroundDispatch;
 
-    const created = await storage.get(snapshot.id);
+    const created = await storage.get(result.snapshot.id);
     expect(created?.title).toBe(title);
 
-    await agentManager.waitForAgentEvent(snapshot.id, { waitForActive: true });
+    await settleBackgroundDispatch();
 
-    const settled = await storage.get(snapshot.id);
+    const settled = await storage.get(result.snapshot.id);
     expect(settled?.title).toBe(title);
   } finally {
-    await storage.flush(); // see the first such cleanup in this file for why
+    await settleBackgroundDispatch(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -454,9 +467,10 @@ test("session create keeps an explicit title after the initial prompt settles", 
   const storage = new AgentStorage(join(workdir, "agents"), logger);
   const agentManager = createRealAgentManager(storage);
   const title = "Explicit override";
+  let settleBackgroundDispatch: () => Promise<void> = () => Promise.resolve();
 
   try {
-    const { snapshot } = await createAgentCommand(
+    const result = await createAgentCommand(
       {
         agentManager,
         agentStorage: storage,
@@ -474,16 +488,17 @@ test("session create keeps an explicit title after the initial prompt settles", 
         buildSessionConfig: async (config) => ({ sessionConfig: config }),
       },
     );
+    settleBackgroundDispatch = result.settleBackgroundDispatch;
 
-    const created = await storage.get(snapshot.id);
+    const created = await storage.get(result.snapshot.id);
     expect(created?.title).toBe(title);
 
-    await agentManager.waitForAgentEvent(snapshot.id, { waitForActive: true });
+    await settleBackgroundDispatch();
 
-    const settled = await storage.get(snapshot.id);
+    const settled = await storage.get(result.snapshot.id);
     expect(settled?.title).toBe(title);
   } finally {
-    await storage.flush(); // see the first such cleanup in this file for why
+    await settleBackgroundDispatch(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
