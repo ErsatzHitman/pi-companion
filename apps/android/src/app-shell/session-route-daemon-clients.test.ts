@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   resolveAttachmentDownloadClient,
+  resolveEditorTextClient,
   resolveQueueModeClient,
   resolveSlashCommandsClient,
   resolveTranscribeClient,
@@ -67,6 +68,9 @@ function createCountingFakeDaemonClient() {
     requestAttachmentDownloadToken: vi.fn(async (agentId: string, path: string) => {
       calls.push(["requestAttachmentDownloadToken", agentId, path]);
       return { token: "tok_1", mimeType: "image/png", error: null };
+    }),
+    respondToEditorText: vi.fn(async (agentId: string, requestId: string, text: string) => {
+      calls.push(["respondToEditorText", agentId, requestId, text]);
     }),
   };
 }
@@ -260,6 +264,42 @@ describe("resolveSlashCommandsClient", () => {
       getActiveLifecycle: () => ({ getDaemonClient: () => null }),
     };
     expect(resolveSlashCommandsClient(connection)).toBeUndefined();
+  });
+});
+
+describe("resolveEditorTextClient (T293)", () => {
+  it("returns the exact live client reference unchanged — never a wrapper or a clone", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveEditorTextClient(connectionWithClient(fakeClient));
+    expect(resolved).toBe(fakeClient as unknown as typeof resolved);
+  });
+
+  it("respondToEditorText and on(...) calls on the resolved client reach the real counting fake", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveEditorTextClient(connectionWithClient(fakeClient));
+
+    const unsubscribe = resolved!.on("agent_editor_text_request", () => {});
+    void resolved!.respondToEditorText("agt_t293", "req-1", "the current draft");
+
+    expect(fakeClient.on).toHaveBeenCalledWith("agent_editor_text_request", expect.any(Function));
+    expect(fakeClient.respondToEditorText).toHaveBeenCalledWith(
+      "agt_t293",
+      "req-1",
+      "the current draft",
+    );
+    unsubscribe();
+  });
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveEditorTextClient(connection)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveEditorTextClient(connection)).toBeUndefined();
   });
 });
 

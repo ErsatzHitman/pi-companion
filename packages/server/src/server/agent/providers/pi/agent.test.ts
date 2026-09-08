@@ -14,7 +14,7 @@ import path from "node:path";
 import pino from "pino";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { describe, expect, onTestFinished, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 
 import {
   getAgentStreamEventTurnId,
@@ -237,6 +237,20 @@ class SessionEvents {
     );
   }
 
+  nextEditorTextRequest(): Promise<Extract<AgentStreamEvent, { type: "editor_text_requested" }>> {
+    return this.nextEvent(
+      (event): event is Extract<AgentStreamEvent, { type: "editor_text_requested" }> =>
+        event.type === "editor_text_requested",
+    );
+  }
+
+  nextComposerText(): Promise<Extract<AgentStreamEvent, { type: "pi_composer" }>> {
+    return this.nextEvent(
+      (event): event is Extract<AgentStreamEvent, { type: "pi_composer" }> =>
+        event.type === "pi_composer",
+    );
+  }
+
   nextTimelineEvent(): Promise<Extract<AgentStreamEvent, { type: "timeline" }>> {
     return this.nextEvent(
       (event): event is Extract<AgentStreamEvent, { type: "timeline" }> =>
@@ -409,6 +423,111 @@ describe("PiRpcAgentSession", () => {
     expect(fakeSession.extensionUiResponses).toEqual([
       { id: "comment-1", response: { value: "" } },
     ]);
+  });
+
+  // T293: getEditorText / pasteToEditor — the composer-read half of the
+  // tier-2 bridge (plan.md §4.2 "Pi editor-text read bridge").
+  describe("getEditorText / pasteToEditor (T293)", () => {
+    test("answers getEditorText with the client's text once respondToEditorTextRequest is called", async () => {
+      const { pi, session, events } = await createSession();
+      const fakeSession = pi.latestSession();
+
+      fakeSession.emitGetEditorText("get-1");
+      const requested = await events.nextEditorTextRequest();
+      expect(requested).toMatchObject({ provider: "pi" });
+      // The daemon->client broadcast id is internally generated, NOT Pi's
+      // own extension_ui_request id ("get-1") — a `pasteToEditor` read
+      // needs the same broadcast with no id from Pi to reuse at all.
+      expect(requested.requestId).not.toBe("get-1");
+
+      session.respondToEditorTextRequest(requested.requestId, "hello from the composer");
+
+      expect(fakeSession.extensionUiResponses).toEqual([
+        { id: "get-1", response: { value: "hello from the composer" } },
+      ]);
+    });
+
+    test("also accepts the get_editor_text spelling", async () => {
+      const { pi, session, events } = await createSession();
+      const fakeSession = pi.latestSession();
+
+      fakeSession.emit({ type: "extension_ui_request", id: "get-2", method: "get_editor_text" });
+      const requested = await events.nextEditorTextRequest();
+      session.respondToEditorTextRequest(requested.requestId, "snake case works too");
+
+      expect(fakeSession.extensionUiResponses).toEqual([
+        { id: "get-2", response: { value: "snake case works too" } },
+      ]);
+    });
+
+    test("first client to answer wins; a later answer for the same request is a silent no-op", async () => {
+      const { pi, session, events } = await createSession();
+      const fakeSession = pi.latestSession();
+
+      fakeSession.emitGetEditorText("get-race");
+      const requested = await events.nextEditorTextRequest();
+
+      session.respondToEditorTextRequest(requested.requestId, "first client's draft");
+      session.respondToEditorTextRequest(requested.requestId, "second client's draft");
+
+      expect(fakeSession.extensionUiResponses).toEqual([
+        { id: "get-race", response: { value: "first client's draft" } },
+      ]);
+    });
+
+    test("an unknown or already-resolved requestId is a silent no-op", async () => {
+      const { session, events } = await createSession();
+
+      expect(() => session.respondToEditorTextRequest("no-such-request", "text")).not.toThrow();
+      expect(events.allEvents().filter((e) => e.type === "permission_resolved")).toEqual([]);
+    });
+
+    test("no client answering within the timeout resolves getEditorText with an empty string", async () => {
+      const { pi, session, events } = await createSession();
+      const fakeSession = pi.latestSession();
+
+      vi.useFakeTimers();
+      try {
+        fakeSession.emitGetEditorText("get-timeout");
+        await events.nextEditorTextRequest();
+        // Nobody ever calls session.respondToEditorTextRequest(...) here —
+        // this is the "no client attached" / "client never answers" case.
+        await vi.advanceTimersByTimeAsync(2_000);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(fakeSession.extensionUiResponses).toEqual([
+        { id: "get-timeout", response: { value: "" } },
+      ]);
+    });
+
+    test("pasteToEditor appends the pasted text to the client's current draft", async () => {
+      const { pi, session, events } = await createSession();
+      const fakeSession = pi.latestSession();
+
+      fakeSession.emitPasteToEditor(" world", "paste-1");
+      const requested = await events.nextEditorTextRequest();
+      session.respondToEditorTextRequest(requested.requestId, "hello");
+
+      const composer = await events.nextComposerText();
+      expect(composer.text).toBe("hello world");
+      // pasteToEditor never owes Pi a reply — only a real getEditorText
+      // request/response pair should ever appear in extensionUiResponses.
+      expect(fakeSession.extensionUiResponses).toEqual([]);
+    });
+
+    test("pasteToEditor into an empty draft is just the pasted text", async () => {
+      const { pi, session, events } = await createSession();
+      const fakeSession = pi.latestSession();
+
+      fakeSession.emitPasteToEditor("fresh text", "paste-2");
+      const requested = await events.nextEditorTextRequest();
+      session.respondToEditorTextRequest(requested.requestId, "");
+
+      const composer = await events.nextComposerText();
+      expect(composer.text).toBe("fresh text");
+    });
   });
 
   test("combines Pi ask_user select and optional comment into one permission", async () => {

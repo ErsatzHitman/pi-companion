@@ -1905,6 +1905,51 @@ export const CAPABILITIES = [
       /\bno slash[- ]command (?:module|controller|palette) exists[^.]{0,30}?(?:on android|in this app)/i,
     ],
   },
+  {
+    // T293: `getEditorText`'s composer-read wiring. `wireEditorTextResponder`
+    // is measured, not assumed: `git grep -n 'function wireEditorTextResponder'`
+    // returns exactly two declaring files —
+    // `apps/web/src/features/composer/daemon-editor-text-client.ts` and
+    // `apps/android/src/features/composer/editor-text-model.ts` — both the
+    // same wire capability (answering a broadcast `agent_editor_text_request`
+    // with the composer's live draft), so a bare-string member is correct
+    // here the same way T281's `transcribeVoiceClip` used one bare string
+    // across two files declaring the same capability. Every other candidate
+    // token was checked against `isCapabilityMemberDeclared` BEFORE this one
+    // was chosen and rejected as inert: the daemon-side method this task
+    // also ships, `respondToEditorTextRequest`, is a plain `void`-returning,
+    // non-`async` method in every one of its three declaring files
+    // (`agent-sdk-types.ts`, `agent-manager.ts`, `providers/pi/agent.ts`),
+    // which none of `isCapabilityMemberDeclared`'s four declaration shapes
+    // recognizes (it matches an `async` method, a `Promise`-returning
+    // method, a `function` declaration, a `const`/`let` assignment, or an
+    // interface/type property — never a bare synchronous method) — proven
+    // directly by calling the exported `isCapabilityMemberDeclared` against
+    // all three files, which returned `false` for every one, before this
+    // token was chosen instead. Registering that token would have shipped
+    // an entry structurally unable to ever report "shipped", the inert-
+    // entry shape this file warns against throughout. `wireEditorTextResponder`
+    // is a real `export function`, which the same check confirms `true` for
+    // both declaring files.
+    //
+    // FORWARD guard (T162/T257's shape): no live denying sentence existed
+    // anywhere in scope when this was added, so it was proven able to FIRE
+    // by appending a sentence in this entry's own wording (never lifted from
+    // either declaring file's own doc comment, and never from either file
+    // itself — T183's "a guard cannot police the file its own capability
+    // ships in" caution) to a real, unrelated, in-scope tracked file,
+    // confirming `run-guard-capability-prose.mjs` exited 1 naming this
+    // capability, then restoring the file from a scratchpad copy — never
+    // `git checkout --` — and confirming exit 0 with `git status --porcelain`
+    // empty.
+    name: "composer-text read for a Pi extension (wireEditorTextResponder)",
+    methodNames: ["wireEditorTextResponder"],
+    denyingPhrases: [
+      /\bprompt-arbitrage\b[^.]{0,60}?(?:does nothing|is inert|has no input)/i,
+      /\bgetEditorText\b[^.]{0,60}?(?:appears nowhere|is dropped|unknown extension_ui_request method dropped)/i,
+      /\b(?:web|android)\b[^.]{0,60}?(?:has no|lacks)[^.]{0,40}?way to (?:answer|read)[^.]{0,40}?(?:the )?composer'?s? (?:current |live )?(?:text|draft)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

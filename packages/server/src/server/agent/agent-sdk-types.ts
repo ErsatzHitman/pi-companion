@@ -487,6 +487,28 @@ export type AgentStreamEvent =
       answeredBy?: PermissionAnsweredBy;
     }
   | {
+      /**
+       * T293: Pi's `getEditorText` tier-2 extension_ui_request asks for the
+       * composer's CURRENT text — a request/response, unlike every other
+       * tier-2 push (plan.md §4.2 "Pi editor-text read bridge"). This event
+       * is the daemon->client half of that round trip: every connected
+       * session broadcasts it to its own client (mirroring
+       * `permission_requested`'s unconditional broadcast in `session.ts`),
+       * and whichever client answers FIRST via `respondToEditorTextRequest`
+       * wins — later answers for the same `requestId` are silent no-ops
+       * because the provider session deletes its pending-request entry the
+       * moment the first one lands. A client that never answers, or no
+       * client being connected at all, is covered by the SAME mechanism: the
+       * provider session also arms a timeout when it emits this event, and
+       * resolves the request with `""` if nothing answers in time — see
+       * `PiRpcAgentSession`'s `EDITOR_TEXT_REQUEST_TIMEOUT_MS`.
+       */
+      type: "editor_text_requested";
+      provider: AgentProvider;
+      requestId: string;
+      turnId?: string;
+    }
+  | {
       type: "attention_required";
       provider: AgentProvider;
       reason: "finished" | "error" | "permission";
@@ -782,6 +804,18 @@ export interface AgentSession {
    * provider's side, silent to every other observer until someone re-reads.
    */
   getQueueModes?(): Promise<{ steeringMode: QueueMode | null; followUpMode: QueueMode | null }>;
+  /**
+   * T293: answers a pending `editor_text_requested` event (see that event's
+   * doc comment above) with `text` — the CALLER's best guess at the
+   * composer's current content, read from whichever connected client
+   * answered first. A `requestId` the provider session no longer has
+   * pending (already resolved by an earlier answer, or by its own timeout)
+   * is a silent no-op — that is what makes "first answer wins" well-defined
+   * for the multi-client case. Only the Pi provider implements this; other
+   * providers leave it undefined, the same convention as
+   * `setSteeringMode`/`getQueueModes` above.
+   */
+  respondToEditorTextRequest?(requestId: string, text: string): void;
   /**
    * T131: mirrors Pi's `set_auto_compaction` RPC command
    * (`PiRuntimeSession.setAutoCompaction`, `cli-runtime.ts`'s `setAutoCompaction`

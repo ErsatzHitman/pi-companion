@@ -5138,6 +5138,25 @@ export class DaemonClient {
     });
   }
 
+  /**
+   * T293: answers a broadcast `agent_editor_text_request` (register a
+   * handler with `on("agent_editor_text_request", ...)`, mirroring
+   * `daemon-permissions-client.ts`'s `on("agent_permission_request", ...)`
+   * convention) with `text` — the composer's CURRENT draft, read locally by
+   * the caller with no daemon round trip of its own; this call IS the round
+   * trip. Fire-and-forget, same shape as `respondToPermission` above: a
+   * daemon that no longer has `requestId` pending (another client already
+   * answered, or the request timed out) silently drops it.
+   */
+  async respondToEditorText(agentId: string, requestId: string, text: string): Promise<void> {
+    this.sendSessionMessage({
+      type: "agent_editor_text_response",
+      agentId,
+      requestId,
+      text,
+    });
+  }
+
   async respondToPermissionAndWait(
     agentId: string,
     requestId: string,

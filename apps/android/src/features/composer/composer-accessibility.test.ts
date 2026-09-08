@@ -359,3 +359,32 @@ describe("T292: slash-command palette is wired into Composer, sits above PromptB
     expect(code).toMatch(/onDismiss=\{handleDismissSlashCommands\}/);
   });
 });
+
+describe("T293: getEditorText / pasteToEditor composer read is wired into Composer via a live-mirrored ref", () => {
+  const code = readCode("Composer.tsx");
+
+  it("mirrors state.draft into draftRef on every change, not only inside handleValueChange", () => {
+    expect(code).toMatch(
+      /useEffect\(\(\) => \{\s*draftRef\.current = state\.draft;\s*\}, \[state\.draft\]\);/,
+    );
+  });
+
+  it("wires wireEditorTextResponder from the injected editorTextClient prop, not a hard-coded source", () => {
+    const wireStart = code.indexOf("useEffect(() => {\n    if (!editorTextClient)");
+    expect(wireStart).toBeGreaterThan(-1);
+    const wireEnd = code.indexOf("[editorTextClient, resolvedSessionId]);", wireStart);
+    expect(wireEnd).toBeGreaterThan(wireStart);
+    const wireBody = code.slice(wireStart, wireEnd);
+    expect(wireBody).toMatch(/return wireEditorTextResponder\(editorTextClient, \{/);
+    expect(wireBody).toMatch(/agentId: resolvedSessionId,/);
+    expect(wireBody).toMatch(/getDraftText: \(\) => draftRef\.current,/);
+  });
+
+  it("does nothing when editorTextClient is undefined — no client yet, not an error", () => {
+    const wireStart = code.indexOf("useEffect(() => {\n    if (!editorTextClient)");
+    expect(wireStart).toBeGreaterThan(-1);
+    const wireEnd = code.indexOf("[editorTextClient, resolvedSessionId]);", wireStart);
+    const wireBody = code.slice(wireStart, wireEnd);
+    expect(wireBody).toMatch(/if \(!editorTextClient\) \{\s*return;\s*\}/);
+  });
+});

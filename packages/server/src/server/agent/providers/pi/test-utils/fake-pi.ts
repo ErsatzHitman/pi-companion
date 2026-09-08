@@ -548,6 +548,25 @@ export class FakePiSession implements PiRuntimeSession {
     });
   }
 
+  // T293
+  emitGetEditorText(id = `pi-get-editor-text-${Date.now()}`): void {
+    this.emit({
+      type: "extension_ui_request",
+      id,
+      method: "getEditorText",
+    });
+  }
+
+  // T293
+  emitPasteToEditor(text: string, id = `pi-paste-to-editor-${Date.now()}`): void {
+    this.emit({
+      type: "extension_ui_request",
+      id,
+      method: "pasteToEditor",
+      text,
+    });
+  }
+
   emitPiTitle(title: string, id = `pi-title-${Date.now()}`): void {
     this.emit({
       type: "extension_ui_request",

@@ -106,6 +106,21 @@ let piWidgetFactoryWarned = false;
 const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
 const QUESTION_RESPONSE_HEADER = "Response";
 const QUESTION_COMMENT_HEADER = "Comment";
+/**
+ * T293: how long a `getEditorText`/`pasteToEditor` read waits for a
+ * connected client to answer before giving up and resolving with `""`.
+ * Covers BOTH failure modes the task calls out with one mechanism: no
+ * client attached (the broadcast reaches zero sessions and nothing ever
+ * answers) and a client that never replies (a dropped message, a crashed
+ * tab). 2 seconds is a deliberately generous ceiling for what should be an
+ * instant local field read over an already-open websocket — chosen without
+ * a live daemon to measure real round-trip time against (this environment
+ * forbids starting one; see this task's report), so it favours giving a
+ * slow-but-connected client a real chance to answer over aggressively
+ * short-circuiting to empty.
+ */
+const EDITOR_TEXT_REQUEST_TIMEOUT_MS = 2_000;
+
 const PI_ASK_USER_FREEFORM_SENTINEL = "✏️ Type custom response...";
 const COMBINED_ASK_USER_METADATA = "ask_user_select_optional_comment";
 
@@ -1282,6 +1297,15 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly activeToolCalls = new Map<string, PiTrackedToolCall>();
   private readonly pendingExtensionUiRequests = new Map<string, AgentPermissionRequest>();
+  // T293: pending "what is the composer's current text" requests, keyed by
+  // an internally generated id (NOT Pi's extension_ui_request `id` — a
+  // `pasteToEditor` push needs the same read with no reply owed to Pi at
+  // all). Deleting an entry is what makes "first client to answer wins"
+  // well-defined for `respondToEditorTextRequest` — see that method.
+  private readonly pendingEditorTextRequests = new Map<
+    string,
+    { timeoutHandle: ReturnType<typeof setTimeout>; resolve: (text: string) => void }
+  >();
   private activeAskUserDialog: ActiveAskUserDialog | null = null;
   private pendingCombinedAskUserResponse: PendingCombinedAskUserResponse | null = null;
   private activeTurnId: string | null = null;
@@ -1602,6 +1626,56 @@ export class PiRpcAgentSession implements AgentSession {
     });
   }
 
+  /**
+   * T293: broadcasts `editor_text_requested` (every connected client for
+   * this agent answers, mirroring `permission_requested`'s unconditional
+   * broadcast) and arms a bounded timeout, then calls `onResolved` exactly
+   * once with whichever text wins the race — a real client's answer, or
+   * `""` if the timeout fires first. Shared by both `getEditorText` (whose
+   * caller replies to Pi with the result) and `pasteToEditor` (whose caller
+   * uses it to compute an append, with no reply to Pi at all) so the
+   * multi-client/no-client/timeout policy lives in exactly one place.
+   */
+  private requestCurrentEditorText(onResolved: (text: string) => void): void {
+    const internalRequestId = randomUUID();
+    const timeoutHandle = setTimeout(() => {
+      this.resolveEditorTextRequest(internalRequestId, "");
+    }, EDITOR_TEXT_REQUEST_TIMEOUT_MS);
+    this.pendingEditorTextRequests.set(internalRequestId, { timeoutHandle, resolve: onResolved });
+    this.emit({
+      type: "editor_text_requested",
+      provider: this.provider,
+      requestId: internalRequestId,
+      turnId: this.currentTurnIdForEvent(),
+    });
+  }
+
+  private resolveEditorTextRequest(requestId: string, text: string): void {
+    const pending = this.pendingEditorTextRequests.get(requestId);
+    if (!pending) {
+      // Already resolved — either a real client answered first (the timeout
+      // callback races this branch), or a genuinely unknown/stale id (a
+      // duplicate or late client answer for a request this session already
+      // finished). Both are intentional silent no-ops: this is exactly what
+      // makes "first answer wins" well-defined for the multi-client case.
+      return;
+    }
+    clearTimeout(pending.timeoutHandle);
+    this.pendingEditorTextRequests.delete(requestId);
+    pending.resolve(text);
+  }
+
+  /**
+   * T293: answers a pending `getEditorText`/`pasteToEditor` read (see
+   * `requestCurrentEditorText`) with a real client's current composer text.
+   * Called from `session.ts` when the `agent_editor_text_response` a client
+   * sent names an id this session recognizes. A stale/duplicate `requestId`
+   * is a silent no-op — see `resolveEditorTextRequest`.
+   */
+  respondToEditorTextRequest(requestId: string, text: string): void {
+    this.resolveEditorTextRequest(requestId, text);
+  }
+
   describePersistence(): AgentPersistenceHandle | null {
     return {
       provider: this.provider,
@@ -1708,6 +1782,13 @@ export class PiRpcAgentSession implements AgentSession {
       await this.runtimeSession.close();
     } finally {
       this.rejectAllExtensionResults(new Error("Pi session closed"));
+      // T293: an in-flight getEditorText timeout must not fire against a
+      // closed runtime session — clear every pending timer rather than let
+      // it try to respond after `this.runtimeSession.close()` above.
+      for (const pending of this.pendingEditorTextRequests.values()) {
+        clearTimeout(pending.timeoutHandle);
+      }
+      this.pendingEditorTextRequests.clear();
       this.cleanup?.();
     }
   }
@@ -2230,6 +2311,48 @@ export class PiRpcAgentSession implements AgentSession {
         provider: this.provider,
         text,
         turnId: this.currentTurnIdForEvent(),
+      });
+      return;
+    }
+
+    // Tier-2: getEditorText / get_editor_text — composer READ (T293). Unlike
+    // every push above, Pi is waiting on a reply correlated by `event.id`
+    // (`respondToExtensionUiRequest`), so this must resolve exactly once —
+    // see `requestCurrentEditorText` for the multi-client/no-client/timeout
+    // policy (plan.md §4.2 "Pi editor-text read bridge").
+    if (event.method === "getEditorText" || event.method === "get_editor_text") {
+      const requestId = event.id;
+      this.requestCurrentEditorText((text) => {
+        this.runtimeSession.respondToExtensionUiRequest(requestId, { value: text });
+      });
+      return;
+    }
+
+    // Tier-2: pasteToEditor / paste_to_editor — composer insert (T293).
+    // Fire-and-forget from Pi's side, same as set_editor_text above (no
+    // reply is ever sent for this method), but it needs the CURRENT text
+    // before it can push a replacement — the wire protocol carries no
+    // cursor/selection state for any client (verified: `draftText` is the
+    // entire tracked composer state on both apps), so "insert at the
+    // cursor" is approximated as "append to the end of the current draft".
+    // This matches the one real caller in the owner's extension set
+    // (`prompt-arbitrage.ts`'s own doc comment: "keep their draft and hand
+    // back the result by appending instead of clobbering it") exactly —
+    // see this task's report for the full reasoning and the will-not-build
+    // alternative considered.
+    if (
+      (event.method === "pasteToEditor" || event.method === "paste_to_editor") &&
+      typeof (event as Record<string, unknown>).text === "string"
+    ) {
+      const textToInsert = (event as Record<string, unknown>).text as string;
+      const turnId = this.currentTurnIdForEvent();
+      this.requestCurrentEditorText((currentText) => {
+        this.emit({
+          type: "pi_composer",
+          provider: this.provider,
+          text: currentText.length > 0 ? `${currentText}${textToInsert}` : textToInsert,
+          turnId,
+        });
       });
       return;
     }

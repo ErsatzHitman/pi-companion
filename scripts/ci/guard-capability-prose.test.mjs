@@ -5080,3 +5080,102 @@ test("T292: the real committed tree carries no live denial of the slash-command 
     );
   }
 });
+
+test("T293: a live getEditorText-is-dropped claim is flagged once wireEditorTextResponder is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/web/src/features/composer/daemon-editor-text-client.ts",
+      content: "export function wireEditorTextResponder(daemon, options) { return () => {}; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "getEditorText appears nowhere useful, since the wire request is dropped.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "composer-text read for a Pi extension (wireEditorTextResponder)",
+  );
+});
+
+// T293's own reasoning for why `wireEditorTextResponder` was chosen over the
+// daemon-side `respondToEditorTextRequest`: the latter is declared as a
+// plain, non-`async`, `void`-returning method in all three of its real
+// files, and `isCapabilityMemberDeclared`'s four declaration shapes never
+// recognize that. Pinned here so a future edit to those shapes (or to that
+// method's own signature) cannot silently make this claim false again.
+test("T293: respondToEditorTextRequest is NOT recognized by isCapabilityMemberDeclared in any of its three real declaring files (the reason wireEditorTextResponder was chosen instead)", () => {
+  for (const path of [
+    "packages/server/src/server/agent/agent-sdk-types.ts",
+    "packages/server/src/server/agent/agent-manager.ts",
+    "packages/server/src/server/agent/providers/pi/agent.ts",
+  ]) {
+    const content = readCommittedFile(path);
+    assert.equal(
+      isCapabilityMemberDeclared(content, "respondToEditorTextRequest"),
+      false,
+      `${path}: respondToEditorTextRequest is now recognized as declared — ` +
+        "if its signature changed to async/Promise-returning, a CAPABILITIES " +
+        "entry naming it directly may now be viable, and this pinned assumption is stale",
+    );
+  }
+});
+
+test("T293: on the real committed tree, wireEditorTextResponder resolves as shipped from either app's editor-text wiring alone", () => {
+  for (const path of [
+    "apps/web/src/features/composer/daemon-editor-text-client.ts",
+    "apps/android/src/features/composer/editor-text-model.ts",
+  ]) {
+    const real = readCommittedFile(path);
+    const shipped = findShippedCapabilities([{ path, content: real }]);
+
+    assert.ok(
+      shipped.some(
+        (capability) =>
+          capability.name === "composer-text read for a Pi extension (wireEditorTextResponder)",
+      ),
+      `wireEditorTextResponder capability is no longer declared in ${path}: either it was renamed, ` +
+        "or the file moved out of isShippedSourcePath scope",
+    );
+  }
+});
+
+test("T293: the real committed tree carries no live denial of the composer-text-read capability", () => {
+  const shippedFiles = [
+    {
+      path: "apps/web/src/features/composer/daemon-editor-text-client.ts",
+      content: readCommittedFile("apps/web/src/features/composer/daemon-editor-text-client.ts"),
+    },
+    {
+      path: "apps/android/src/features/composer/editor-text-model.ts",
+      content: readCommittedFile("apps/android/src/features/composer/editor-text-model.ts"),
+    },
+  ];
+
+  for (const path of [
+    "apps/web/src/features/composer/Composer.tsx",
+    "apps/web/src/features/composer/ComposerContainer.tsx",
+    "apps/web/src/features/composer/daemon-editor-text-client.ts",
+    "apps/android/src/features/composer/Composer.tsx",
+    "apps/android/src/features/composer/editor-text-model.ts",
+    "packages/server/src/server/agent/providers/pi/agent.ts",
+  ]) {
+    const content = readCommittedFile(path);
+    const violations = findCapabilityDenialViolations({
+      shippedFiles,
+      appFiles: [{ path, content }],
+    });
+    assert.equal(
+      violations.filter((v) => v.path === path).length,
+      0,
+      `${path}'s real committed content must not trip the wireEditorTextResponder entry`,
+    );
+  }
+});

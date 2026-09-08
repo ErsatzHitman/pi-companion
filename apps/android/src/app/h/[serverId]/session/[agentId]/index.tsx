@@ -55,6 +55,7 @@ import { Banner } from "../../../../../ui/primitives";
 import { useAppCore } from "../../../../core-context";
 import {
   resolveAttachmentDownloadClient,
+  resolveEditorTextClient,
   resolveQueueModeClient,
   resolveSlashCommandsClient,
   resolveTranscribeClient,
@@ -788,6 +789,10 @@ export default function SessionRoute() {
   // Composer's slashCommandsClient prop — see resolveSlashCommandsClient's
   // own doc comment.
   const slashCommandsClient = resolveSlashCommandsClient(core.connection);
+  // T293: identical fresh-read cast, off the same live DaemonClient, for
+  // Composer's editorTextClient prop — see resolveEditorTextClient's own
+  // doc comment.
+  const editorTextClient = resolveEditorTextClient(core.connection);
   // T290: real OS-permission ports for attachment picking/camera
   // capture — see this component's own "T290 mount" doc comment above.
   // Unlike queueModeClient/turnStatusClient/transcribeClient above,
@@ -825,6 +830,7 @@ export default function SessionRoute() {
             turnStatusClient={turnStatusClient}
             transcribeClient={transcribeClient}
             slashCommandsClient={slashCommandsClient}
+            editorTextClient={editorTextClient}
             attachmentSource={attachmentSource}
             cameraCapture={cameraCapture}
             outbox={core.turnOutbox.getOutbox() ?? undefined}

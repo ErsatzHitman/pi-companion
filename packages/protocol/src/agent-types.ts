@@ -449,6 +449,18 @@ export type AgentStreamEvent =
       turnId?: string;
     }
   | {
+      /**
+       * T293: daemon->client half of the `getEditorText` request/response
+       * bridge — see the matching member's full doc comment in
+       * `packages/server/src/server/agent/agent-sdk-types.ts`'s
+       * `AgentStreamEvent`, which this mirrors.
+       */
+      type: "editor_text_requested";
+      provider: AgentProvider;
+      requestId: string;
+      turnId?: string;
+    }
+  | {
       type: "attention_required";
       provider: AgentProvider;
       reason: "finished" | "error" | "permission";

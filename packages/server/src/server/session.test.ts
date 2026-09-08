@@ -5814,6 +5814,99 @@ describe("agent_permission_resolved carries answeredBy (T111)", () => {
   });
 });
 
+describe("agent_editor_text_request / agent_editor_text_response (T293)", () => {
+  test("broadcasts a real editor_text_requested agent_stream event as agent_editor_text_request", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const agentEventListeners: Array<(event: AgentManagerEvent) => void> = [];
+    const session = createSessionForTest({
+      messages,
+      agentManager: {
+        subscribe: vi.fn((listener: (event: AgentManagerEvent) => void) => {
+          agentEventListeners.push(listener);
+          return () => {};
+        }),
+      },
+    });
+    void session;
+
+    if (agentEventListeners.length === 0) throw new Error("Agent event listener was not installed");
+    for (const listener of agentEventListeners) {
+      listener({
+        type: "agent_stream",
+        agentId: "agent-1",
+        event: {
+          type: "editor_text_requested",
+          provider: "pi",
+          requestId: "editor-req-1",
+        },
+      });
+    }
+
+    // `editor_text_requested` is also forwarded generically as an
+    // `agent_stream` message (`forwardAgentStream`), same as
+    // `permission_requested` above — filter to the dedicated push this
+    // test is about.
+    const requestMessages = messages.filter(
+      (message) => message.type === "agent_editor_text_request",
+    );
+    expect(requestMessages).toEqual([
+      {
+        type: "agent_editor_text_request",
+        payload: { agentId: "agent-1", requestId: "editor-req-1" },
+      },
+    ]);
+  });
+
+  test("delivers an incoming agent_editor_text_response to agentManager.respondToEditorTextRequest", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const respondToEditorTextRequest = vi.fn();
+    const session = createSessionForTest({
+      messages,
+      agentManager: {
+        subscribe: vi.fn(() => () => {}),
+        respondToEditorTextRequest,
+      },
+    });
+
+    await session.handleMessage({
+      type: "agent_editor_text_response",
+      agentId: "agent-1",
+      requestId: "editor-req-1",
+      text: "the user's current draft",
+    });
+
+    expect(respondToEditorTextRequest).toHaveBeenCalledWith(
+      "agent-1",
+      "editor-req-1",
+      "the user's current draft",
+    );
+  });
+
+  test("swallows a respondToEditorTextRequest failure rather than surfacing it as an activity_log error", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const session = createSessionForTest({
+      messages,
+      agentManager: {
+        subscribe: vi.fn(() => () => {}),
+        respondToEditorTextRequest: vi.fn(() => {
+          throw new Error("agent already gone");
+        }),
+      },
+    });
+
+    await expect(
+      session.handleMessage({
+        type: "agent_editor_text_response",
+        agentId: "agent-1",
+        requestId: "editor-req-stale",
+        text: "too late",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(messages.filter((message) => message.type === "activity_log")).toEqual([]);
+  });
+});
+
 describe("pi.ui.action.response / pi_ui_action_result carry answeredBy (T128)", () => {
   test("attributes an outgoing pi.ui.action.response to this connection's clientId", async () => {
     const messages: SessionOutboundMessage[] = [];

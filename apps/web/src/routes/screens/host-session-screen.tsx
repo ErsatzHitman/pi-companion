@@ -379,7 +379,14 @@ export function HostSessionScreen() {
         testId="host-session-transcript"
       />
       <ApprovalsContainer sessionId={agentId} client={client ?? undefined} />
-      <ComposerContainer sessionId={agentId} client={agentTurnClient} />
+      <ComposerContainer
+        sessionId={agentId}
+        client={agentTurnClient}
+        // T293: a real `DaemonClient` satisfies `DaemonEditorTextSource`
+        // structurally (`daemon-editor-text-client.ts`) — passed directly,
+        // same as `ApprovalsContainer`'s `client` above.
+        editorTextClient={client ?? undefined}
+      />
     </>
   );
 }

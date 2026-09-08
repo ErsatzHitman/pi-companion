@@ -7,6 +7,8 @@ import { CommandSearch, PromptBar } from "../../ui/recipes/index.js";
 import type { CommandSearchItem } from "../../ui/recipes/index.js";
 import type { AgentSlashCommand } from "./agent-turn-client.js";
 import "./composer.css";
+import type { DaemonEditorTextSource } from "./daemon-editor-text-client.js";
+import { wireEditorTextResponder } from "./daemon-editor-text-client.js";
 import { ModelThinkingPicker } from "./ModelThinkingPicker.js";
 import { PromptRoutingPicker } from "./PromptRoutingPicker.js";
 import { QueueModePicker } from "./QueueModePicker.js";
@@ -39,6 +41,18 @@ export interface ComposerProps extends UseComposerOptions {
   label?: string;
   placeholder?: string;
   testId?: string;
+  /**
+   * T293: real `DaemonClient` wiring for Pi's `getEditorText`/
+   * `pasteToEditor` tier-2 read bridge (plan.md §4.2). Separate from
+   * `client` (`AgentTurnClient`, a narrower turn-control interface) since
+   * this needs `on(...)`/`respondToEditorText` instead. `undefined` — no
+   * live daemon connection, the same "no live client yet" seam every
+   * other daemon-backed feature in this file already uses — leaves the
+   * composer working exactly as it does today, with nothing answering a
+   * `getEditorText` extension call (the extension's own bounded timeout
+   * on the daemon side covers that, same as a second, unanswered client).
+   */
+  editorTextClient?: DaemonEditorTextSource;
 }
 
 /** `ComposerAttachment.status` -> `Chip` tone (T28B6): status is always paired with visible text too, never colour alone (plan.md §10.5). */
@@ -179,6 +193,7 @@ export function Composer({
   label = "Message Pi",
   placeholder = "Ask Pi…",
   testId,
+  editorTextClient,
   ...composerOptions
 }: ComposerProps) {
   const {
@@ -222,6 +237,26 @@ export function Composer({
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
+
+  // T293: mirrors the live draft into a ref rather than re-wiring on every
+  // keystroke — `wireEditorTextResponder` reads `draftTextRef.current`
+  // fresh each time a request actually arrives, so the effect below only
+  // needs to re-run when the daemon connection or session identity
+  // changes, not on every character typed.
+  const draftTextRef = useRef(draftText);
+  useEffect(() => {
+    draftTextRef.current = draftText;
+  }, [draftText]);
+
+  useEffect(() => {
+    if (!editorTextClient) {
+      return;
+    }
+    return wireEditorTextResponder(editorTextClient, {
+      agentId: composerOptions.sessionId,
+      getDraftText: () => draftTextRef.current,
+    });
+  }, [editorTextClient, composerOptions.sessionId]);
 
   function focusMessageInput(): void {
     wrapperRef.current?.querySelector<HTMLTextAreaElement>(".pc-prompt-bar__input")?.focus();

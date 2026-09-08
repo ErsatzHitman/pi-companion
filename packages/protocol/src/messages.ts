@@ -737,6 +737,15 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
     resolution: AgentPermissionResponseSchema,
   }),
   z.object({
+    // T293: daemon->client half of the `getEditorText` request/response
+    // bridge — see `editor_text_requested`'s doc comment in
+    // packages/server/src/server/agent/agent-sdk-types.ts's AgentStreamEvent.
+    type: z.literal("editor_text_requested"),
+    provider: AgentProviderSchema,
+    requestId: z.string(),
+    turnId: z.string().optional(),
+  }),
+  z.object({
     type: z.literal("attention_required"),
     provider: AgentProviderSchema,
     reason: z.enum(["finished", "error", "permission"]),
@@ -1933,6 +1942,21 @@ export const AgentPermissionResponseMessageSchema = z.object({
   response: AgentPermissionResponseSchema,
 });
 
+/**
+ * T293: client->server answer to an `agent_editor_text_request` push (see
+ * that schema's own doc comment). `text` is the client's current composer
+ * draft, read locally with no daemon round trip on the client's end — this
+ * message IS the round trip. A daemon that no longer has `requestId`
+ * pending (already resolved by an earlier client's answer, or by its own
+ * timeout) silently drops this — see `PiRpcAgentSession.respondToEditorTextRequest`.
+ */
+export const AgentEditorTextResponseMessageSchema = z.object({
+  type: z.literal("agent_editor_text_response"),
+  agentId: z.string(),
+  requestId: z.string(),
+  text: z.string(),
+});
+
 const CheckoutErrorCodeSchema = z.enum([
   "NOT_GIT_REPO",
   "NOT_ALLOWED",
@@ -2961,6 +2985,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentDetachRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
+  AgentEditorTextResponseMessageSchema,
   CheckoutStatusRequestSchema,
   SubscribeCheckoutDiffRequestSchema,
   UnsubscribeCheckoutDiffRequestSchema,
@@ -4419,6 +4444,26 @@ export const AgentPermissionRequestMessageSchema = z.object({
   payload: z.object({
     agentId: z.string(),
     request: AgentPermissionRequestPayloadSchema,
+  }),
+});
+
+/**
+ * T293: server->client push asking the connected client to answer with the
+ * composer's current draft text for `agentId` (Pi's `getEditorText` tier-2
+ * bridge, plan.md §4.2 "Pi editor-text read bridge"). Broadcast
+ * unconditionally to every connected session for the agent, mirroring
+ * `AgentPermissionRequestMessageSchema` above — whichever client answers
+ * first (`agent_editor_text_response`) wins; see that schema's doc comment
+ * for what happens to a later or missing answer. Deliberately carries no
+ * `answeredBy`-shaped resolution broadcast: unlike a permission dialog,
+ * nothing on any client renders this request, so there is no UI state on
+ * other clients to reconcile once it resolves.
+ */
+export const AgentEditorTextRequestMessageSchema = z.object({
+  type: z.literal("agent_editor_text_request"),
+  payload: z.object({
+    agentId: z.string(),
+    requestId: z.string(),
   }),
 });
 
@@ -5898,6 +5943,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   WaitForFinishResponseMessageSchema,
   AgentPermissionRequestMessageSchema,
   AgentPermissionResolvedMessageSchema,
+  AgentEditorTextRequestMessageSchema,
   AgentDeletedMessageSchema,
   AgentArchivedMessageSchema,
   CloseItemsResponseSchema,
@@ -6126,6 +6172,7 @@ export type ProjectRemoveResponsePayload = z.infer<typeof ProjectRemoveResponseP
 export type WaitForFinishResponseMessage = z.infer<typeof WaitForFinishResponseMessageSchema>;
 export type AgentPermissionRequestMessage = z.infer<typeof AgentPermissionRequestMessageSchema>;
 export type AgentPermissionResolvedMessage = z.infer<typeof AgentPermissionResolvedMessageSchema>;
+export type AgentEditorTextRequestMessage = z.infer<typeof AgentEditorTextRequestMessageSchema>;
 export type AgentDeletedMessage = z.infer<typeof AgentDeletedMessageSchema>;
 export type ListProviderModelsResponseMessage = z.infer<
   typeof ListProviderModelsResponseMessageSchema
@@ -6270,6 +6317,7 @@ export type GetAutoCompactionRequestMessage = z.infer<typeof GetAutoCompactionRe
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
+export type AgentEditorTextResponseMessage = z.infer<typeof AgentEditorTextResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
 export type CheckoutStatusResponse = z.infer<typeof CheckoutStatusResponseSchema>;
 export type CheckoutStatusUpdate = z.infer<typeof CheckoutStatusUpdateSchema>;

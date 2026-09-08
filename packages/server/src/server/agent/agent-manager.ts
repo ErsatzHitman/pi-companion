@@ -2477,6 +2477,28 @@ export class AgentManager {
     }
   }
 
+  /**
+   * T293: delivers one client's answer to a pending `getEditorText`/
+   * `pasteToEditor` composer read (`editor_text_requested`,
+   * plan.md §4.2 "Pi editor-text read bridge") to the agent's provider
+   * session. Deliberately silent, not `Promise`-returning, and untouched by
+   * the persistence/state-refresh machinery `respondToPermission` above
+   * needs — an editor-text read has no timeline entry and no agent state to
+   * update, only a value Pi's provider session is waiting on. A stale
+   * `agentId` (the agent finished or was deleted between the daemon's
+   * broadcast and this client's answer arriving) or a provider whose
+   * session does not implement this (any provider other than Pi) is a
+   * silent no-op, matching `resolveEditorTextRequest`'s own "late/unknown
+   * requestId is a no-op" contract in `providers/pi/agent.ts` — the
+   * multi-client race is won by whichever answer arrives while the request
+   * is still pending, and every other answer (early, late, or for an agent
+   * that is simply gone) has nothing left to affect.
+   */
+  respondToEditorTextRequest(agentId: string, requestId: string, text: string): void {
+    const agent = this.getAgent(agentId);
+    agent?.session?.respondToEditorTextRequest?.(requestId, text);
+  }
+
   async cancelAgentRun(agentId: string): Promise<AgentRunCancellationResult> {
     const agent = this.requireSessionAgent(agentId);
     const run =

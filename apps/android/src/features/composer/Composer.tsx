@@ -50,6 +50,7 @@ import {
 } from "./attachment-source-port";
 import { runCapturePress } from "./attachment-capture-model";
 import { ComposerIconAction } from "./composer-icon-action";
+import { type DaemonEditorTextSource, wireEditorTextResponder } from "./editor-text-model";
 import { createInMemoryStructuredStorage, createSystemClock } from "./in-memory-outbox-runtime";
 import { runMicPress } from "./mic-press-model";
 import {
@@ -418,6 +419,19 @@ export interface ComposerProps {
    * enabled control with nothing to show.
    */
   slashCommandsClient?: DaemonSlashCommandSource;
+  /**
+   * T293: real `DaemonClient` wiring for Pi's `getEditorText`/
+   * `pasteToEditor` tier-2 read bridge (plan.md §4.2), closing the seam
+   * T292's own `handleValueChange` doc comment named. Unlike every other
+   * client prop above, this has no visible UI of its own — it only
+   * answers a daemon push with the composer's current draft, mirrored
+   * into a ref so the answer is always fresh without re-subscribing on
+   * every keystroke (see the wiring `useEffect` below). Optional, same
+   * "no client yet" seam as every sibling prop: omitted, nothing answers
+   * a `getEditorText` extension call, and the daemon's own bounded
+   * timeout covers that exactly as it covers a second, unanswered client.
+   */
+  editorTextClient?: DaemonEditorTextSource;
   placeholder?: string;
   testId?: string;
 }
@@ -554,6 +568,7 @@ export function Composer({
   queueModeClient,
   turnStatusClient,
   slashCommandsClient,
+  editorTextClient,
   placeholder,
   testId,
 }: ComposerProps) {
@@ -678,6 +693,32 @@ export function Composer({
       cancelled = true;
     };
   }, [slashCommandsController]);
+
+  // --- T293: getEditorText / pasteToEditor composer read -------------------
+  // Mirrors `state.draft` into a ref rather than re-wiring the daemon
+  // subscription on every keystroke — `wireEditorTextResponder` reads
+  // `draftRef.current` fresh each time a request actually arrives, so the
+  // effect below only re-runs when the daemon connection or session
+  // identity changes. Reading `state.draft` (rather than only
+  // `handleValueChange`'s `value` argument) means this stays correct for
+  // EVERY way the draft can change — typing, a selected slash command
+  // (`handleSelectSlashCommand`), and a completed voice transcript
+  // (`applyTranscriptToDraft`) — without duplicating this ref-update at
+  // each of those call sites.
+  const draftRef = useRef(state.draft);
+  useEffect(() => {
+    draftRef.current = state.draft;
+  }, [state.draft]);
+  useEffect(() => {
+    if (!editorTextClient) {
+      return;
+    }
+    return wireEditorTextResponder(editorTextClient, {
+      agentId: resolvedSessionId,
+      getDraftText: () => draftRef.current,
+    });
+  }, [editorTextClient, resolvedSessionId]);
+
   const handleOpenSlashCommands = useCallback(() => {
     slashCommandsController.open();
     setSlashCommandsState(slashCommandsController.getState());
@@ -811,17 +852,17 @@ export function Composer({
   // `slashCommandsState` itself). `notifyDraftChanged` recomputes the
   // palette's auto-open trigger on every keystroke; the `setState`
   // still runs unconditionally regardless of what the controller
-  // decides. NAMED SEAM for T293 (`getEditorText`, reading the
-  // composer's current draft for an extension): `value` here is
-  // exactly the live draft text a `getEditorText` handler would need to
-  // read. Nothing today mirrors it anywhere outside this component's
-  // own `state.draft` — a future `onDraftChange?: (text: string) =>
-  // void` prop added to `ComposerProps` and called here (alongside, not
-  // instead of, the two lines below) is the seam to extend, letting the
-  // session route mirror the current draft into a ref the daemon-facing
-  // `getEditorText` wiring can read. Not added by this task — T293 owns
-  // the daemon/client side of that capability and decides the exact
-  // shape it needs.
+  // decides.
+  //
+  // CLOSED by T293 (`getEditorText`, reading the composer's current draft
+  // for an extension) — this said the seam was not yet closed, naming a
+  // hypothetical `onDraftChange` prop. T293 mirrored `state.draft` (not
+  // this callback's `value` argument) into `draftRef` above instead, via
+  // its own `useEffect` on `state.draft` — that covers every way the
+  // draft changes (typing here, a selected slash command, a completed
+  // voice transcript) in one place, rather than adding a prop this
+  // callback would have to remember to call alongside the two lines
+  // below, and alongside `handleSelectSlashCommand`'s own draft write.
   const handleValueChange = useCallback(
     (value: string) => {
       setState((current) => ({ ...current, draft: value }));

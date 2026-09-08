@@ -227,3 +227,7 @@ export type {
 } from "./slash-command-model";
 export { SlashCommandPicker } from "./SlashCommandPicker";
 export type { SlashCommandPickerProps } from "./SlashCommandPicker";
+
+// --- T293: getEditorText / pasteToEditor composer read --------------------
+export { wireEditorTextResponder } from "./editor-text-model";
+export type { DaemonEditorTextRequestMessage, DaemonEditorTextSource } from "./editor-text-model";

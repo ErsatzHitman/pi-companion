@@ -452,7 +452,7 @@ describe("SessionRoute source", () => {
     // the same reasoning `handleSubmit`/`turnRunning`'s cases above use.
     const code = readCode();
     expect(code).toMatch(
-      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
+      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
     );
   });
 
@@ -479,9 +479,9 @@ describe("SessionRoute source", () => {
   // that SessionRoute actually calls it and actually passes the result
   // to Composer, never a fixed `undefined`. ------------------------------
 
-  it("T132/T282/T284/T292: imports resolveAttachmentDownloadClient/resolveQueueModeClient/resolveSlashCommandsClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
+  it("T132/T282/T284/T292/T293: imports resolveAttachmentDownloadClient/resolveEditorTextClient/resolveQueueModeClient/resolveSlashCommandsClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
     expect(readCode()).toMatch(
-      /import \{\s*resolveAttachmentDownloadClient,\s*resolveQueueModeClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+      /import \{\s*resolveAttachmentDownloadClient,\s*resolveEditorTextClient,\s*resolveQueueModeClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
     );
   });
 
@@ -552,6 +552,25 @@ describe("SessionRoute source", () => {
     // Never the fixed literal that would silently leave the palette
     // wired to nothing regardless of connection state.
     expect(code).not.toMatch(/slashCommandsClient=\{undefined\}/);
+  });
+
+  // --- T293: wires editorTextClient into the production Composer mount,
+  // resolved the identical way as slashCommandsClient above — see this
+  // component's own "T293" comment beside the mount. Before this task
+  // `getEditorText`/`pasteToEditor` had no bridge on Android at all, so
+  // there was no prop and no resolver to wire. -------------------------
+
+  it("T293: derives editorTextClient by calling resolveEditorTextClient with core.connection, never a hard-coded literal", () => {
+    const code = readCode();
+    expect(code).toMatch(/const editorTextClient = resolveEditorTextClient\(core\.connection\);/);
+  });
+
+  it("T293: passes the resolved value straight through to Composer's own editorTextClient prop — deleting this prop must fail this assertion", () => {
+    const code = readCode();
+    expect(code).toMatch(/<Composer[\s\S]*?editorTextClient=\{editorTextClient\}/);
+    // Never the fixed literal that would silently leave nothing answering
+    // a getEditorText extension call regardless of connection state.
+    expect(code).not.toMatch(/editorTextClient=\{undefined\}/);
   });
 
   // --- T284: wires resolveImageUri into TranscriptMessageRow inside

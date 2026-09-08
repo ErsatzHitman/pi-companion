@@ -1176,3 +1176,92 @@ describe("Composer drag-and-drop, paste, and inline previews (T279)", () => {
     });
   });
 });
+
+describe("Composer editor-text bridge (T293)", () => {
+  /** Minimal fake `DaemonEditorTextSource`, driven by the test. */
+  class FakeDaemonEditorTextSource {
+    readonly respondToEditorText = vi.fn(async () => undefined);
+    private readonly handlers = new Set<
+      (message: {
+        type: "agent_editor_text_request";
+        payload: { agentId: string; requestId: string };
+      }) => void
+    >();
+
+    on(
+      _type: "agent_editor_text_request",
+      handler: (message: {
+        type: "agent_editor_text_request";
+        payload: { agentId: string; requestId: string };
+      }) => void,
+    ): () => void {
+      this.handlers.add(handler);
+      return () => this.handlers.delete(handler);
+    }
+
+    emitRequest(agentId: string, requestId: string): void {
+      for (const handler of this.handlers) {
+        handler({ type: "agent_editor_text_request", payload: { agentId, requestId } });
+      }
+    }
+  }
+
+  it("answers a live getEditorText request with whatever is currently typed", async () => {
+    const user = userEvent.setup();
+    const editorTextClient = new FakeDaemonEditorTextSource();
+    render(
+      <Composer
+        {...baseProps()}
+        sessionId="session-editor-text"
+        editorTextClient={editorTextClient}
+        testId="composer"
+      />,
+    );
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.click(input);
+    await user.keyboard("draft in progress");
+
+    act(() => {
+      editorTextClient.emitRequest("session-editor-text", "req-1");
+    });
+
+    expect(editorTextClient.respondToEditorText).toHaveBeenCalledWith(
+      "session-editor-text",
+      "req-1",
+      "draft in progress",
+    );
+  });
+
+  it("ignores a request for a different sessionId", () => {
+    const editorTextClient = new FakeDaemonEditorTextSource();
+    render(
+      <Composer
+        {...baseProps()}
+        sessionId="session-editor-text"
+        editorTextClient={editorTextClient}
+        testId="composer"
+      />,
+    );
+
+    act(() => {
+      editorTextClient.emitRequest("some-other-session", "req-1");
+    });
+
+    expect(editorTextClient.respondToEditorText).not.toHaveBeenCalled();
+  });
+
+  it("never answers when no editorTextClient is supplied", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} sessionId="session-editor-text" testId="composer" />);
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.click(input);
+    await user.keyboard("hello");
+
+    // Nothing to assert on directly (there is no client to have received a
+    // call) — this proves only that mounting without the prop does not
+    // throw, matching every other daemon-backed feature's "no live client
+    // yet" degradation in this file.
+    expect(input.value).toBe("hello");
+  });
+});

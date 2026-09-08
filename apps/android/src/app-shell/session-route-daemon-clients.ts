@@ -46,6 +46,15 @@
  * already narrows four times above satisfies this fifth port as-is
  * too, with no adapter.
  *
+ * **T293 adds `resolveEditorTextClient` below**, the same pattern a
+ * sixth time: `Composer.tsx`'s `editorTextClient` prop wants a
+ * `DaemonEditorTextSource` (`../features/composer`'s
+ * `{ respondToEditorText(agentId, requestId, text), on("agent_editor_text_request", ...) }`),
+ * and the real `DaemonClient` (`packages/client/src/daemon-client.ts`)
+ * implements both exactly — so the one live `DaemonClient` instance this
+ * file already narrows five times above satisfies this sixth port as-is
+ * too, with no adapter.
+ *
 
  * ## Why this is its own file, not inlined in `index.tsx` like
  * `SessionApprovals`'s cast
@@ -66,6 +75,7 @@
  * unchanged" is a plain data-flow claim, not a rendering one.
  */
 import type {
+  DaemonEditorTextSource,
   DaemonQueueModeSource,
   DaemonSlashCommandSource,
   DaemonTurnStatusSource,
@@ -191,6 +201,30 @@ export function resolveSlashCommandsClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | DaemonSlashCommandSource
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T293: same fresh-read contract as the five functions above, cast to
+ * `DaemonEditorTextSource` instead — the sixth narrow port this one live
+ * `DaemonClient` instance satisfies (the real `respondToEditorText(agentId,
+ * requestId, text)` plus the generic `on("agent_editor_text_request", ...)`
+ * overload, see `packages/client/src/daemon-client.ts`'s own doc comments
+ * on both). `undefined` (never `null`) with no active lifecycle or no
+ * live client yet, matching every sibling resolver above — `Composer`'s
+ * own `editorTextClient` wiring then simply never subscribes
+ * (`editor-text-model.ts`'s "no client yet" seam), so nothing answers a
+ * `getEditorText` extension call and the daemon's own bounded timeout
+ * covers it exactly as it covers a second, unanswered client.
+ */
+export function resolveEditorTextClient(
+  connection: SessionRouteConnectionSource,
+): DaemonEditorTextSource | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | DaemonEditorTextSource
       | null
       | undefined) ?? undefined
   );

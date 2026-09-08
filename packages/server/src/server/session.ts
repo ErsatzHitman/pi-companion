@@ -1717,6 +1717,20 @@ export class Session {
               ...(event.event.answeredBy ? { answeredBy: event.event.answeredBy } : {}),
             },
           });
+        } else if (event.event.type === "editor_text_requested") {
+          // T293: broadcast unconditionally to every connected `Session`,
+          // same as `permission_requested` above — this client answers with
+          // its own current composer draft via `agent_editor_text_response`
+          // (`dispatchAgentEditorTextMessage` below). Whichever client
+          // answers first wins the race; see
+          // `AgentEditorTextRequestMessageSchema`'s doc comment.
+          this.emit({
+            type: "agent_editor_text_request",
+            payload: {
+              agentId: event.agentId,
+              requestId: event.event.requestId,
+            },
+          });
         }
 
         // Title updates may be applied asynchronously after agent creation.
@@ -2256,6 +2270,8 @@ export class Session {
         return this.handleCancelAgentRequest(msg.agentId, msg.requestId);
       case "agent_permission_response":
         return this.handleAgentPermissionResponse(msg.agentId, msg.requestId, msg.response);
+      case "agent_editor_text_response":
+        return this.handleAgentEditorTextResponse(msg.agentId, msg.requestId, msg.text);
       case "clear_agent_attention":
         return this.handleClearAgentAttention(msg.agentId, msg.requestId);
       default:
@@ -4319,6 +4335,30 @@ export class Session {
         },
       });
       throw error;
+    }
+  }
+
+  /**
+   * T293: a client's answer to a broadcast `agent_editor_text_request`
+   * (see that message's own doc comment). Deliberately quiet on failure —
+   * unlike a permission response, a stale/late/duplicate editor-text answer
+   * (the agent already finished, or another client's answer already won
+   * the race) is an ordinary, expected outcome of the multi-client
+   * broadcast, not a user-facing error, so it is logged and swallowed
+   * rather than surfaced through `activity_log`.
+   */
+  private async handleAgentEditorTextResponse(
+    agentId: string,
+    requestId: string,
+    text: string,
+  ): Promise<void> {
+    try {
+      this.agentManager.respondToEditorTextRequest(agentId, requestId, text);
+    } catch (error) {
+      this.sessionLogger.warn(
+        { err: error, agentId, requestId },
+        "Failed to deliver editor text response",
+      );
     }
   }
 

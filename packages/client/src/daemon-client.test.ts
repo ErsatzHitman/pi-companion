@@ -5242,6 +5242,89 @@ test("parses canonical agent_stream tool_call payloads without crashing", async 
   expect(logger.warn).not.toHaveBeenCalled();
 });
 
+// T293: getEditorText's daemon->client half. Mirrors the `agent_stream`
+// tests above — a real `DaemonClient` receiving a real wire push and
+// exposing it through `on(type, handler)` — for the new dedicated
+// `agent_editor_text_request` push instead.
+test("delivers a real agent_editor_text_request push through on(...)", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const received: unknown[] = [];
+  const unsubscribe = client.on("agent_editor_text_request", (msg) => {
+    received.push(msg);
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent_editor_text_request",
+      payload: {
+        agentId: "agent-1",
+        requestId: "editor-req-1",
+      },
+    }),
+  );
+
+  unsubscribe();
+
+  expect(received).toEqual([
+    {
+      type: "agent_editor_text_request",
+      payload: { agentId: "agent-1", requestId: "editor-req-1" },
+    },
+  ]);
+});
+
+test("respondToEditorText sends a real agent_editor_text_response wire message (T293)", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  await client.respondToEditorText("agent-1", "editor-req-1", "the user's current draft");
+
+  expect(mock.sent).toHaveLength(1);
+  const sentMessage = JSON.parse(mock.sent[0] as string) as {
+    type: "session";
+    message: {
+      type: "agent_editor_text_response";
+      agentId: string;
+      requestId: string;
+      text: string;
+    };
+  };
+  expect(sentMessage.message).toEqual({
+    type: "agent_editor_text_response",
+    agentId: "agent-1",
+    requestId: "editor-req-1",
+    text: "the user's current draft",
+  });
+});
+
 // T143: `compaction_end`'s payload used to be discarded entirely at the
 // daemon boundary (`result?: unknown`); this proves the wire-level fix
 // (`AgentTimelineItemPayloadSchema`'s `"compaction"` branch gaining

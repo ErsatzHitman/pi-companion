@@ -1,22 +1,29 @@
 import { useCore } from "../../app/core-context.js";
 import { Composer } from "./Composer.js";
 import type { AgentTurnClient } from "./agent-turn-client.js";
+import type { DaemonEditorTextSource } from "./daemon-editor-text-client.js";
 
 export interface ComposerContainerProps {
   /** Conversation target this composer submits into (session or agent id). */
   sessionId: string;
   /**
-   * Live turn-control client (T28B2/T28B3). Defaults to `undefined`:
-   * this app has no route that can obtain a live `DaemonClient` yet
-   * (`useCore()`'s `connection` is `fake-core-adapter.ts`'s stand-in
-   * until a real one lands — the same "no live client yet" state
-   * `TerminalRoute` and `FileBrowserScreen` already document). Once a
-   * real one exists, its `createDaemonAgentTurnClient` adapter
-   * (`daemon-agent-turn-client.ts`) is what this prop should be built
-   * from — that adapter and its fixture test already prove the real
-   * wire round trip today, independent of when this prop gets wired.
+   * Live turn-control client (T28B2/T28B3). `undefined` on a route with no
+   * live `DaemonClient` connected yet — the same "no live client yet"
+   * state `TerminalRoute` and `FileBrowserScreen` already document.
+   * `routes/screens/host-session-screen.tsx` builds this from a real
+   * `DaemonClient` via `createDaemonAgentTurnClient`
+   * (`daemon-agent-turn-client.ts`) once one is connected.
    */
   client?: AgentTurnClient;
+  /**
+   * T293: real `DaemonClient` wiring for Pi's `getEditorText`/
+   * `pasteToEditor` tier-2 read bridge — see `Composer`'s own doc comment
+   * on this same prop name for what it does and its "no live client yet"
+   * degradation. A real `DaemonClient` satisfies `DaemonEditorTextSource`
+   * as-is (`daemon-editor-text-client.ts`'s own doc comment), so callers
+   * can pass one directly.
+   */
+  editorTextClient?: DaemonEditorTextSource;
 }
 
 /**
@@ -32,7 +39,7 @@ export interface ComposerContainerProps {
  * `platform.filePicker` (T28B6, plan.md §7.3) is this app's real
  * `createBrowserFilePicker()` adapter (`apps/web/src/platform/file-picker.ts`).
  */
-export function ComposerContainer({ sessionId, client }: ComposerContainerProps) {
+export function ComposerContainer({ sessionId, client, editorTextClient }: ComposerContainerProps) {
   const { platform } = useCore();
   return (
     <Composer
@@ -41,6 +48,7 @@ export function ComposerContainer({ sessionId, client }: ComposerContainerProps)
       structuredStorage={platform.structuredStorage}
       filePicker={platform.filePicker}
       client={client}
+      editorTextClient={editorTextClient}
     />
   );
 }
