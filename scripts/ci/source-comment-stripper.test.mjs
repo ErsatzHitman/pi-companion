@@ -167,40 +167,58 @@ test("classifySource labels code, comment and string spans in order", () => {
   assert.deepEqual(kinds, ["code", "comment", "code", "string", "code"]);
 });
 
-// --- T256: the JSX-tag-slash class, found by the whole-tree re-verification,
-// currently inert but not hypothetical ---------------------------------
+// --- T256/T263: the JSX-tag-slash class -------------------------------
+//
+// T256 found and pinned this as a known, currently-inert limitation:
+// `<` was one of the real punctuation tokens `canPrecedeRegex` treated as a
+// legal regex-literal opener, and a character scan has no way to tell a
+// genuine `<` comparison apart from a JSX closing tag's `<` — so the `/` of
+// `</Foo>` was misread as opening a regex literal, `scanRegexLiteral` hunted
+// forward for the next un-classed `/`, found the first slash of a
+// following real `//` comment, and folded it into the fake "regex" span —
+// so the comment's own `//` was never re-examined as a comment start and
+// leaked into `stripComments`' output unstripped.
+//
+// T263 closed the gap by removing `<` from `REGEX_PRECEDING_PUNCTUATION`
+// entirely (see that set's own comment in source-comment-stripper.mjs for
+// the fix and the false-negative measurement proving it swallows no real
+// regex literal anywhere in the tree today). These two tests are updated,
+// not deleted, per T263's own requirement: they now pin the FIXED
+// behaviour — the comment strips correctly — rather than the leak T256
+// found. The comments below describe the old, pre-T263 mechanism for
+// context; the assertions describe what actually happens today.
 
-test("documented limitation: a JSX closing tag's `/` can make canPrecedeRegex fire, and a real trailing comment survives unstripped", () => {
-  // `<` is one of the real punctuation tokens a genuine regex literal can
-  // follow in plain JS/TS expression grammar (canPrecedeRegex has no way to
-  // know this `<` opened a JSX closing tag rather than a comparison), so the
-  // `/` of `</Foo>` is misread as opening a regex literal. scanRegexLiteral
-  // then hunts forward for the next un-classed `/` — the first `/` of the
-  // real trailing `//` comment — and treats THAT as the regex's closing
-  // slash, so the main loop never re-examines the comment's own `//` as a
-  // comment start. This is the T256 whole-tree re-verification's one
-  // disclosed gap (see this module's own header paragraph near
-  // `canPrecedeRegex`/`scanRegexLiteral`): none of the 2,247 tracked module
-  // files scanned at the time hit it, but the trigger itself is real.
+test("T263: a JSX closing tag's `/` no longer makes canPrecedeRegex fire, so a real trailing comment strips correctly", () => {
+  // Before T263: `<` was a real punctuation token a genuine regex literal
+  // can follow in plain JS/TS expression grammar (canPrecedeRegex had no
+  // way to know this `<` opened a JSX closing tag rather than a
+  // comparison), so the `/` of `</Foo>` was misread as opening a regex
+  // literal and the trailing `// real comment...` leaked through unstripped.
+  // This was the T256 whole-tree re-verification's one disclosed gap: none
+  // of the 2,247 tracked module files scanned at the time hit it, but the
+  // trigger itself was real.
   const source = "const a = (\n  </Foo> // real comment, should vanish\n);\n";
   const stripped = stripComments(source);
-  assert.equal(stripped.includes("real comment, should vanish"), true);
+  assert.equal(stripped.includes("real comment, should vanish"), false);
 });
 
-test("documented limitation does not require JSX: any `<` immediately before a single `/`, with a real `//` comment shortly after, reproduces it", () => {
-  // Confirms the trigger is exactly canPrecedeRegex's treatment of `<`
-  // (real JS grammar: a regex literal legally follows `<`), not something
-  // specific to a JSX parser context this module never runs in — this
-  // module only ever sees raw text, never a parsed JSX tree, so it cannot
-  // tell "less-than, divide" from "start of a JSX closing tag" apart. An
-  // adjacent `//` (no character in between) is NOT ambiguous — the
-  // unambiguous comment-start check runs before the regex heuristic ever
-  // sees it, so a bare `x < // comment` strips correctly. The defect needs
-  // exactly one non-`/` character between the opening `/` and the real
-  // `//`, matching `</Foo>`'s shape (`/`, then `Foo>`, then the comment).
+test("T263: does not require JSX — any `<` immediately before a single `/`, with a real `//` comment shortly after, now strips correctly too", () => {
+  // Confirms the fix is exactly canPrecedeRegex's treatment of `<` (real JS
+  // grammar: a regex literal legally follows `<`), not something specific
+  // to a JSX parser context this module never runs in — this module only
+  // ever sees raw text, never a parsed JSX tree, so it never could tell
+  // "less-than, divide" from "start of a JSX closing tag" apart, which is
+  // exactly why `<` was removed outright rather than special-cased on JSX
+  // shape. An adjacent `//` (no character in between) was NEVER ambiguous —
+  // the unambiguous comment-start check runs before the regex heuristic
+  // ever sees it, so a bare `x < // comment` always stripped correctly,
+  // before and after T263. The old defect needed exactly one non-`/`
+  // character between the opening `/` and the real `//`, matching
+  // `</Foo>`'s shape (`/`, then `Foo>`, then the comment) — that shape now
+  // strips correctly too.
   const adjacent = "x < // real comment, should vanish\n  1;\n";
   assert.equal(stripComments(adjacent).includes("real comment, should vanish"), false);
 
   const oneCharBetween = "x < /b // real comment, should vanish\n  1;\n";
-  assert.equal(stripComments(oneCharBetween).includes("real comment, should vanish"), true);
+  assert.equal(stripComments(oneCharBetween).includes("real comment, should vanish"), false);
 });

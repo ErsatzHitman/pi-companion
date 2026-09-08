@@ -204,6 +204,27 @@
 // turn this from "checked, currently clean" into a live corruption — not a
 // hypothetical this module has already ruled out.
 //
+// (CORRECTED at T263: the gap this paragraph and the one above it describe
+// is now closed, not merely documented as inert. `canPrecedeRegex` no
+// longer treats `<` as a token a regex literal can follow at all — see
+// `REGEX_PRECEDING_PUNCTUATION`'s own comment for the fix and why `<` was
+// removed outright rather than special-cased on JSX shape. Re-running
+// T256's whole-tree oracle comparison after the fix, at the same method
+// (a real TypeScript parse supplying ground-truth `RegularExpressionLiteral`
+// spans, diffed byte-for-byte against this module's real `stripComments`
+// output): 0 of 2,248 tracked module files differ, both before and after
+// this fix — the fix changes zero currently-scanned files' output, exactly
+// as T256 predicted since none of the 334 files hit the trigger. Separately
+// measured, not assumed: of the tree's 2,691 real `RegularExpressionLiteral`
+// spans, ZERO have `<` as their immediately preceding code token, so
+// removing `<` swallows no real regex anywhere in the tree today.
+// `source-comment-stripper.test.mjs`'s two regression tests for this shape
+// were updated in the same commit — both now assert the comment strips
+// correctly, not left pinned to the old leaking behaviour. The 334-file
+// count and the "currently-inert" framing in the two paragraphs above are
+// historical, describing what was true at the P9-H gate; they are not
+// current claims.)
+//
 // Whichever of this module's callers exist when you read this, this
 // safety claim describes only what was measured, against the scope that
 // was measured, as of the commit that measured it. A ninth caller (or a
@@ -247,6 +268,33 @@ function scanLineComment(source, i) {
 
 // Punctuation a value expression cannot legally follow — so a `/` right
 // after one of these is a regex literal's opener, never division.
+//
+// `<` is deliberately NOT a member (T263). In real JS/TS grammar it is a
+// legal preceding token for a genuine regex literal (`a < /x/.test(b)`,
+// a less-than comparison against a regex-derived boolean), which is why it
+// was here originally — but this module never parses JSX, so it has no way
+// to tell that shape apart from a JSX CLOSING tag's `/` (`</Foo>`), where
+// the character immediately before the slash is also `<` and `<` is not an
+// expression position at all. With `<` included, `canPrecedeRegex` treated
+// `</Foo>`'s `/` as a regex opener, `scanRegexLiteral` then hunted forward
+// for the next un-classed `/` and found the first slash of a following real
+// `//` comment, folding it into the fake "regex" span — so the comment's
+// own `//` was never re-examined as a comment start and survived into
+// `stripComments`' output unstripped. Filed as T256's known-inert
+// limitation, closed here: removing `<` fixes both the JSX shape and the
+// equivalent non-JSX one (`x < /b // real comment`, pinned in this file's
+// own test), since a character scan cannot distinguish "comparison operator"
+// from "JSX closing tag" by any means available to it — the only options
+// were "never allow a regex after `<`" or "understand JSX", and this module
+// stays JSX-unaware on purpose (see the module header). Measured, not
+// assumed, that this costs nothing today: T263 re-ran T256's whole-tree
+// oracle (a real TypeScript parse supplying ground-truth
+// `RegularExpressionLiteral` spans) over every one of the 2,248 tracked
+// module files at the pre-fix commit and found ZERO whose real regex
+// literal's immediately preceding code token is `<` — so removing it does
+// not start misreading any regex literal that exists in this tree today as
+// division. See this module's header comment for the full T256/T263
+// history and the byte-diff counts before and after.
 const REGEX_PRECEDING_PUNCTUATION = new Set([
   "(",
   "[",
@@ -265,7 +313,6 @@ const REGEX_PRECEDING_PUNCTUATION = new Set([
   "%",
   "^",
   "~",
-  "<",
   ">",
   "/",
 ]);
