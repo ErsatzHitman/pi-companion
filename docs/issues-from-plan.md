@@ -10336,6 +10336,22 @@ the late write to land after the enumeration (an injected delay in the dispatch 
 or a stubbed `writeFileAtomic`) and show the cleanup still succeeds. A fix that cannot be shown to
 fail without it is not distinguishable from luck.
 
+**Evidence already produced, before this task is run.** A P9-N implementer spike (stopped mid-wave
+when the wave was cancelled; harness preserved outside the repo) ran each cleanup mode five times
+against a real `AgentStorage` and a real `AgentManager`:
+
+| Cleanup                                       | Result                        |
+| --------------------------------------------- | ----------------------------- |
+| no wait at all                                | `ENOTEMPTY` **reliably**      |
+| `storage.flush()` only                        | **still racy**                |
+| `agentManager.flush()` then `storage.flush()` | never failed across five runs |
+
+So the shipped P9-M fix (`storage.flush()` alone) is confirmed to be the partial measure its own
+comment says it is, and the missing await is **`AgentManager`'s**, not storage's — which points at
+option 1 or 2 rather than 3. Treat this as a starting hypothesis to re-derive, not a result to
+copy: five runs passing is not a proof, and the acceptance bar below is still a deterministic
+reproduction, not a green run.
+
 Owns: `packages/server/src/server/agent/create-agent/**` and `agent-storage.ts`'s quiescence API if
 option 2 is taken.
 
