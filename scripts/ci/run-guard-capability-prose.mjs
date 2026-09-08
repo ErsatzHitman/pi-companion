@@ -352,15 +352,44 @@ const DOCS_EXTENSIONS = new Set([".md"]);
 // have exited 0 with all three still reading "cannot pass" the moment
 // T207 made that false, the identical shape T179 and T197 each closed
 // for their own trees. `.github/workflows/` (`.yml` only — the three
-// files there today are all `.yml`) and `apps/android/maestro/`
-// (`.md` only — `README.md` is the one Markdown file in that directory;
-// the flow `.yaml` files themselves are governed by
-// `guard-no-production-daemon-port.mjs`'s narrower rule, not this one)
-// are the two prefixes this widening adds.
+// files there today are all `.yml`) and `apps/android/maestro/` are the
+// two prefixes this widening adds.
+//
+// T281: DECISION — WIDEN `apps/android/maestro/` from `.md` alone to
+// `.md`+`.yaml`. T207's own comment (above, left standing rather than
+// rewritten, per CLAUDE.md's "leave a correction in place" preference for
+// a decision that was right at the time) reasoned that the flow `.yaml`
+// files were "governed by `guard-no-production-daemon-port.mjs`'s
+// narrower rule, not this one" — true as far as it goes, but that guard
+// checks ONLY for a literal production-daemon-port mention; it has never
+// scanned for a capability-denial sentence, and nothing else did either.
+// The P9-O merge gate found two of its seven falsified prose sites sitting
+// in exactly this blind spot: `apps/android/maestro/composer-inputs.yaml`'s
+// own narrative comments (the same "TWO OF FOUR INPUT MODES..." block
+// `README.md` — already in scope — narrates prose in) asserted the mic
+// action ran "over the same outbox/sessionId/onSubmit a text send uses"
+// and that `handleMicPress` was "real end to end since T276", both false
+// the moment T277 landed in the same wave — structurally invisible to
+// this guard the whole time, the same "check that cannot fail" shape
+// T246 and T254 each closed one directory over.
+//
+// MEASURED before widening, per this task's own instruction (the same
+// discipline T246 used for `APP_ROOT_CONFIG_PATTERN`): `git ls-files
+// 'apps/android/maestro/*.yaml'` returns exactly 14 files (plus one
+// `shards.json`, already excluded — no extension this set admits) at
+// authorship. Running the widened scan against the real, committed tree
+// (all 14 read as `appFiles` alongside `README.md`) produced ZERO new
+// violations against the then-27 real `CAPABILITIES` entries — every one
+// of these 14 files is Maestro flow YAML with narrative `#`-comments
+// describing what the flow proves, the same genre `README.md` already
+// carries, not adversarial or profanity-filter-shaped content the way
+// this guard's own three self-referential files are. No new exclusion
+// was needed the way `SELF_REFERENTIAL_DENIAL_EXCLUSIONS` was for those
+// three, or `DOCS_LEDGER_DENIAL_EXCLUSIONS` was for the task ledger.
 const WORKFLOWS_PREFIX = ".github/workflows/";
 const WORKFLOWS_EXTENSIONS = new Set([".yml"]);
 const MAESTRO_PREFIX = "apps/android/maestro/";
-const MAESTRO_EXTENSIONS = new Set([".md"]);
+const MAESTRO_EXTENSIONS = new Set([".md", ".yaml"]);
 // T197: `docs/issues-from-plan.md` is the repository's own task ledger —
 // CLAUDE.md calls it out by name as governing task scope, so it is not one
 // of the "reference-only" documents this task's brief warned about, and it
@@ -499,7 +528,9 @@ function isMaestroProsePath(path) {
  * `apps/web/src`, `apps/android/src`, `scripts/ci`, and `packaging/**`;
  * T197 added `docs/**`; T207 added `.github/workflows/*.yml` and
  * `apps/android/maestro/*.md`; T254 added `apps/<name>/app.config.ts` (the
- * same `APP_ROOT_CONFIG_PATTERN` `isShippedSourcePath` already used) — except
+ * same `APP_ROOT_CONFIG_PATTERN` `isShippedSourcePath` already used); T281
+ * widened the maestro half to `apps/android/maestro/*.yaml` as well (see
+ * `MAESTRO_EXTENSIONS`'s own comment for the measurement) — except
  * this guard's own three files (see `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`)
  * and the task ledger, `docs/issues-from-plan.md` (see
  * `DOCS_LEDGER_DENIAL_EXCLUSIONS`). Comments AND test files both included
@@ -541,7 +572,7 @@ export function main() {
       `guard-capability-prose: OK — ${CAPABILITIES.length} capability group(s) checked against ` +
         `${shippedPaths.length} packages/*/src|apps/*/src|scripts/ci file(s) and ${appPaths.length} ` +
         `apps/web|android src + scripts/ci + packaging/** + docs/** + .github/workflows/*.yml + ` +
-        `apps/android/maestro/*.md + apps/*/app.config.ts file(s); no live denial found ` +
+        `apps/android/maestro/*.md|*.yaml + apps/*/app.config.ts file(s); no live denial found ` +
         `for a shipped capability.`,
     );
     return;

@@ -2806,10 +2806,26 @@ test("T207: isAppSourcePath now covers apps/android/maestro/*.md", () => {
   assert.equal(isAppSourcePath("apps/android/maestro/README.md"), true);
 });
 
-test("T207: isAppSourcePath does not admit apps/android/maestro/*.yaml (a different guard's job) or unrelated workflow-adjacent files", () => {
-  assert.equal(isAppSourcePath("apps/android/maestro/smoke.yaml"), false);
+// CORRECTED (T281): this test used to be titled "... does not admit
+// apps/android/maestro/*.yaml (a different guard's job) ..." and asserted
+// `isAppSourcePath("apps/android/maestro/smoke.yaml") === false`. T281
+// widened `MAESTRO_EXTENSIONS` to `.md`+`.yaml` — see that widening's own
+// comment in run-guard-capability-prose.mjs for why "a different guard's
+// job" was true but incomplete (that different guard only checks for a
+// literal production-daemon-port mention, never a capability-denial
+// sentence) — so a `.yaml` maestro flow file is now IN scope, and the two
+// unrelated `.github`-adjacent assertions below (never in scope, unaffected
+// by T281) are what remains of this test.
+test("T207: isAppSourcePath does not admit unrelated workflow-adjacent files", () => {
   assert.equal(isAppSourcePath(".github/dependabot.yml"), false);
   assert.equal(isAppSourcePath(".github/ISSUE_TEMPLATE/bug.md"), false);
+});
+
+test("T281: isAppSourcePath now covers apps/android/maestro/*.yaml", () => {
+  assert.equal(isAppSourcePath("apps/android/maestro/smoke.yaml"), true);
+  assert.equal(isAppSourcePath("apps/android/maestro/composer-inputs.yaml"), true);
+  // shards.json carries no extension MAESTRO_EXTENSIONS admits -- unaffected.
+  assert.equal(isAppSourcePath("apps/android/maestro/shards.json"), false);
 });
 
 test("T207: isShippedSourcePath is unaffected by the denial-scan widening", () => {
@@ -4641,4 +4657,211 @@ test("T268: run-guard-declared-workspace-deps.mjs's own real, committed content 
     }),
     [],
   );
+});
+
+// T281: registering wave P9-O's four capabilities. All four are FORWARD
+// guards, the T257/P9-H shape: the seven prose sites the P9-O gate actually
+// found and fixed by hand already carry `CORRECTED at the P9-O merge gate`
+// markers, so these tests fabricate a fresh denying sentence in each entry's
+// own wording rather than reusing any of those (already-exempt) quotations.
+// A manual RED/GREEN proof against the real, uncommitted-at-write-time
+// working tree (append the same phrasing to a real tracked file, confirm
+// exit 1, restore from a scratchpad copy, confirm exit 0) is recorded in
+// this task's own report, per the task brief's "proven able to FIRE"
+// requirement -- these fixture tests are the standing regression coverage.
+
+test("T281: a live does-not-have-a-real-recording-port claim is flagged once createExpoAudioVoiceCapturePort is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/src/features/voice/expo-audio-voice-capture-port.ts",
+      content: "export function createExpoAudioVoiceCapturePort(deps) { return {}; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "Android voice capture has no real recording port; the app cannot\n" +
+        "open a microphone stream today.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "Android voice capture is backed by a real recording port, not a stub (createExpoAudioVoiceCapturePort)",
+  );
+});
+
+test("T281: on the real committed tree, createExpoAudioVoiceCapturePort resolves as shipped", () => {
+  const real = readCommittedFile(
+    "apps/android/src/features/voice/expo-audio-voice-capture-port.ts",
+  );
+  const shipped = findShippedCapabilities([
+    { path: "apps/android/src/features/voice/expo-audio-voice-capture-port.ts", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name ===
+        "Android voice capture is backed by a real recording port, not a stub (createExpoAudioVoiceCapturePort)",
+    ),
+    "createExpoAudioVoiceCapturePort capability is no longer declared where expected:" +
+      " either it was renamed, or the file moved out of isShippedSourcePath scope",
+  );
+});
+
+test("T281: a live no-wire-request-to-transcribe claim is flagged once transcribeVoiceClip is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: "class DaemonClient { async transcribeVoiceClip(input) { return null; } }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "No wire request exists to transcribe a recorded voice clip today.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "a recorded voice clip can be transcribed over the wire (transcribeVoiceClip)",
+  );
+});
+
+test("T281: on the real committed tree, transcribeVoiceClip resolves as shipped from packages/client alone", () => {
+  const real = readCommittedFile("packages/client/src/daemon-client.ts");
+  const shipped = findShippedCapabilities([
+    { path: "packages/client/src/daemon-client.ts", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name ===
+        "a recorded voice clip can be transcribed over the wire (transcribeVoiceClip)",
+    ),
+    "transcribeVoiceClip capability is no longer declared in daemon-client.ts:" +
+      " either it was renamed, or the file moved out of isShippedSourcePath scope",
+  );
+});
+
+test("T281: a live no-shared-capture-model claim is flagged once runCapturePress is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/src/features/composer/attachment-capture-model.ts",
+      content: "export async function runCapturePress(port) { return {}; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "No shared press-to-capture model exists for the camera on android.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "camera-capture button press resolves permission exactly once via a shared model (runCapturePress)",
+  );
+});
+
+test("T281: on the real committed tree, runCapturePress resolves as shipped", () => {
+  const real = readCommittedFile("apps/android/src/features/composer/attachment-capture-model.ts");
+  const shipped = findShippedCapabilities([
+    { path: "apps/android/src/features/composer/attachment-capture-model.ts", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name ===
+        "camera-capture button press resolves permission exactly once via a shared model (runCapturePress)",
+    ),
+    "runCapturePress capability is no longer declared in attachment-capture-model.ts:" +
+      " either it was renamed, or the file moved out of isShippedSourcePath scope",
+  );
+});
+
+test("T281: a live no-clipboard-paste-handler claim is flagged once the web trio is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/web/src/features/composer/use-clipboard-paste.ts",
+      content: "export function useComposerPaste(options) { return () => {}; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "No clipboard paste handler exists in the web composer.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "the web composer accepts files by drag-and-drop and clipboard paste, not only the file dialog (addFiles/useComposerPaste/useDragAndDrop)",
+  );
+});
+
+test("T281: the web trio is OR-across-members, not a T168 AND-group -- any ONE of the three shipping alone is enough, since they are measured to live in three different files", () => {
+  const onlyDragAndDropShipped = findShippedCapabilities([
+    {
+      path: "apps/web/src/features/composer/use-drag-and-drop.ts",
+      content: "export function useDragAndDrop(options) { return {}; }\n",
+    },
+  ]);
+
+  assert.ok(
+    onlyDragAndDropShipped.some(
+      (capability) =>
+        capability.name ===
+        "the web composer accepts files by drag-and-drop and clipboard paste, not only the file dialog (addFiles/useComposerPaste/useDragAndDrop)",
+    ),
+    "the web trio must resolve as shipped from useDragAndDrop alone -- if this fails, the" +
+      " entry was reshaped into a same-file AND-group, which is false for these three names",
+  );
+});
+
+test("T281: on the real committed tree, all three web-trio members resolve as shipped from their own separate files", () => {
+  const useAttachmentsReal = readCommittedFile("apps/web/src/features/composer/use-attachments.ts");
+  const useComposerPasteReal = readCommittedFile(
+    "apps/web/src/features/composer/use-clipboard-paste.ts",
+  );
+  const useDragAndDropReal = readCommittedFile(
+    "apps/web/src/features/composer/use-drag-and-drop.ts",
+  );
+
+  for (const [path, content] of [
+    ["apps/web/src/features/composer/use-attachments.ts", useAttachmentsReal],
+    ["apps/web/src/features/composer/use-clipboard-paste.ts", useComposerPasteReal],
+    ["apps/web/src/features/composer/use-drag-and-drop.ts", useDragAndDropReal],
+  ]) {
+    const shipped = findShippedCapabilities([{ path, content }]);
+    assert.ok(
+      shipped.some(
+        (capability) =>
+          capability.name ===
+          "the web composer accepts files by drag-and-drop and clipboard paste, not only the file dialog (addFiles/useComposerPaste/useDragAndDrop)",
+      ),
+      `the web trio capability must resolve as shipped from ${path} alone`,
+    );
+  }
 });

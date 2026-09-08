@@ -2,8 +2,9 @@
 // repository's real source (not just `packages/client/src`) may not
 // coexist with prose in `apps/web/src`, `apps/android/src`, `scripts/ci`,
 // `packaging/**` (T179 widened the denial scan to the latter two), `docs/**`
-// (T197), or `.github/workflows/*.yml`/`apps/android/maestro/*.md` (T207)
-// asserting that capability is absent. `run-guard-capability-prose.mjs`'s
+// (T197), or `.github/workflows/*.yml`/`apps/android/maestro/*.md` (T207) —
+// widened to `apps/android/maestro/*.yaml` too by T281 — asserting that
+// capability is absent. `run-guard-capability-prose.mjs`'s
 // `isAppSourcePath` is the authoritative scope check — read it rather than
 // trusting this list, which cannot watch itself.
 //
@@ -1603,6 +1604,112 @@ export const CAPABILITIES = [
       /guard-dockerignore-depth(?:\.mjs)?[^.]{0,140}?(?:does not|never|cannot) (?:consult|respect|read|honou?r) (?:the )?`?\.gitignore`?/i,
       /(?:its|the) disk walk[^.]{0,120}?(?:does not|never) (?:exclude|skip|filter)[^.]{0,60}?`?\.gitignore`?d/i,
       /guard-dockerignore-depth(?:\.mjs)?[^.]{0,160}?(?:red|fails) locally (?:but|while|and) (?:green|passes) (?:in|on) CI/i,
+    ],
+  },
+  // T281: the P9-O merge gate found the guard exiting 0 across the whole of
+  // P9-O not because the tree was clean, but because no `CAPABILITIES` entry
+  // existed for anything that wave shipped — CLAUDE.md's T124 "add an entry
+  // the moment you ship one" instruction, missed four times in one wave (the
+  // gate's own commit message: "Filed T281-T287 ... T281" for exactly this).
+  // Four entries below, one per capability named in T281's brief. All four
+  // are FORWARD guards in T162/T257's shape: the seven prose sites the P9-O
+  // gate actually found and fixed by hand already carry
+  // `CORRECTED at the P9-O merge gate` markers (see
+  // `apps/android/src/features/voice/index.ts`,
+  // `apps/android/src/features/voice/voice-capture-port.ts`,
+  // `apps/android/src/features/composer/mic-press-model.test.ts`,
+  // `apps/android/src/features/notifications/push-registration-port.ts`, and
+  // `apps/android/maestro/composer-inputs.yaml` twice), so a phrase that
+  // happened to match one of those quoted, already-corrected sentences would
+  // never fire — confirmed directly (see this task's report), not assumed.
+  // Every `denyingPhrases` entry below is therefore worded in this task's OWN
+  // voice, never lifted from any of those five files or from the declaring
+  // file each capability actually ships in (T215's collision, avoided the
+  // same way T215 avoided it: by rephrasing, not by adding an exclusion), and
+  // each was proven able to FIRE by appending a fresh sentence in that wording
+  // to a real tracked in-scope file, confirming exit 1 naming the right
+  // capability, then restoring the file from a scratchpad copy (never
+  // `git checkout --`) and confirming exit 0 with `git status --porcelain`
+  // empty.
+  {
+    // `createExpoAudioVoiceCapturePort` — measured with `git grep`: declared
+    // exactly once, as a `function` declaration, in
+    // `apps/android/src/features/voice/expo-audio-voice-capture-port.ts`. No
+    // other shipped file declares anything by this name (35 total mentions
+    // across the tree, all in the voice/composer/notifications features
+    // narrating this same function), so a bare-string member is both
+    // sufficient and safe — no T168 group or T169 shape-anchor needed.
+    name: "Android voice capture is backed by a real recording port, not a stub (createExpoAudioVoiceCapturePort)",
+    methodNames: ["createExpoAudioVoiceCapturePort"],
+    denyingPhrases: [
+      /\bandroid\b[^.]{0,80}?voice capture[^.]{0,80}?(?:has no|lacks|is missing)[^.]{0,60}?real (?:recording|capture) (?:port|implementation)/i,
+      /createUnavailableVoiceCapturePort[^.]{0,100}?(?:is|remains|stays)[^.]{0,30}?(?:this (?:app|build)'s )?only production (?:VoiceCapturePort|voice[- ]capture (?:port|implementation))/i,
+      /\bno (?:real|production) (?:expo[- ]?audio )?(?:voice )?recording (?:port|implementation) exists[^.]{0,30}?(?:on android|in this app|today)/i,
+    ],
+  },
+  {
+    // `transcribeVoiceClip` — measured with `git grep`: declared as a real
+    // method (not merely mentioned) in exactly two shipped files —
+    // `packages/client/src/daemon-client.ts` (`async transcribeVoiceClip(`)
+    // and `apps/android/src/features/voice/voice-model.ts` (an interface
+    // method, `transcribeVoiceClip?(input: {`). Both declarations are this
+    // one wire capability, not an unrelated same-named member, so a
+    // bare-string member is sufficient. The brief also names
+    // `packages/server`'s speech provider as part of where this capability
+    // lives (the daemon-side handler for the `transcribe_voice_clip.request`/
+    // `.response` wire pair, in
+    // `packages/server/src/server/session/voice/voice-session.ts`) — that
+    // file does not declare a member literally named `transcribeVoiceClip`
+    // (its handler has its own name), so it is not needed for the "shipped"
+    // check to be true; the client-side method alone already makes it so.
+    name: "a recorded voice clip can be transcribed over the wire (transcribeVoiceClip)",
+    methodNames: ["transcribeVoiceClip"],
+    denyingPhrases: [
+      /\bno (?:wire|rpc|client) (?:request|method|call) exists to transcribe (?:a |the )?(?:recorded )?voice clip/i,
+      /\ban? (?:audio|voice) clip (?:cannot|can'?t) be transcribed[^.]{0,40}?(?:today|yet|over the wire)/i,
+      /transcribeVoiceClip[^.]{0,60}?(?:does not exist|is not implemented|has never been sent)/i,
+    ],
+  },
+  {
+    // `runCapturePress` — measured with `git grep`: declared exactly once,
+    // as an `export async function`, in
+    // `apps/android/src/features/composer/attachment-capture-model.ts`. Every
+    // other mention across the tree (20 total) is a call site, an import, or
+    // a comment naming it — no unrelated same-named member exists anywhere in
+    // scope, so a bare-string member is sufficient.
+    name: "camera-capture button press resolves permission exactly once via a shared model (runCapturePress)",
+    methodNames: ["runCapturePress"],
+    denyingPhrases: [
+      /\bcamera capture[^.]{0,60}?(?:has no|lacks)[^.]{0,50}?(?:press|permission) (?:handler|resolution) (?:function|model)/i,
+      /\bno (?:shared|single) (?:press-to-capture|capture-press) (?:model|function) (?:exists|is called)[^.]{0,40}?(?:for the camera|on android)/i,
+      /runCapturePress[^.]{0,60}?(?:does not exist|is not (?:called|implemented))/i,
+    ],
+  },
+  {
+    // The web trio — `addFiles`, `useComposerPaste`, `useDragAndDrop`.
+    // Measured with `git grep` before choosing a shape, per this task's own
+    // instruction not to assume a T168 AND-group: the three are declared in
+    // THREE DIFFERENT shipped files —
+    // `apps/web/src/features/composer/use-attachments.ts` (`addFiles`, both
+    // as an interface property and as its own `const addFiles =` binding),
+    // `apps/web/src/features/composer/use-clipboard-paste.ts`
+    // (`export function useComposerPaste(`), and
+    // `apps/web/src/features/composer/use-drag-and-drop.ts`
+    // (`export function useDragAndDrop(`). A T168 AND-group requires every
+    // member in ONE file, which is false here, so the three are three
+    // separate (OR-across-members) tokens instead — the capability counts as
+    // shipped the moment any one of the three real, uniquely-declared names
+    // exists, which today all three do. `addFiles` alone is a plain English
+    // phrase and could in principle collide elsewhere; measured directly: it
+    // appears only in this one feature's own files (`Composer.tsx`,
+    // `use-attachments.test.ts`, and the three files above) across the whole
+    // tracked tree, so no group or shape-anchor is needed today.
+    name: "the web composer accepts files by drag-and-drop and clipboard paste, not only the file dialog (addFiles/useComposerPaste/useDragAndDrop)",
+    methodNames: ["addFiles", "useComposerPaste", "useDragAndDrop"],
+    denyingPhrases: [
+      /\bweb composer[^.]{0,60}?(?:cannot|can'?t|does not support) (?:dropping|dragging) files? (?:onto|into) it/i,
+      /\bno clipboard paste handler exists[^.]{0,30}?(?:in|for) the web composer/i,
+      /\bfiles (?:cannot|can'?t) be (?:staged|added) (?:by|via) drag(?:ging)?[- ]?and[- ]?drop in the web (?:app|composer)/i,
     ],
   },
 ];

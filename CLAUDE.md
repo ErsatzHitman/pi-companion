@@ -574,6 +574,66 @@ all stay outside `isShippedSourcePath`'s scope, unchanged. The import-graph orph
 of `app.config.ts` as a non-src entry point, predating this task and untouched by it either
 way.
 
+### T281: four of P9-O's capabilities registered; `apps/android/maestro/` widened to `*.yaml`
+
+The P9-O merge gate found `run-guard-capability-prose.mjs` exiting 0 across the whole of
+that wave not because the tree was clean, but because no `CAPABILITIES` entry existed for
+anything P9-O shipped — this section's own "add an entry the moment you ship one"
+instruction, missed four times in one wave. Four entries were registered:
+`createExpoAudioVoiceCapturePort` (Android voice capture backed by a real recording port,
+not a stub), `transcribeVoiceClip` (a recorded voice clip can be transcribed over the
+wire), `runCapturePress` (the camera-capture button press resolves permission exactly once
+via a shared model), and the web trio `addFiles`/`useComposerPaste`/`useDragAndDrop` (the
+web composer accepts drag-and-drop and clipboard-paste files, not only the file dialog).
+
+All four are FORWARD guards in T162/T257's shape: the seven prose sites the P9-O gate
+actually found and fixed by hand already carry `CORRECTED at the P9-O merge gate` markers,
+so a phrase that happened to match one of those quoted, already-corrected sentences would
+never fire — checked directly rather than assumed, per this task's own brief. Every
+`denyingPhrases` entry is worded in T281's own voice, never lifted from the five files those
+markers live in or from the file each capability actually ships in (T215's collision,
+avoided the same way T215 avoided it — by rephrasing, not by adding an exclusion), and each
+was proven able to FIRE by appending a fresh sentence to a real tracked in-scope file (a
+different, unrelated file was picked for each of the four, to stay clear of another task's
+concurrently in-flight edits to the actual voice/composer feature files), confirming exit 1
+naming the right capability, then restoring from a scratchpad copy — never `git checkout --`
+— and confirming exit 0 with `git status --porcelain` empty.
+
+**Shape, measured per name rather than assumed:** `createExpoAudioVoiceCapturePort` and
+`runCapturePress` are each declared in exactly one shipped file, so a bare-string member is
+sufficient for both. `transcribeVoiceClip` is declared in exactly two shipped files
+(`packages/client/src/daemon-client.ts`'s real method, `apps/android/src/features/voice/
+voice-model.ts`'s interface method) — both the same wire capability, so a bare string is
+still sufficient; `packages/server`'s speech-provider handler (named in the task brief as
+part of where this capability lives) does not itself declare a member named
+`transcribeVoiceClip`, so it plays no role in the "shipped" check. The web trio was measured
+before choosing a shape, per this task's explicit instruction not to assume a T168 AND-group:
+`addFiles`, `useComposerPaste`, and `useDragAndDrop` are declared in three DIFFERENT files
+(`use-attachments.ts`, `use-clipboard-paste.ts`, `use-drag-and-drop.ts` respectively), so an
+AND-group (which requires every member in ONE file) is the wrong shape here — the three are
+three separate OR-across-members tokens instead, and `guard-capability-prose.test.mjs`'s
+"OR-across-members, not a T168 AND-group" case pins exactly this by shipping only
+`useDragAndDrop` and confirming the capability still resolves as shipped.
+
+**The `*.yaml` scope question, decided rather than left open:** two of the seven P9-O prose
+sites lived in `apps/android/maestro/composer-inputs.yaml`'s own narrative comments, and
+`isAppSourcePath` admitted only `apps/android/maestro/*.md` — those two sites were
+structurally invisible, the "check that cannot fail" shape T246 and T254 each closed one
+directory over. **Decision: WIDEN**, to `apps/android/maestro/*.yaml` alongside the existing
+`*.md`. The prior reasoning for `.md`-only (T207's comment: the flow `.yaml` files are
+"governed by `guard-no-production-daemon-port.mjs`'s narrower rule, not this one") was true
+but incomplete — that guard checks only for a literal production-daemon-port mention, never
+for a capability-denial sentence, so nothing was actually checking the yaml files' narrative
+prose for the shape this guard exists to catch. Measured before trusting it, the same
+discipline T246 used for `APP_ROOT_CONFIG_PATTERN`: `git ls-files
+'apps/android/maestro/*.yaml'` returns exactly 14 files (plus `shards.json`, which carries no
+extension this set admits and stays excluded); running the widened scan against the real,
+committed tree produced zero new violations against the then-27 real `CAPABILITIES` entries.
+No new exclusion (`SELF_REFERENTIAL_DENIAL_EXCLUSIONS`/`DOCS_LEDGER_DENIAL_EXCLUSIONS`-shaped)
+was needed — every one of the 14 files is ordinary Maestro flow YAML with narrative
+`#`-comments, the same genre `README.md` (already in scope) carries, not adversarial or
+profanity-filter-shaped content the way this guard's own three self-referential files are.
+
 ## T217: a guard for count claims in committed prose was investigated and rejected
 
 Four consecutive merge gates removed a stale figure from committed prose: `CLAUDE.md`'s
