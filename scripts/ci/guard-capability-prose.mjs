@@ -1612,16 +1612,24 @@ export const CAPABILITIES = [
   // the moment you ship one" instruction, missed four times in one wave (the
   // gate's own commit message: "Filed T281-T287 ... T281" for exactly this).
   // Four entries below, one per capability named in T281's brief. All four
-  // are FORWARD guards in T162/T257's shape: the seven prose sites the P9-O
-  // gate actually found and fixed by hand already carry
-  // `CORRECTED at the P9-O merge gate` markers (see
-  // `apps/android/src/features/voice/index.ts`,
-  // `apps/android/src/features/voice/voice-capture-port.ts`,
-  // `apps/android/src/features/composer/mic-press-model.test.ts`,
-  // `apps/android/src/features/notifications/push-registration-port.ts`, and
-  // `apps/android/maestro/composer-inputs.yaml` twice), so a phrase that
-  // happened to match one of those quoted, already-corrected sentences would
-  // never fire — confirmed directly (see this task's report), not assumed.
+  // are FORWARD guards in T162/T257's shape: MOST of the prose sites the P9-O
+  // gate found and fixed by hand carry `CORRECTED at the P9-O merge gate`
+  // markers, so a phrase matching one of those quoted, already-corrected
+  // sentences would not fire. CORRECTED at the P9-P merge gate: this said
+  // "the seven prose sites ... already carry" those markers and listed five
+  // files. Re-counted with a multiline-tolerant scan (the marker phrase wraps
+  // across comment gutters, so a single-line grep undercounts): six markers
+  // across five files — `maestro/composer-inputs.yaml` twice, plus
+  // `features/voice/index.ts`, `features/voice/voice-capture-port.ts`,
+  // `features/voice/expo-audio-voice-capture-port.ts` (omitted by the old
+  // list; it holds the P9-O gate's own `LOW_QUALITY`-is-stereo headline) and
+  // `features/notifications/push-registration-port.ts`.
+  // `features/composer/mic-press-model.test.ts` carries NO marker of any kind:
+  // the P9-O gate corrected it by DELETING the false test title rather than
+  // quoting it, which is a legitimate choice but means the "already exempt"
+  // reasoning never applied there. The conclusion is unaffected — every phrase
+  // below is in this task's own voice, so exemption was never what protected
+  // them.
   // Every `denyingPhrases` entry below is therefore worded in this task's OWN
   // voice, never lifted from any of those five files or from the declaring
   // file each capability actually ships in (T215's collision, avoided the

@@ -1146,6 +1146,8 @@ impossible. T51 audits the gap and adds a test so it cannot silently return.
 
 File lists, reads, writes, uploads, and downloads use existing daemon RPC and binary frames. The frontend must not directly access laptop paths.
 
+**Attachment bytes.** A message attachment is the one file class the rule above cannot serve. `AgentTimelineImageRef` carries a `path`, never inline bytes, and that path points into a daemon-local temp directory outside every workspace root — so `readFile`/`file_explorer_request` and `requestDownloadToken`/`file_download_token_request`, which both resolve relative to a workspace `cwd`, reject it by construction. Attachments therefore get their own capability-scoped serving path: the daemon accepts a request only for a path already recorded on the requesting agent's own timeline, independently confirms the realpath lies inside the attachment temp root, and hands back a short-lived token consumed through the same download route the existing file RPC uses. Neither the workspace-scoped resolver nor its containment check may be widened to accommodate this; the two membership and containment layers are what keep an attachment request from becoming an arbitrary host-file read. This is what makes an attachment sent from one client renderable on another.
+
 Terminal output stays on the existing binary channel and respects daemon backpressure. Web renders direct xterm. Android rebuilds an xterm WebView wrapper from the established binary protocol and behavior tests; the old frontend implementation is reference material only.
 
 ### 12.5 Offline behavior

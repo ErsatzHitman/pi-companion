@@ -4660,10 +4660,15 @@ test("T268: run-guard-declared-workspace-deps.mjs's own real, committed content 
 });
 
 // T281: registering wave P9-O's four capabilities. All four are FORWARD
-// guards, the T257/P9-H shape: the seven prose sites the P9-O gate actually
-// found and fixed by hand already carry `CORRECTED at the P9-O merge gate`
-// markers, so these tests fabricate a fresh denying sentence in each entry's
-// own wording rather than reusing any of those (already-exempt) quotations.
+// guards, the T257/P9-H shape: these tests fabricate a fresh denying sentence
+// in each entry's own wording rather than reusing a P9-O-gate quotation.
+// CORRECTED at the P9-P merge gate: this said "the seven prose sites the P9-O
+// gate actually found and fixed by hand already carry
+// `CORRECTED at the P9-O merge gate` markers", so the quotations were
+// "already-exempt". Six markers exist across five files, and
+// `mic-press-model.test.ts` carries none — its false title was deleted, not
+// quoted. Fabricating fresh wording is what makes these entries safe; the
+// exemption was never load-bearing.
 // A manual RED/GREEN proof against the real, uncommitted-at-write-time
 // working tree (append the same phrasing to a real tracked file, confirm
 // exit 1, restore from a scratchpad copy, confirm exit 0) is recorded in

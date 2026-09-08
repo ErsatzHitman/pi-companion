@@ -347,8 +347,21 @@ export const AUDIT_BASELINE = [
   {
     package: "expo-linking",
     severity: "moderate",
+    // Range re-synced at the P9-P merge gate. Upstream advisory data grew ONE
+    // trailing arm, `>=58.0.0-canary-20260806-8c2d007`, which made this entry
+    // report simultaneously as an unbaselined advisory and as a stale entry.
+    // This is bookkeeping, not a new risk acceptance, and that was measured
+    // rather than assumed: the installed version is 8.0.12, already inside the
+    // pre-existing `2.2.2 - 55.0.0-canary-20260223-05214f1` arm, so the new arm
+    // covers only versions ABOVE what this repository resolves. Same advisory,
+    // same owner, same reason, same exposure. Nothing in wave P9-P touched
+    // `package-lock.json`, this guard, or `docs/security-and-version-drift.md`
+    // (`git log <base>..HEAD --` those three paths returns nothing), so the
+    // change came from the registry, not from the tree. If a future re-sync
+    // adds an arm that DOES cover the installed version, that is a new
+    // acceptance and needs the owner, not a range edit.
     range:
-      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d",
+      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || >=58.0.0-canary-20260806-8c2d007",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },

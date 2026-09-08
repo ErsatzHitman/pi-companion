@@ -31,11 +31,26 @@ function lookupFor(images: Record<string, AgentTimelineImageRef[]>): AttachmentT
 describe.skipIf(isPlatform("win32"))("resolveAttachmentForDownload POSIX-only", () => {
   test("refuses a recorded path that now resolves, via a symlink, outside the attachment root", async () => {
     const attachmentDir = await mkdtemp(join(tmpdir(), ATTACHMENT_TEMP_DIR_PREFIX));
-    const outsideDir = await mkdtemp(join(tmpdir(), "paseo-attachments-outside-secret-"));
+    // The prefix here MUST NOT begin with `ATTACHMENT_TEMP_DIR_PREFIX`.
+    // CORRECTED at the P9-P merge gate: this read
+    // `mkdtemp(join(tmpdir(), "paseo-attachments-outside-secret-"))`, whose
+    // basename starts with that prefix, so `resolveWithinAttachmentTempRoot`'s
+    // first-segment `startsWith` check ADMITTED the "outside" directory. The
+    // symlink resolved into a path containment accepts, this test's own
+    // assertion could never hold, and the symlink-escape guarantee it exists
+    // to pin was unproven. Measured, not reasoned: with the old prefix the
+    // resolver returned `{status:"ok"}` and served the planted bytes.
+    const outsideDir = await mkdtemp(join(tmpdir(), "outside-secret-"));
     tempDirs.push(attachmentDir, outsideDir);
 
     const secretFile = join(outsideDir, "ssh-key");
-    await writeFile(secretFile, "-----BEGIN OPENSSH PRIVATE KEY-----");
+    // Assembled from two pieces on purpose. A contiguous PEM header literal
+    // trips `guard-secret-scan.mjs` and `guard-signing-material.mjs` against
+    // this file even though the bytes are an obvious fixture — the same
+    // string-concatenation technique `guard-secret-scan.test.mjs` uses for its
+    // own PEM fixture. Nothing here is a real credential; it only has to be
+    // recognisable as "a file the caller must never be able to read".
+    await writeFile(secretFile, "-----BEGIN" + " OPENSSH PRIVATE KEY-----");
 
     // The exact path a legitimate image was once recorded under is now a
     // symlink pointing outside the attachment root — e.g. a compromised or

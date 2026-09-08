@@ -16,8 +16,8 @@ import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
  * *relative to a workspace `cwd`* through `file-explorer/service.ts`'s
  * `resolveScopedPath`, which throws for anything outside that workspace
  * root — and an attachment path is outside every workspace root by
- * construction. plan.md §12.4 records this as the capability this module
- * closes.
+ * construction. plan.md §12.4's "Attachment bytes" paragraph records this as
+ * the capability this module closes.
  *
  * **The design, chosen and argued against the alternative by measurement.**
  * Two shapes were possible: (1) serve by an opaque id the daemon resolves
@@ -152,11 +152,21 @@ interface AttachmentRootContainment {
  * root: resolving through any symlink in the chain (including a symlink
  * substituted in at the exact recorded path after the fact) and rejecting
  * the result unless it lands inside a `paseo-attachments-*` directory
- * directly under the OS temp root. This is the second, independent layer —
- * it refuses a `..`-shaped path outright (never matches, and even if it
- * somehow did, cannot resolve into the temp root) and a symlink-out just as
- * directly (the realpath of the swapped-in symlink's target fails
- * containment even though the request path string is unchanged).
+ * directly under the OS temp root. This is the second, independent layer.
+ * It refuses a `..`-shaped path that resolves ANYWHERE ELSE, and a
+ * symlink-out just as directly: the realpath of the swapped-in symlink's
+ * target fails containment even though the request path string is unchanged.
+ *
+ * CORRECTED at the P9-P merge gate: this said a `..`-shaped path "cannot
+ * resolve into the temp root". It can — a request whose literal string goes
+ * up out of an attachment directory and straight back down into the same one
+ * realpaths to a legitimate in-root file and is served (measured, not
+ * reasoned). That is harmless, because membership already required the exact
+ * string to be on the agent's own timeline, but the clause as written was
+ * false. The underlying reason is worth stating: `resolveScopedPath` checks
+ * containment BOTH before and after `realpath`; this function only checks
+ * after, so "the same discipline `resolveScopedPath` applies" describes a
+ * superset of what is implemented here.
  */
 async function resolveWithinAttachmentTempRoot(
   candidatePath: string,

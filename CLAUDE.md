@@ -586,12 +586,20 @@ wire), `runCapturePress` (the camera-capture button press resolves permission ex
 via a shared model), and the web trio `addFiles`/`useComposerPaste`/`useDragAndDrop` (the
 web composer accepts drag-and-drop and clipboard-paste files, not only the file dialog).
 
-All four are FORWARD guards in T162/T257's shape: the seven prose sites the P9-O gate
-actually found and fixed by hand already carry `CORRECTED at the P9-O merge gate` markers,
-so a phrase that happened to match one of those quoted, already-corrected sentences would
-never fire — checked directly rather than assumed, per this task's own brief. Every
-`denyingPhrases` entry is worded in T281's own voice, never lifted from the five files those
-markers live in or from the file each capability actually ships in (T215's collision,
+All four are FORWARD guards in T162/T257's shape. (CORRECTED at the P9-P merge gate: this
+said "the seven prose sites the P9-O gate actually found and fixed by hand already carry
+`CORRECTED at the P9-O merge gate` markers", and named five files. A multiline-tolerant
+re-count — the marker phrase wraps across comment gutters, so a single-line grep undercounts
+it — found **six markers across five files**: `apps/android/maestro/composer-inputs.yaml`
+twice, plus `features/voice/index.ts`, `features/voice/voice-capture-port.ts`,
+`features/voice/expo-audio-voice-capture-port.ts` — omitted by the old list, and the file
+holding that gate's own headline correction — and
+`features/notifications/push-registration-port.ts`.
+`features/composer/mic-press-model.test.ts` carries no marker at all: the P9-O gate deleted
+its false test title instead of quoting it. So a matching phrase would not have been exempt
+there. The conclusion stands for a different reason than the one given.) Every
+`denyingPhrases` entry is worded in T281's own voice, never lifted from a file carrying one
+of those markers or from the file each capability actually ships in (T215's collision,
 avoided the same way T215 avoided it — by rephrasing, not by adding an exclusion), and each
 was proven able to FIRE by appending a fresh sentence to a real tracked in-scope file (a
 different, unrelated file was picked for each of the four, to stay clear of another task's

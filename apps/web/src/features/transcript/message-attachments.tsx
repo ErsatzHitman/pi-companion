@@ -31,12 +31,25 @@ import "./message-attachments.css";
  * (`os.tmpdir()/paseo-attachments-*`,
  * `packages/server/src/server/agent/providers/provider-image-output.ts`'s
  * `materializeProviderImage`) that exists specifically *outside* any
- * session's workspace root, so both existing RPCs reject it. There is no
- * third RPC that serves an unscoped path. This is a real, provable
- * backend gap, not a client omission — resolving it needs new daemon
- * work (a dedicated attachment-serving RPC, or widening one of the
- * existing ones to accept a capability-scoped path), which is out of
- * this task's owned files (`apps/web/src/features/transcript/` only).
+ * session's workspace root, so both existing RPCs reject it.
+ *
+ * CORRECTED at the P9-P merge gate. This said: "There is no third RPC
+ * that serves an unscoped path. This is a real, provable backend gap,
+ * not a client omission — resolving it needs new daemon work (a
+ * dedicated attachment-serving RPC, or widening one of the existing ones
+ * to accept a capability-scoped path)". T283 did that daemon work. The
+ * third RPC now exists — `attachment_download_token_request`, served by
+ * `packages/server/src/server/file-upload/attachment-access.ts`'s
+ * `resolveAttachmentForDownload`, which admits a path only when it is
+ * already recorded on the requesting agent's own timeline AND its
+ * realpath lies inside the attachment temp root (plan.md §12.4,
+ * "Attachment bytes"). `resolveScopedPath` was NOT widened.
+ *
+ * What is still true is narrower: nothing supplies `resolveImageSrc`
+ * yet, so this renderer still shows the reference card. Wiring the seam
+ * at the route level — in both apps, and registering the capability in
+ * `guard-capability-prose.mjs` in the same commit — is T284's, and was
+ * outside T283's owned files (`packages/server` only).
  *
  * Rather than either faking a preview (inventing pixels this client
  * cannot actually fetch) or dropping the image silently, `resolveImageSrc`

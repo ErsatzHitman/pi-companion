@@ -270,12 +270,22 @@ export interface ComposerProps {
    * `transcribeVoiceClip` implements it).
    *
    * **T282 wires this at the mount**: the session route
-   * (`app/h/[serverId]/session/[agentId]/index.tsx`) now passes
-   * `client.transcribeVoiceClip.bind(client)`, where `client` is the
-   * same `AppCore.connection`-derived `DaemonClient`
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`) now passes the live
+   * `DaemonClient` itself, narrowed to `VoiceTranscriptionClient` by
+   * `resolveTranscribeClient` — the same `AppCore.connection`-derived
+   * `DaemonClient`
    * `queueModeClient`/`turnStatusClient` below already receive from the
    * route layer — see `app-shell/session-route-daemon-clients.ts`'s
-   * `resolveTranscribeClient`. CORRECTED at T282: this comment used to
+   * `resolveTranscribeClient`. CORRECTED at the P9-P merge gate: this
+   * said the route passes `client.transcribeVoiceClip.bind(client)`.
+   * Nothing binds anything — `resolveTranscribeClient` casts the whole
+   * client, and that distinction is load-bearing rather than stylistic:
+   * `voiceController`'s `useMemo` below is keyed on `transcribeClient`,
+   * so a freshly-bound function would be a new identity every render and
+   * would rebuild the controller mid-recording. A maintainer who "fixed"
+   * the code to match the old wording would introduce that bug. The
+   * mechanism was copied from T282's own ledger brief, not from the
+   * tree. CORRECTED at T282: this comment used to
    * say **"Left undone deliberately in this task"**, reasoning that
    * wiring it blind, with no device or live daemon connection available
    * to prove the round trip end to end, was worse than a disclosed,

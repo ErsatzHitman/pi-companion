@@ -54,8 +54,13 @@
  *
  * **T282 (wave P9-W61) wires this at the only production mount.** The
  * session route (`app/h/[serverId]/session/[agentId]/index.tsx`) now
- * resolves `client.transcribeVoiceClip.bind(client)` off the same
- * `AppCore.connection`-derived `DaemonClient` it already threads through
+ * resolves the live `DaemonClient` and narrows it to this interface —
+ * CORRECTED at the P9-P merge gate, which said it "resolves
+ * `client.transcribeVoiceClip.bind(client)`"; no call site binds
+ * anything, and the same sentence already described the real mechanism
+ * as "the identical fresh-read-and-cast pattern", which a bind is not —
+ * off the same `AppCore.connection`-derived `DaemonClient` it already
+ * threads through
  * for `queueModeClient`/`turnStatusClient` — see `app-shell/
  * session-route-daemon-clients.ts`'s `resolveTranscribeClient`, the
  * identical fresh-read-and-cast pattern those two functions use — and

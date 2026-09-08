@@ -16,13 +16,17 @@
  * `./tool-call-row-model.ts`'s doc comments), so it is unit-testable
  * under this workspace's plain `vitest` setup.
  *
- * **Same backend gap as web, same answer**: `AgentTimelineImageRef`
- * carries a `path` into a daemon-local temp directory
- * (`materializeProviderImage`), not workspace-relative bytes any
- * existing RPC will resolve — see web's `message-attachments.tsx` module
- * doc comment for the full citation trail. No live `DaemonClient` is
- * wired into this app this wave either (`message-row-model.ts`'s prior
- * doc comment), so there is no resolver to call regardless. Rather than
+ * **Same shape as web, same answer.** `AgentTimelineImageRef` carries a
+ * `path` into a daemon-local temp directory (`materializeProviderImage`),
+ * not workspace-relative bytes — see web's `message-attachments.tsx`
+ * module doc comment for the full citation trail. CORRECTED at the P9-P
+ * merge gate: this called it a "backend gap" and said "no existing RPC
+ * will resolve" such a path. T283 shipped one —
+ * `attachment_download_token_request`, capability-scoped to paths
+ * already on the requesting agent's own timeline (plan.md §12.4,
+ * "Attachment bytes"). What remains true is that nothing supplies
+ * `resolveImageUri` yet, so there is no resolver wired here to call;
+ * supplying it is T284's. Rather than
  * inventing pixels or dropping the reference silently, every image
  * renders as an accessible reference card — name, kind, size — through
  * `imageAttachmentViewModel` below, with an optional `resolveImageUri`

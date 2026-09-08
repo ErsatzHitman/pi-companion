@@ -544,6 +544,8 @@ that recomputation has to be domain-specific:
 | T285   | Cover the fifth PermissionKind in permission-recovery's own battery             | phase-9   | android          | P9-W64 | T278                                                                  |
 | T286   | Reconcile cleanTranscript's leading-filler doc with its regex                   | phase-9   | server           | P9-W65 | T277                                                                  |
 | T287   | Correct resolveGroqSttCredentials's model-always-Groq-valid claim               | phase-9   | server           | P9-W66 | T277                                                                  |
+| T288   | Pin T283's $PASEO_HOME criterion and drop the layer-symmetry claim              | phase-9   | server           | P9-W67 | T283                                                                  |
+| T289   | Register resolveTranscribeClient in guard-capability-prose                      | phase-9   | tooling          | P9-W68 | T282                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -945,6 +947,10 @@ the task details always agree.
 |        | filter the doc says it does not).                                        |       |
 | P9-W66 | T287 (filed by the P9-O gate; GROQ_STT_MODEL produces exactly            | 1     |
 |        | the value the sentence promises cannot happen).                          |       |
+| P9-W67 | T288 (filed by the P9-P gate; the one non-negotiable nothing             | 1     |
+|        | pins is the one a later widening would break).                           |       |
+| P9-W68 | T289 (filed by the P9-P gate; T282 shipped the mount wiring              | 1     |
+|        | and registered nothing -- P9-O's omission again).                        |       |
 
 ---
 
@@ -10580,6 +10586,19 @@ route-level wiring in each app. Do not touch the daemon.
 - [ ] An unreachable file still shows the reference card — no blank space, no broken image
 - [ ] Non-image attachments render as a chip, and that decision is recorded
 - [ ] What could not be exercised in this environment is stated plainly
+- [ ] `resolveAttachmentForDownload` is registered in `CAPABILITIES` in this same commit
+
+**Two notes added at the P9-P merge gate, after T283 shipped the daemon half.** First: the seam
+table above is correct, but the _gap prose_ is not all where T283's report said it was. The
+sentences asserting the capability was missing lived in web's `message-attachments.tsx` **and in
+`apps/android/src/features/transcript/message-attachments-model.ts`** — not in Android's
+`message-attachments.tsx`, which carried only a weaker "a future daemon RPC can be wired in here".
+Both false sites were corrected at that gate and now carry `CORRECTED at the P9-P merge gate`
+markers, so do not go looking for the old wording. Second, and the reason the new checkbox above
+exists: registering `resolveAttachmentForDownload` was **blocked** while that prose still denied the
+RPC — the gate proved by execution that a probe entry made `run-guard-capability-prose.mjs` exit 1
+naming both client sites, which T283 had no scope to fix. That block is now lifted, which makes the
+registration this task's duty rather than a follow-up.
 
 #### T285 — Cover the fifth `PermissionKind` in `permission-recovery`'s own battery
 
@@ -10654,6 +10673,88 @@ Owns: `packages/server/src/server/speech/providers/openai/config.ts` and its tes
 - [ ] The doc states only what the code guarantees, or the code guarantees what the doc states
 - [ ] The `GROQ_STT_MODEL` override path is pinned either way
 - [ ] The true narrower clause about `OpenAISTT`'s own default is preserved
+
+#### T288 — Pin T283's `$PASEO_HOME` acceptance criterion, and drop the symmetry claim
+
+`labels: phase-9, area: server` · `wave: P9-W67` · `depends-on: T283`
+
+T283's brief listed four non-negotiables, "each pinned by its own test". Three are. The fourth —
+**"Nothing under `$PASEO_HOME` outside `uploads/` is reachable"** — is satisfied by the design (the
+serving path never touches `$PASEO_HOME` at all) but **no test asserts it**. Measured at the P9-P
+merge gate: `grep -niE "paseo_home|paseoHome|uploads"` across both
+`attachment-access.test.ts` and `attachment-access.posix.test.ts` returns nothing, and none of the
+seven test titles concerns it.
+
+That matters for a specific, foreseeable reason rather than as bookkeeping. T283's own design record
+anticipates a later widening to add the uploads directory as a second permitted root. This is
+exactly the criterion that would stop such a widening from exposing the rest of `$PASEO_HOME` — and
+it is the one criterion nothing would catch. Write the test **now**, while the answer is still "the
+code cannot reach there", so the widening has to keep it true.
+
+The test: a path under a `$PASEO_HOME`-shaped root outside `uploads/`, **recorded on the requesting
+agent's own timeline** (so membership is satisfied and containment is the only thing refusing it),
+must be refused. Build the fixture root under a temp directory you create and remove; **never point
+a test at the real `$PASEO_HOME`** — it is the owner's live data.
+
+**Second half: the decision record overstates one thing, and this task corrects it.**
+`attachment-access.ts`'s header says the two layers "fail closed independently" and that "a bug in
+either layer alone still fails closed". The P9-P gate disproved the symmetric half by execution: the
+containment layer admits **any** first-level `tmpdir()` child whose name starts with
+`ATTACHMENT_TEMP_DIR_PREFIX`, and temp is world-writable, so an attacker-creatable
+`tmpdir()/paseo-attachments-EVIL/x.png` passes containment. It is not exploitable today — only
+`materializeProviderImage` can put a path on a timeline, and it is the sole producer of
+`AgentTimelineImageRef` in the tree (verified) — so membership is what actually holds that door. But
+the record claims a symmetry it does not have, and a future reader relying on it would
+under-protect membership. State the real asymmetry: **membership is load-bearing; containment is
+defence-in-depth, not an equal partner.**
+
+Do **not** "fix" this by tightening containment to a set of directories the daemon itself created
+unless you argue the cost: that means retaining state across process restarts, which the current
+design deliberately avoids. Recording the asymmetry honestly may well be the right answer.
+
+Owns: `packages/server/src/server/file-upload/**`.
+
+- [ ] A `$PASEO_HOME`-shaped path outside `uploads/`, on the caller's own timeline, is refused by a test
+- [ ] The fixture never touches the real `$PASEO_HOME`
+- [ ] The "fail closed independently" / "either layer alone" claim is corrected to the measured asymmetry
+- [ ] If containment is tightened instead, the retained-state cost is argued rather than absorbed
+
+#### T289 — Register `resolveTranscribeClient` in `CAPABILITIES`
+
+`labels: phase-9, area: tooling` · `wave: P9-W68` · `depends-on: T282`
+
+T282 shipped `resolveTranscribeClient` (`apps/android/src/app-shell/session-route-daemon-clients.ts`)
+— the mount wiring that makes voice transcription reachable in the app — and registered nothing, the
+same T124 omission wave P9-O made four times and T281 was filed to close. T281's
+`transcribeVoiceClip` entry does **not** cover this: that entry protects the wire method on
+`DaemonClient`, which existed and was registered while the mount still passed nothing. "The client
+can transcribe" and "the app actually asks it to" are two different capabilities, and the second is
+the one whose absence prose kept asserting.
+
+A FORWARD guard in T162's shape: no live denying sentence exists today — verified at the P9-P gate,
+every remaining mention is either past-tense or correctly conditional on there being an active
+daemon connection. So prove the entry can FIRE before trusting it, per `CLAUDE.md`'s T124 procedure:
+append a denying sentence **in this entry's own wording** to a real tracked in-scope file, confirm
+`run-guard-capability-prose.mjs` exits 1 naming it, restore from a scratchpad copy — never
+`git checkout --` — and confirm exit 0 with `git status --porcelain` empty.
+
+Two cautions specific to this entry. `resolveTranscribeClient` is declared in exactly one file, so a
+plain bare-string member is enough — measure that rather than assuming it. And do **not** word the
+phrases from the P9-P gate's own corrections in `Composer.tsx` and `voice-model.ts`: both now carry
+`CORRECTED at the P9-P merge gate` markers and would be exempt, so a phrase lifted from them could
+not fire — the inert-entry shape this repository has now hit at four different scope boundaries.
+
+**Not in scope:** `resolveAttachmentForDownload`. T284 must register that one in the same commit that
+supplies the two renderer seams, because the P9-P gate proved by execution that registering it while
+the client prose still denied the RPC made the guard exit 1 on prose T283 had no scope to fix. That
+prose is now corrected, so T284's registration is unblocked — it is still T284's, not this task's.
+
+Owns: `scripts/ci/guard-capability-prose.mjs` and its test.
+
+- [ ] `resolveTranscribeClient` is registered and watched firing before being trusted
+- [ ] No phrase is lifted from a file carrying a `CORRECTED at the P9-P merge gate` marker
+- [ ] The entry's shape is chosen from a measured declaration count, not assumed
+- [ ] `run-guard-capability-prose.mjs` exits 0 on the real tree afterward
 
 #### T32A1 — Build the Android connect form
 
