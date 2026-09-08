@@ -81,6 +81,59 @@ files is a defect the moment it does so, regardless of whether the fact stated i
 still true; the fix is to restate that fact in `plan.md` (or wherever the capability
 actually lives) and cite that instead, not to argue the fact still holds.
 
+### Provenance vs. authority: the test for citing a reference-only document (T253/T261)
+
+T253 sorted every shipped-source citation of a reference-only document into two classes
+using this test. Apply it to any new citation before deciding whether it survives, rather
+than re-deriving the question from scratch:
+
+- **Provenance** — the comment records _where a fixture or a shape came from_. Reading a
+  reference-only file for behavior is exactly what the corollary above still permits, so
+  a citation doing only this is kept as-is.
+- **Authority** — the comment justifies _what the code does today_ by pointing at the
+  reference-only file as the decision record itself. This is a violation: repoint it by
+  restating the fact in `plan.md` (or wherever the capability actually lives) and citing
+  that instead, the same way the corollary's own example describes.
+
+Worked examples, each confirmed by reading the file:
+
+- **Provenance, kept** —
+  `packages/frontend-core/src/testing/fixtures/extensions/scenarios/loop.ts`'s header
+  comment cites `docs/pi-extension-compatibility.md` §3.3 for "Modelled on the Phase 0
+  re-audit": it records where the fixture's panel/widget shape came from, and makes no
+  claim about what today's code does.
+- **Authority, repointed** — `packages/server/src/server/agent/providers/pi/rpc-types.ts`
+  used to ground three "decision record" comments in
+  `docs/pi-extension-compatibility.md` (the `get_tree` removal/restore policy and two
+  disclosed RPC-mirror drifts). T253 wrote those decisions into `plan.md` §4.2 ("Pi RPC
+  command mirror drift disclosure") first, then repointed all three comments to cite that
+  section instead of the frozen document.
+
+The citations T253 classified as provenance and kept — re-apply the test above before
+adding, removing, or repointing any of these; do not sweep them on the assumption that
+"cites a reference-only document" alone makes a citation an authority violation:
+
+- `apps/android/src/features/extensions/renderers/form-model.ts`
+- `apps/android/src/features/extensions/renderers/form.tsx`
+- `apps/android/src/features/extensions/renderers/roster-model.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/advisor.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/ask-user.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/btw.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/loop.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/minimal-status.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/plan-mode.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/prompt-arbitrage.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/switchboard.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/todo.ts`
+- `packages/frontend-core/src/testing/fixtures/extensions/scenarios/workflows.ts`
+- `packages/server/src/server/agent/providers/pi/rpc-types.ts` — only its `get_commands`
+  mirror-selection rationale; the same file's three decision-record citations are the
+  repointed example above, not part of this kept list
+
+See `docs/issues-from-plan.md`'s T253 and T261 sections for the full history of this sort,
+including the two citations (in the extension `log` renderer and its model) that the P9-D
+merge gate had already repointed before T253 ran.
+
 ## Repository invariants
 
 These hold everywhere in the codebase, not just for a single task:

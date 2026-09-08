@@ -9026,7 +9026,7 @@ git ls-files 'apps/*/src/**' 'packages/*/src/**' | grep -E '\.(ts|tsx|js|jsx|mjs
   'pi-extension-compatibility\.md|frontend-data-migration\.md|T0[234]-provenance\.md'
 ```
 
-- [ ] Every remaining citation is classified as provenance (kept) or authority (repointed), with the classification recorded
+- [x] Every remaining citation is classified as provenance (kept) or authority (repointed), with the classification recorded (T261: the test and the kept-citation list live in `CLAUDE.md`'s reference-only section)
 - [ ] `rpc-types.ts`'s three "decision record" citations point at `plan.md`, and `plan.md` states those decisions before the repoint lands
 - [ ] No reference-only document is edited (T242's frozen rule still binds)
 - [ ] Any test asserting a repointed comment string is updated in the same commit
@@ -9364,10 +9364,10 @@ may cite the audit; a comment justifying **what the code does today** is authori
 Owns: whichever of `plan.md` §5 or `CLAUDE.md`'s reference-only section gains the rule, and
 `docs/issues-from-plan.md`'s T253 checkbox.
 
-- [ ] The provenance/authority test is written down where a reader of the grep will find it
-- [ ] At least one worked example on each side is named
-- [ ] T253's third checkbox is ticked, and the 14 kept citations are enumerated somewhere durable
-- [ ] No reference-only document is edited
+- [x] The provenance/authority test is written down where a reader of the grep will find it (`CLAUDE.md`, beside the T242 corollary it operationalises)
+- [x] At least one worked example on each side is named (`loop.ts` for provenance, `rpc-types.ts` for authority)
+- [x] T253's third checkbox is ticked, and the 14 kept citations are enumerated somewhere durable (listed in `CLAUDE.md`, not totaled)
+- [x] No reference-only document is edited
 
 #### T262 — LEGACY_PROVIDER_IDS excludes "pi", so the shipped Android app sees no agents
 
