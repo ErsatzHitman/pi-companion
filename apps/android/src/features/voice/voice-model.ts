@@ -90,7 +90,13 @@
  * argued in this task, none of them a rewrite: collapse the doubled/
  * irregular whitespace Whisper-family models emit, trim the ends, and drop
  * ONE leading filler token ("um", "uh", etc.) if the transcript starts with
- * one. It does NOT do `D:\Handy`'s `audio_toolkit/text.rs` custom-word
+ * one — together with any run of trailing punctuation/dash/ellipsis
+ * characters immediately after that token (T286: widened from "exactly one
+ * trailing punctuation character" after the P9-O gate measured that
+ * Whisper-family models routinely emit an ellipsis or a dash after a
+ * filler — "Um... hello there", "Um—hello" — and the narrower rule left
+ * both unchanged; see `cleanTranscript`'s own comment for the exact
+ * character set). It does NOT do `D:\Handy`'s `audio_toolkit/text.rs` custom-word
  * repair (Levenshtein distance + Soundex phonetics): that repair needs a
  * user-maintained vocabulary list this product has no UI for yet, and
  * applying fuzzy phonetic matching with nothing to match against would
@@ -185,9 +191,18 @@ const LEADING_FILLER_WORDS = new Set(["um", "umm", "ummm", "uh", "uhh", "erm", "
  * order: collapse any run of whitespace (Whisper-family models sometimes
  * emit doubled spaces or a stray newline) to a single space; trim the
  * ends; then, if the FIRST word is a bare filler token, drop that one
- * word (and any punctuation immediately after it) — only the leading
- * one, never a filler appearing mid-sentence, since removing those would
- * change the speaker's actual words rather than clean up capture noise.
+ * word — only the leading one, never a filler appearing mid-sentence,
+ * since removing those would change the speaker's actual words rather
+ * than clean up capture noise — together with any RUN of trailing
+ * punctuation/dash/ellipsis characters immediately after it (comma,
+ * period, colon, semicolon, `!`, `?`, the unicode ellipsis `…`, a
+ * repeated run of periods such as `...`, a hyphen, an en dash `–`, or an
+ * em dash `—`, in any combination). T286 widened this from "exactly one
+ * trailing punctuation character" — that narrower rule left "Um... hello
+ * there" and "Um—hello" unchanged, which is the two forms Whisper-family
+ * models emit after a filler most often; see `voice-model.test.ts`'s
+ * "T286" cases for both, pinned individually alongside the two forms
+ * that already worked (a single comma, and no punctuation at all).
  */
 export function cleanTranscript(raw: string): string {
   const collapsed = raw.replace(/\s+/g, " ").trim();
@@ -195,7 +210,7 @@ export function cleanTranscript(raw: string): string {
     return collapsed;
   }
 
-  const match = /^([A-Za-z]+)[,.:;!?]?(?:\s+(.*))?$/s.exec(collapsed);
+  const match = /^([A-Za-z]+)[,.:;!?…\-–—]*(?:\s*(.*))?$/s.exec(collapsed);
   if (!match) {
     return collapsed;
   }

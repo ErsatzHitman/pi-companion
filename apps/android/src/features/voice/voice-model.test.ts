@@ -107,6 +107,46 @@ describe("cleanTranscript (T277 — deterministic cleanup)", () => {
   it("leaves ordinary text with no leading filler untouched (besides whitespace collapse)", () => {
     expect(cleanTranscript("commit the fix")).toBe("commit the fix");
   });
+
+  // T286: the doc above used to say "ONE leading filler token ... if the transcript
+  // starts with one" while the regex only ever admitted exactly one trailing
+  // punctuation character, so a Whisper-family ellipsis or dash after the filler left
+  // the transcript unchanged. Each admitted form below is pinned as its OWN case, per
+  // T286's brief, so a partial regression (e.g. dashes fixed but not ellipses) is
+  // visible rather than hidden behind one combined assertion.
+  describe("T286: widened trailing-punctuation forms after a leading filler", () => {
+    it("a three-dot ellipsis after the filler is dropped with it", () => {
+      expect(cleanTranscript("Um... hello there")).toBe("hello there");
+    });
+
+    it("a unicode ellipsis character after the filler is dropped with it", () => {
+      expect(cleanTranscript("Um… hello there")).toBe("hello there");
+    });
+
+    it("an em dash directly after the filler, with no separating space, is dropped with it", () => {
+      expect(cleanTranscript("Um—hello")).toBe("hello");
+    });
+
+    it("a hyphen directly after the filler, with no separating space, is dropped with it", () => {
+      expect(cleanTranscript("Um-hello")).toBe("hello");
+    });
+
+    it("still drops a single trailing comma (the form that already worked)", () => {
+      expect(cleanTranscript("Um, hello there")).toBe("hello there");
+    });
+
+    it("still drops the filler when no trailing punctuation follows at all (the other form that already worked)", () => {
+      expect(cleanTranscript("Uh hello")).toBe("hello");
+    });
+
+    it("a filler-only transcript followed by an ellipsis still collapses to empty", () => {
+      expect(cleanTranscript("Um...")).toBe("");
+    });
+
+    it("still never drops a mid-sentence filler even when it is followed by an ellipsis", () => {
+      expect(cleanTranscript("please um... add a comment")).toBe("please um... add a comment");
+    });
+  });
 });
 
 describe("applyTranscriptToDraft (T277 — the append decision)", () => {
