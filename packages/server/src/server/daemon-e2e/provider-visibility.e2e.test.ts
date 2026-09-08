@@ -13,6 +13,18 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 // real, shipped Android `appVersion` ("0.1.0", `ANDROID_DAEMON_APP_VERSION` in
 // `apps/android/src/app-shell/core.ts`) receives a non-empty agent list.
 //
+// "The REAL provider manifest" above is scoped precisely to `this.providerRegistry`
+// (what `buildRegistry()` builds, and what `resolveCreateConfig`/`getProviderDiagnostic`
+// read) -- it is NOT a claim that this daemon's `AgentManager` only knows about "pi".
+// `getAgentManagerProviderState()` (`agent/provider-snapshot-manager.ts:280-284`) overlays
+// every `createTestAgentClients()` entry into `AgentManager.clients` unconditionally, so
+// this exact daemon's `list_available_providers_request` reports four ids
+// (`["pi","claude","codex","opencode"]`, measured directly), not one. T264 decided that
+// divergence is intentional rather than a bug to guard away -- see `extraClients`'s doc
+// comment on `ProviderSnapshotManagerOptions` for the rationale. It does not affect this
+// test: the assertions below only check the "pi" agent this test itself creates, never
+// `list_available_providers_request`.
+//
 // Before T262, `session.ts`'s `isProviderVisibleToClient` hid every agent from any
 // connection below `MIN_VERSION_ALL_PROVIDERS` ("0.1.45") unless its provider was one of
 // `LEGACY_PROVIDER_IDS` ("claude"/"codex"/"opencode") -- a set that has never contained

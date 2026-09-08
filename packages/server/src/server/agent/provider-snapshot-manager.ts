@@ -90,6 +90,38 @@ export interface ProviderSnapshotManagerOptions {
   workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
   managedProcesses?: ManagedProcessRegistry;
   isDev?: boolean;
+  // Test/embedding injection point for `AgentClient` implementations, feeding TWO
+  // independent merge paths that intentionally apply different rules (T264, decided
+  // at the P9-W45 wave after the P9-I gate found the two disagreeing):
+  //
+  //  - `buildRegistry()` (below) overlays an entry onto `this.providerRegistry` only
+  //    when `registry[provider]` already exists -- i.e. only to swap the
+  //    IMPLEMENTATION of an already-declared manifest provider (real or
+  //    `providerOverrides`-derived), never to invent a new one. A `ProviderDefinition`
+  //    carries manifest-only behaviour (default-model resolution, diagnostic labels,
+  //    `derivedFromProviderId`) that has no meaning without a base definition to
+  //    supply it, so an id with no definition is dropped rather than given one.
+  //  - `getAgentManagerProviderState()` (below) overlays every entry into
+  //    `AgentManager.clients` UNCONDITIONALLY, with no such guard. This is
+  //    deliberate, not an oversight: `AgentManager` treats a provider id as nothing
+  //    more than a key into its own client map -- see
+  //    `AgentManager.listProviderAvailability()`'s own test, "listProviderAvailability
+  //    uses registered client keys, including custom providers"
+  //    (`agent-manager.test.ts`), which constructs an `AgentManager` directly with a
+  //    client for `"zai"`, a provider the manifest has never declared, and expects it
+  //    reported. `extraClients` is the one public surface this class exposes for that
+  //    (see `provider-snapshot-manager.test.ts`'s own `createExtraClient` comment:
+  //    "extraClients is the only injection surface the manager exposes for tests").
+  //
+  // Net effect: an `extraClients` entry whose id already has (or gains, via
+  // `providerOverrides`) a registry definition reaches BOTH `this.providerRegistry`
+  // and `AgentManager.clients` consistently. An entry with no definition reaches only
+  // `AgentManager.clients` -- it can create/message/list-available a session but
+  // `resolveCreateConfig`/`getProviderDiagnostic` (which read `this.providerRegistry`)
+  // still report it unconfigured. That is the intended shape for a client standing in
+  // for a provider the caller does not want the manifest-facing half to know about,
+  // not a bug to reconcile. Production never exercises this gap: `config.ts` passes
+  // `agentClients: {}`, so `extraClients` is always empty on a real daemon.
   extraClients?: Partial<Record<AgentProvider, AgentClient>>;
   refreshTimeoutMs?: number;
   diagnosticTimeoutMs?: number;
@@ -277,6 +309,11 @@ export class ProviderSnapshotManager {
         clients[provider] = this.ensureClient(provider, definition);
       }
     }
+    // Deliberately unguarded (T264) -- see `extraClients`'s doc comment on
+    // `ProviderSnapshotManagerOptions` above for why this loop does not mirror
+    // `buildRegistry()`'s `if (!definition) continue;`: `AgentManager.clients` is not
+    // scoped to the provider manifest, so an id with no `this.providerRegistry` entry
+    // is still a legitimate key here.
     for (const [provider, client] of Object.entries(this.extraClients)) {
       if (client) {
         clients[provider] = client;
@@ -449,6 +486,11 @@ export class ProviderSnapshotManager {
       isDev: this.isDev,
     });
 
+    // Guarded (unlike `getAgentManagerProviderState()`'s overlay below) -- see
+    // `extraClients`'s doc comment on `ProviderSnapshotManagerOptions` above. This
+    // loop only ever REPLACES an existing manifest (or `providerOverrides`-derived)
+    // definition's implementation; it never invents a definition for an id the
+    // registry does not already have.
     for (const [provider, client] of Object.entries(this.extraClients) as Array<
       [AgentProvider, AgentClient]
     >) {

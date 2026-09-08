@@ -1319,6 +1319,27 @@ export function createTestAgentClients(
     // really does report all four provider ids. Measured, not inferred.
     // Filed as T264; the overlay is code, not prose, so it is not this
     // correction's to change.)
+    //
+    // (T264 decision: the overlay stays unguarded, deliberately. It is not the same
+    // guard `buildRegistry` needs -- `AgentManager.clients` is not scoped to the
+    // provider manifest, and `AgentManager.listProviderAvailability`'s own test
+    // ("...including custom providers", `agent-manager.test.ts`) exercises exactly
+    // that: a client for an id the manifest has never declared, reported anyway.
+    // `extraClients`'s doc comment on `ProviderSnapshotManagerOptions`
+    // (`agent/provider-snapshot-manager.ts`) has the full rationale for both merge
+    // paths. So this file's claude/codex/opencode entries keep reaching
+    // `AgentManager.clients` (and therefore `list_available_providers_request`) on any
+    // test daemon built with this function's defaults, even though they never become
+    // `providerRegistry` definitions -- checked against what depends on that by
+    // running the affected e2e/unit files: `resolveCreateConfig`/`requireProvider`
+    // (which reads `providerRegistry`, not `AgentManager.clients`) already rejects
+    // `createAgent` for any of these three ids regardless of this overlay, so nothing
+    // that creates an agent through the real daemon relies on it; what does rely on it
+    // is direct `AgentManager` construction with one of these fakes as a `clients`
+    // entry -- `agent-loading.test.ts`, `mcp-server.test.ts`, `create-agent/create.test.ts`
+    // among them -- which bypasses `ProviderSnapshotManager` entirely and would be
+    // unaffected by a guard here either way. Production is unaffected either way:
+    // `config.ts` passes `agentClients: {}`.)
     // T258 added this entry so `test:integration`'s three e2e files have a
     // real fake to exercise instead of an always-discarded one.
     pi: new FakeAgentClient("pi", options),
