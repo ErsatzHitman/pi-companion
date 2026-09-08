@@ -536,6 +536,7 @@ that recomputation has to be domain-specific:
 | T277   | Transcribe through Groq, clean it, and put the text in the prompt bar           | phase-9   | server           | P9-W56 | T276                                                                  |
 | T278   | Image thumbnails and capture in the mobile prompt bar                           | phase-9   | android          | P9-W57 | none                                                                  |
 | T279   | Drag-and-drop, paste, and inline previews in the web composer                   | phase-9   | web              | P9-W58 | none                                                                  |
+| T280   | Make create-agent's post-return dispatch awaitable by its own tests             | phase-9   | server           | P9-W59 | none                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -921,6 +922,8 @@ the task details always agree.
 |        | thumbnail could render from).                                            |       |
 | P9-W58 | T279 (owner request; the web composer has no paste, drop                 | 1     |
 |        | or dragover handler at all).                                             |       |
+| P9-W59 | T280 (filed by the P9-M gate after CI went RED; a test                   | 1     |
+|        | racing its own asynchronous continuation).                               |       |
 
 ---
 
@@ -10277,6 +10280,70 @@ Owns: `apps/web/src/features/composer/**` only.
 - [ ] The pasted-URL rule is argued and pinned in both directions
 - [ ] Every path goes through the existing limits — no second acceptance path
 - [ ] Object URLs are revoked on removal and on send
+
+#### T280 — Make create-agent's post-return dispatch awaitable by its own tests
+
+`labels: phase-9, area: server` · `wave: P9-W59` · `depends-on: none`
+
+CI run **34205088229** turned `main` red at `9be3731` with **zero assertion failures**:
+`3496 passed`, one file failed, and the failure was inside a `finally` block —
+
+```
+FAIL src/server/agent/create-agent/create.test.ts > mcp create stamps the new worktree's workspaceId, not the parent's
+Error: ENOTEMPTY: directory not empty, rmdir '/tmp/create-agent-test-7tfH4F/agents'
+ ❯ src/server/agent/create-agent/create.test.ts:327:5
+```
+
+The gate commit touched no file under `packages/server`, and this was the **first failure in
+fifteen runs** on `main`, so it is a latent race that surfaced, not a regression.
+
+**The mechanism, traced through source rather than guessed at.** `createAgentCommand` is called
+with `background: true` and an `initialPrompt`, and returns as soon as the snapshot exists — this
+file's own sibling tests are named "exposes the created worktree **before dispatching the initial
+prompt**" and "keeps the prompt title **after the initial prompt settles**", so a dispatch that
+writes agent records is still running when the test's assertions finish. `AgentStorage.writeRecord`
+goes through `writeFileAtomic`, which creates a `.<name>.<pid>.<ts>.<uuid>.tmp` sibling in the same
+directory and then renames it. `rmSync(workdir, { recursive: true, force: true })` enumerates
+`agents/`, deletes what it saw, and then `rmdir`s — and a temp file created between the enumeration
+and the `rmdir` produces exactly `ENOTEMPTY`.
+
+**The P9-M gate fixed the symptom correctly and did not claim more.** All six real-storage tests in
+that file now `await storage.flush()` before `rmSync`, which is what every production caller already
+does (`bootstrap.ts`, `session.ts`, `test-utils/paseo-daemon.ts`). But `flush()` awaits the writes
+already in `pendingWrites` when it snapshots the map — **a write queued after that snapshot is
+still outside it.** So the window is closed, not proven unlosable.
+
+**This task settles the real question: should a test be able to await the dispatch at all?** Today
+it cannot, which is why the cleanup has to guess. Options, and the choice must be argued against the
+others rather than asserted:
+
+1. Return a handle (a promise, a disposer) from `createAgentCommand` when `background: true`, so a
+   caller — test or production — can await the dispatch it started. Most honest; widest blast radius.
+2. Give `AgentStorage` a `quiesce()` that resolves only when no write is queued **and** none can
+   still be queued, and use that in cleanup. Narrower, but "none can still be queued" needs an owner
+   and may not be expressible.
+3. Decide the tests should not use a real `AgentStorage` at all for these cases. Cheapest, and loses
+   the coverage that motivated using a real one — argue why that is acceptable if chosen.
+
+Do **not** fix this by retrying the `rmSync`, by raising a timeout, or by moving the file into
+`test:unit:serial`. T240 already ruled on that shape for this repository: those hide contention
+rather than remove it, and a passing run would prove nothing about the next one. Serialization also
+would not help here — the race is between one test and its own asynchronous continuation, not
+between sibling files competing for the machine.
+
+Whatever is chosen, the acceptance bar is a **deterministic** demonstration, not a green run: force
+the late write to land after the enumeration (an injected delay in the dispatch path, a fake clock,
+or a stubbed `writeFileAtomic`) and show the cleanup still succeeds. A fix that cannot be shown to
+fail without it is not distinguishable from luck.
+
+Owns: `packages/server/src/server/agent/create-agent/**` and `agent-storage.ts`'s quiescence API if
+option 2 is taken.
+
+- [ ] The chosen option is argued against the other two, by measurement
+- [ ] The failure is reproduced deterministically BEFORE the fix, not just observed green after
+- [ ] The same reproduction passes with the fix in place
+- [ ] No retry, no raised timeout, and no move into `test:unit:serial`
+- [ ] The P9-M gate's `await storage.flush()` comment is updated to say what finally closed it
 
 #### T32A1 — Build the Android connect form
 

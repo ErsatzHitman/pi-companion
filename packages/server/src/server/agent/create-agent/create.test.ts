@@ -238,6 +238,33 @@ test("session create stamps the requested workspaceId when no worktree setup run
     const stored = await storage.get(snapshot.id);
     expect(stored?.workspaceId).toBe("ws-source");
   } finally {
+    // `AgentStorage` queues record writes and exposes `flush()` to await them;
+    // `writeFileAtomic` lands a `.<name>.<pid>.<ts>.<uuid>.tmp` sibling and then
+    // renames it. Without the flush, an in-flight write can create that temp
+    // file in `agents/` AFTER `rmSync` has already enumerated the directory,
+    // so the final `rmdir` fails with `ENOTEMPTY` and the whole file fails
+    // with ZERO assertion failures. Observed on CI at run 34205088229, the
+    // first failure in fifteen runs, on a commit touching no server file.
+    // Every production caller already awaits this (`bootstrap.ts`,
+    // `session.ts`, `test-utils/paseo-daemon.ts`); these tests did not.
+    // Measured, not assumed: these tests pass `background: true` with an
+    // `initialPrompt`, and this file's own sibling tests are named "exposes
+    // the created worktree BEFORE dispatching the initial prompt" and "keeps
+    // the prompt title AFTER the initial prompt settles" -- so the command
+    // returns while a dispatch that writes records is still running. That
+    // late write is what lands in `agents/` after `rmSync` enumerated it.
+    //
+    // What this DOES NOT claim: `flush()` awaits the writes already queued
+    // when it snapshots `pendingWrites`, so a write queued after that point
+    // is still outside it. It closes the observed window and matches every
+    // production caller; it is not a proof that no ordering can lose. The
+    // deeper question -- whether the post-return dispatch should be
+    // awaitable by a test at all -- is filed as T280.
+    //
+    // This is the T240 measure-the-source rule rather than a timeout bump:
+    // it removes the write from the race instead of widening the window the
+    // race has to lose in.
+    await storage.flush();
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -273,6 +300,7 @@ test("session create stamps the new worktree's workspaceId when a setup continua
     const stored = await storage.get(snapshot.id);
     expect(stored?.workspaceId).toBe("ws-new-worktree");
   } finally {
+    await storage.flush(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -324,6 +352,7 @@ test("mcp create stamps the new worktree's workspaceId, not the parent's", async
     expect(storedChild?.workspaceId).toBe("ws-new-worktree");
     expect(child.cwd).toBe(join(workdir, "worktree", "packages", "core"));
   } finally {
+    await storage.flush(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -376,6 +405,7 @@ test("mcp create exposes the created worktree before dispatching the initial pro
 
     expect(observed).toEqual({ createdWorktree, lifecycle: "idle" });
   } finally {
+    await storage.flush(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -414,6 +444,7 @@ test("session create keeps the prompt title after the initial prompt settles", a
     const settled = await storage.get(snapshot.id);
     expect(settled?.title).toBe(title);
   } finally {
+    await storage.flush(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -452,6 +483,7 @@ test("session create keeps an explicit title after the initial prompt settles", 
     const settled = await storage.get(snapshot.id);
     expect(settled?.title).toBe(title);
   } finally {
+    await storage.flush(); // see the first such cleanup in this file for why
     rmSync(workdir, { recursive: true, force: true });
   }
 });
