@@ -1303,9 +1303,22 @@ export function createTestAgentClients(
     opencode: new FakeAgentClient("opencode", options),
     // "pi" is the only key `ProviderSnapshotManager.buildRegistry()` keeps
     // (see `AGENT_PROVIDER_DEFINITIONS` in
-    // `packages/protocol/src/provider-manifest.ts`) — the other three are
-    // dropped by its `if (!definition) continue;` merge guard because this
+    // `packages/protocol/src/provider-manifest.ts`) — the other three never
+    // become registry DEFINITIONS, because `buildRegistry`'s
+    // `if (!definition) continue;` merge guard drops them and this
     // repository's provider registry is Pi-only (plan.md lines 99, 174).
+    //
+    // (CORRECTED at the P9-I merge gate. This said the other three are
+    // "dropped by its `if (!definition) continue;` merge guard", full stop.
+    // True of `buildRegistry`; FALSE of the path that feeds `AgentManager`.
+    // `getAgentManagerProviderState`
+    // (`agent/provider-snapshot-manager.ts:280-284`) overlays every
+    // `extraClients` entry with no such guard, and
+    // `AgentManager.listProviderAvailability` enumerates that overlay
+    // rather than the manifest — so a test daemon built with these fakes
+    // really does report all four provider ids. Measured, not inferred.
+    // Filed as T264; the overlay is code, not prose, so it is not this
+    // correction's to change.)
     // T258 added this entry so `test:integration`'s three e2e files have a
     // real fake to exercise instead of an always-discarded one.
     pi: new FakeAgentClient("pi", options),

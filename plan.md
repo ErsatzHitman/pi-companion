@@ -1410,19 +1410,39 @@ Because the ported backend preserves data formats and no daemon-data migration i
     Pi Companion has no such installed base: `AgentProviderSchema`
     (`packages/protocol/src/provider-manifest.ts`) has always been an open `z.string()`, never
     an enum, and `AGENT_PROVIDER_DEFINITIONS` has always had exactly one entry, `id: "pi"`. With
-    non-Pi providers a stated non-goal (§2.3), the set this gate filtered can never again contain
-    anything this product's own client would reject — so the gate, left in place, did the
-    opposite of its job: it hid the one real provider from the one real client this product
-    ships, because `ANDROID_DAEMON_APP_VERSION` (`apps/android/src/app-shell/core.ts`,
-    `"0.1.0"`) sits below `"0.1.45"` by construction and has no roadmap reason to ever cross it.
+    non-Pi providers a stated non-goal (§2.3), the set this gate filtered is pi-only IN
+    PRODUCTION — `config.ts:527` passes `agentClients: {}`, so nothing is ever overlaid onto the
+    manifest-derived registry on a real daemon. **CORRECTED at the P9-I merge gate:** this said
+    the set "can never again contain anything this product's own client would reject",
+    unconditionally. That is false for any daemon with a non-empty `agentClients` — every test
+    daemon — because `getAgentManagerProviderState`
+    (`packages/server/src/server/agent/provider-snapshot-manager.ts:280-284`) overlays every
+    `extraClients` entry with no `if (!definition) continue;` guard, unlike `buildRegistry`
+    (`:452-456`) which has one. Measured against T262's own new e2e daemon,
+    `list_available_providers_request` returns four provider ids, not one. The conclusion holds;
+    the unconditional reasoning did not. The overlay itself is filed as T264.
+    So the gate, left in place, did the opposite of its job: it hid the one real provider from
+    the Android client, because `ANDROID_DAEMON_APP_VERSION`
+    (`apps/android/src/app-shell/core.ts`, `"0.1.0"`) sits below `"0.1.45"` by construction and
+    has no roadmap reason to ever cross it. The safety argument is stronger than "no installed
+    base": the method returned `true` for any client at or above `"0.1.45"` and now returns
+    `true` unconditionally, so retiring it is provably a no-op for every such client — and this
+    product ships TWO clients, `apps/web`'s `DAEMON_APP_VERSION` being `"0.3.0-beta.2"`, already
+    above the threshold. T262 levels Android up to what web always had; it cannot regress web.
     Two cheaper fixes were considered and rejected: adding `"pi"` to `LEGACY_PROVIDER_IDS` would
     make the set's own name false (`"pi"` is not legacy, it is the only provider) while leaving
     the whole now-pointless apparatus in place to be misapplied again; bumping
-    `ANDROID_DAEMON_APP_VERSION` past `"0.1.45"` would pass this one gate but risks silently
-    crossing (or coming close to) the unrelated `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY`
-    threshold (`"0.1.105"`) for a client that has not implemented explicit workspace recovery —
-    a version number should describe what a client actually does, not be inflated to defeat one
-    check. `isProviderVisibleToClient` itself is kept (now an unconditional `true`) rather than
+    `ANDROID_DAEMON_APP_VERSION` past `"0.1.45"` would pass this one gate, but that constant is
+    an unexamined literal with no documented protocol meaning of its own (`core.ts:113-124`
+    records it "was a bare `"0.1.0"` literal repeated at both construction sites", where web's
+    `DAEMON_APP_VERSION` calls itself a fixed protocol-compatibility declaration) — a version
+    number should describe what a client actually does, not be moved until an unrelated check
+    passes. **CORRECTED at the same gate:** the rejection used to rest on the bump "risks
+    silently crossing (or coming close to)" `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY`
+    (`"0.1.105"`). Executed against the real `isAppVersionAtLeast`, at `"0.1.46"`
+    `clientUsesLegacyWorkspaceRestore` returns `true`, identical to `"0.1.0"` — not crossed, not
+    near. It is vacuous at any value besides: neither shipped app issues the one RPC that reads
+    it. `isProviderVisibleToClient` itself is kept (now an unconditional `true`) rather than
     deleted, because `ProviderCatalogSession`, `createAgentUpdatesService`, and
     `WorkspaceDirectory` each still depend on a `host.isProviderVisibleToClient` callback of that
     shape; removing the parameter from those three modules is unscoped follow-up, not part of

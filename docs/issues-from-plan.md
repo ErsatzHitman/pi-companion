@@ -522,6 +522,10 @@ that recomputation has to be domain-specific:
 | T261   | Record T253's provenance/authority classification durably                       | phase-9   | docs             | P9-W42 | T253                                                                  |
 | T262   | LEGACY_PROVIDER_IDS excludes pi, so the shipped Android app sees no agents      | phase-9   | server           | P9-W43 | none                                                                  |
 | T263   | Teach canPrecedeRegex about the JSX closing-tag case, or scope it               | phase-9   | tooling          | P9-W44 | T256                                                                  |
+| T264   | Guard or document the unguarded extraClients overlay                            | phase-9   | server           | P9-W45 | T262                                                                  |
+| T265   | Anchor T259's two over-wide phrases to their own guard                          | phase-9   | tooling          | P9-W46 | T259                                                                  |
+| T266   | Decide whether the vestigial isProviderVisibleToClient callback should go       | phase-9   | server           | P9-W47 | T262                                                                  |
+| T267   | Reclassify rpc-types.ts's get_commands citation and close T253's ledger         | phase-9   | docs             | P9-W48 | T261                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -879,6 +883,14 @@ the task details always agree.
 |        | surfaced and correctly refused to fix in its own scope).                 |       |
 | P9-W44 | T263 (filed by the P9-H gate; the one shape that really does             | 1     |
 |        | trigger the regex heuristic, inert today).                               |       |
+| P9-W45 | T264 (filed by the P9-I gate; two merge paths, only one of               | 1     |
+|        | which applies the manifest guard).                                       |       |
+| P9-W46 | T265 (filed by the P9-I gate; two phrases that fire on true              | 1     |
+|        | statements about other guards).                                          |       |
+| P9-W47 | T266 (filed by the P9-I gate; the seam T262 deferred, inert              | 1     |
+|        | at two of its six call sites even before T262).                          |       |
+| P9-W48 | T267 (filed by the P9-I gate; one kept citation that fails               | 1     |
+|        | T261's own test, plus two satisfied checkboxes).                         |       |
 
 ---
 
@@ -9511,6 +9523,176 @@ Owns: `scripts/ci/source-comment-stripper.mjs` and its test.
 - [ ] The whole-tree oracle comparison is re-run and its byte-difference count reported
 - [ ] No real regex literal starts being swallowed — measured, not asserted
 - [ ] The known-limitation regression test T256 added is updated rather than deleted
+
+#### T264 — Guard or document the unguarded extraClients overlay
+
+`labels: phase-9, area: server` · `wave: P9-W45` · `depends-on: T262`
+
+Two paths merge `extraClients` into provider state, and only one applies the manifest guard.
+Measured at the P9-I merge gate by reading both, not inferred:
+
+- `packages/server/src/server/agent/provider-snapshot-manager.ts:452-456` — `buildRegistry()`
+  does `const definition = registry[provider]; if (!definition) continue;`, so an `extraClients`
+  entry whose id is not already a manifest key never becomes a registry definition.
+- **`:280-284`** — `getAgentManagerProviderState()` has a **second, separate** overlay with **no
+  such guard**: `for (const [provider, client] of Object.entries(this.extraClients)) { if
+(client) { clients[provider] = client; } }`.
+- `AgentManager.listProviderAvailability()` enumerates that overlay, not the manifest.
+
+**Consequence, measured against the daemon T262's own new e2e test builds:**
+`list_available_providers_request` returns `["pi", "claude", "opencode", "codex"]` — four ids,
+three of them providers this repository declares a non-goal (`plan.md` §2.3).
+
+**Production is not affected, and this task must not claim it is.** `config.ts:527` passes
+`agentClients: {}`, reaching `ProviderSnapshotManager` as `extraClients` via
+`bootstrap.ts:831`, so a real daemon overlays nothing. This is a test-surface divergence and a
+false-premise source, not a live product defect — which is exactly why it was filed rather than
+fixed at the gate: the overlay is code, and the gate's remit was the prose resting on it.
+
+Decide whether the two paths should agree. Both outcomes are legitimate:
+
+1. **Add the same `if (!definition) continue;` guard** to `:280-284`. Then a test daemon reports
+   only manifest providers, and the two paths stop disagreeing. Check first what depends on the
+   current behaviour — `createTestAgentClients()` returns `claude`/`codex`/`opencode`, and
+   something may rely on those clients existing even though they are not registry definitions.
+2. **Record why they differ.** There may be a real reason a test harness wants to inject a
+   client without a manifest definition. If so, say it where a reader of either path finds it,
+   and the divergence stops being a trap.
+
+Whichever ships, **the two prose sites that rest on the false reading were corrected at the P9-I
+gate and must stay consistent with whatever this task decides**:
+`packages/server/src/server/test-utils/fake-agent-client.ts` (its "dropped by its
+`if (!definition) continue;` merge guard" claim) and
+`packages/server/src/server/daemon-e2e/provider-visibility.e2e.test.ts`'s header, which calls
+its daemon "built from the REAL provider manifest" while that daemon has four registered
+clients.
+
+Owns: `packages/server/src/server/agent/provider-snapshot-manager.ts`,
+`packages/server/src/server/test-utils/fake-agent-client.ts`,
+`packages/server/src/server/daemon-e2e/provider-visibility.e2e.test.ts`.
+
+- [ ] The decision names which path changes (or that neither does) and why the other option lost
+- [ ] `list_available_providers_request` against a test daemon returns what the decision says it should — executed, not asserted
+- [ ] Nothing depending on an unguarded injected client broke, checked by running the affected e2e files one at a time
+- [ ] Both corrected prose sites still read true afterward
+
+#### T265 — Anchor T259's two over-wide phrases to their own guard
+
+`labels: phase-9, area: tooling` · `wave: P9-W46` · `depends-on: T259`
+
+T259 widened T251's `discoverPackageTargets` entry so it catches the apps-only framing. All four
+new phrases fire, and the past-tense exclusion works. But two of them carry **no anchor tying
+them to that guard**, so they fire on true statements about other tools. Reproduced at the P9-I
+merge gate through the real `findCapabilityDenialViolations`:
+
+```
+FIRES  "the orphan-module walk does not scan `packages/*/src`."
+FIRES  "guard-no-android-web-files scans only apps/android and apps/web by design."
+```
+
+Both name real guards with exactly those real scopes: `run-orphan-modules.mjs` genuinely does
+not walk `packages/*/src` as a declaration check, and `guard-no-android-web-files.mjs` genuinely
+scans only the two app trees by design. A future author writing either sentence would be
+telling the truth and would get a capability-prose failure naming an unrelated capability.
+
+**Not a live failure**, so this is drift risk rather than a red: no such sentence exists in the
+tree today. T259's header claims the phrases were "worded away from" collisions, but it checked
+only the three files narrating _this_ guard's own history; it never tested a true claim about a
+different guard.
+
+The same gate found a second, sharper illustration of the width: feeding the whole committed
+`docs/issues-from-plan.md` through the real function as if it were in scope produces **5 hits**,
+including T251's own task brief. The runner is green only because
+`isAppSourcePath("docs/issues-from-plan.md")` returns `false` via
+`DOCS_LEDGER_DENIAL_EXCLUSIONS` — confirmed by calling the exported predicate. The widening sits
+one exclusion away from firing on true prose.
+
+Anchor both phrases to `guard-declared-workspace-deps` (or `discoverPackageTargets`) by name,
+the way the entry's other phrases already are. Keep them firing on the four framings T259
+measured — re-run those four — and add both false-positive sentences above as fixture
+non-collision tests, so a later widening cannot silently reintroduce the reach.
+
+Owns: `scripts/ci/guard-capability-prose.mjs` and its test.
+
+- [ ] Both sentences above no longer fire, pinned as non-collision fixture tests
+- [ ] All four framings T259 measured still fire, re-run and reported
+- [ ] The de-wrapped check is run against `run-orphan-modules.mjs` and `guard-no-android-web-files.mjs` too, not only this guard's own files
+- [ ] Each surviving phrase is watched firing before it is trusted
+
+#### T266 — Decide whether the vestigial isProviderVisibleToClient callback should go
+
+`labels: phase-9, area: server` · `wave: P9-W47` · `depends-on: T262`
+
+T262 retired the visibility gate: `session.ts`'s `isProviderVisibleToClient` now returns `true`
+unconditionally and reads no `appVersion`. It kept the method and its `provider` parameter
+deliberately, as a seam. The follow-up it explicitly deferred: the callback is still declared on
+**three** host interfaces and still called at six sites, every one of them now a no-op filter.
+
+- `packages/server/src/server/session/provider/provider-catalog-session.ts:44` (declaration) and
+  its `start()` filter
+- `packages/server/src/server/session/agent-updates-service.ts:57`
+- `packages/server/src/server/session/workspace-directory.ts:84`
+
+Two of those call sites were measured at the P9-I gate to be **behaviourally inert even before
+T262**: `workspace-directory`'s `fetchWorkspaces` returned the same entry count with the gate
+active and retired, and `agent-updates-service` gated only `payload.kind === "upsert"`. So the
+seam is not uniformly load-bearing, and "keep it in case the gate returns" is weaker for some
+callers than others — which is the argument this task has to settle per caller, not in bulk.
+
+The two stale present-tense COMPAT comments in `provider-catalog-session.ts` were corrected at
+the P9-I gate (they claimed the gating "lives on the shell" and "reads appVersion live"). Note
+`isAppSourcePath` returns **false** for that file, so `guard-capability-prose` can never catch
+prose there — a removal decision that leaves stale comments behind has no backstop.
+
+Decide: remove the callback from all three interfaces and delete the no-op filters, or keep it
+and say per interface why. If removing, check the DI'd test fakes that supply it
+(`provider-catalog-session.test.ts`, `agent-updates-service.test.ts`) — both remain valid
+host-contract tests, but their "legacy client" framing no longer describes any real connection
+and should be retitled in the same commit.
+
+Owns: those three modules, their tests, and `session.ts`'s `isProviderVisibleToClient`.
+
+- [ ] The decision is per caller, with the two inert ones distinguished from the rest
+- [ ] If removed: every call site and every DI'd fake is updated in the same commit
+- [ ] If kept: each interface says why, next to its own declaration
+- [ ] No "legacy client" framing survives that no longer describes a real connection
+
+#### T267 — Reclassify rpc-types.ts's get_commands citation and close T253's ledger
+
+`labels: phase-9, area: docs` · `wave: P9-W48` · `depends-on: T261`
+
+T261 recorded the provenance-versus-authority rule in `CLAUDE.md` (one location, verified) with
+a worked example on each side. Applying that rule to the 14 kept citations turns up one that
+does not pass its own test — flagged independently by both the P9-I verifier and its merge gate:
+
+`packages/server/src/server/agent/providers/pi/rpc-types.ts:335` reads _"See
+`docs/pi-extension-compatibility.md`'s T51A findings section for **why this one (of 12
+previously-unmirrored request types) was mirrored rather than deferred**"_. That justifies a
+shipped scoping decision by pointing at the frozen audit as the decision record — **authority**
+under T261's test, not provenance.
+
+**This is a T253 classification defect, not a T261 recording defect**, and this task must say so
+rather than implying T261 got the rule wrong. `CLAUDE.md`'s own wording invites re-applying the
+test to the kept list; this is that re-application. Mitigating, and worth stating: the
+substantive reason is already given inline, so a reader is not actually dependent on the frozen
+file — which is why this is a reclassification rather than a defect that misleads anyone today.
+
+Two of T253's ledger checkboxes are also unticked though satisfied, measured at the same gate:
+its second (`rpc-types.ts`'s three "decision record" citations point at `plan.md`) is satisfied
+— lines 208, 266 and 293 cite `plan.md` §4.2 and `plan.md:308` carries that heading — and its
+fourth likewise. Tick them, or state why not.
+
+Give the `get_commands` rationale a citable home the way T253 did for the other three: restate
+it in `plan.md` §4.2 alongside them, then repoint. Do not repoint before `plan.md` says it.
+
+Owns: `packages/server/src/server/agent/providers/pi/rpc-types.ts`, `CLAUDE.md`'s kept-citation
+list, `docs/issues-from-plan.md`'s T253 section, and `plan.md` §4.2 only to add the restated
+fact.
+
+- [ ] The `get_commands` rationale has a `plan.md` home before the comment is repointed
+- [ ] `CLAUDE.md`'s kept list drops that file, or explains why it stays
+- [ ] T253's second and fourth checkboxes are ticked, or the reason they are not is written down
+- [ ] The commit says this is a T253 classification call, not a T261 error, and no reference-only document is edited
 
 #### T32A1 — Build the Android connect form
 

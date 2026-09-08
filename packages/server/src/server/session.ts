@@ -1791,15 +1791,43 @@ export class Session {
   // an open `z.string()`, not an enum -- and its own manifest
   // (`AGENT_PROVIDER_DEFINITIONS`) has always had exactly one entry,
   // `id: "pi"`. Non-Pi providers are a stated non-goal (plan.md §2.3), so
-  // the set this gate filtered can never again contain anything this
-  // product's own client would choke on. Left in place, the gate produced
-  // the opposite of its intended effect: it hid the one real provider this
-  // product has from the one real client this product ships, because that
-  // client's own declared version ("0.1.0",
+  // IN PRODUCTION the set this gate filtered is pi-only: `config.ts:527`
+  // passes `agentClients: {}`, reaching `ProviderSnapshotManager` as
+  // `extraClients` via `bootstrap.ts:831`, so nothing is ever overlaid onto
+  // the manifest-derived registry on a real daemon.
+  //
+  // (CORRECTED at the P9-I merge gate. This said "the set this gate
+  // filtered can never again contain anything this product's own client
+  // would choke on" — unconditionally, with no production qualifier. That
+  // is false for any daemon built with a non-empty `agentClients`, which is
+  // every test daemon: `getAgentManagerProviderState`
+  // (`agent/provider-snapshot-manager.ts:280-284`) overlays EVERY
+  // `extraClients` entry into `AgentManager.clients` with no
+  // `if (!definition) continue;` guard, unlike `buildRegistry`
+  // (`:452-456`) which has exactly that guard. Measured against the daemon
+  // T262's own new e2e test builds, `list_available_providers_request`
+  // returns `["pi","claude","opencode","codex"]` — four, not one. The
+  // CONCLUSION stands, because production's set really is pi-only; the
+  // unconditional reasoning did not, and two other files rest on it — see
+  // T264. Filed rather than fixed here: the overlay is real code, not
+  // prose, and is not this correction's to change.)
+  //
+  // Left in place, the gate produced the opposite of its intended effect:
+  // it hid the one real provider this product has from the Android client,
+  // because that client's own declared version ("0.1.0",
   // apps/android/src/app-shell/core.ts) sits below "0.1.45" by construction
   // and would keep doing so regardless of how long the app has been out,
   // since nothing in this product's roadmap ever needs to cross that
   // threshold on its own merits (see plan.md's decision record for T262).
+  //
+  // THE SAFETY ARGUMENT, which is stronger than "no installed base to
+  // protect" and was missing: before this change the method returned
+  // `true` for any client at or above "0.1.45"; it now returns `true`
+  // unconditionally. So retiring the gate is provably a NO-OP for every
+  // such client. This product ships TWO clients, not one, and
+  // `apps/web`'s `DAEMON_APP_VERSION` is "0.3.0-beta.2" — measured through
+  // the real `isAppVersionAtLeast`, already above the threshold. T262
+  // levels Android up to what web always had; it cannot regress web.
   //
   // Two cheaper fixes were considered and rejected, argued in full in
   // plan.md:
@@ -1811,16 +1839,26 @@ export class Session {
   //    someone reads `MIN_VERSION_ALL_PROVIDERS` and assumes it still means
   //    something for a client that ships today.
   //  - Bumping `ANDROID_DAEMON_APP_VERSION` past "0.1.45" would satisfy
-  //    this one gate, but that constant is a genuine wire-compatibility
-  //    signal read for an unrelated purpose two lines below
-  //    (`clientUsesLegacyWorkspaceRestore` against
-  //    `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY`, "0.1.105") -- inflating
-  //    it to dodge this gate risks silently also crossing (or, chosen
-  //    carelessly, coming close to) that second, unrelated threshold for a
-  //    client that has not actually implemented explicit workspace
-  //    recovery. A version number should describe what the code at the
-  //    other end actually does, not be moved until an unrelated check
-  //    passes.
+  //    this one gate, but the constant is an unexamined literal with no
+  //    documented protocol meaning of its own -- `core.ts:113-124` records
+  //    that it "was a bare `\"0.1.0\"` literal repeated at both
+  //    construction sites", where `apps/web`'s `DAEMON_APP_VERSION`
+  //    comment explicitly calls itself a fixed protocol-compatibility
+  //    declaration. Moving a meaningless literal until an unrelated check
+  //    passes is the objection: a version number should describe what the
+  //    code at the other end actually does.
+  //
+  //    (CORRECTED at the P9-I merge gate. This argued the bump "risks
+  //    silently also crossing (or, chosen carelessly, coming close to)"
+  //    `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY` ("0.1.105"). Executed
+  //    against the real `isAppVersionAtLeast`, that is false for the bump
+  //    this sentence names: at "0.1.46",
+  //    `clientUsesLegacyWorkspaceRestore` returns `true`, IDENTICAL to its
+  //    answer at "0.1.0" -- the second threshold is not crossed and is not
+  //    near. It is also vacuous at any value: the only consumer is
+  //    `restoreOwningWorkspaceForLegacyAgentRefresh` below, and neither
+  //    shipped app issues that RPC. The objection above survives; this one
+  //    did not.)
   //
   // The method (and its `provider` parameter) is kept, not deleted:
   // `ProviderCatalogSession`, `createAgentUpdatesService`, and
