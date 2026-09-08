@@ -548,6 +548,8 @@ that recomputation has to be domain-specific:
 | T289   | Register resolveTranscribeClient in guard-capability-prose                      | phase-9   | tooling          | P9-W68 | T282                                                                  |
 | T290   | Ship real AttachmentSourcePort and CameraCapturePort at the mount               | phase-9   | android          | P9-W69 | T278, T282                                                            |
 | T291   | Re-pin expo-audio to the version this app's own expo bundles                    | phase-9   | android          | P9-W70 | T276                                                                  |
+| T292   | Slash-command completion in the Android composer                                | phase-9   | android          | P9-W71 | none                                                                  |
+| T293   | Serve the composer's current text to an extension (getEditorText)               | phase-9   | server           | P9-W72 | none                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -957,6 +959,10 @@ the task details always agree.
 |        | feature is unreachable until these two ports exist).                     |       |
 | P9-W70 | T291 (found while verifying that install; expo-audio is pinned           | 1     |
 |        | below what this app's own expo bundles).                                 |       |
+| P9-W71 | T292 (owner request; typing / offers commands on web and is              | 1     |
+|        | plain text on Android).                                                  |       |
+| P9-W72 | T293 (owner request; the tier-2 bridge can push editor text but          | 1     |
+|        | not read it, so prompt-arbitrage is inert).                              |       |
 
 ---
 
@@ -10874,6 +10880,113 @@ Owns: `apps/android/package.json`'s `expo-audio` pin (owner-run), and
 - [ ] If a bump is needed, the exact command is stated for the owner rather than attempted
 - [ ] After any bump, `RecorderState`/`RecordingStatus` are re-read and T276's conclusion re-checked
 - [ ] If the drift is benign, that is recorded and the task closes without a change
+
+#### T292 — Slash-command completion in the Android composer
+
+`labels: phase-9, area: android` · `wave: P9-W71` · `depends-on: none`
+
+**Owner request.** Typing `/` in the prompt bar must offer the available commands. It does in the
+web UI; on Android it is plain text today.
+
+**Measured, not assumed:** `apps/android/src/features/composer/` contains no slash-command module,
+and nothing in it references a command list, a `/` prefix, or a picker. Web has
+`use-slash-commands.ts` and its test; Android has no counterpart. So this is a missing feature, not
+a broken one — nothing regressed.
+
+**The daemon side already exists and is shared.** The list is Pi's own, fetched over
+`get_commands` (`packages/server/src/server/agent/providers/pi/agent.ts`'s `commandsRpcName` and
+`runtimeSession.getCommands()`), surfaced to clients as `list_commands_response`. **Do not hard-code
+a command set** — that would go stale the moment the owner installs another extension, and this
+repository has 39 of them.
+
+**Follow web's model rather than inventing one.** `apps/web/src/features/composer/use-slash-commands.ts`
+already settled every question this task would otherwise re-litigate, and its decisions are
+documented in its own header:
+
+- `commands` mirrors the daemon's list via the turn client's `listCommands`, starting empty and
+  **staying empty when the client omits it** — the same "no client yet" optional seam
+  `onQueueUpdate`/`abort` use. Android must degrade the same way rather than throwing.
+- It re-fetches when the agent or client identity changes.
+- The palette opens when the whole draft is `/` plus a space-free token — i.e. before arguments are
+  typed — and also opens manually for discoverability.
+- **It never blocks a send.** An unrecognized slash command is sent as plain text; there is no
+  client-side command validation. Preserve that exactly: a picker that can swallow a submission is
+  worse than no picker.
+
+Read that file first and lift the _model_, not the JSX. If the shared decisions belong in
+`packages/frontend-core` so both apps consume one implementation, argue that — but do not move web's
+hook there as a drive-by; either propose it with the cost stated, or duplicate the model deliberately
+and say why.
+
+**Android-specific work this task actually owns:** the picker surface itself. It must sit above the
+prompt bar without covering the input (the same constraint the metadata pill menus solved), survive
+the IME appearing, be dismissible without sending, and be operable by tap. Check
+`composer-focus-model.ts`'s `COMPOSER_LAYOUT_CONTRACT` before choosing a placement.
+
+**No device exists in this environment.** Prove the model with unit tests and say plainly what
+needed a device.
+
+Owns: `apps/android/src/features/composer/**` and the turn-client wiring it needs.
+**Do not edit `apps/web`** — its implementation is the reference, not the deliverable.
+
+- [ ] Typing `/` offers the real command list, fetched from the daemon
+- [ ] No command set is hard-coded anywhere
+- [ ] A client without `listCommands` degrades to an empty palette, not an error
+- [ ] The palette never blocks or alters a send; an unknown command still sends as text
+- [ ] The picker does not cover the input, and survives the IME
+- [ ] Whether the shared model belongs in `frontend-core` is argued either way
+- [ ] What could not be exercised without a device is stated plainly
+
+#### T293 — Serve the composer's current text to an extension (`getEditorText`)
+
+`labels: phase-9, area: server` · `wave: P9-W72` · `depends-on: none`
+
+**Owner-visible symptom:** `prompt-arbitrage` does nothing in the web UI or the Android app. Typing
+`/` plus a prompt is supposed to rewrite it in place; it works in Pi's TUI and is inert on both of
+this product's surfaces.
+
+**The cause is an asymmetry in the tier-2 UI bridge, measured at the P9-Q follow-up.**
+`packages/server/src/server/agent/providers/pi/agent.ts` handles `set_editor_text`/`setEditorText`
+— pushing text INTO the composer — and handles nothing for reading it back. `getEditorText` and
+`pasteToEditor` appear nowhere in `packages/server/src` or `packages/protocol/src` at all (grepped,
+zero hits), so they fall through to the tier-2 default and are dropped with a one-time
+`[pi] unknown extension_ui_request method dropped: ${event.method}` warning.
+
+`prompt-arbitrage.ts` calls `ctx.ui.getEditorText` to read what the user typed, rewrites it, and
+calls `setEditorText` to put it back. The second half works. The first does not, so the rewrite has
+no input. `subagents.ts` also calls `getEditorText`, but has a bridge path and does not depend on
+it.
+
+**This is a request/response, not a fire-and-forget push, and that is the whole difficulty.** Every
+tier-2 method handled today flows daemon → client. This one needs client → daemon → Pi, with a
+reply correlated back to the extension's pending call, and a timeout for a client that never
+answers. Design it deliberately:
+
+- Where does the answer come from when **two** clients are attached, each with a different draft?
+  Pick an answer and defend it — the focused/most-recent client, the requesting session's, or refuse
+  ambiguity. Silently picking one is the failure a future reader will not forgive.
+- What happens with **no** client attached? The extension must get a definite outcome, not hang.
+- A malicious or buggy extension must not be able to poll composer contents at will. State whether
+  this needs rate limiting or a capability gate, and if not, why not.
+
+**Decide `pasteToEditor` in the same task**, since it is the same family: it inserts at the cursor,
+where `setEditorText` replaces wholesale. Either implement it or record a will-not-implement with
+the reason — leaving it as a silent drop after this task has touched the area is the outcome to
+avoid.
+
+**Verify the fix against the real extension, not only a fixture.** `prompt-arbitrage`'s bare-`/`
+flow is the acceptance case. If it cannot be exercised without a live daemon (this environment
+forbids starting one), say exactly what was and was not run.
+
+Owns: the tier-2 handler in `packages/server/src/server/agent/providers/pi/agent.ts`, the protocol
+request/response pair, and the composer read on both clients.
+
+- [ ] An extension calling `getEditorText` receives the composer's current text
+- [ ] The multi-client and no-client cases each have a defined, defended answer
+- [ ] A client that never replies times out rather than hanging the extension
+- [ ] `pasteToEditor` is implemented or refused with a recorded reason
+- [ ] `prompt-arbitrage`'s rewrite is exercised, or its non-exercise is stated plainly
+- [ ] No new unknown-method drop is introduced in the area this task touches
 
 #### T32A1 — Build the Android connect form
 
