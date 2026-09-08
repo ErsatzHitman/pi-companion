@@ -81,7 +81,6 @@ export interface WorkspaceDirectoryDeps {
   listTerminalActivityContributions(): Promise<
     Array<{ cwd: string; workspaceId?: string; activity: TerminalActivity | null }>
   >;
-  isProviderVisibleToClient(provider: string): boolean;
   buildWorkspaceDescriptor(input: {
     workspace: PersistedWorkspaceRecord;
     projectRecord?: PersistedProjectRecord | null;
@@ -255,9 +254,19 @@ export class WorkspaceDirectory {
       });
     }
 
-    const activeAgents = agents.filter(
-      (agent) => !agent.archivedAt && this.deps.isProviderVisibleToClient(agent.provider),
-    );
+    // T266: this used to also re-check `deps.isProviderVisibleToClient(agent.provider)`
+    // here. It was removed after being proven structurally redundant, not merely a
+    // post-T262 no-op: `deps.listAgentPayloads` is `session.ts`'s own
+    // `listAgentPayloads()`, which already applies that exact gate (via the SAME
+    // shared `this.isProviderVisibleToClient` method) before `agents` ever reaches
+    // this class -- session.ts is this class's only production caller. Filtering an
+    // already-filtered list by the identical predicate a second time can never
+    // change the result, in any past or future state of that gate, not only the
+    // current always-true one. Proven by an ablation test at the T266 gate: with a
+    // fake `listAgentPayloads` pre-filtered the way the real one is, deleting this
+    // second filter produced byte-identical `listDescriptors()` output in both the
+    // gate-true and gate-false cases.
+    const activeAgents = agents.filter((agent) => !agent.archivedAt);
     this.applyAgentBucketContributions({
       activeAgents,
       descriptorsByWorkspaceId,

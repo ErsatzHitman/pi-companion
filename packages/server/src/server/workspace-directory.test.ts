@@ -72,7 +72,6 @@ class WorkspaceStatus {
     listAgentPayloads: async () => this.agents,
     listProviderSubagentActivity: async () => this.providerSubagents,
     listTerminalActivityContributions: async () => this.terminals,
-    isProviderVisibleToClient: () => true,
     buildWorkspaceDescriptor: async ({ workspace }) => ({
       id: workspace.workspaceId,
       projectId: workspace.projectId,
@@ -561,7 +560,6 @@ describe("WorkspaceDirectory empty projects", () => {
       listAgentPayloads: async () => [],
       listProviderSubagentActivity: async () => [],
       listTerminalActivityContributions: async () => [],
-      isProviderVisibleToClient: () => true,
       buildWorkspaceDescriptor: async ({ workspace }) => ({
         id: workspace.workspaceId,
         projectId: workspace.projectId,

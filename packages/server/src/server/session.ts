@@ -994,7 +994,6 @@ export class Session {
       listAgentPayloads: () => this.listAgentPayloads(),
       listProviderSubagentActivity: async () => this.agentManager.listProviderSubagentActivity(),
       listTerminalActivityContributions: () => this.listTerminalActivityContributions(),
-      isProviderVisibleToClient: (provider) => this.isProviderVisibleToClient(provider),
       buildWorkspaceDescriptor: (input) => this.buildWorkspaceDescriptor(input),
     });
 
@@ -1860,13 +1859,33 @@ export class Session {
   //    shipped app issues that RPC. The objection above survives; this one
   //    did not.)
   //
-  // The method (and its `provider` parameter) is kept, not deleted:
-  // `ProviderCatalogSession`, `createAgentUpdatesService`, and
-  // `WorkspaceDirectory` each still depend on a
-  // `host.isProviderVisibleToClient(provider)` callback of this shape, and
-  // changing those three modules' host interfaces is outside this task's
-  // `Owns:` grant (`session.ts`, `apps/android/src/app-shell/core.ts`,
-  // `plan.md`).
+  // The method (and its `provider` parameter) is kept, not deleted: T266 settled,
+  // per caller, whether the three DI'd host interfaces sharing this callback should
+  // keep it now that it is a no-op everywhere.
+  //  - `ProviderCatalogSession` KEEPS it: it is the only remaining place that
+  //    filters PROVIDER-CATALOG content (models/modes/available-providers/snapshot
+  //    RPCs) by visibility -- nothing else in `session.ts` replicates that for
+  //    those RPCs, so a future provider a legacy client cannot render would need
+  //    this seam. See that interface's own comment.
+  //  - `createAgentUpdatesService` KEEPS it, for a different, non-redundant reason:
+  //    it is the ONLY gate on the LIVE agent-update push path
+  //    (`forwardLiveAgent`/`emitStoredRecord` -> `bufferOrEmit`), which never
+  //    passes through this class's own `listAgentPayloads()` (that method backs
+  //    only the `fetch_agents_request` snapshot). Proven by an ablation test at the
+  //    T266 gate: forcing the callback to always return `true` while leaving it
+  //    `false` changed the emitted-update count from 0 to 1. See that interface's
+  //    own comment.
+  //  - `WorkspaceDirectory` had its copy of this callback REMOVED (not merely
+  //    left as a no-op): this class is `WorkspaceDirectory`'s only production
+  //    caller, and `WorkspaceDirectory.deps.listAgentPayloads` is bound to this
+  //    class's OWN `listAgentPayloads()`, which already applies this exact gate
+  //    (the same shared method) before `WorkspaceDirectory` ever sees the agent
+  //    list. Filtering an already-filtered list by the identical predicate a
+  //    second time can never change the result, in any state of this gate, past
+  //    or future -- proven by an ablation test at the T266 gate that found
+  //    byte-identical `listDescriptors()` output with and without the internal
+  //    filter, in both the gate-true and gate-false cases. See `workspace-directory.ts`'s
+  //    `buildDescriptorMap` for the removal note.
   private isProviderVisibleToClient(_provider: string): boolean {
     return true;
   }

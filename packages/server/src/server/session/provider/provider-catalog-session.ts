@@ -41,14 +41,21 @@ export interface ProviderCatalogSessionHost {
   emit(msg: SessionOutboundMessage): void;
   // T262 retired the visibility gate: the shell's implementation now returns
   // `true` unconditionally and reads no `appVersion`. The callback is kept as
-  // a seam, not a filter — see `session.ts`'s retirement comment, and T266
-  // for whether it should be removed from this interface at all.
+  // a seam, not a filter — see `session.ts`'s retirement comment.
   // (CORRECTED at the P9-I merge gate. This said "visibility gating for older
   // clients lives on the shell (agent-lifecycle shares it). Reads appVersion
   // live." — present tense, and nothing reads `appVersion` any more. T262's
   // own grep for this symbol returned this file; `isAppSourcePath` is FALSE
   // for it, so `guard-capability-prose` could never have caught this. It is
   // T124's grep-and-fix-every-hit rule, not the guard's backstop.)
+  //
+  // T266 KEPT this declaration (unlike `WorkspaceDirectoryDeps`, where the
+  // equivalent declaration was deleted as provably redundant): this is the only
+  // remaining place that filters PROVIDER-CATALOG content — models, modes,
+  // available-providers, and the providers snapshot — by client visibility.
+  // Nothing else in `session.ts` re-applies that filter to this content, so a
+  // future provider a legacy client cannot render would need this seam; see
+  // `session.ts`'s retirement comment for the per-caller reasoning on all three.
   isProviderVisibleToClient(provider: string): boolean;
   // COMPAT(customModeIcons): reads clientCapabilities live.
   supportsCustomModeIcons(): boolean;

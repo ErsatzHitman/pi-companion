@@ -9652,10 +9652,84 @@ and should be retitled in the same commit.
 
 Owns: those three modules, their tests, and `session.ts`'s `isProviderVisibleToClient`.
 
-- [ ] The decision is per caller, with the two inert ones distinguished from the rest
-- [ ] If removed: every call site and every DI'd fake is updated in the same commit
-- [ ] If kept: each interface says why, next to its own declaration
-- [ ] No "legacy client" framing survives that no longer describes a real connection
+- [x] The decision is per caller, with the two inert ones distinguished from the rest
+- [x] If removed: every call site and every DI'd fake is updated in the same commit
+- [x] If kept: each interface says why, next to its own declaration
+- [x] No "legacy client" framing survives that no longer describes a real connection
+
+**STATUS: DONE.** Two file-path corrections found while reading the real tree (not this
+task's fault — the paths above predate a later reorganisation): the real files are
+`packages/server/src/server/session/agent-updates/agent-updates-service.ts` and
+`packages/server/src/server/workspace-directory.ts` (not nested under `session/`).
+
+**Re-deriving the two "inert" findings, per this task's own instruction, found one holds and
+one does not:**
+
+- `workspace-directory`: re-derived and **confirmed, and strengthened**. Not just "same entry
+  count" — proven structurally redundant. `grep -rn "new WorkspaceDirectory("
+packages/server/src` finds it constructed in exactly one non-test file — `session.ts` — plus
+  its own test's fixtures; `session.ts` is its only PRODUCTION caller, and its
+  `listAgentPayloads` dependency is bound to `() => this.listAgentPayloads()` —
+  `session.ts`'s own private method, which already applies
+  `agents.filter((agent) => this.isProviderVisibleToClient(agent.provider))` internally
+  (via the SAME shared method) before `WorkspaceDirectory` ever receives the list.
+  Applying the identical predicate a second time to an already-filtered list cannot change
+  the result, in any past or future state of the gate. Proven by an ablation test (built at
+  this gate, run, and then deleted since the code it exercised no longer exists): with a
+  fake `listAgentPayloads` pre-filtered the way the real one is, forcing the internal
+  `isProviderVisibleToClient` term to always `true` produced byte-identical
+  `listDescriptors()` output — same entry count AND same per-workspace `status` — in both
+  the gate-true and gate-false cases. **Removed** from `WorkspaceDirectoryDeps`.
+- `agent-updates-service`: re-derived and **not confirmed — the opposite was found.** The raw
+  fact ("gated only `payload.kind === \"upsert\"`") is true by inspection, but does not
+  establish inertness: `agent-updates-service.test.ts` already has two passing tests
+  (`"drops an upsert whose provider is not visible to the client"`,
+  `"does not buffer an upsert for a provider that is not visible"`) that toggle exactly this
+  gate and observe the emitted-update list change from non-empty to `[]`. Tracing why: the
+  LIVE agent-update path this service gates (`forwardLiveAgent` from
+  `agentManager.subscribe`'s `"agent_state"` event, `session.ts`'s
+  `subscribeToAgentEvents`) never passes through `session.ts`'s `listAgentPayloads()` — that
+  method backs only the `fetch_agents_request` snapshot, a separate path — and
+  `AgentManager.subscribe` itself applies no provider filter to what it forwards. So this
+  callback is the ONLY gate on that path, not a redundant second one. An ablation test (same
+  harness pattern, also deleted after use) confirmed it directly: forcing the callback to
+  always return `true` while a parallel run kept it `false` changed the emitted-update count
+  for an otherwise-identical `forwardLiveAgent` call from 0 to 1. **Kept**, with the
+  reasoning above written next to its declaration in `agent-updates-service.ts`. This
+  corrects the ledger's classification of this call site as one of the "two inert" ones —
+  consistent with this file's own repeated caution that a decision record's stated cause can
+  turn out false, and with this task's explicit instruction not to trust it unread.
+
+**Per-caller decision:**
+
+- `ProviderCatalogSession` — **kept**. It is the only remaining filter on provider-CATALOG
+  content (models, modes, available-providers, the providers snapshot); nothing else in
+  `session.ts` re-applies visibility to that content. Reasoning added next to its
+  declaration in `provider-catalog-session.ts`, alongside the existing P9-I-corrected COMPAT
+  comment (left as-is, not re-litigated).
+- `createAgentUpdatesService` — **kept** (not one of the two removed, contrary to the
+  ledger's framing — see re-derivation above). Reasoning added next to its declaration.
+- `WorkspaceDirectory` — **removed**: the interface member, its call site in
+  `buildDescriptorMap`, the DI wiring in `session.ts`'s constructor, and both fixtures in
+  `workspace-directory.test.ts` that supplied it.
+
+`session.ts`'s own retirement comment on `isProviderVisibleToClient` was rewritten to give
+all three of these reasons in one place, per caller, replacing the "outside this task's
+Owns grant" placeholder T262 left there. No "legacy client" framing needed retitling in
+either kept test file: `agent-updates-service.test.ts`'s two provider-visibility tests are
+titled by behaviour ("drops an upsert whose provider is not visible..."), not by a "legacy
+client" framing, and `provider-catalog-session.test.ts`'s fixture (`isProviderVisibleToClient:
+(provider) => visible.has(provider)`) carries no such framing either — both remain accurate,
+host-contract tests today, unchanged.
+
+`plan.md` §18 item 13 (`Owns` line does not cover it, but T124's grep-and-fix-every-hit rule
+does: that item asserted, in the present tense, that all three modules "each still depend on"
+the callback, which is now false for `WorkspaceDirectory`) was given a `RESOLVED by T266`
+addendum recording this outcome, rather than left to read as still-open follow-up.
+
+Verification run: `cd packages/server && npx vitest run src/server/workspace-directory.test.ts
+src/server/session/agent-updates/agent-updates-service.test.ts
+src/server/session/provider/provider-catalog-session.test.ts --bail=1` (foreground, one shot).
 
 #### T267 — Reclassify rpc-types.ts's get_commands citation and close T253's ledger
 

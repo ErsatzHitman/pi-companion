@@ -1446,7 +1446,16 @@ Because the ported backend preserves data formats and no daemon-data migration i
     deleted, because `ProviderCatalogSession`, `createAgentUpdatesService`, and
     `WorkspaceDirectory` each still depend on a `host.isProviderVisibleToClient` callback of that
     shape; removing the parameter from those three modules is unscoped follow-up, not part of
-    this decision.
+    this decision. **RESOLVED by T266, per caller, not in bulk:** `ProviderCatalogSession` and
+    `createAgentUpdatesService` keep the callback — the first is the only remaining filter on
+    provider-CATALOG content (models/modes/available-providers/snapshot), the second is the
+    only gate on the LIVE agent-update push path, and an ablation test proved each is
+    non-redundant with anything else in `session.ts`. `WorkspaceDirectory`'s copy was deleted:
+    `session.ts` is its only production caller and already pre-filters the agent list this
+    class receives through the SAME shared method (inside its own `listAgentPayloads()`), so
+    the class's own second application of that method was provably, structurally redundant —
+    an ablation test found byte-identical output with and without it, in both the gate-true and
+    gate-false cases.
 
 ---
 

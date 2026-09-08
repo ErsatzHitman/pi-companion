@@ -54,6 +54,18 @@ export interface AgentUpdatesServiceDeps {
   emit(message: SessionOutboundMessage): void;
   enrichAgentPayload(payload: AgentSnapshotPayload): Promise<AgentSnapshotPayload>;
   buildStoredAgentPayload(record: StoredAgentRecord): AgentSnapshotPayload;
+  // T262 retired the visibility gate this reads: `session.ts`'s implementation
+  // now returns `true` unconditionally, so `bufferOrEmit`'s use of it below is a
+  // no-op today. T266 kept it here (rather than deleting it, as it was deleted
+  // from `WorkspaceDirectoryDeps`) because this callback is NOT redundant with
+  // any other filter: the live agent-update path this service gates
+  // (`forwardLiveAgent`/`emitStoredRecord` -> `bufferOrEmit`) never passes through
+  // `session.ts`'s `listAgentPayloads()` (which backs only the
+  // `fetch_agents_request` snapshot and applies the same gate there), so this is
+  // the ONLY place that would filter a live push by provider visibility. Proven
+  // by an ablation test at the T266 gate: forcing this callback to always return
+  // `true` while the real gate was `false` changed the emitted-update count for
+  // an otherwise-identical `forwardLiveAgent` call from 0 to 1.
   isProviderVisibleToClient(provider: string): boolean;
   buildProjectPlacementForWorkspaceId(workspaceId: string): Promise<ProjectPlacementPayload | null>;
   emitWorkspaceUpdateForWorkspaceId(workspaceId: string): Promise<void>;
