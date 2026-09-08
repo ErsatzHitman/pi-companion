@@ -34,10 +34,13 @@
  * `"drafted"` (the text to insert into the composer draft) and
  * `"transcription-failed"`. `raw-audio-unsupported` is gone too:
  * `{ kind: "audio" }` now genuinely transcribes through
- * `VoiceTranscriptionClient`/`Composer.tsx`'s `transcribeClient` prop when
- * one is wired, and resolves the honest `"transcription-unavailable"` when
- * it is not (see `voice-model.ts`'s own header for why nothing wires that
- * prop in this task).
+ * `VoiceTranscriptionClient`/`Composer.tsx`'s `transcribeClient` prop.
+ * **T282 wires that prop at the only production mount** — see
+ * `voice-model.ts`'s own header ("T282 wires this at the only production
+ * mount") for the exact resolve call — so a real recording against a
+ * connected daemon now transcribes for real; the honest
+ * `"transcription-unavailable"` outcome still covers the no-connection
+ * case, never a silent no-op.
  */
 export {
   applyTranscriptToDraft,

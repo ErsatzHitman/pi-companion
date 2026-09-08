@@ -50,21 +50,34 @@
  * (`VoiceTranscriptionClient`, matching `AttachmentUploadClient`'s own
  * "duck-typed, never imports `@picompanion/client` directly" shape in
  * `../composer/attachment-model.ts`), exactly the same optionality pattern
- * `Composer.tsx`'s `uploadClient` already uses. **This task does not wire a
- * live `DaemonClient` into `Composer.tsx`'s new `transcribeClient` prop —
- * that prop's default is `undefined`, same as `uploadClient`'s today** (see
- * `Composer.tsx`'s own doc comment on the prop for the exact call that
- * would close this: `client.transcribeVoiceClip.bind(client)`, where
- * `client` is the same `AppCore.connection`-derived `DaemonClient` the
- * route layer already threads through for `queueModeClient`/
- * `turnStatusClient`). Left undone deliberately: doing that wiring blind,
- * with no device or live daemon connection available to prove it end to
- * end in this environment, is a worse outcome than a disclosed, honestly
- * un-wired optional prop. When `transcribe` is absent, a `"audio"` port
- * outcome resolves `{ outcome: "transcription-unavailable" }` — a truthful
- * "this screen has no transcription client connected" state, not the old
+ * `Composer.tsx`'s `uploadClient` already uses.
+ *
+ * **T282 (wave P9-W61) wires this at the only production mount.** The
+ * session route (`app/h/[serverId]/session/[agentId]/index.tsx`) now
+ * resolves `client.transcribeVoiceClip.bind(client)` off the same
+ * `AppCore.connection`-derived `DaemonClient` it already threads through
+ * for `queueModeClient`/`turnStatusClient` — see `app-shell/
+ * session-route-daemon-clients.ts`'s `resolveTranscribeClient`, the
+ * identical fresh-read-and-cast pattern those two functions use — and
+ * passes the result as `Composer.tsx`'s `transcribeClient` prop. A real
+ * recording made on a real device with a real daemon connection now
+ * reaches Groq and comes back as draft text, end to end. CORRECTED at
+ * T282: this paragraph used to say **"This task does not wire a live
+ * `DaemonClient` into `Composer.tsx`'s new `transcribeClient` prop — that
+ * prop's default is `undefined`, same as `uploadClient`'s today"** and
+ * **"Left undone deliberately: doing that wiring blind, with no device or
+ * live daemon connection available to prove it end to end in this
+ * environment, is a worse outcome than a disclosed, honestly un-wired
+ * optional prop."** Both were true of T277 and are no longer true. What
+ * has NOT changed: when there is no active daemon connection (unpaired,
+ * or paired but disconnected), `resolveTranscribeClient` returns
+ * `undefined`, `transcribe` is absent here exactly as before, and a
+ * `"audio"` port outcome still resolves `{ outcome:
+ * "transcription-unavailable" }` — a truthful "this screen has no
+ * transcription client connected" state, not the old
  * `"raw-audio-unsupported"` (which read as "audio can never be
- * transcribed", no longer true once a caller wires the prop).
+ * transcribed", never true once a caller wires the prop) and never a
+ * silent no-op.
  *
  * ## Cleanup: deterministic before clever (T277)
  *

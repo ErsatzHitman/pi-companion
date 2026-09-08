@@ -14,6 +14,18 @@
  * exactly why (T110's real `getQueueModes`/`setSteeringMode`/
  * `setFollowUpMode`, and the real `on("agent_stream", handler)` overload).
  *
+ * **T282 adds `resolveTranscribeClient` below**, the identical pattern a
+ * third time: `Composer.tsx`'s `transcribeClient` prop wants a
+ * `VoiceTranscriptionClient` (`../features/voice`'s
+ * `{ transcribeVoiceClip?(input): Promise<{ text, error }> }`), and the
+ * real `DaemonClient.transcribeVoiceClip` (`packages/client/src/
+ * daemon-client.ts`) matches that shape exactly — same method name, same
+ * input fields (`audioBase64`/`format`/optional `language`), same
+ * `{ text: string | null; error: string | null }` return — so the one
+ * live `DaemonClient` instance this file already narrows twice above
+ * satisfies this third port as-is too, with no adapter.
+ *
+
  * ## Why this is its own file, not inlined in `index.tsx` like
  * `SessionApprovals`'s cast
  *
@@ -33,6 +45,7 @@
  * unchanged" is a plain data-flow claim, not a rendering one.
  */
 import type { DaemonQueueModeSource, DaemonTurnStatusSource } from "../features/composer";
+import type { VoiceTranscriptionClient } from "../features/voice";
 
 /**
  * The one shape this module needs off `AppCore.connection`
@@ -84,6 +97,28 @@ export function resolveTurnStatusClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | DaemonTurnStatusSource
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T282: same fresh-read contract as the two functions above, cast to
+ * `VoiceTranscriptionClient` instead — the third narrow port this one
+ * live `DaemonClient` instance satisfies. `undefined` (never `null`)
+ * with no active lifecycle or no live client yet, matching
+ * `ComposerProps.transcribeClient`'s own `| undefined` shape —
+ * `Composer` resolves a captured `{ kind: "audio" }` clip to the
+ * truthful `"transcription-unavailable"` outcome in that case (see
+ * `Composer.tsx`'s `transcribeClient` doc comment), never a silent
+ * no-op and never a permission taken with nothing to repay it.
+ */
+export function resolveTranscribeClient(
+  connection: SessionRouteConnectionSource,
+): VoiceTranscriptionClient | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | VoiceTranscriptionClient
       | null
       | undefined) ?? undefined
   );

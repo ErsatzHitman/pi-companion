@@ -452,7 +452,7 @@ describe("SessionRoute source", () => {
     // the same reasoning `handleSubmit`/`turnRunning`'s cases above use.
     const code = readCode();
     expect(code).toMatch(
-      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
+      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
     );
   });
 
@@ -479,9 +479,9 @@ describe("SessionRoute source", () => {
   // that SessionRoute actually calls it and actually passes the result
   // to Composer, never a fixed `undefined`. ------------------------------
 
-  it("T132: imports resolveQueueModeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
+  it("T132/T282: imports resolveQueueModeClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
     expect(readCode()).toMatch(
-      /import \{\s*resolveQueueModeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+      /import \{\s*resolveQueueModeClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
     );
   });
 
@@ -507,6 +507,29 @@ describe("SessionRoute source", () => {
     // closed).
     expect(code).not.toMatch(/queueModeClient=\{undefined\}/);
     expect(code).not.toMatch(/turnStatusClient=\{undefined\}/);
+  });
+
+  // --- T282: wires transcribeClient into the production Composer mount,
+  // resolved the identical way as queueModeClient/turnStatusClient above
+  // — see this component's own "T282 mount" doc comment. Before this
+  // task the mic action genuinely requested and genuinely received a
+  // real OS microphone permission (T276's real voiceCapture default) and
+  // then always discarded the clip: nothing wired transcribeClient, so
+  // every "audio" outcome resolved "transcription-unavailable" no matter
+  // what the daemon connection state was. -------------------------------
+
+  it("T282: derives transcribeClient by calling resolveTranscribeClient with core.connection, never a hard-coded literal", () => {
+    const code = readCode();
+    expect(code).toMatch(/const transcribeClient = resolveTranscribeClient\(core\.connection\);/);
+  });
+
+  it("T282: passes the resolved value straight through to Composer's own transcribeClient prop — deleting this prop must fail this assertion", () => {
+    const code = readCode();
+    expect(code).toMatch(/<Composer[\s\S]*?transcribeClient=\{transcribeClient\}/);
+    // Never the fixed literal that would silently leave the mic wired to
+    // nothing regardless of connection state — the exact gap this task
+    // closed.
+    expect(code).not.toMatch(/transcribeClient=\{undefined\}/);
   });
 
   // --- T32S10: TranscriptWindowList (T33A6) had no live importer --------

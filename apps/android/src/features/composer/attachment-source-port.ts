@@ -29,6 +29,15 @@
  * `"unavailable"` copy — a distinct, honest state from a user's own
  * `"denied"` choice.
  *
+ * **Re-checked directly for T282** (which wired `Composer.tsx`'s sibling
+ * `transcribeClient` prop at the session mount and considered wiring
+ * these two ports at the same time): neither package resolves from this
+ * workspace today. `require.resolve("expo-image-picker", { paths:
+ * ["apps/android/src"] })` and the same call for `expo-document-picker`
+ * both throw `Cannot find module`, checked against both
+ * `apps/android/node_modules` and the repository root's — this is still
+ * a real install gap, not a stale claim carried forward unchecked.
+ *
  * To wire a real picker once available (versions pinned exactly per
  * `apps/android/node_modules/expo/bundledNativeModules.json` — read
  * from *this app's own* installed `expo` (54.0.37, matching

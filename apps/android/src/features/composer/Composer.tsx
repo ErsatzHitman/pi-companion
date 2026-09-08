@@ -267,15 +267,22 @@ export interface ComposerProps {
    * captured `{ kind: "audio" }` clip into text — mirrors `uploadClient`
    * above exactly (same "duck-typed, optional method, no live client
    * wired here" shape; `packages/client/src/daemon-client.ts`'s real
-   * `transcribeVoiceClip` implements it). **Left undone deliberately in
-   * this task**: the real call that would close this gap is
+   * `transcribeVoiceClip` implements it).
+   *
+   * **T282 wires this at the mount**: the session route
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`) now passes
    * `client.transcribeVoiceClip.bind(client)`, where `client` is the
    * same `AppCore.connection`-derived `DaemonClient`
    * `queueModeClient`/`turnStatusClient` below already receive from the
-   * route layer — but wiring it blind, with no device or live daemon
-   * connection available in this environment to prove the round trip
-   * end to end, was judged worse than a disclosed, honestly un-wired
-   * optional prop. Omitted (today, always): a captured `{ kind: "audio"
+   * route layer — see `app-shell/session-route-daemon-clients.ts`'s
+   * `resolveTranscribeClient`. CORRECTED at T282: this comment used to
+   * say **"Left undone deliberately in this task"**, reasoning that
+   * wiring it blind, with no device or live daemon connection available
+   * to prove the round trip end to end, was worse than a disclosed,
+   * honestly un-wired optional prop — true of T277, no longer true.
+   * Still optional, and still `undefined` with no active daemon
+   * connection (a fresh `resolveTranscribeClient` read, same as
+   * `queueModeClient`/`turnStatusClient`): a captured `{ kind: "audio"
    * }` clip resolves `VoiceStopOutcome`'s `"transcription-unavailable"`
    * — a truthful "no transcription client connected" state, surfaced
    * through `voiceOutcomeDisplay` below, never a silent no-op.

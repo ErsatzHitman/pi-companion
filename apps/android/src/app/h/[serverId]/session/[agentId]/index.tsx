@@ -49,6 +49,7 @@ import { Banner } from "../../../../../ui/primitives";
 import { useAppCore } from "../../../../core-context";
 import {
   resolveQueueModeClient,
+  resolveTranscribeClient,
   resolveTurnStatusClient,
 } from "../../../../../app-shell/session-route-daemon-clients";
 
@@ -545,6 +546,52 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * DaemonClient" apps/android/src`, historically comments-only — no
  * longer true as of `T32A1B`).
  *
+ * **T282 mount**: `Composer` used to get no `transcribeClient` prop
+ * either, so a real recording made on a real device (T276's real
+ * `expo-audio`-backed `voiceCapture` default, live since that task) hit
+ * a dead end: permission was genuinely requested and genuinely granted,
+ * and the finished clip then always resolved
+ * `"transcription-unavailable"` and was discarded — a user pays a real
+ * OS permission for nothing back. This route now resolves
+ * `transcribeClient` the identical way as `queueModeClient`/
+ * `turnStatusClient` two paragraphs up, via this same
+ * `session-route-daemon-clients.ts`'s `resolveTranscribeClient` (its own
+ * doc comment argues why the one live `DaemonClient` this route already
+ * narrows twice also satisfies `VoiceTranscriptionClient` as-is), so a
+ * recording made against a connected daemon now reaches
+ * `DaemonClient.transcribeVoiceClip` for real and comes back as
+ * editable composer draft text (see `Composer.tsx`'s `transcribeClient`
+ * prop doc comment and `../../../../../features/voice/voice-model.ts`'s
+ * header for the full path). With no active daemon connection,
+ * `transcribeClient` is `undefined` exactly as `queueModeClient`/
+ * `turnStatusClient` are, and the mic still shows the honest
+ * `"transcription-unavailable"` outcome rather than a silent no-op.
+ *
+ * `attachmentSource`/`cameraCapture` remain unset at this mount, and
+ * deliberately so — not an oversight this task missed. Both ports'
+ * only production implementations are still
+ * `createUnavailableAttachmentSourcePort`/`createUnavailableCameraCapturePort`
+ * (`../../../../../features/composer/attachment-source-port.ts`), because
+ * `apps/android/package.json` declares neither `expo-image-picker` nor
+ * `expo-document-picker` and neither resolves from this workspace today
+ * (checked directly: `require.resolve("expo-image-picker", { paths:
+ * ["apps/android/src"] })` and the `expo-document-picker` equivalent
+ * both throw `Cannot find module`, from both `apps/android/node_modules`
+ * and the repository root's). This task may not run `npm install`.
+ * Closing this gap needs, in order: the owner running
+ *
+ *   npm install --workspace=@picompanion/android expo-image-picker@~17.0.11
+ *   npm install --workspace=@picompanion/android expo-document-picker@~14.0.8
+ *
+ * (versions pinned to *this app's own* installed `expo`'s
+ * `bundledNativeModules.json`, per `attachment-source-port.ts`'s own
+ * header), then a real `AttachmentSourcePort`/`CameraCapturePort`
+ * implementation added behind that same file's already-drawn seam, then
+ * this route passing them here exactly like `transcribeClient` above.
+ * Nothing in `Composer.tsx`, `attachment-model.ts`, or
+ * `attachment-capture-model.ts` needs to change for that — the whole
+ * point of the seam those files already describe.
+ *
  * `turnRunning` is no longer the fixed `false` literal this comment used
  * to disclose as a gap. T64 landed mid-wave with a real per-agent signal
  * (`createTurnRunningSignal`, `../../../../../features/sessions/
@@ -665,6 +712,10 @@ export default function SessionRoute() {
   // client cast above.
   const queueModeClient = resolveQueueModeClient(core.connection);
   const turnStatusClient = resolveTurnStatusClient(core.connection);
+  // T282: identical fresh-read cast, off the same live DaemonClient, for
+  // Composer's transcribeClient prop — see resolveTranscribeClient's own
+  // doc comment and this component's "T282 mount" doc comment above.
+  const transcribeClient = resolveTranscribeClient(core.connection);
 
   return (
     <>
@@ -692,6 +743,7 @@ export default function SessionRoute() {
             turnService={turnService}
             queueModeClient={queueModeClient}
             turnStatusClient={turnStatusClient}
+            transcribeClient={transcribeClient}
             outbox={core.turnOutbox.getOutbox() ?? undefined}
           />
         }

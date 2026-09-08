@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   resolveQueueModeClient,
+  resolveTranscribeClient,
   resolveTurnStatusClient,
   type SessionRouteConnectionSource,
 } from "./session-route-daemon-clients";
@@ -46,6 +47,12 @@ function createCountingFakeDaemonClient() {
         calls.push(["unsubscribe"]);
       };
     }),
+    transcribeVoiceClip: vi.fn(
+      async (input: { audioBase64: string; format: string; language?: string }) => {
+        calls.push(["transcribeVoiceClip", input.audioBase64, input.format, input.language]);
+        return { text: "hello from groq", error: null };
+      },
+    ),
   };
 }
 
@@ -128,6 +135,41 @@ describe("resolveTurnStatusClient", () => {
   });
 });
 
+describe("resolveTranscribeClient", () => {
+  it("returns the exact live client reference unchanged — never a wrapper or a clone", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveTranscribeClient(connectionWithClient(fakeClient));
+    expect(resolved).toBe(fakeClient as unknown as typeof resolved);
+  });
+
+  it("a transcribeVoiceClip call on the resolved client reaches the real counting fake and its resolved value round-trips", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveTranscribeClient(connectionWithClient(fakeClient));
+
+    const result = await resolved!.transcribeVoiceClip!({
+      audioBase64: "QUJD",
+      format: "m4a",
+      language: "en",
+    });
+
+    expect(fakeClient.transcribeVoiceClip).toHaveBeenCalledTimes(1);
+    expect(fakeClient.calls).toEqual([["transcribeVoiceClip", "QUJD", "m4a", "en"]]);
+    expect(result).toEqual({ text: "hello from groq", error: null });
+  });
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveTranscribeClient(connection)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveTranscribeClient(connection)).toBeUndefined();
+  });
+});
+
 describe("resolveQueueModeClient and resolveTurnStatusClient read the SAME underlying client", () => {
   it("both resolve functions, given the same connection, return the identical object reference — one live client serves both features, never two", () => {
     const fakeClient = createCountingFakeDaemonClient();
@@ -135,5 +177,15 @@ describe("resolveQueueModeClient and resolveTurnStatusClient read the SAME under
     const queueModeClient = resolveQueueModeClient(connection);
     const turnStatusClient = resolveTurnStatusClient(connection);
     expect(queueModeClient).toBe(turnStatusClient as unknown as typeof queueModeClient);
+  });
+});
+
+describe("resolveTranscribeClient and resolveQueueModeClient read the SAME underlying client", () => {
+  it("both resolve functions, given the same connection, return the identical object reference — the mic's transcription client is the same live DaemonClient every other Composer daemon prop reads, never a second connection", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const connection = connectionWithClient(fakeClient);
+    const transcribeClient = resolveTranscribeClient(connection);
+    const queueModeClient = resolveQueueModeClient(connection);
+    expect(transcribeClient).toBe(queueModeClient as unknown as typeof transcribeClient);
   });
 });
