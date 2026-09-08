@@ -823,6 +823,20 @@ jobs:
   # (`src/terminal/agent-hooks/claude/claude.real.e2e.test.ts`) exercises
   # the ambient, already-configured `claude` CLI directly rather than an
   # isolated temp `CLAUDE_CONFIG_DIR`.
+  #
+  # T258 made the scope decision this comment's last paragraph left open, and took
+  # option (b): all three files now exercise "pi", the one real provider, against a
+  # matching fake added to `fake-agent-client.ts`, rather than reintroducing non-Pi
+  # providers into `AGENT_PROVIDER_DEFINITIONS`. Run individually and directly (never
+  # through this unwired `test:integration` script), all three now pass:
+  #   cd packages/server && npx vitest run --maxWorkers=1 \
+  #     src/server/daemon-e2e/models.e2e.test.ts \
+  #     src/server/daemon-e2e/live-preferences.e2e.test.ts \
+  #     src/server/agent/model-catalog.e2e.test.ts
+  # (one file per invocation) each exit 0. `test:integration` itself is still not wired
+  # into this job — that remains T250's original, still-open subject, not decided here.
+  # See T258's entry in `docs/issues-from-plan.md` for the coverage the rescoping to
+  # "pi" gives up, file by file.
 
   server-tests-ubuntu:
     name: server-tests (ubuntu-latest)

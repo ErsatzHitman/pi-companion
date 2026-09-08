@@ -1255,6 +1255,34 @@ export class FakeAgentClient implements AgentClient {
         modes: TEST_MODES,
       };
     }
+    if (this.provider === "pi") {
+      // Shaped like the real Pi provider's catalog (`providers/pi/agent.ts`'s
+      // `mapPiModel`): Pi is a single AgentProvider that fronts several
+      // underlying LLM backends, so its model ids/labels carry a
+      // "<backend>/<model>" prefix rather than naming one vendor.
+      return {
+        models: [
+          {
+            provider: this.provider,
+            id: "anthropic/claude-sonnet-4-5",
+            label: "anthropic/claude-sonnet-4-5",
+            isDefault: true,
+            thinkingOptions: [
+              { id: "off", label: "Off", isDefault: true },
+              { id: "on", label: "On" },
+            ],
+            defaultThinkingOptionId: "off",
+          },
+          {
+            provider: this.provider,
+            id: "anthropic/claude-haiku-4-5",
+            label: "anthropic/claude-haiku-4-5",
+            isDefault: false,
+          },
+        ],
+        modes: TEST_MODES,
+      };
+    }
     return {
       models: [{ provider: this.provider, id: "test-model", label: "Test Model", isDefault: true }],
       modes: TEST_MODES,
@@ -1273,5 +1301,13 @@ export function createTestAgentClients(
     claude: new FakeAgentClient("claude", options),
     codex: new FakeAgentClient("codex", options),
     opencode: new FakeAgentClient("opencode", options),
+    // "pi" is the only key `ProviderSnapshotManager.buildRegistry()` keeps
+    // (see `AGENT_PROVIDER_DEFINITIONS` in
+    // `packages/protocol/src/provider-manifest.ts`) — the other three are
+    // dropped by its `if (!definition) continue;` merge guard because this
+    // repository's provider registry is Pi-only (plan.md lines 99, 174).
+    // T258 added this entry so `test:integration`'s three e2e files have a
+    // real fake to exercise instead of an always-discarded one.
+    pi: new FakeAgentClient("pi", options),
   };
 }

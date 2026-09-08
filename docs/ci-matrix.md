@@ -293,6 +293,28 @@ run test:unit --workspace=@picompanion/server` — **not** the package's own
   (`src/terminal/agent-hooks/claude/claude.real.e2e.test.ts`) exercises
   the ambient, already-configured `claude` CLI directly rather than an
   isolated temp `CLAUDE_CONFIG_DIR`.
+  **T258 decided the scope question this section left open, and took option (b):**
+  all three `test:integration` e2e files (`src/server/daemon-e2e/models.e2e.test.ts`,
+  `src/server/daemon-e2e/live-preferences.e2e.test.ts`,
+  `src/server/agent/model-catalog.e2e.test.ts`) were rescoped to exercise "pi", the
+  one real provider, against a new `pi` fake added to `fake-agent-client.ts` —
+  rather than reintroducing non-Pi providers into `AGENT_PROVIDER_DEFINITIONS`, which
+  would have contradicted plan.md §2.3's non-goal directly. Run individually,
+  foreground, one at a time (never through this unwired script):
+  `cd packages/server && npx vitest run --maxWorkers=1 <file>` exits 0 for all three.
+  Rescoping cost real coverage — the multi-provider assertions (Codex/OpenCode model
+  and thinking-option shapes, and every Claude-specific model id) are gone, enumerated
+  file by file in T258's entry in `docs/issues-from-plan.md`, not merely asserted away.
+  T258 also found and filed, but did not fix (outside its `Owns:` line), a second,
+  independent gate: `session.ts`'s `isProviderVisibleToClient` treats a client whose
+  `appVersion` is null or below `"0.1.45"` as legacy and only shows it
+  `LEGACY_PROVIDER_IDS` (`"claude"/"codex"/"opencode"`) — a set that no longer contains
+  "pi". The rescoped `live-preferences.e2e.test.ts` works around this in its own test
+  connection only, by declaring `appVersion: "0.1.45"`; the real Android app declares
+  `ANDROID_DAEMON_APP_VERSION = "0.1.0"` (`apps/android/src/app-shell/core.ts`) and
+  would be gated the same way in production, never receiving an `agent_update` push for
+  its own Pi agents. `test:integration` is still not wired into this job — that remains
+  T250's original, still-open subject.
 - `protocol-client-tests` (ubuntu-latest only): `@picompanion/client` and
   `@picompanion/highlight`, alongside protocol.
 - **`relay-tests` (T44A4, new).** `@picompanion/relay` had a real `"test":

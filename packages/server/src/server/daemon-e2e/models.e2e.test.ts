@@ -1,65 +1,27 @@
 import { describe, test, expect } from "vitest";
-import { execFileSync } from "node:child_process";
 import { createDaemonTestContext } from "../test-utils/index.js";
 
-// NOT part of `npm run test:unit`; run via `test:integration`, which stays unwired in
-// CI. Its Claude case fails against `createTestAgentClients()`'s fakes with
-// `Unknown provider: claude` — this repository's provider registry is Pi-only
-// (plan.md §1.2/§2.3), so "claude" is never a key in it. Measured cause and disposition
-// (T250): `.github/workflows/ci.yml`'s server-tests job comment and
-// `docs/ci-matrix.md`'s backend section.
-
-function isBinaryInstalled(binary: string): boolean {
-  try {
-    const out = execFileSync("which", [binary], { encoding: "utf8" }).trim();
-    return out.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-const hasCodex = isBinaryInstalled("codex");
-const hasOpenCode = isBinaryInstalled("opencode");
-
+// Run via `test:integration` (not part of `npm run test:unit`). Rescoped by T258 to the
+// one provider this repository's registry actually has: `AGENT_PROVIDER_DEFINITIONS` in
+// `packages/protocol/src/provider-manifest.ts` lists exactly one entry, `id: "pi"`
+// (plan.md lines 99, 174 — "a Pi-only daemon and provider", "non-Pi agent providers" is a
+// stated non-goal). This file used to assert "claude"/"codex"/"opencode" cases carried
+// over from Paseo's multi-provider daemon; T250 measured why they failed
+// (`Unknown provider: <id>`, since `ProviderSnapshotManager.buildRegistry()` only lets an
+// `extraClients` fake override a provider id already in the builtin registry) and T258
+// made the scope call: rescope to "pi" with a matching fake in `fake-agent-client.ts`
+// rather than reintroduce non-Pi providers into the manifest. See T258's entry in
+// `docs/issues-from-plan.md` for the coverage this rescoping gives up.
 describe("daemon E2E", () => {
   describe("listProviderModels", () => {
-    test.runIf(hasCodex)(
-      "returns model list for Codex provider",
-      async () => {
-        const ctx = await createDaemonTestContext();
-        try {
-          // List models for Codex provider - no agent needed
-          const result = await ctx.client.listProviderModels("codex");
-
-          // Verify response structure
-          expect(result.provider).toBe("codex");
-          expect(result.error).toBeNull();
-          expect(result.fetchedAt).toBeTruthy();
-
-          // Should return at least one model
-          expect(result.models).toBeTruthy();
-          expect(result.models.length).toBeGreaterThan(0);
-
-          // Verify model structure
-          const model = result.models[0];
-          expect(model.provider).toBe("codex");
-          expect(model.id).toBeTruthy();
-          expect(model.label).toBeTruthy();
-        } finally {
-          await ctx.cleanup();
-        }
-      },
-      60000, // 1 minute timeout
-    );
-
-    test("returns model list for Claude provider", async () => {
+    test("returns model list for Pi provider", async () => {
       const ctx = await createDaemonTestContext();
       try {
-        // List models for Claude provider - no agent needed
-        const result = await ctx.client.listProviderModels("claude");
+        // List models for the Pi provider - no agent needed
+        const result = await ctx.client.listProviderModels("pi");
 
         // Verify response structure
-        expect(result.provider).toBe("claude");
+        expect(result.provider).toBe("pi");
         expect(result.error).toBeNull();
         expect(result.fetchedAt).toBeTruthy();
 
@@ -69,37 +31,12 @@ describe("daemon E2E", () => {
 
         // Verify model structure
         const model = result.models[0];
-        expect(model.provider).toBe("claude");
+        expect(model.provider).toBe("pi");
         expect(model.id).toBeTruthy();
         expect(model.label).toBeTruthy();
       } finally {
         await ctx.cleanup();
       }
-    }, 180000);
-
-    test.runIf(hasOpenCode)(
-      "returns model list for OpenCode provider",
-      async () => {
-        const ctx = await createDaemonTestContext();
-        try {
-          const result = await ctx.client.listProviderModels("opencode");
-
-          expect(result.provider).toBe("opencode");
-          expect(result.error).toBeNull();
-          expect(result.fetchedAt).toBeTruthy();
-
-          expect(result.models).toBeTruthy();
-          expect(result.models.length).toBeGreaterThan(0);
-
-          const model = result.models[0];
-          expect(model.provider).toBe("opencode");
-          expect(model.id).toBeTruthy();
-          expect(model.label).toBeTruthy();
-        } finally {
-          await ctx.cleanup();
-        }
-      },
-      60000,
-    );
+    }, 60000);
   });
 });
