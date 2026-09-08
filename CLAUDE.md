@@ -804,9 +804,12 @@ reference to anything, left alone); and real citations outside this task's `Owns
 reported to whoever owns each file rather than touched here. Two of those out-of-scope
 citations had themselves already drifted the same way T269's fenced-form sample did —
 `packages/frontend-core/src/testing/real-session-protection.test.ts`'s citation of
-`agent.ts`'s `"custom"`-role display check moved off the cited line by that file's own
+`agent.ts`'s `"custom"`-role display check had moved off the cited line by that file's own
 subsequent edits, and `scripts/ci/guard-web-session-bundle-budget.mjs`'s citation of
-`agent-stream-coalescer.test.ts`'s test title is now describing a gap that test's title no
-longer has, since the title itself was corrected — evidence for the same "a script can tell
-a line exists, never that it still says what the prose claims" conclusion T269 already
-reached, not a new argument.
+`agent-stream-coalescer.test.ts`'s test title was by then describing a gap that test's title
+no longer had, since the title itself had been corrected — evidence for the same "a script
+can tell a line exists, never that it still says what the prose claims" conclusion T269
+already reached, not a new argument. **Both were fixed at P9-W52 (T273) and P9-W53 (T274);
+the sentence above describes what T272's audit found, not the tree today.** (CORRECTED at
+the P9-M merge gate: it read "is now describing a gap", present tense, which the wave that
+closed both had already made false.)

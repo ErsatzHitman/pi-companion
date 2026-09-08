@@ -2681,10 +2681,34 @@ test("T197: the real docs/legacy-retirement.md — the file that motivated this 
   // snapshot of the P8-W6 tree, not a live description of today's file —
   // it already rotted, silently, exactly once. `docs/legacy-retirement.md`
   // is edited by other tasks constantly, its line numbers move on every
-  // such edit, and by the time T272's audit re-measured it a literal
-  // `grep -n CORRECTED docs/legacy-retirement.md` returned SIX hits, at
-  // 9, 15, 43, 323, 326, 374 — only one of the original four numbers still
-  // landed on a marker, and the count itself had changed too. Re-deriving
+  // such edit, and when the P9-L merge gate re-measured it a literal
+  // `grep -n CORRECTED docs/legacy-retirement.md` returned a different
+  // count and a different set — only one of the original four numbers
+  // still landed on a marker, and the count itself had changed too.
+  //
+  // (CORRECTED at the P9-M merge gate, twice, in this paragraph's own
+  // failure mode. It said "by the time T272's audit re-measured it" and
+  // then printed "SIX hits, at 9, 15, 43, 323, 326, 374" eight lines
+  // before asserting "none is reprinted here".
+  //
+  // T272's audit never measured this file and could not have: its
+  // recovery grep's digit band was `{2,4}`, and executed against this
+  // file at T272's own HEAD it returns NO HITS. The P9-L gate found it,
+  // after widening the band — which is what commit 3bf62c6's own message
+  // says, so the message was right and the shipped comment was wrong.
+  // That is the P6-W19 shape: a number a future reader will trust,
+  // attributed to a pass that never produced it.
+  //
+  // The seven figures are dropped rather than re-dated, because the
+  // paragraph's own argument demands it and because they were printed as
+  // a bare comma list — the ONE shape the widened recovery grep still
+  // cannot see, since `lines?` is mandatory in that pattern and absent
+  // here. Executed: the grep over this file returns only `lines 9`, the
+  // P8-W6 number. So this comment had closed one invisible comma-list of
+  // line numbers and authored a fresh one, while arguing in the same
+  // breath that it had not.)
+  //
+  // Re-deriving
   // a replacement count is not the fix, because that same grep is not
   // even what decides a real marker: the guard's actual
   // `HISTORICAL_QUOTE_MARKERS` regex is case-insensitive (so a bare

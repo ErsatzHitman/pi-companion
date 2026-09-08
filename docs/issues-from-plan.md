@@ -532,6 +532,10 @@ that recomputation has to be domain-specific:
 | T273   | Repoint real-session-protection.test.ts's rotted agent.ts citation              | phase-9   | core             | P9-W52 | T269                                                                  |
 | T274   | Retire the bundle-budget guard's overtaken missing-rationale claim              | phase-9   | tooling          | P9-W53 | T269                                                                  |
 | T275   | Date or recount the four-marker citation that has rotted                        | phase-9   | tooling          | P9-W54 | T272                                                                  |
+| T276   | Ship a real VoiceCapturePort and make the mic button waveform-only              | phase-9   | android          | P9-W55 | none                                                                  |
+| T277   | Transcribe through Groq, clean it, and put the text in the prompt bar           | phase-9   | server           | P9-W56 | T276                                                                  |
+| T278   | Image thumbnails and capture in the mobile prompt bar                           | phase-9   | android          | P9-W57 | none                                                                  |
+| T279   | Drag-and-drop, paste, and inline previews in the web composer                   | phase-9   | web              | P9-W58 | none                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -909,6 +913,14 @@ the task details always agree.
 |        | calls missing is now the test's own title).                              |       |
 | P9-W54 | T275 (filed by the P9-L gate; invisible to T272's grep                   | 1     |
 |        | twice over -- single-digit, then bare numbers).                          |       |
+| P9-W55 | T276 (owner request; the press-to-stop machine exists, the               | 1     |
+|        | recorder behind it does not).                                            |       |
+| P9-W56 | T277 (owner request; the audio outcome dead-ends and a                   | 1     |
+|        | finished transcript auto-sends instead of offering).                     |       |
+| P9-W57 | T278 (owner request; StagedAttachment carries nothing a                  | 1     |
+|        | thumbnail could render from).                                            |       |
+| P9-W58 | T279 (owner request; the web composer has no paste, drop                 | 1     |
+|        | or dragover handler at all).                                             |       |
 
 ---
 
@@ -9969,9 +9981,9 @@ citation nobody has verified in a while.
 
 Owns: `packages/frontend-core/src/testing/real-session-protection.test.ts` only.
 
-- [ ] The `~line 2661` citation is replaced with a symbol citation
-- [ ] The claim the comment makes about that check is re-read against the real code and corrected if wrong
-- [ ] No line-number citation remains in that file
+- [x] The `~line 2661` citation is replaced with a symbol citation
+- [x] The claim the comment makes about that check is re-read against the real code and corrected if wrong
+- [x] No line-number citation remains in that file
 
 #### T274 — `guard-web-session-bundle-budget.mjs`'s comment calls a rationale missing that now exists
 
@@ -10000,9 +10012,9 @@ so and delete the paragraph rather than leaving a stale worry in a shipped guard
 Owns: `scripts/ci/guard-web-session-bundle-budget.mjs` only. Do **not** edit
 `agent-stream-coalescer.test.ts` — it is already correct.
 
-- [ ] The "missing rationale" claim is removed or rewritten against what the test title says today
-- [ ] No line-number citation remains in that comment
-- [ ] `node scripts/ci/run-guard-web-session-bundle-budget.mjs` still exits 0
+- [x] The "missing rationale" claim is removed or rewritten against what the test title says today
+- [x] No line-number citation remains in that comment
+- [x] `node scripts/ci/run-guard-web-session-bundle-budget.mjs` still exits 0
 
 #### T275 — `guard-capability-prose.test.mjs`'s four-marker citation has rotted
 
@@ -10032,10 +10044,239 @@ above without checking each is a real `HISTORICAL_QUOTE_MARKERS` trigger in cont
 Owns: `scripts/ci/guard-capability-prose.test.mjs` only. Do **not** edit
 `docs/legacy-retirement.md`.
 
-- [ ] The marker set is re-derived directly, not copied from this brief
-- [ ] The route (date it / recount it / convert it) is chosen and argued against the alternatives
-- [ ] The sentence no longer reads as a present-tense claim that is false
-- [ ] `node --test scripts/ci/guard-capability-prose.test.mjs` all-pass
+- [x] The marker set is re-derived directly, not copied from this brief
+- [x] The route (date it / recount it / convert it) is chosen and argued against the alternatives
+- [x] The sentence no longer reads as a present-tense claim that is false
+
+  True of the P8-W6 sentence the moment T275 landed, but the paragraph it added introduced
+  two of its own: it attributed its new number set to a measurement T272 never made (that
+  audit's grep returns NO HITS on this file, executed at its own HEAD), and it printed seven
+  figures eight lines before asserting “none is reprinted here” — as a bare comma list, the
+  one shape the widened recovery grep still cannot see. The P9-M merge gate found both and
+  fixed them, which is what made this box true.
+
+- [x] `node --test scripts/ci/guard-capability-prose.test.mjs` all-pass
+
+#### T276 — Ship a real VoiceCapturePort and make the mic button waveform-only
+
+`labels: phase-9, area: android` · `wave: P9-W55` · `depends-on: none`
+
+The press-to-start / press-to-stop machine already exists and is well-built. What does not exist is
+a recorder: `apps/android/src/features/voice/voice-capture-port.ts` ships exactly one production
+`VoiceCapturePort`, `createUnavailableVoiceCapturePort()`, whose `getPermissionStatus` returns
+`"unavailable"` and whose `stop()` returns `{ kind: "transcript", text: "" }`. Every voice path in
+the app is therefore inert today, and `mic-press-model.ts`'s own header says so
+("Both currently default to `createUnavailable*Port()` (no recorder installed)").
+
+**Read before scoping**, in this order: `voice-capture-port.ts` (the port contract),
+`voice-model.ts` (`createVoiceCaptureController`, `VoiceState`, `VoiceStartOutcome`,
+`VoiceStopOutcome`), `mic-press-model.ts` (the one-permission-resolution-per-press invariant T83
+closed), and `Composer.tsx`'s `handleMicPress`.
+
+**Ship a real port.** `packages/expo-two-way-audio` is already in this repository and already
+carries `ios/MicrophonePermissionRequester.swift`; establish first whether it can serve as the
+recorder or whether a separate Expo audio dependency is required. **If the package needed is not
+installed, that is a hard stop under this repository's install rules** — build behind the existing
+port, prove against a fake, report the exact install command, and say plainly that the real package
+was never installed. Do not vendor or stub a live-looking module.
+
+The port must resolve `{ kind: "audio", audioBase64, format }` — **not** `"transcript"`. That arm
+already exists in `VoiceCaptureOutcome` and is currently dead: `voice-model.ts` answers it with
+`{ outcome: "raw-audio-unsupported" }`. Closing that dead end is the NEXT task's job, not this
+one; this task ships the capture and leaves the outcome honestly unsupported, with a test pinning
+that it is reached.
+
+Target format is **16 kHz mono**, which is what a cloud STT endpoint wants and what avoids a
+resample later. Record it if the platform allows; if it does not, record the device's native rate
+and say so in the port's doc comment rather than claiming a rate you did not verify.
+
+**The permission invariant is load-bearing.** T83 closed a double-prompt bug: exactly one
+permission resolution per press, inside `requestStart()`. A real recorder is the first build where
+a second prompt would actually be visible to a user. Do not add a precheck; do not call
+`resolvePermission` from the port's own `start()`.
+
+**The UI change: the mic shows the waveform and nothing else.** No "Listening…" label, no status
+text (grep confirms no such string exists today — do not introduce one). While
+`VoiceState.status === "recording"` the mic control renders an animated waveform only. The
+artifact at `https://claude.ai/code/artifact/f8701c46-b748-4e61-ab5a-be8caf5cc263` already carries
+the intended treatment as `.eq`/`@keyframes eq-bounce` — five bars, `eq-bounce .8s ease-in-out
+infinite`, staggered `.06s`, `var(--accent)`, on `.cmp.listening` — and `D:\beautiful-ui` is the
+source for the surrounding motion vocabulary. Match that, do not re-invent it.
+
+`status === "processing"` is a different state and must remain distinguishable from `"recording"`;
+decide what it shows and say why. A waveform that keeps bouncing after the user has pressed stop
+is a lie about what the microphone is doing.
+
+Owns: `apps/android/src/features/voice/**`, `apps/android/src/features/composer/mic-press-model.ts`
+and `Composer.tsx`'s mic control only.
+
+- [ ] A real `VoiceCapturePort` exists, resolving `{ kind: "audio", ... }`, or the exact blocking install is reported and the fake-backed implementation is complete
+- [ ] Exactly one permission resolution per press, pinned by a test that fails if a second is added
+- [ ] Recording renders a waveform and no status text; `"processing"` is visually distinct and the choice is argued
+- [ ] The sample rate and channel count the port actually produces are stated, measured not assumed
+- [ ] `raw-audio-unsupported` is still reached, and a test pins that it is
+
+#### T277 — Transcribe captured audio through Groq, clean it, and put the text in the prompt bar
+
+`labels: phase-9, area: server` · `wave: P9-W56` · `depends-on: the recorder task above`
+
+Two defects block the flow the owner asked for, and they are independent of each other.
+
+**1. The audio outcome dead-ends.** `voice-model.ts` answers `{ kind: "audio" }` with
+`{ outcome: "raw-audio-unsupported" }`. Nothing transcribes it.
+
+**2. A finished transcript is SENT, not offered.** `createVoiceCaptureController` enqueues into the
+outbox (`VoiceOutboxLike`, `VoicePromptPayload`, `{ outcome: "queued", outboxEntryId }`). The
+requested behaviour is the opposite: the text lands in the prompt bar as an editable draft, and the
+user decides whether to send. **This is a behaviour change to a shipped decision, not a bug fix** —
+record it in `plan.md` and correct `voice-model.ts`'s own header, which currently explains the
+enqueue as the design.
+
+**Do not build a new provider before measuring whether one is needed.** This repository already
+has `packages/server/src/server/speech/`: a `SpeechToTextProvider` interface whose `id` is
+`"openai" | "local" | (string & {})`, an `OpenAISTT` class with a **configurable `baseUrl`** and a
+`(string & {})` model escape hatch, and a `provider-resolver.ts`. Groq's transcription API is
+served at `https://api.groq.com/openai/v1` and is OpenAI-compatible. **Establish by execution
+whether Groq is a configuration of `OpenAISTT` or genuinely needs its own provider, and argue the
+answer.** `D:\Handy\research\cloud-stt-groq\07-proposed-architecture.md` reached the same
+conclusion for a different codebase — that cloud providers should be configuration in front of the
+existing path, not new engine code — and its reasoning transfers; cite it as the reference it is,
+never as authority for what this repository does.
+
+Facts confirmed from `D:\Handy\research\cloud-stt-groq\05-groq-api.md`, to be re-verified against
+Groq's own documentation before shipping, not copied on trust:
+
+| Field         | Value                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------- |
+| Endpoint      | `POST https://api.groq.com/openai/v1/audio/transcriptions`                                |
+| Auth          | `Authorization: Bearer <key>`                                                             |
+| Body          | `multipart/form-data`                                                                     |
+| Model         | `whisper-large-v3-turbo` (default; ~$0.04/hr) or `whisper-large-v3` (translation-capable) |
+| Response      | `response_format: json` → `{"text": "..."}`, one field                                    |
+| Size ceiling  | 25 MB free tier — about 13 minutes of 16 kHz mono 16-bit WAV                              |
+| Billing floor | 10 seconds minimum billed, however short the clip                                         |
+
+`whisper-large-v3-turbo` **cannot translate**. If any translate-to-English affordance is exposed,
+it must force the non-turbo model or be hidden — a real capability interaction, not a detail.
+
+Check the size ceiling **before** upload and fail with a clear message; do not discover it as a 413. Pass `language` when known — it improves both accuracy and latency.
+
+**The key is a secret.** Follow this repository's existing credential handling
+(`apps/android/src/features/connect/credential-store.ts`, `persisted-config.ts`) rather than
+inventing storage. It must never be logged, never enter a URL or query string, and never appear in
+a diagnostics export — `packages/frontend-core/src/security/secret-shape.ts` and
+`scripts/ci/guard-secret-scan.mjs` already exist and both must stay green. Never paste a
+secret-shaped literal as one contiguous run into any file, in a test or anywhere else.
+
+**Cleanup is a real step, and it is deterministic before it is clever.** `D:\Handy`'s
+`src-tauri/src/audio_toolkit/text.rs` does custom-word repair by Levenshtein distance plus Soundex
+phonetics, deliberately restricted to ASCII keys because that scoring is wrong for CJK. Decide what
+this product needs and argue the scope: at minimum trim, collapse the doubled whitespace Whisper
+emits, and drop a leading filler token. **A hallucinated transcript from silence is a known Whisper
+failure mode** — decide whether to guard it (Groq's `verbose_json` exposes `no_speech_prob` and
+`avg_logprob` for exactly this) and say why if you do not. Do not route the text through an LLM for
+cleanup without arguing the latency cost against what it buys.
+
+Whatever the cleanup does, **an empty or whitespace-only result must not overwrite a draft the user
+has already typed.** Define what happens to existing composer text — append, replace, or insert at
+cursor — and pin it with a test; this is the decision most likely to be made by accident.
+
+Owns: the speech provider wiring, `voice-model.ts`'s outcome handling, the composer draft
+insertion, and the `plan.md` section recording the send-vs-draft change.
+
+- [ ] Groq-as-configuration vs Groq-as-provider is decided by execution and argued against the other
+- [ ] The endpoint, model, response shape and size ceiling are verified against Groq's own docs, not this brief
+- [ ] The key never reaches a log, a URL, or a diagnostics export; `run-guard-secret-scan.mjs` stays green
+- [ ] The transcript lands in the prompt bar as an editable draft; nothing auto-sends
+- [ ] The interaction with existing composer text is defined and pinned by a test
+- [ ] `plan.md` records the outbox-to-draft change, and `voice-model.ts`'s header no longer explains the old behaviour as the design
+- [ ] Oversize audio fails before upload with a clear message
+
+#### T278 — Image thumbnails and capture in the mobile prompt bar
+
+`labels: phase-9, area: android` · `wave: P9-W57` · `depends-on: none`
+
+Staging, limits and upload states already exist: `attachment-model.ts` has `StagedAttachment`,
+`evaluateAttachmentCandidate`, `stageAttachment`, `markAttachmentUploaded`, `markAttachmentError`,
+and `DEFAULT_ATTACHMENT_LIMITS` (6 files, 25 MiB each, 100 MiB total, the last matching
+`DaemonClient.uploadFile`'s own `MAX_UPLOAD_BYTES`). What is missing is narrow and specific.
+
+**`StagedAttachment` carries no preview.** Its fields are `id`, `name`, `mimeType`, `size`,
+`status`, `uploaded?`, `error?` — nothing a thumbnail could render from. Add a preview channel for
+image types only, and make it optional so a non-image attachment is not forced to carry an empty
+one. **Decide where the preview bytes live and argue it**: a local URI is cheap but platform-shaped
+and `packages/frontend-core` may not hold it; a data URI is portable but multiplies memory across
+six staged files. Whichever you choose, state the memory cost of six 25 MiB images staged at once —
+measured, not estimated — and say what is released on send and on removal.
+
+Non-image types stay a compact chip: name, size, a remove affordance. **No preview for them, by
+decision** — say so where a future reader will look, so the next wave does not read the absence as
+an oversight.
+
+**Capture is a second source, not the same one.** `FilePicker.pickFiles` in
+`packages/frontend-core/src/platform/file-picker.ts` is a picker, not a camera. Taking a photo is a
+different permission, a different failure mode, and a different cancel path. Either extend the port
+or add a sibling; argue which, and note that the camera permission must follow the same
+one-resolution-per-press discipline T83 established for the microphone.
+
+Match `D:\beautiful-ui` for the chip and thumbnail treatment; the artifact's `.att` chip
+(`pop-in .2s cubic-bezier(.23,1,.32,1)`) is the established shape in this product.
+
+Owns: `apps/android/src/features/composer/attachment-*.ts`, the composer's attachment strip, and
+the file-picker/camera port.
+
+- [ ] `StagedAttachment` carries an optional preview, image types only
+- [ ] Where preview bytes live is argued, with the six-file worst case measured and the release points named
+- [ ] Non-image types render as a chip, and the no-preview decision is recorded where a reader will find it
+- [ ] Capture works as a distinct source with its own permission path, one resolution per press
+- [ ] Existing limits still reject oversize and over-count candidates, pinned by tests
+
+#### T279 — Drag-and-drop, paste, and inline previews in the web composer
+
+`labels: phase-9, area: web` · `wave: P9-W58` · `depends-on: none`
+
+`apps/web/src/features/composer/use-attachments.ts` already has `ComposerAttachment`,
+`useAttachments`, upload status and `formatAttachmentSize`. **The web composer has no
+`onPaste`, no `onDrop`, and no `dragover` handler anywhere** — grepping `apps/web/src` for
+`onPaste|onDrop|dragover|clipboardData|DataTransfer` returns only unrelated diagnostics code. So
+every input path beyond the file dialog is missing, not merely rough.
+
+Four inputs, and they are **four different code paths, not one** — do not implement one and assume
+the others follow:
+
+| Input         | Source                               | The part that bites                                                                                                                                    |
+| ------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Drag and drop | `DataTransfer.files`                 | Needs `dragover` **prevented** or the browser navigates away and the drop is lost. Needs a drop target that is not the whole window unless you mean it |
+| Pasted image  | `ClipboardEvent.clipboardData.items` | A screenshot arrives as a `File` with **no name** — synthesize one, and say what you synthesize                                                        |
+| Pasted link   | `clipboardData.getData("text")`      | Must NOT be swallowed. A URL in a prompt is usually just text; only treat it as an attachment on an explicit signal, and argue the rule you pick       |
+| File dialog   | existing `FilePicker`                | Already works; do not regress it                                                                                                                       |
+
+The pasted-link rule is the one most likely to be got wrong in a way that annoys the owner daily.
+Pasting a URL into a prompt is overwhelmingly ordinary text. **State the rule, argue it against the
+alternative, and pin both directions with tests** — the URL that stays text and the one that
+becomes an attachment.
+
+Images get an inline preview in the prompt bar, as on mobile. Reuse
+`URL.createObjectURL` if that is the choice, and **call `URL.revokeObjectURL` on removal and on
+send** — a preview that leaks a blob URL per paste is a real leak in a long session, and nothing in
+this repository would notice.
+
+Everything must route through the existing `useAttachments` limits, so a dropped 200 MB file is
+rejected by the same rule as a picked one. A second acceptance path that skips the ceiling is the
+defect this task should be most careful not to create.
+
+Match `D:\beautiful-ui` for the drop-target and preview treatment. Keep the drop affordance quiet
+until a drag is actually over the target; a permanently visible dashed rectangle is not this
+product's vocabulary.
+
+Owns: `apps/web/src/features/composer/**` only.
+
+- [ ] Drop, paste-image, paste-link and dialog all work, each pinned by its own test
+- [ ] `dragover` is prevented; a drop outside the target does not navigate
+- [ ] A pasted screenshot gets a synthesized name, and what is synthesized is stated
+- [ ] The pasted-URL rule is argued and pinned in both directions
+- [ ] Every path goes through the existing limits — no second acceptance path
+- [ ] Object URLs are revoked on removal and on send
 
 #### T32A1 — Build the Android connect form
 
