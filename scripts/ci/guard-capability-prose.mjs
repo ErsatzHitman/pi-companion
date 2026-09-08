@@ -1374,11 +1374,80 @@ export const CAPABILITIES = [
     // before being kept, so a future comment reflow welding a wrapped
     // clause onto one line cannot create the collision CLAUDE.md's T215
     // section describes.
+    //
+    // T259: the two phrases above are calibrated to the one sentence T251
+    // fixed and miss the framing every reader who learned this guard
+    // BEFORE T251 actually carries — "it walks only apps/android and
+    // apps/web" — plus the bare "does not scan packages" shape with no
+    // `packages/relay` literal in it at all. The P9-G gate ran six
+    // phrasings through the real function and found four MISSED; these
+    // four new phrases close exactly those four, worded away from every
+    // one of them verbatim.
+    //
+    // Trap 1 (collision with true history): both
+    // `guard-declared-workspace-deps.mjs` ("T251: widened from
+    // `apps/android/src`/`apps/web/src` ALONE to every `packages/*/src`
+    // too") and `run-guard-declared-workspace-deps.mjs` ("Walks
+    // `apps/android/src`, `apps/web/src`, and (T251) every
+    // `packages/*/src`") narrate the pre-T251 scope correctly, and neither
+    // carries a `HISTORICAL_QUOTE_MARKERS` trigger — the task brief is
+    // explicit that "used to walk" is not one. Rather than lean on that
+    // marker, the new apps-only phrase is anchored to the PRESENT-TENSE
+    // verb form `walks`/`scans` (mandatory trailing "s", i.e. a "this
+    // guard walks/scans" construction) immediately followed by `only`.
+    // Neither file's narration matches: one says "widened from ... ALONE
+    // to" (no "only" at all, and the verb is "widened", not "walks"), the
+    // other says "Walks `apps/android/src`, `apps/web/src`, AND ...
+    // `packages/*/src`" (no "only" — it lists three targets, packages
+    // included). A denial actually reading "used to walk only
+    // apps/android/src and apps/web/src" — base-form "walk", no trailing
+    // "s" — structurally cannot match `walks?\s+only` here because the
+    // mandatory "s" is exactly what a present-tense claim needs and a
+    // "used to walk" past-tense claim does not have. This entry's own
+    // header comment above (line ~1) does say "used to walk only
+    // `apps/android/src` and `apps/web/src`" for the same reason and is
+    // safe on a second, independent ground: `guard-capability-prose.mjs`
+    // is one of `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`'s three files, so
+    // `isAppSourcePath` never scans it at all.
+    //
+    // Trap 2 (de-wrapped comparison): both files above wrap their
+    // narration across multiple `//`-prefixed lines. `flattenProse` joins
+    // wrapped lines with a single space but never strips a `//` gutter, so
+    // a phrase spanning a wrap point in either file's RAW committed text
+    // would see a literal `// ` sitting inside it today — which is not
+    // protection, only an accident of the current line breaks (CLAUDE.md's
+    // T215 section names this exact hazard). Both files' full text were
+    // therefore also checked with every `//` gutter and JSDoc `*` gutter
+    // stripped and all whitespace collapsed to one space each — a
+    // simulation of a future single-line reflow — and re-run against all
+    // four new phrases: still zero matches, because the structural
+    // anchors above (mandatory "s", the literal `packages/*/src` glob
+    // rather than a paraphrase, and "today" required near the bare-guard
+    // phrasing) hold regardless of where a line break used to be, not
+    // because of where it happens to be now.
     name: "declared-workspace-deps guard scans every packages/*/src (discoverPackageTargets)",
     methodNames: ["discoverPackageTargets"],
     denyingPhrases: [
       /(?:that|the) guard (?:does not|doesn'?t|never) scans? `?packages\/relay`?/i,
       /an undeclared import (?:here|in packages\/relay|under packages\/relay) (?:would|could|is) (?:not (?:be )?caught|never (?:be )?(?:caught|detected|flagged))/i,
+      // T259 (1/4): the apps-only framing — "it walks only apps/android
+      // and apps/web" — is the phrasing every pre-T251 reader carries.
+      // Mandatory trailing "s" on the verb structurally excludes a
+      // "used to walk only ..." past-tense narration (see Trap 1 above).
+      /\b(?:walks|scans)\s+only\b[^.]{0,120}?apps\/android(?:\/src)?[^.]{0,60}?(?:and|&)[^.]{0,20}?apps\/web(?:\/src)?/i,
+      // T259 (2/4): the bare "does not scan packages/*/src" shape, with no
+      // `packages/relay` literal — anchored to the actual glob this
+      // capability's own scope uses, not a paraphrase of it.
+      /(?:does not|doesn'?t|never) scans?[^.]{0,30}?`?packages\/\*\/src`?/i,
+      // T259 (3/4): "the relay package is not covered by the guard".
+      /(?:relay package|packages\/relay) is not[^.]{0,20}?covered by[^.]{0,20}?(?:the|this) guard\b/i,
+      // T259 (4/4): the bare, guard-scoped "does not scan packages today"
+      // shape with no path literal at all — "today" required nearby so
+      // this cannot fire on an unrelated file's unrelated "packages"
+      // mention, and distinct from `packages/relay` (word-boundary after
+      // "packages" would otherwise also match that literal, which is why
+      // "today" is required rather than left open).
+      /(?:that|this) guard (?:does not|doesn'?t|never) scans? packages\b[^.]{0,40}?today/i,
     ],
   },
   {

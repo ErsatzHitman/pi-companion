@@ -4249,3 +4249,133 @@ test("P9-H gate: on the real committed tree, T257 capability resolves as shipped
       " isShippedSourcePath scope",
   );
 });
+
+// T259: widens the T251 entry's `denyingPhrases` past the one sentence T251
+// fixed to the apps-only framing and bare "does not scan packages" shape the
+// P9-G gate found MISSED (four phrasings run against the real function, all
+// four missed). These pin all four newly-caught phrasings plus the
+// past-tense non-collision against both guards' own real, COMMITTED
+// narration and against `docs/security-and-version-drift.md`'s real
+// COMMITTED "CORRECTED (T251)" quotation -- never the working copy, so a
+// stray uncommitted edit made while proving the RED/GREEN firing above could
+// never make any of these lie.
+
+const T259_CAPABILITY_NAME =
+  "declared-workspace-deps guard scans every packages/*/src (discoverPackageTargets)";
+
+const T259_SHIPPED_FILES = [
+  {
+    path: "scripts/ci/run-guard-declared-workspace-deps.mjs",
+    content: "function discoverPackageTargets(repoRoot) { return []; }\n",
+  },
+];
+
+test("T259 (1/4): the apps-only framing -- 'walks only apps/android and apps/web' -- fires", () => {
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "The declared-workspace-deps guard walks only apps/android and\n" +
+        "apps/web, so a missing packages/* dependency would slip through.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+});
+
+test("T259 (2/4): the bare 'does not scan packages/*/src' shape, with no packages/relay literal, fires", () => {
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "This check does not scan `packages/*/src` at all, so an undeclared\n" +
+        "workspace import under any package would never be caught.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+});
+
+test("T259 (3/4): the 'relay package is not covered by the guard' framing fires", () => {
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "The relay package is not covered by the guard, so its own version\n" +
+        "literal is the only defense against a silent workspace-import drift.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+});
+
+test("T259 (4/4): the bare, guard-scoped 'does not scan packages today' shape fires", () => {
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "That guard does not scan packages today, which is why the relay\n" +
+        "version literal was never flagged as a missing dependency.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+});
+
+test("T259: guard-declared-workspace-deps.mjs's own real, committed 'widened from ... alone' narration does not collide", () => {
+  const real = readCommittedFile("scripts/ci/guard-declared-workspace-deps.mjs");
+  const appFiles = [{ path: "scripts/ci/guard-declared-workspace-deps.mjs", content: real }];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
+
+test("T259: run-guard-declared-workspace-deps.mjs's own real, committed present-tense 'Walks apps/android/src, apps/web/src, and every packages/*/src' narration does not collide", () => {
+  const real = readCommittedFile("scripts/ci/run-guard-declared-workspace-deps.mjs");
+  const appFiles = [{ path: "scripts/ci/run-guard-declared-workspace-deps.mjs", content: real }];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
+
+test("T259: docs/security-and-version-drift.md's real, committed CORRECTED (T251) quotation of 'does not scan packages/relay' does not collide", () => {
+  const real = readCommittedFile("docs/security-and-version-drift.md");
+  const appFiles = [{ path: "docs/security-and-version-drift.md", content: real }];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
+
+test("T259: a synthetic past-tense 'used to walk only apps/android and apps/web' narration does not fire (mandatory present-tense 's' on walks/scans, not HISTORICAL_QUOTE_MARKERS)", () => {
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "This guard used to walk only apps/android and apps/web, before T251\n" +
+        "widened it to every packages/*/src too.\n",
+    },
+  ];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
