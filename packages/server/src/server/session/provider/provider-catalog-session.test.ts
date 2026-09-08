@@ -80,7 +80,13 @@ function makeSubsystem(options: MakeOptions = {}) {
 }
 
 describe("ProviderCatalogSession", () => {
-  it("PUSH gates invisible providers and downgrades unknown mode icons for legacy clients", () => {
+  // T266 kept this seam and this test with it: it is a HOST-CONTRACT test driving
+  // a DI'd fake, so it stays valid whatever the shell's real implementation
+  // returns. Retitled at the P9-J merge gate: it used to say "for legacy
+  // clients", framing that no longer describes any real connection now that
+  // `session.ts` returns `true` unconditionally. T266 ticked the acceptance box
+  // asserting no such framing survived; this title is the one that did.
+  it("PUSH gates invisible providers and downgrades unknown mode icons when the host reports a provider invisible", () => {
     const { subsystem, emitted, pushSnapshotChange } = makeSubsystem({
       visibleProviders: new Set(["codex"]),
       supportsCustomModeIcons: false,

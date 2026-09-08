@@ -1800,10 +1800,10 @@ export class Session {
   // would choke on" — unconditionally, with no production qualifier. That
   // is false for any daemon built with a non-empty `agentClients`, which is
   // every test daemon: `getAgentManagerProviderState`
-  // (`agent/provider-snapshot-manager.ts:280-284`) overlays EVERY
+  // (`getAgentManagerProviderState` in `agent/provider-snapshot-manager.ts`) overlays EVERY
   // `extraClients` entry into `AgentManager.clients` with no
   // `if (!definition) continue;` guard, unlike `buildRegistry`
-  // (`:452-456`) which has exactly that guard. Measured against the daemon
+  // (`buildRegistry`) which has exactly that guard. Measured against the daemon
   // T262's own new e2e test builds, `list_available_providers_request`
   // returns `["pi","claude","opencode","codex"]` — four, not one. The
   // CONCLUSION stands, because production's set really is pi-only; the
@@ -1863,7 +1863,9 @@ export class Session {
   // per caller, whether the three DI'd host interfaces sharing this callback should
   // keep it now that it is a no-op everywhere.
   //  - `ProviderCatalogSession` KEEPS it: it is the only remaining place that
-  //    filters PROVIDER-CATALOG content (models/modes/available-providers/snapshot
+  //    filters PROVIDER-CATALOG content (available-providers and the providers
+  //    snapshot, on both its push and request paths -- NOT models or modes; see
+  //    the correction in `provider-catalog-session.ts`'s own header
   //    RPCs) by visibility -- nothing else in `session.ts` replicates that for
   //    those RPCs, so a future provider a legacy client cannot render would need
   //    this seam. See that interface's own comment.

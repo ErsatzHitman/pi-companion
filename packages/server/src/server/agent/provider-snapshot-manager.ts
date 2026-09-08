@@ -116,9 +116,17 @@ export interface ProviderSnapshotManagerOptions {
   // Net effect: an `extraClients` entry whose id already has (or gains, via
   // `providerOverrides`) a registry definition reaches BOTH `this.providerRegistry`
   // and `AgentManager.clients` consistently. An entry with no definition reaches only
-  // `AgentManager.clients` -- it can create/message/list-available a session but
-  // `resolveCreateConfig`/`getProviderDiagnostic` (which read `this.providerRegistry`)
-  // still report it unconfigured. That is the intended shape for a client standing in
+  // `AgentManager.clients` -- it is listed by `listProviderAvailability`, which
+  // enumerates that map, but every path that reads `this.providerRegistry`
+  // rejects it: `requireProvider` throws `Provider <id> is not configured`, and
+  // `getProviderDiagnostic` reports the same string.
+  //
+  // (CORRECTED at the P9-J merge gate. This said such an entry "can
+  // create/message/list-available a session". Only list-available holds —
+  // executed, `resolveCreateConfig` for an id with no definition THROWS. The same
+  // commit's own message and its `fake-agent-client.ts` paragraph both state the
+  // correct opposite, so two files in one commit disagreed. Three capabilities
+  // were named under one cause and it held for one of them.) That is the intended shape for a client standing in
   // for a provider the caller does not want the manifest-facing half to know about,
   // not a bug to reconcile. Production never exercises this gap: `config.ts` passes
   // `agentClients: {}`, so `extraClients` is always empty on a real daemon.

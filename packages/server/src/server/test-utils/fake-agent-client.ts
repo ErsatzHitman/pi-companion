@@ -1312,7 +1312,7 @@ export function createTestAgentClients(
     // "dropped by its `if (!definition) continue;` merge guard", full stop.
     // True of `buildRegistry`; FALSE of the path that feeds `AgentManager`.
     // `getAgentManagerProviderState`
-    // (`agent/provider-snapshot-manager.ts:280-284`) overlays every
+    // (`getAgentManagerProviderState` in `agent/provider-snapshot-manager.ts`) overlays every
     // `extraClients` entry with no such guard, and
     // `AgentManager.listProviderAvailability` enumerates that overlay
     // rather than the manifest — so a test daemon built with these fakes

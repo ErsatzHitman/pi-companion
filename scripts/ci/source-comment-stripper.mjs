@@ -291,10 +291,28 @@ function scanLineComment(source, i) {
 // oracle (a real TypeScript parse supplying ground-truth
 // `RegularExpressionLiteral` spans) over every one of the 2,248 tracked
 // module files at the pre-fix commit and found ZERO whose real regex
-// literal's immediately preceding code token is `<` — so removing it does
-// not start misreading any regex literal that exists in this tree today as
-// division. See this module's header comment for the full T256/T263
-// history and the byte-diff counts before and after.
+// literal's immediately preceding code token is `<` — so no regex literal in
+// this tree is affected. See this module's header comment for the full
+// T256/T263 history and the byte-diff counts before and after.
+//
+// (CORRECTED at the P9-J merge gate. This said removing `<` "does not start
+// misreading any regex literal that exists in this tree today as division".
+// The measurement is right; the framing understates what a misread COSTS, and
+// a future reader weighing whether to re-add `<` needs the real figure. A
+// regex after `<` is not read as harmless division — the scan then treats a
+// `//` inside the regex body as a line comment and swallows the rest of the
+// line. Executed against the real exported `stripComments`, with both regexes
+// confirmed as genuine `RegularExpressionLiteral` spans by a TypeScript parse:
+//
+//   if (n < /[//]/.test(s)) { keepMe(); }    ->  "if (n < /["
+//   if (n < /a[//]b/.test(s)) { keepMe(); }  ->  "if (n < /a["
+//
+// `keepMe()` is deleted from the stripped output in both. So T263 traded one
+// silent failure mode for another; the trade is sound only because BOTH are
+// inert on this tree — zero JSX-closing-tag leaks and zero regexes after `<`
+// — and the JSX shape is the one that recurs in `.tsx`, which
+// `orphan-modules.mjs` now walks in full. If a regex after `<` ever appears,
+// the answer is to understand JSX, not to re-add `<`.)
 const REGEX_PRECEDING_PUNCTUATION = new Set([
   "(",
   "[",

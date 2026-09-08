@@ -16,7 +16,7 @@ import { DaemonClient } from "../test-utils/daemon-client.js";
 // "The REAL provider manifest" above is scoped precisely to `this.providerRegistry`
 // (what `buildRegistry()` builds, and what `resolveCreateConfig`/`getProviderDiagnostic`
 // read) -- it is NOT a claim that this daemon's `AgentManager` only knows about "pi".
-// `getAgentManagerProviderState()` (`agent/provider-snapshot-manager.ts:280-284`) overlays
+// `getAgentManagerProviderState()` (`getAgentManagerProviderState` in `agent/provider-snapshot-manager.ts`) overlays
 // every `createTestAgentClients()` entry into `AgentManager.clients` unconditionally, so
 // this exact daemon's `list_available_providers_request` reports four ids
 // (`["pi","claude","codex","opencode"]`, measured directly), not one. T264 decided that

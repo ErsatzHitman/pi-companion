@@ -526,6 +526,8 @@ that recomputation has to be domain-specific:
 | T265   | Anchor T259's two over-wide phrases to their own guard                          | phase-9   | tooling          | P9-W46 | T259                                                                  |
 | T266   | Decide whether the vestigial isProviderVisibleToClient callback should go       | phase-9   | server           | P9-W47 | T262                                                                  |
 | T267   | Reclassify rpc-types.ts's get_commands citation and close T253's ledger         | phase-9   | docs             | P9-W48 | T261                                                                  |
+| T268   | Restore pronoun coverage to T265's anchored phrases                             | phase-9   | tooling          | P9-W49 | T265                                                                  |
+| T269   | Stop citing shipped source by line number, and guard it                         | phase-9   | tooling          | P9-W50 | none                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -891,6 +893,10 @@ the task details always agree.
 |        | at two of its six call sites even before T262).                          |       |
 | P9-W48 | T267 (filed by the P9-I gate; one kept citation that fails               | 1     |
 |        | T261's own test, plus two satisfied checkboxes).                         |       |
+| P9-W49 | T268 (filed by the P9-J gate; the anchoring silenced the                 | 1     |
+|        | pronoun form stale prose actually uses).                                 |       |
+| P9-W50 | T269 (filed by the P9-J gate; one commit rotted five                     | 1     |
+|        | line-number citations, one of them on arrival).                          |       |
 
 ---
 
@@ -9657,6 +9663,12 @@ Owns: those three modules, their tests, and `session.ts`'s `isProviderVisibleToC
 - [x] If kept: each interface says why, next to its own declaration
 - [x] No "legacy client" framing survives that no longer describes a real connection
 
+  Ticked by T266, but `provider-catalog-session.test.ts`'s own test title still read "for
+  legacy clients" when it landed — the P9-J merge gate found it and retitled it, which is
+  what made this box true. `isAppSourcePath` returns **false** for that path, so no guard
+  could have caught it; it was only ever going to be found by the grep the criterion asks
+  for.
+
 **STATUS: DONE.** Two file-path corrections found while reading the real tree (not this
 task's fault — the paths above predate a later reorganisation): the real files are
 `packages/server/src/server/session/agent-updates/agent-updates-service.ts` and
@@ -9767,6 +9779,100 @@ fact.
 - [ ] `CLAUDE.md`'s kept list drops that file, or explains why it stays
 - [ ] T253's second and fourth checkboxes are ticked, or the reason they are not is written down
 - [ ] The commit says this is a T253 classification call, not a T261 error, and no reference-only document is edited
+
+#### T268 — Restore pronoun coverage to T265's anchored phrases
+
+`labels: phase-9, area: tooling` · `wave: P9-W49` · `depends-on: T265`
+
+T265 anchored two of T259's phrases to `guard-declared-workspace-deps` by name, which correctly
+silenced the two false positives about other guards. It also silenced **the most likely real
+drift shape**, and its shipped comment claims the opposite — that the T259 (2/4) framing "still
+fires, just no longer un-anchored".
+
+Executed at the P9-J merge gate through the real `CAPABILITIES` entry and
+`findCapabilityDenialViolations`:
+
+| sentence                                                                                                                                                    | result           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `guard-declared-workspace-deps does not scan `packages/\*/src` at all.`                                                                                     | FIRES            |
+| **T259's own 2/4 fixture**: `This check does not scan `packages/\*/src` at all, so an undeclared workspace import under any package would never be caught.` | **silent**       |
+| `This guard does not scan `packages/\*/src`, so an undeclared import is never caught.`                                                                      | **silent**       |
+| `It walks only apps/android and apps/web, so packages are not checked.`                                                                                     | **silent**       |
+| `the orphan-module walk does not scan `packages/\*/src`.` (FP-1)                                                                                            | silent — correct |
+| `guard-no-android-web-files scans only apps/android and apps/web by design.` (FP-2)                                                                         | silent — correct |
+
+**The pronoun form is the shape that will actually appear.** A stale comment inside
+`guard-declared-workspace-deps.mjs` itself naturally says "this guard" or "this check", not the
+file's own name — nobody writes their own filename in their own header. So the entry now catches
+the framing a _different_ file would use about this guard, and misses the framing this guard's
+own file would use about itself. That is backwards relative to where stale prose accumulates.
+
+**Not a regression to revert.** T265's narrowing was right about the false positives, and both
+FP sentences must stay silent. This task adds coverage back without reopening them.
+
+The obvious shape: allow the pronoun forms when the file under judgment IS the guard's own
+source (or a file whose nearby text carries a `workspace-dep`-ish token), and keep requiring the
+explicit name elsewhere. `findCapabilityDenialViolations` already knows each `appFile`'s `path`,
+so a per-entry path condition is expressible without changing the scan. Measure whether that is
+the cheapest correct shape before building it — an alternative is a second entry scoped to the
+one file.
+
+Prove each restored phrase fires and each FP stays silent, by execution, and pin all six rows of
+the table above as fixture tests so neither direction can drift again. Correct T265's shipped
+comment, which asserts the 2/4 framing still fires.
+
+Owns: `scripts/ci/guard-capability-prose.mjs` and its test.
+
+- [ ] All three silent-but-should-fire sentences above fire, watched at CLI level
+- [ ] Both false positives stay silent, pinned as fixture tests
+- [ ] T265's comment no longer claims the 2/4 framing still fires when it does not
+- [ ] The six rows above are pinned as tests, in both directions
+
+#### T269 — Stop citing shipped source by line number, and guard it
+
+`labels: phase-9, area: tooling` · `wave: P9-W50` · `depends-on: none`
+
+A single commit broke **five** committed citations by inserting comment lines above the code they
+pointed at. T264 added 42 lines of explanation to
+`packages/server/src/server/agent/provider-snapshot-manager.ts`; the unguarded `extraClients`
+overlay moved from `:280-284` to `:317-321` and `buildRegistry`'s guard from `:452-456` to
+`:494-500`. Every citation of the old numbers then pointed at unrelated code — `:280-284` landed
+inside `refresh()`, `:452-456` inside `on()`/`off()`:
+
+- `packages/server/src/server/session.ts` (two sites, written at the P9-I gate)
+- `packages/server/src/server/test-utils/fake-agent-client.ts`
+- `packages/server/src/server/daemon-e2e/provider-visibility.e2e.test.ts` — **written by that
+  same commit, already stale on arrival**
+- `plan.md` (two sites, also written at the P9-I gate)
+
+All six were repointed to symbol names at the P9-J merge gate. **The class is the point, not
+these six.** A `file.ts:NNN` citation is correct only until the next edit above it, and nothing
+in this repository notices when it rots — the reader who follows one lands in unrelated code
+with no signal that anything is wrong, which is worse than no citation at all.
+
+Measure the real extent before deciding what to build: grep committed prose for
+`` `<path>:NNN` `` and `` `:NNN-NNN` `` shapes across `packages/*/src`, `apps/*/src`,
+`scripts/ci`, `docs/**` and `plan.md`, and report how many exist and how many are already wrong
+today. A guard is only worth building if the population is real and mostly-correct; if it is
+large and already largely rotten, the finding is more valuable than the check.
+
+If a guard is built, it belongs in `scripts/ci` and must be able to see where these citations
+actually live — call `isAppSourcePath` and `isShippedSourcePath` on candidate paths rather than
+assuming, and note `plan.md` returns **false** for both, so a `plan.md`-only citation cannot be
+caught by anything in the `guard-capability-prose` family. Register whatever capability it ships
+in `CAPABILITIES` in the same commit, proven able to fire.
+
+The alternative outcome is equally acceptable and must be argued if chosen: rule that shipped
+prose cites by **symbol name**, never by line number, write that where authors read it
+(`CLAUDE.md`), and fix the existing population by hand. A line number in a _commit message_ or a
+gate report is fine — those are dated snapshots. It is committed source prose that rots.
+
+Owns: whichever of `scripts/ci` gains the guard, plus `CLAUDE.md` if the rule route is taken.
+
+- [ ] The real population of line-number citations is measured, with how many are already wrong
+- [ ] The decision names guard-or-rule and argues against the other
+- [ ] If a guard: it fires on a real rotted citation, watched, and its capability is registered
+- [ ] If a rule: it is written where authors read it, and the existing population is fixed
 
 #### T32A1 — Build the Android connect form
 

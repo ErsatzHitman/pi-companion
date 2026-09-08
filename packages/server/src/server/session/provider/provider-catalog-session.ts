@@ -51,8 +51,31 @@ export interface ProviderCatalogSessionHost {
   //
   // T266 KEPT this declaration (unlike `WorkspaceDirectoryDeps`, where the
   // equivalent declaration was deleted as provably redundant): this is the only
-  // remaining place that filters PROVIDER-CATALOG content — models, modes,
-  // available-providers, and the providers snapshot — by client visibility.
+  // remaining place that filters PROVIDER-CATALOG content — available-providers
+  // and the providers snapshot, on both its push and request paths — by client
+  // visibility
+  //
+  // (CORRECTED at the P9-J merge gate. This named FOUR kinds: "models, modes,
+  // available-providers, and the providers snapshot". Executed one by one against
+  // a session whose `isProviderVisibleToClient` returned false for one provider
+  // and true for another, each surface invoked in its own test so one result
+  // could not mask another:
+  //
+  //   providers_snapshot_update (push)     -> filtered
+  //   get_providers_snapshot_response      -> filtered
+  //   list_available_providers_response    -> filtered
+  //   list_provider_models_response        -> NOT filtered
+  //   list_provider_modes_response         -> NOT filtered
+  //
+  // Models and modes are not merely unfiltered — they are not call sites at all.
+  // `handleListProviderModelsRequest` and `handleListProviderModesRequest` both
+  // read through `getProviderSnapshotEntryForRead`, which applies no visibility
+  // filter (only `enabled` and `status`), and the only three
+  // `isProviderVisibleToClient` invocations in this file are the push filter and
+  // the two list/snapshot request handlers. The decision to KEEP the seam still
+  // stands on those three; the justification as written was false for two of the
+  // four kinds it named, and a reader would have concluded models and modes are
+  // gated when a client asking for an invisible provider's models gets them.).
   // Nothing else in `session.ts` re-applies that filter to this content, so a
   // future provider a legacy client cannot render would need this seam; see
   // `session.ts`'s retirement comment for the per-caller reasoning on all three.

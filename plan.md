@@ -1416,9 +1416,10 @@ Because the ported backend preserves data formats and no daemon-data migration i
     the set "can never again contain anything this product's own client would reject",
     unconditionally. That is false for any daemon with a non-empty `agentClients` — every test
     daemon — because `getAgentManagerProviderState`
-    (`packages/server/src/server/agent/provider-snapshot-manager.ts:280-284`) overlays every
+    (`getAgentManagerProviderState` in
+    `packages/server/src/server/agent/provider-snapshot-manager.ts`) overlays every
     `extraClients` entry with no `if (!definition) continue;` guard, unlike `buildRegistry`
-    (`:452-456`) which has one. Measured against T262's own new e2e daemon,
+    (`buildRegistry`) which has one. Measured against T262's own new e2e daemon,
     `list_available_providers_request` returns four provider ids, not one. The conclusion holds;
     the unconditional reasoning did not. The overlay itself is filed as T264.
     So the gate, left in place, did the opposite of its job: it hid the one real provider from
@@ -1444,11 +1445,20 @@ Because the ported backend preserves data formats and no daemon-data migration i
     near. It is vacuous at any value besides: neither shipped app issues the one RPC that reads
     it. `isProviderVisibleToClient` itself is kept (now an unconditional `true`) rather than
     deleted, because `ProviderCatalogSession`, `createAgentUpdatesService`, and
-    `WorkspaceDirectory` each still depend on a `host.isProviderVisibleToClient` callback of that
-    shape; removing the parameter from those three modules is unscoped follow-up, not part of
-    this decision. **RESOLVED by T266, per caller, not in bulk:** `ProviderCatalogSession` and
+    `WorkspaceDirectory` each depended, AT T262, on a `host.isProviderVisibleToClient`
+    callback of that shape; removing the parameter from those three modules was unscoped
+    follow-up, not part of that decision. (**CORRECTED at the P9-J merge gate:** this read
+    "each still depend on", present tense, which T266 made false for `WorkspaceDirectory`
+    in the very commit the addendum below describes. The addendum was appended without
+    marking the clause above it as superseded, so a grep of the governing document still
+    returned the false claim as a standing statement.) **RESOLVED by T266, per caller, not in bulk:** `ProviderCatalogSession` and
     `createAgentUpdatesService` keep the callback — the first is the only remaining filter on
-    provider-CATALOG content (models/modes/available-providers/snapshot), the second is the
+    provider-CATALOG content (available-providers and the snapshot, on both push and
+    request paths — **CORRECTED at the P9-J merge gate:** this said
+    "models/modes/available-providers/snapshot", and models and modes are not filtered,
+    nor are they call sites; they read through `getProviderSnapshotEntryForRead`, which
+    applies no visibility filter. The keep decision stands on the three that are), the
+    second is the
     only gate on the LIVE agent-update push path, and an ablation test proved each is
     non-redundant with anything else in `session.ts`. `WorkspaceDirectory`'s copy was deleted:
     `session.ts` is its only production caller and already pre-filters the agent list this
