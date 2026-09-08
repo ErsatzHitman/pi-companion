@@ -2667,15 +2667,40 @@ test("T197: the real docs/legacy-retirement.md — the file that motivated this 
   // expected — T197 is hardening, not a fix for a live defect in this file.
   //
   // CORRECTED (P8-W6 merge gate): this title said the file scans clean
-  // "and its own three CORRECTED markers". Both halves were wrong. The
-  // file carries FOUR such markers (lines 9, 35, 295, 332), and they are
-  // inert here: no denyingPhrase in CAPABILITIES matches this document's
-  // text at all, so the count is 0 violations with the markers present
-  // and 0 with every marker neutralised. This assertion proves the file
-  // scans clean; it proves nothing about the historical-quotation
-  // exemption. That mechanism is proved by the matched pair above, which
-  // builds content containing a real matching phrase and shows deleting
-  // only the marker turns 0 violations into 1.
+  // "and its own three CORRECTED markers". Both halves were wrong. As of
+  // that gate, the file carried FOUR such markers (lines 9, 35, 295, 332),
+  // and they were inert there: no denyingPhrase in CAPABILITIES matched
+  // this document's text at all, so the count was 0 violations with the
+  // markers present and 0 with every marker neutralised. This assertion
+  // proves the file scans clean; it proves nothing about the
+  // historical-quotation exemption. That mechanism is proved by the
+  // matched pair above, which builds content containing a real matching
+  // phrase and shows deleting only the marker turns 0 violations into 1.
+  //
+  // CORRECTED further (T275): treat the paragraph above as a dated
+  // snapshot of the P8-W6 tree, not a live description of today's file —
+  // it already rotted, silently, exactly once. `docs/legacy-retirement.md`
+  // is edited by other tasks constantly, its line numbers move on every
+  // such edit, and by the time T272's audit re-measured it a literal
+  // `grep -n CORRECTED docs/legacy-retirement.md` returned SIX hits, at
+  // 9, 15, 43, 323, 326, 374 — only one of the original four numbers still
+  // landed on a marker, and the count itself had changed too. Re-deriving
+  // a replacement count is not the fix, because that same grep is not
+  // even what decides a real marker: the guard's actual
+  // `HISTORICAL_QUOTE_MARKERS` regex is case-insensitive (so a bare
+  // lowercase "corrected" mid-sentence counts) and also fires on
+  // "this said" / "this paragraph said" with no "CORRECTED" token in
+  // sight at all — running it directly against the file, rather than
+  // approximating it with a keyword grep, finds a DIFFERENT set again.
+  // Any number this comment could print today would start rotting the
+  // moment this commit lands, the same way "FOUR" did. So none is
+  // reprinted here: this paragraph is now explicitly a record of what one
+  // gate found on the date named, not a citation the next reader should
+  // expect to resolve against the current file. To see the real marker
+  // set as of today, run the guard's own `HISTORICAL_QUOTE_MARKERS` regex
+  // against `docs/legacy-retirement.md` directly — do not trust a grep
+  // for the literal word "CORRECTED", and do not trust a number written
+  // in this file.
   const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
     .split("\n")
     .filter(Boolean);
