@@ -9930,12 +9930,14 @@ pointer to this task there; replace it with the finished grep.
 
 Owns: the listed files, plus `CLAUDE.md`'s T269 closing paragraph.
 
-- [ ] Every one of the 33 hits is classified as citation or non-citation, with the reason
-- [ ] Each real citation's target is resolved and read BEFORE conversion; drifted claims corrected
-- [ ] `docs/agent-configuration-surface.md`'s remaining 9 and `docs/android-apk-release.md`'s 1 are converted
-- [ ] `guard-capability-prose.mjs`'s two are converted, or argued as non-citations
-- [ ] `CLAUDE.md`'s recorded re-run grep matches the prose form, replacing the P9-K pointer
-- [ ] No guard is built, and the reason is stated
+- [x] Every one of the hits is classified as citation or non-citation, with the reason
+      (re-measured at this task's own HEAD: 32, not 33 — the P9-K gate had already fixed
+      one of `docs/agent-configuration-surface.md`'s ten by dropping its number)
+- [x] Each real citation's target is resolved and read BEFORE conversion; drifted claims corrected
+- [x] `docs/agent-configuration-surface.md`'s remaining 9 and `docs/android-apk-release.md`'s 1 are converted
+- [x] `guard-capability-prose.mjs`'s two are converted, or argued as non-citations
+- [x] `CLAUDE.md`'s recorded re-run grep matches the prose form, replacing the P9-K pointer
+- [x] No guard is built, and the reason is stated
 
 #### T32A1 — Build the Android connect form
 
