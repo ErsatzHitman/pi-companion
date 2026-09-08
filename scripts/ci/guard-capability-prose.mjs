@@ -1880,6 +1880,31 @@ export const CAPABILITIES = [
       /\ban? attachment (?:sent from|attached on) (?:a phone|android|the web app)[^.]{0,60}?(?:cannot|can'?t|never) (?:be seen|render|appear)[^.]{0,40}?(?:on the other|elsewhere|on the (?:web|android) (?:app|client))/i,
     ],
   },
+  {
+    // `createSlashCommandsController` (T292) — measured with `git grep`:
+    // declared exactly once, as an `export function`, in
+    // `apps/android/src/features/composer/slash-command-model.ts`. Every
+    // other mention across the tree is an import or a call site — no
+    // unrelated same-named member exists anywhere in scope, so a
+    // bare-string member is sufficient, same shape as `runCapturePress`
+    // above. FORWARD guard (T162/T257's shape): no live denying sentence
+    // existed anywhere in scope when this was added, so it was proven
+    // able to FIRE by appending a sentence in this entry's own wording to
+    // a real tracked in-scope file (never one carrying a `CORRECTED`-style
+    // historical marker, and never this capability's own declaring file —
+    // T183's "a guard cannot police the file its own capability ships in"
+    // caution), confirming `run-guard-capability-prose.mjs` exited 1
+    // naming this capability, then restoring the file from a scratchpad
+    // copy — never `git checkout --` — and confirming exit 0 with `git
+    // status --porcelain` empty.
+    name: "slash-command palette on Android (createSlashCommandsController)",
+    methodNames: ["createSlashCommandsController"],
+    denyingPhrases: [
+      /\bandroid\b[^.]{0,60}?(?:has no|lacks) (?:a )?slash[- ]command (?:palette|completion)/i,
+      /\btyping (?:a )?"?\/"?[^.]{0,60}?(?:does nothing|is plain text)[^.]{0,40}?on android/i,
+      /\bno slash[- ]command (?:module|controller|palette) exists[^.]{0,30}?(?:on android|in this app)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

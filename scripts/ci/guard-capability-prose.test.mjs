@@ -5014,3 +5014,69 @@ test("T289: Composer.tsx and voice-model.ts (each carrying a CORRECTED at the P9
     );
   }
 });
+
+test("T292: a live no-slash-command-palette claim is flagged once createSlashCommandsController is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/src/features/composer/slash-command-model.ts",
+      content: "export function createSlashCommandsController(deps) { return {}; }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "No slash-command palette exists on android today.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "slash-command palette on Android (createSlashCommandsController)",
+  );
+});
+
+test("T292: on the real committed tree, createSlashCommandsController resolves as shipped from slash-command-model.ts alone", () => {
+  const real = readCommittedFile("apps/android/src/features/composer/slash-command-model.ts");
+  const shipped = findShippedCapabilities([
+    { path: "apps/android/src/features/composer/slash-command-model.ts", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name === "slash-command palette on Android (createSlashCommandsController)",
+    ),
+    "createSlashCommandsController capability is no longer declared in slash-command-model.ts:" +
+      " either it was renamed, or the file moved out of isShippedSourcePath scope",
+  );
+});
+
+test("T292: the real committed tree carries no live denial of the slash-command capability", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/src/features/composer/slash-command-model.ts",
+      content: readCommittedFile("apps/android/src/features/composer/slash-command-model.ts"),
+    },
+  ];
+
+  for (const path of [
+    "apps/android/src/features/composer/Composer.tsx",
+    "apps/android/src/features/composer/SlashCommandPicker.tsx",
+    "apps/android/src/features/composer/slash-command-model.ts",
+  ]) {
+    const content = readCommittedFile(path);
+    const violations = findCapabilityDenialViolations({
+      shippedFiles,
+      appFiles: [{ path, content }],
+    });
+    assert.equal(
+      violations.filter((v) => v.path === path).length,
+      0,
+      `${path}'s real committed content must not trip the createSlashCommandsController entry`,
+    );
+  }
+});
