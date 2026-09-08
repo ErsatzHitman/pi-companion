@@ -7,7 +7,7 @@ import type { ExtensionFixtureScenario } from "../types.js";
  * Published over the `subagents:fleet` channel. This fixture carries the
  * shape the client actually receives *after* daemon synthesis
  * (`packages/server/src/server/agent/providers/pi/ui-bridge/state.ts`'s
- * `applyChannel` `"subagents:fleet"` case, lines ~558-577): a `roster`
+ * `applyChannel` `"subagents:fleet"` case): a `roster`
  * element `id:"fleet"`, `ns:"subagents"`, `placement:"pinned"`, whose rows
  * carry `state`/`detail`/per-row `actions` — never the extension-internal
  * channel payload, which never reaches the client directly. All ids/paths

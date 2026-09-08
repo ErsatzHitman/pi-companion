@@ -738,11 +738,13 @@ export const CAPABILITIES = [
     //   4. nix/README.md: "those workspace names are checked against real
     //      package.json files in this repository" -> exit 0 (not caught;
     //      NOT widened, on purpose).
-    //   5. guard-docker-packaging-paths.mjs (~line 30): "the exact failure
+    //   5. guard-docker-packaging-paths.mjs, module-header item 2 (which
+    //      names `findBuildOrderViolations`): "the exact failure
     //      mode T171 guards on the OUTPUT side, checked here on the INPUT
     //      (packaging-recipe) side instead" -> exit 0 (not caught; NOT
     //      widened, on purpose).
-    //   6. guard-docker-packaging-paths.mjs (~line 160): "that output is
+    //   6. guard-docker-packaging-paths.mjs, `findBuildOrderViolations`'s
+    //      own doc comment: "that output is
     //      comment-free by construction, since both extractors only ever
     //      collect RUN lines / phase-string bodies" -> exit 0 (not
     //      caught pre-T187; WIDENED below).

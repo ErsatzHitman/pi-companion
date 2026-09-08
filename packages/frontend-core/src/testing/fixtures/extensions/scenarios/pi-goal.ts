@@ -7,7 +7,7 @@ import type { ExtensionFixtureScenario } from "../types.js";
  * Published over the `pi-goal:status` channel. This fixture carries the
  * shape the client actually receives *after* daemon synthesis
  * (`packages/server/src/server/agent/providers/pi/ui-bridge/state.ts`'s
- * `applyChannel` `"pi-goal:status"` case, lines ~617-650): a `status`
+ * `applyChannel` `"pi-goal:status"` case): a `status`
  * element `id:"status"`, `ns:"goal"` carrying the goal text, plus — only
  * while `payload.active`/`payload.running` is true — an indeterminate
  * `progress` element `id:"goal-progress"`, `ns:"goal"`. Rounds/budget

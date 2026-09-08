@@ -19,7 +19,7 @@ import type { ExtensionFixtureScenario } from "../types.js";
  * 2. **Progress** is published over the `workflow:progress` channel and
  *    only reaches the client as the daemon's *synthesized* shape
  *    (`packages/server/src/server/agent/providers/pi/ui-bridge/state.ts`'s
- *    `applyChannel` `"workflow:progress"` case, lines ~579-615), verified
+ *    `applyChannel` `"workflow:progress"` case), verified
  *    directly against that production code rather than a doc claim, the
  *    same treatment `subagents`/`pi-goal` got in T40A1.
  *
@@ -203,7 +203,7 @@ export const workflowsFixture: ExtensionFixtureScenario = {
       id: "workflow-progress-channel-upsert-1",
       direction: "daemon_to_client",
       wireType: "session(agent_stream:pi_ui_delta)",
-      note: "The workflow:progress channel's daemon-synthesized `progress` element (applyChannel, state.ts lines ~579-600). See this file's doc comment: T40A3 fixed the value/max gap T40A2 disclosed.",
+      note: "The workflow:progress channel's daemon-synthesized `progress` element (state.ts's `applyChannel` `\"workflow:progress\"` case). See this file's doc comment: T40A3 fixed the value/max gap T40A2 disclosed.",
       message: {
         type: "session",
         message: {

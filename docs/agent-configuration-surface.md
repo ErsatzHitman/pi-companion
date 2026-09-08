@@ -62,8 +62,8 @@ use-slash-commands.ts`, T28B4).
 That is a real but narrow signal, not a skill catalog:
 
 - `mapPiCommandKind` collapses Pi's three-way `source` into two wire values —
-  `"extension"` and `"prompt"` both become our `kind: "command"` (line 140: `return
-"command"`), proven directly by `agent.test.ts`'s `"maps extension, prompt, and
+  `"extension"` and `"prompt"` both become our `kind: "command"` (its fallback
+  branch: `return "command";`), proven directly by `agent.test.ts`'s `"maps extension, prompt, and
 skill commands to Paseo slash commands"` test: a `source: "extension"` command and
   a `source: "prompt"` command both come back `kind: "command"` in the same
   assertion that shows `source: "skill"` alone becoming `kind: "skill"`. A slash
@@ -87,10 +87,10 @@ servers it has.
 But the daemon does not need to ask Pi, because **the daemon itself constructs the
 MCP config Pi launches with**. `packages/server/src/server/agent/providers/pi/agent.ts`:
 
-- `readPiGlobalMcpConfig` (lines 611-630) reads Pi's own global
+- `readPiGlobalMcpConfig` reads Pi's own global
   `~/.pi/agent/mcp.json` (via `resolvePiAgentDir`) directly off disk before every
   launch.
-- `createPiMcpConfigFile` (lines 632-664) merges that global file's `mcpServers` (or
+- `createPiMcpConfigFile` merges that global file's `mcpServers` (or
   legacy `mcp-servers`) with the per-session `AgentSessionConfig.mcpServers`
   (`McpServerConfig`, declared in `agent-sdk-types.ts` — stdio/http/sse variants, each
   optionally carrying `env`/`headers`), including the internally-injected `paseo`
@@ -105,7 +105,7 @@ to expose this itself. `McpServerConfig.env`/`.headers` can carry secrets, so an
 report of this data must redact those fields, the same rule T41B2's diagnostics
 export already exists to enforce for a different data source.
 
-`listFeatures()` (`agent.ts` line ~3034) is a plausible-looking existing seam for
+`listFeatures()` (`agent.ts`'s `PiRpcAgentClient.listFeatures` method) is a plausible-looking existing seam for
 this — it returns `Promise<AgentFeature[]>` per `AgentSessionConfig` — but it is a
 stub that unconditionally returns `[]`; it reports nothing today and would need to
 be filled in, not merely called.
@@ -124,10 +124,12 @@ an extension uses once it is already active.
 Unlike MCP, the daemon does not even read a config file for this: grepping
 `agent.ts` for `extensionPaths`/`extensionsDir`/`extensions.json` finds exactly one
 use, `extensionPaths: input.paseoExtension ? [input.paseoExtension.path] : undefined`
-(lines 576, 2927) — the single internal bridge extension this project injects, never
+(`buildResumeStartInput`, and the equivalent literal in `PiRpcAgentClient.createSession`)
+— the single internal bridge extension this project injects, never
 a read of whatever extensions directory a real Pi installation might have. The only
 passive signal is reactive and negative: `extension_error` events name a failing
-extension's path only when it throws (`agent.ts` line 2583) — nothing is reported
+extension's path only when it throws (`handleSessionEvent`'s `"extension_error"` case,
+which reads the notice's `source` from `event.extensionPath`) — nothing is reported
 about the extensions that are loaded and working.
 
 So extensions sit strictly behind MCP servers on the "can be reported" ladder: MCP
@@ -144,16 +146,20 @@ should not be mistaken for this one:
 
 - `packages/server/src/server/agent/provider-subagents/store.ts`'s
   `ProviderSubagentDescriptor` and the `subagents:fleet` published channel
-  (`plan.md` §11.4, line 865) track **running or completed subagent instances** a
+  (`plan.md` §11.4's renderer registry, "Published channels remain `subagents:fleet`,
+  ...") track **running or completed subagent instances** a
   session has spawned — status, title, parent turn — as live telemetry. This is a
-  roster of _invocations_, already fully live per `plan.md`'s architecture (line 854:
+  roster of _invocations_, already fully live per `plan.md`'s architecture (§11.4's
+  renderer registry table, `subagents` row:
   "prominent roster with running, blocked, done, usage, and cancel/open actions").
 - What T50 is asked about is a **catalog of configured subagent types/roles** the
   agent could invoke before any of them runs (the way some agent tools let a user
   browse named subagent personas). No such catalog concept appears anywhere in Pi's
   RPC surface, in `plan.md`, or in this repository's code. It is not a gap in an
   existing mirror; there is nothing here to mirror. `plan.md`'s every other use of
-  "subagent" (lines 105, 118, 559, 605, 811, 1026) is the same runtime-fleet sense as
+  "subagent" (§2.1's primary goal statement, §2.2's first-release capability list,
+  §8.3's wide-layout description, §9.2's compact-layout description, §11.6's tool
+  renderer registry, and the Phase 4 exit criteria) is the same runtime-fleet sense as
   `provider-subagents/store.ts`, not a definitions catalog.
 
 ### Summary table

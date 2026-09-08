@@ -764,11 +764,34 @@ family could never police the two `plan.md` citations this task also fixed — a
 would need its own, wider scope, for a check whose value this measurement showed is lower
 than its cost. If a future wave finds new line-number citations creeping back in, the fix
 is the same grep this section ran, not a standing check — but note that grep matches only
-the two BACKTICK-FENCED shapes, and the rule above also forbids the unfenced prose form
-(`path.ts` line NNN, or a bare line NNN). That form was never measured by T269 and is
-still live in this tree: the P9-K merge gate found 33 hits outside the ledger, at least one
-already dead (`docs/agent-configuration-surface.md` cited a ledger line that is now blank,
-for a task whose row sits ~1300 lines away). Filed as T272, which owns both the conversion
-and the extension of the grep below to cover the prose form: ``grep -rnoE
-'`[A-Za-z0-9_./-]+\.(ts|tsx|js|jsx|mjs|md)(:[0-9]+(-[0-9]+)?)`' packages/*/src apps/*/src
-scripts/ci docs plan.md``, plus ``grep -rnoE '`:[0-9]+(-[0-9]+)?`'`` for the bare form.
+the two BACKTICK-FENCED shapes; the rule above also forbids the unfenced prose form
+(`path.ts` line NNN, or a bare line NNN), and that form has its own recovery grep, below.
+
+**T272 (P9-W51) closed that second population, for the same reason argued above — a guard
+here cannot judge semantic drift either, only line existence.** The re-run grep for the
+unfenced form is:
+
+```
+git grep -noiE '\b(at |on |see )?lines? ~?[0-9]{2,4}(-[0-9]+)?\b' HEAD \
+  -- 'packages/*/src/*' 'apps/*/src/*' 'scripts/ci/*' 'docs/*' 'plan.md' \
+  ':!docs/issues-from-plan.md'
+```
+
+Every hit this found at T272's own HEAD was classified, individually, into one of three
+buckets, never assumed from a file-level pattern: real citations this task owned and
+converted (`docs/agent-configuration-surface.md`'s nine, `docs/android-apk-release.md`'s
+one `.gitignore` entry, `scripts/ci/guard-capability-prose.mjs`'s two comment references
+into `guard-docker-packaging-paths.mjs`, and the three `packages/frontend-core` extension
+scenario fixtures' four references into `state.ts`'s `applyChannel`); rendered-log fixture
+CONTENT that only looks like a citation (`apps/android`'s and `apps/web`'s renderer test
+files assert literal strings like `"line 51"` a log/diff renderer displays — not a
+reference to anything, left alone); and real citations outside this task's `Owns` grant,
+reported to whoever owns each file rather than touched here. Two of those out-of-scope
+citations had themselves already drifted the same way T269's fenced-form sample did —
+`packages/frontend-core/src/testing/real-session-protection.test.ts`'s citation of
+`agent.ts`'s `"custom"`-role display check moved off the cited line by that file's own
+subsequent edits, and `scripts/ci/guard-web-session-bundle-budget.mjs`'s citation of
+`agent-stream-coalescer.test.ts`'s test title is now describing a gap that test's title no
+longer has, since the title itself was corrected — evidence for the same "a script can tell
+a line exists, never that it still says what the prose claims" conclusion T269 already
+reached, not a new argument.

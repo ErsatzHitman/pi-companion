@@ -511,7 +511,8 @@ drop), and before any `npm ci`/clean step would remove it again.
 ### 3.4 `apps/android`'s inputs that live outside the repository
 
 `expo prebuild` (invoked by EAS's managed CNG when no committed `apps/android/android/`
-exists — confirmed gitignored, `.gitignore` line 19) needs, beyond the checked-out
+exists — confirmed gitignored, the repository root `.gitignore`'s
+`apps/android/android/` entry) needs, beyond the checked-out
 tree and `npm ci`'s resolved `node_modules`: nothing else that this task could find.
 `app.config.ts` reads no environment variable except `APP_VARIANT` (used only to
 switch the dev/prod package id and app name — confirmed by
