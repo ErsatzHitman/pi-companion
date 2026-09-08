@@ -11,6 +11,10 @@ import { ComposerContainer } from "../../features/composer/index.js";
 import { createDaemonAgentTurnClient } from "../../features/composer/index.js";
 import { createDaemonSessionResumeClient } from "../../features/sessions/index.js";
 import { SessionResumeScreen } from "../../features/sessions/SessionResumeScreen.js";
+import {
+  resolveDirectHttpOrigin,
+  useAttachmentImageResolver,
+} from "../../features/transcript/attachment-image-resolver.js";
 import { EditFromHereSurface } from "../../features/transcript/index.js";
 import type {
   EditFromHereForkClient,
@@ -294,12 +298,32 @@ function useSessionTranscriptEntries(
  * `client` prop, via `createDaemonAgentTurnClient`). Absent a
  * connection, every prop below resolves to `undefined`/a fixture
  * fallback exactly as before this task — each adapter's own fixture
+ *
+ * **T284 mount**: `EditFromHereSurface`'s `resolveImageSrc` prop used to
+ * be omitted entirely, so every message attachment (a phone photo sent
+ * from `apps/android`, or vice versa) always rendered
+ * `MessageAttachments`' honest reference-card fallback, never the image
+ * itself — `message-attachments.tsx`'s own module doc names this as the
+ * one thing still missing once T283 shipped the daemon capability. This
+ * route now supplies a real one via `useAttachmentImageResolver`
+ * (`../../features/transcript/attachment-image-resolver.js`), fed the
+ * live `client`, this route's own `agentId`, `transcriptEntries` (the
+ * exact same live list `EditFromHereSurface` already renders — no second
+ * subscription), and `downloadOrigin` — this route's own new derivation,
+ * off `hostController.getCurrentProfile()`/`info.kind`, of the connected
+ * daemon's direct HTTP origin. `downloadOrigin` is `null` (so every image
+ * still falls back to the reference card, truthfully) whenever there is
+ * no connection yet or the active connection is a relay pairing, which
+ * has no direct HTTP endpoint to derive one from at all — see
+ * `attachment-image-resolver.ts`'s module doc for why that is this
+ * capability's real, by-design boundary rather than a gap this task left
+ * open.
  * test already proves its real wire round trip independent of when this
  * wiring lands.
  */
 export function HostSessionScreen() {
   const { serverId, agentId } = routeApi.useParams();
-  const { client, info } = useDaemonClientContext();
+  const { client, info, hostController } = useDaemonClientContext();
   const { platform } = useCore();
   const navigate = useNavigate();
 
@@ -314,6 +338,26 @@ export function HostSessionScreen() {
   const editFromHereClient = useMemo(() => adaptEditFromHereForkClient(client), [client]);
 
   const transcriptEntries = useSessionTranscriptEntries(client, agentId, info.status);
+
+  // T284: `hostController.getCurrentProfile()` is a synchronous getter,
+  // not itself part of the `info` snapshot `useDaemonClientContext()`
+  // hands back — but it changes exactly when `info.profileId`/`info.kind`
+  // do (both are read off the same `HostController` generation), so those
+  // are this memo's real dependencies. `null` (no direct HTTP origin) on
+  // a relay connection or with no connection yet — see
+  // `attachment-image-resolver.ts`'s module doc for why that is a real,
+  // by-design limitation rather than a gap this task left open.
+  const downloadOrigin = useMemo(
+    () => resolveDirectHttpOrigin(hostController?.getCurrentProfile() ?? null, info.kind),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `hostController.getCurrentProfile()` is read fresh; `info.profileId`/`info.kind` are what actually change.
+    [hostController, info.profileId, info.kind],
+  );
+  const resolveImageSrc = useAttachmentImageResolver({
+    client,
+    agentId,
+    downloadOrigin,
+    entries: transcriptEntries,
+  });
 
   function openForkedSession(outcome: EditFromHereOutcome): void {
     void navigate({
@@ -330,6 +374,7 @@ export function HostSessionScreen() {
         entries={transcriptEntries}
         clock={platform.clock}
         client={editFromHereClient}
+        resolveImageSrc={resolveImageSrc}
         onOpenSession={openForkedSession}
         testId="host-session-transcript"
       />

@@ -369,6 +369,37 @@ describe("areMessageRowPropsEqual: same comparator fields as web's areRowPropsEq
   it("ignores `corrected` when comparing a user-message pair (the field does not exist there)", () => {
     expect(areMessageRowPropsEqual(props(userEntry()), props(userEntry()))).toBe(true);
   });
+
+  // T284: `resolveImageUri` and `entry.images` are both compared by
+  // reference, so a caller passing a fresh closure or a fresh array every
+  // render would defeat this memo entirely — this is what proves the
+  // comparator actually reads them, not just that the interface declares
+  // them.
+  it("is false when resolveImageUri changes reference, even with every other field identical", () => {
+    const base = userEntry();
+    const resolverA = () => "https://daemon.example/a.png";
+    const resolverB = () => "https://daemon.example/a.png";
+    expect(
+      areMessageRowPropsEqual(
+        props(base, { resolveImageUri: resolverA }),
+        props(base, { resolveImageUri: resolverA }),
+      ),
+    ).toBe(true);
+    expect(
+      areMessageRowPropsEqual(
+        props(base, { resolveImageUri: resolverA }),
+        props(base, { resolveImageUri: resolverB }),
+      ),
+    ).toBe(false);
+  });
+
+  it("is false when entry.images changes reference, even with an identical array of one element", () => {
+    const image = { mimeType: "image/png", path: "/tmp/paseo-attachments-x/a.png" };
+    const withImages = userEntry({ images: [image] });
+    const withImagesAgain = userEntry({ images: [image] });
+    expect(areMessageRowPropsEqual(props(withImages), props(withImages))).toBe(true);
+    expect(areMessageRowPropsEqual(props(withImages), props(withImagesAgain))).toBe(false);
+  });
 });
 
 /**

@@ -25,6 +25,8 @@
  */
 import type { timeline } from "@picompanion/frontend-core";
 
+import type { ResolveImageUri } from "./message-attachments";
+
 export type CoreMessageEntry = Extract<
   timeline.TranscriptEntry,
   { kind: "user-message" } | { kind: "assistant-message" }
@@ -95,20 +97,37 @@ export interface TranscriptMessageRowProps {
    * `agent_stream` deltas. Sourced by the caller, exactly as on web —
    * this module has no turn-lifecycle state of its own. */
   streaming: boolean;
+  /** Resolves a message image to a native-fetchable `uri`. Forwarded
+   * unchanged to `MessageAttachments` — see that file's `ResolveImageUri`
+   * doc comment for what renders when this is omitted or returns
+   * `undefined` for a given image. T284: the session route
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`) now supplies a real
+   * one via `use-attachment-image-resolver.ts`'s
+   * `useAttachmentImageResolver`. */
+  resolveImageUri?: ResolveImageUri;
   testId?: string;
 }
 
 /**
  * Byte-for-byte the same comparator fields as web's `areRowPropsEqual`
- * (`apps/web/src/features/transcript/message-row.tsx`), minus the
- * `images`/`resolveImageSrc` comparisons — neither field is read by this
- * module's view yet (see the module doc comment's "deliberate
- * difference" note). Used to wrap `TranscriptMessageRow` in `memo` so a
- * live update to the newest streaming row does not re-render every
- * already-settled row in the list — the render-level half of "streaming
- * text updates incrementally without full re-render"; the data-batching
- * half is `transcript-message-batcher.ts`'s `TimelineCoalescer`
- * composition.
+ * (`apps/web/src/features/transcript/message-row.tsx`), now including
+ * `resolveImageUri` (T284). CORRECTED at T284: this used to say "minus
+ * the `images`/`resolveImageSrc` comparisons — neither field is read by
+ * this module's view yet" — false even before this task for `images`,
+ * which `message-row.tsx`'s `TranscriptMessageRowImpl` has read since
+ * T33A5 and which the comparator below already compared (by reference,
+ * sufficient because every upsert this app's timeline layer produces
+ * hands a fresh `CoreMessageEntry` object, never a mutated one — the same
+ * assumption every other compared field here relies on). `resolveImageUri`
+ * is compared by reference too, the same as web's `resolveImageSrc`: a
+ * caller passing a fresh closure every render would defeat this memo
+ * entirely, which is exactly why `use-attachment-image-resolver.ts`
+ * returns its resolver via `useCallback`. Used to wrap
+ * `TranscriptMessageRow` in `memo` so a live update to the newest
+ * streaming row does not re-render every already-settled row in the
+ * list — the render-level half of "streaming text updates incrementally
+ * without full re-render"; the data-batching half is
+ * `transcript-message-batcher.ts`'s `TimelineCoalescer` composition.
  */
 export function areMessageRowPropsEqual(
   previous: TranscriptMessageRowProps,
@@ -124,6 +143,7 @@ export function areMessageRowPropsEqual(
       ? previous.entry.corrected === next.entry.corrected
       : true) &&
     previous.streaming === next.streaming &&
+    previous.resolveImageUri === next.resolveImageUri &&
     previous.testId === next.testId
   );
 }

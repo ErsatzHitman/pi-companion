@@ -45,21 +45,29 @@ import "./message-attachments.css";
  * realpath lies inside the attachment temp root (plan.md §12.4,
  * "Attachment bytes"). `resolveScopedPath` was NOT widened.
  *
- * What is still true is narrower: nothing supplies `resolveImageSrc`
- * yet, so this renderer still shows the reference card. Wiring the seam
- * at the route level — in both apps, and registering the capability in
- * `guard-capability-prose.mjs` in the same commit — is T284's, and was
- * outside T283's owned files (`packages/server` only).
+ * CORRECTED at T284: this said "nothing supplies `resolveImageSrc` yet",
+ * naming wiring the seam at the route level as T284's own remaining
+ * work. `routes/screens/host-session-screen.tsx` now does exactly that
+ * (`useAttachmentImageResolver`,
+ * `features/transcript/attachment-image-resolver.ts`) — a phone
+ * attachment sent from `apps/android` really does render here, over a
+ * `"direct"` daemon connection. `resolveImageSrc` still resolves
+ * `undefined` (this file's reference card, below) for every image with
+ * no live connection yet, or a `"relay"`-paired one: a relay tunnel
+ * proxies only the encrypted WebSocket, so there is no direct daemon HTTP
+ * endpoint to fetch a token URL from — see
+ * `attachment-image-resolver.ts`'s own module doc for why that is this
+ * capability's real, by-design boundary, not a gap left open.
  *
  * Rather than either faking a preview (inventing pixels this client
  * cannot actually fetch) or dropping the image silently, `resolveImageSrc`
- * below is an explicit, optional seam: any caller that *does* have a way
- * to turn a path into a fetchable URL (a future daemon RPC, wired at the
- * route level once it exists) can supply one, and every image in this
- * transcript will render it immediately with no change to this file.
- * Until one is supplied, every image renders through the same real,
- * accessible, keyboard-reachable reference card the acceptance criteria
- * ask for — never a blank space, never a broken `<img>`.
+ * below is an explicit, optional seam: any caller that has a way to turn
+ * a path into a fetchable URL can supply one, and every image in this
+ * transcript renders it immediately with no change to this file. Absent
+ * one — or when it returns `undefined` for a given image — that image
+ * renders through the same real, accessible, keyboard-reachable
+ * reference card the acceptance criteria ask for — never a blank space,
+ * never a broken `<img>`.
  */
 export type ResolveImageSrc = (
   image: AgentTimelineImageRef,
@@ -178,6 +186,26 @@ interface AttachmentReferenceProps {
  * (`Tab` reaches the `<summary>`, `Enter`/`Space` toggles it) and an
  * implicit accessible name from its text content, with no custom ARIA
  * needed.
+ *
+ * **T284: confirmed, not changed, that this is this product's "compact
+ * chip" answer for a non-previewable attachment — the collapsed
+ * `<summary>` line (name + kind/size badge) IS the chip; expanding it
+ * reveals only the explanatory note, never a second control.** This is
+ * deliberately a different component from `ui/primitives/Chip.tsx`'s
+ * `Chip`/`ChipGroup` — the pill `Composer.tsx` renders for a *staged,
+ * pre-send* attachment (always paired with a `Remove` affordance, no
+ * expandable content of its own). A read-only, already-sent message
+ * attachment needs the opposite shape (no remove action; a disclosure for
+ * "why no preview"), which is exactly what `AttachmentReference` already
+ * is — reusing `Chip` here would have to bolt a `<details>` onto a
+ * component built for removal, not gained anything, and this task's own
+ * brief says not to fork the renderer without a reason. No non-image
+ * attachment can reach a transcript row at all today to need this
+ * treatment for a different reason (see this component's doc comment
+ * just above): the reference card doubles as the answer for both cases
+ * because they collapse to the identical shape — "an attachment reference
+ * with no live preview available" — not because one was special-cased for
+ * the other.
  */
 function AttachmentReference({
   name,

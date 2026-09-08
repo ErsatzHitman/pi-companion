@@ -25,6 +25,16 @@
  * live `DaemonClient` instance this file already narrows twice above
  * satisfies this third port as-is too, with no adapter.
  *
+ * **T284 adds `resolveAttachmentDownloadClient` below**, the same pattern
+ * a fourth time: `use-attachment-image-resolver.ts`'s hook wants an
+ * `AttachmentDownloadTokenClient` (`../features/transcript`'s
+ * `{ requestAttachmentDownloadToken(agentId, path): Promise<{ token,
+ * mimeType, error }> }`), and the real `DaemonClient.
+ * requestAttachmentDownloadToken` (T283, `packages/client/src/
+ * daemon-client.ts`) matches that shape exactly — so the one live
+ * `DaemonClient` instance this file already narrows three times above
+ * satisfies this fourth port as-is too, with no adapter.
+ *
 
  * ## Why this is its own file, not inlined in `index.tsx` like
  * `SessionApprovals`'s cast
@@ -45,6 +55,7 @@
  * unchanged" is a plain data-flow claim, not a rendering one.
  */
 import type { DaemonQueueModeSource, DaemonTurnStatusSource } from "../features/composer";
+import type { AttachmentDownloadTokenClient } from "../features/transcript";
 import type { VoiceTranscriptionClient } from "../features/voice";
 
 /**
@@ -119,6 +130,29 @@ export function resolveTranscribeClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | VoiceTranscriptionClient
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T284: same fresh-read contract as the three functions above, cast to
+ * `AttachmentDownloadTokenClient` instead — the fourth narrow port this
+ * one live `DaemonClient` instance satisfies (T283's real
+ * `requestAttachmentDownloadToken(agentId, path)`, see that method's own
+ * doc comment in `packages/client/src/daemon-client.ts`). `undefined`
+ * (never `null`) with no active lifecycle or no live client yet,
+ * matching every sibling resolver above — `use-attachment-image-
+ * resolver.ts`'s hook then resolves every image to `undefined` (the
+ * accessible reference card) rather than attempting a token request with
+ * nothing to send it to.
+ */
+export function resolveAttachmentDownloadClient(
+  connection: SessionRouteConnectionSource,
+): AttachmentDownloadTokenClient | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | AttachmentDownloadTokenClient
       | null
       | undefined) ?? undefined
   );

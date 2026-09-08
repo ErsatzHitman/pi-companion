@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  resolveAttachmentDownloadClient,
   resolveQueueModeClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
@@ -53,6 +54,10 @@ function createCountingFakeDaemonClient() {
         return { text: "hello from groq", error: null };
       },
     ),
+    requestAttachmentDownloadToken: vi.fn(async (agentId: string, path: string) => {
+      calls.push(["requestAttachmentDownloadToken", agentId, path]);
+      return { token: "tok_1", mimeType: "image/png", error: null };
+    }),
   };
 }
 
@@ -167,6 +172,42 @@ describe("resolveTranscribeClient", () => {
       getActiveLifecycle: () => ({ getDaemonClient: () => null }),
     };
     expect(resolveTranscribeClient(connection)).toBeUndefined();
+  });
+});
+
+describe("resolveAttachmentDownloadClient", () => {
+  it("returns the exact live client reference unchanged — never a wrapper or a clone", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveAttachmentDownloadClient(connectionWithClient(fakeClient));
+    expect(resolved).toBe(fakeClient as unknown as typeof resolved);
+  });
+
+  it("a requestAttachmentDownloadToken call on the resolved client reaches the real counting fake and its resolved value round-trips", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveAttachmentDownloadClient(connectionWithClient(fakeClient));
+
+    const result = await resolved!.requestAttachmentDownloadToken(
+      "agt_t284_attachment",
+      "/tmp/paseo-attachments-x/a.png",
+    );
+
+    expect(fakeClient.requestAttachmentDownloadToken).toHaveBeenCalledTimes(1);
+    expect(fakeClient.calls).toEqual([
+      ["requestAttachmentDownloadToken", "agt_t284_attachment", "/tmp/paseo-attachments-x/a.png"],
+    ]);
+    expect(result).toEqual({ token: "tok_1", mimeType: "image/png", error: null });
+  });
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveAttachmentDownloadClient(connection)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveAttachmentDownloadClient(connection)).toBeUndefined();
   });
 });
 

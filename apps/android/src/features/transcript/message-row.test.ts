@@ -57,4 +57,15 @@ describe("message-row.tsx: T33A5 renders entry.images via MessageAttachments", (
   it("derives images from entry.images with a safe fallback (never crashes on an entry with no images)", () => {
     expect(readCode()).toMatch(/const images = entry\.images \?\? \[\]/);
   });
+
+  // T284: proves the .tsx actually forwards resolveImageUri, not just
+  // that TranscriptMessageRowProps declares it — a strip-comments source
+  // match, same discipline every other assertion in this file uses.
+  it("destructures resolveImageUri from props and forwards it unchanged to MessageAttachments", () => {
+    const source = readCode();
+    expect(source).toMatch(
+      /function TranscriptMessageRowImpl\(\{[\s\S]*?resolveImageUri[\s\S]*?\}: TranscriptMessageRowProps\)/,
+    );
+    expect(source).toMatch(/resolveImageUri=\{resolveImageUri\}/);
+  });
 });

@@ -1819,6 +1819,46 @@ export const CAPABILITIES = [
       /\bpressing (?:attach|the camera action) (?:only ever )?(?:reaches|resolves|settles)[^.]{0,40}?"?unavailable"?/i,
     ],
   },
+  {
+    // T284: `resolveAttachmentForDownload` — measured with `git grep -n
+    // "resolveAttachmentForDownload" -- 'apps/*/src/*' 'packages/*/src/*'
+    // 'scripts/ci/*'`: declared exactly once, as a real `export async
+    // function`, in `packages/server/src/server/file-upload/
+    // attachment-access.ts`. Every other hit (both `attachment-access.test.ts`
+    // files, `session.ts`, `session.test.ts`, web's own
+    // `message-attachments.tsx`) is a test-file usage (excluded from the
+    // "shipped" scan), a call site, an import, or a doc-comment mention
+    // naming it — no unrelated same-named member exists anywhere in scope,
+    // so a bare-string member is sufficient.
+    //
+    // This is the SAME "the capability can do X" / "the app actually asks
+    // it to" split T289/T290 each registered above: T283 shipped the
+    // daemon RPC this method serves
+    // (`attachment_download_token_request`), and — until this task — no
+    // client anywhere in the tree ever called it, which is exactly what
+    // made a probe entry for this name block at the P9-P merge gate (a
+    // live denying sentence sat in web's `message-attachments.tsx` AND in
+    // `apps/android/src/features/transcript/message-attachments-model.ts`,
+    // per that gate's own note in `docs/issues-from-plan.md`'s T284
+    // section). Both sites are corrected in this same commit, each with a
+    // `CORRECTED at T284`/`CORRECTED AGAIN at T284` marker ahead of its
+    // quoted old text, alongside every other site this task's own T124
+    // grep found (`message-row.tsx` on web; `message-row-model.ts`,
+    // `message-attachments.tsx` on Android) — so no live denying sentence
+    // exists in scope today. Proven able to fire by appending a sentence
+    // in this entry's own wording to a real tracked in-scope file,
+    // confirming `run-guard-capability-prose.mjs` exited 1 naming this
+    // capability, then restoring the file from a scratchpad copy — never
+    // `git checkout --` — and confirming exit 0 with `git status
+    // --porcelain` empty.
+    name: "attachments render across clients via the attachment-serving RPC, not just the RPC existing (resolveAttachmentForDownload)",
+    methodNames: ["resolveAttachmentForDownload"],
+    denyingPhrases: [
+      /\bresolveAttachmentForDownload[^.]{0,60}?(?:does not exist|has never been (?:added|shipped)|is not (?:defined|declared|called|wired))/i,
+      /\bno (?:client|caller) anywhere (?:in this (?:app|tree|repository)|today) (?:ever )?calls?\s+(?:the )?attachment[- ]download[- ]token (?:request|rpc)/i,
+      /\ban? attachment (?:sent from|attached on) (?:a phone|android|the web app)[^.]{0,60}?(?:cannot|can'?t|never) (?:be seen|render|appear)[^.]{0,40}?(?:on the other|elsewhere|on the (?:web|android) (?:app|client))/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

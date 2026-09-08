@@ -47,9 +47,11 @@ export interface TranscriptMessageRowProps {
   streaming: boolean;
   /** Resolves a message image to a browser-fetchable URL. Forwarded
    * unchanged to `MessageAttachments` — see that file's module doc
-   * comment for what renders when this is omitted (the default today:
-   * no caller can supply one yet, since resolving one needs daemon work
-   * outside this task's owned files). */
+   * comment for what renders when this is omitted or returns
+   * `undefined` for a given image. CORRECTED at T284: this used to say
+   * no caller could supply one yet. `host-session-screen.tsx` now does,
+   * via `features/transcript/attachment-image-resolver.ts`'s
+   * `useAttachmentImageResolver`. */
   resolveImageSrc?: ResolveImageSrc;
   /**
    * T105 (plan.md §11.1's edit-from-here shortcut, T38A1b's frontend-core

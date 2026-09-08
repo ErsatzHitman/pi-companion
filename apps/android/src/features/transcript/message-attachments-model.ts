@@ -24,14 +24,17 @@
  * will resolve" such a path. T283 shipped one —
  * `attachment_download_token_request`, capability-scoped to paths
  * already on the requesting agent's own timeline (plan.md §12.4,
- * "Attachment bytes"). What remains true is that nothing supplies
- * `resolveImageUri` yet, so there is no resolver wired here to call;
- * supplying it is T284's. Rather than
- * inventing pixels or dropping the reference silently, every image
- * renders as an accessible reference card — name, kind, size — through
- * `imageAttachmentViewModel` below, with an optional `resolveImageUri`
- * seam (`message-attachments.tsx`) so a future daemon RPC can start
- * rendering real previews with no change to this module's shape.
+ * "Attachment bytes"). CORRECTED AGAIN at T284: this then said "nothing
+ * supplies `resolveImageUri` yet". The session route
+ * (`app/h/[serverId]/session/[agentId]/index.tsx`) now does, via
+ * `use-attachment-image-resolver.ts`'s `useAttachmentImageResolver` — a
+ * real photo attached on `apps/web` renders here over a direct daemon
+ * connection; a relay-paired connection (no direct HTTP endpoint to fetch
+ * a token URL from) or no connection at all still resolves every image to
+ * the reference card below, truthfully. Rather than inventing pixels or
+ * dropping the reference silently, every image renders as an accessible
+ * reference card — name, kind, size — through `imageAttachmentViewModel`
+ * below whenever no `uri` is resolved, and a real preview whenever one is.
  */
 import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
 
@@ -130,8 +133,13 @@ export interface ImageAttachmentViewModel {
    * oversized-payload case this task's acceptance names explicitly. */
   oversized: boolean;
   /** The visible caption explaining why there is no preview: the
-   * oversized reason when `oversized`, else the "no resolver wired yet"
-   * reason. Always shown as visible text, never colour/icon alone. */
+   * oversized reason when `oversized`, else the generic "no preview
+   * available in this client" reason shown whenever `resolveImageUri` is
+   * absent or returns `undefined` for this image (see
+   * `use-attachment-image-resolver.ts`'s module doc for the real,
+   * by-design cases that produces: no live connection yet, a relay
+   * pairing, or a token request still in flight/failed). Always shown as
+   * visible text, never colour/icon alone. */
   note: string;
 }
 

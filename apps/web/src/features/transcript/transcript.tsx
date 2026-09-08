@@ -46,7 +46,8 @@ export interface TranscriptProps {
   streamingEntryId?: string | null;
   /** Forwarded to every `TranscriptMessageRow` (T52A3). See
    * `message-attachments.tsx`'s module doc comment for what this seam is
-   * for and why no caller wires a real one yet. */
+   * for, and `host-session-screen.tsx` (T284) for the real caller that
+   * now wires one. */
   resolveImageSrc?: ResolveImageSrc;
   /**
    * T105: per-message edit-from-here eligibility, from

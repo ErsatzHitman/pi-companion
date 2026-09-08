@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { cleanup, render, screen } from "@testing-library/react";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -114,5 +117,68 @@ describe("adaptEditFromHereForkClient (T105)", () => {
     expect(forkAgent).toHaveBeenCalledTimes(1);
     expect(forkAgent).toHaveBeenCalledWith("source-session", { entryId: "m1", entryIndex: 0 });
     expect(result).toEqual({ agentId: "forked-agent-7" });
+  });
+});
+
+/**
+ * T284: proves this route's attachment-image wiring — a source-level
+ * contract test, the same instrument `CLAUDE.md` names for a behavior
+ * that cannot be exercised through a full render. Everything ABOUT the
+ * hook's correctness (a token request resolves a real fetchable URL,
+ * never retries a failed one, resets on a connection change) already
+ * has real, non-decorative proof in `attachment-image-resolver.test.ts`;
+ * what is unproven anywhere else is that this ROUTE actually calls
+ * `useAttachmentImageResolver` with the live `client`/`agentId`/
+ * `transcriptEntries`/`downloadOrigin` and forwards the result to
+ * `EditFromHereSurface`. A full render can't observe that: this route's
+ * `client` comes from `useDaemonClientContext()`, backed by a real
+ * `hosts.HostController` `DaemonClientProvider` constructs internally —
+ * `daemon-client-context.tsx` exports no way to inject a fake one, and
+ * that file is outside this task's owned files. The
+ * "mounts the edit-from-here transcript surface" test above already
+ * proves `EditFromHereSurface` itself renders with no live connection;
+ * this only proves the wiring line, the same way `adaptEditFromHereForkClient`
+ * above is proven as a pure function rather than through the DOM.
+ */
+function readHostSessionScreenSource(): string {
+  // `import.meta.url` is already a real `file:` URL string here; under
+  // jsdom, `new URL(x, import.meta.url)` throws `ERR_INVALID_URL_SCHEME`
+  // (see `../../ui/shell.test.tsx`'s identical comment/pattern).
+  const path = join(dirname(fileURLToPath(import.meta.url)), "host-session-screen.tsx");
+  return readFileSync(path, "utf8");
+}
+
+function readHostSessionScreenCode(): string {
+  return readHostSessionScreenSource()
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+describe("HostSessionScreen attachment-image wiring (T284)", () => {
+  it("imports resolveDirectHttpOrigin/useAttachmentImageResolver from features/transcript/attachment-image-resolver", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(
+      /import \{\s*resolveDirectHttpOrigin,\s*useAttachmentImageResolver,?\s*\} from "\.\.\/\.\.\/features\/transcript\/attachment-image-resolver\.js";/,
+    );
+  });
+
+  it("derives downloadOrigin from hostController.getCurrentProfile()/info.kind, never a hard-coded literal", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(
+      /resolveDirectHttpOrigin\(hostController\?\.getCurrentProfile\(\) \?\? null, info\.kind\)/,
+    );
+  });
+
+  it("calls useAttachmentImageResolver with the live client, this route's agentId, downloadOrigin, and transcriptEntries", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(
+      /const resolveImageSrc = useAttachmentImageResolver\(\{\s*client,\s*agentId,\s*downloadOrigin,\s*entries: transcriptEntries,\s*\}\);/,
+    );
+  });
+
+  it("passes the resolved resolveImageSrc straight through to EditFromHereSurface's own prop — deleting it must fail this assertion", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(/<EditFromHereSurface[\s\S]*?resolveImageSrc=\{resolveImageSrc\}/);
+    expect(code).not.toMatch(/resolveImageSrc=\{undefined\}/);
   });
 });

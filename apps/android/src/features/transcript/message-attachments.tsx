@@ -33,13 +33,15 @@ export {
 /**
  * Resolves an image reference to a browser/native-fetchable URI — the
  * same optional seam web's `ResolveImageSrc` establishes. `undefined`
- * (the default: no resolver supplied, or the resolver itself returns
- * `undefined` for this image) always falls back to the accessible
- * reference card; a future daemon RPC can be wired in here with no
- * change to this file's shape. Never called for an oversized image (see
- * `imageAttachmentViewModel`'s `oversized` flag) — an oversized image
- * always shows its reference card, regardless of whether a resolver
- * exists.
+ * (no resolver supplied, or the resolver itself returns `undefined` for
+ * this image) always falls back to the accessible reference card. T284:
+ * the session route now supplies a real one
+ * (`use-attachment-image-resolver.ts`'s `useAttachmentImageResolver`,
+ * wired through `TranscriptMessageRow`'s own `resolveImageUri` prop) —
+ * this file's own shape needed no change for that, exactly as designed.
+ * Never called for an oversized image (see `imageAttachmentViewModel`'s
+ * `oversized` flag) — an oversized image always shows its reference
+ * card, regardless of whether a resolver exists.
  */
 export type ResolveImageUri = (
   image: AgentTimelineImageRef,
@@ -56,6 +58,24 @@ export interface MessageAttachmentsProps {
 
 type Styles = ReturnType<typeof createStyles>;
 
+/**
+ * T284: confirmed, not changed, that the `<Card>` fallback below is this
+ * product's "compact chip" answer for a non-previewable attachment on
+ * this platform, mirroring web's identical confirmation in
+ * `message-attachments.tsx`. Deliberately a different component from
+ * `ui/primitives/Chip.tsx`'s `Chip`/`ChipGroup` — `Composer.tsx` already
+ * renders that one for a *staged, pre-send* attachment (a status pill,
+ * `D:\beautiful-ui`'s own "rounded-chip" attachment-chip radius per that
+ * file's doc comment, always removable, "no preview for non-image types,
+ * by design"). A read-only, already-sent message attachment needs the
+ * opposite shape (no remove action; a name/kind/size summary plus an
+ * explanatory note), which is exactly what this `<Card>` already is.
+ * `imageAttachmentViewModel`'s own doc comment (`message-attachments-
+ * model.ts`) already establishes this card as the answer for BOTH the
+ * oversized case and the no-`uri`-resolved case, for the same reason web's
+ * does: they collapse to the identical shape, not because one was
+ * special-cased for the other.
+ */
 function AttachmentImage({
   image,
   context,

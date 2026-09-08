@@ -32,9 +32,11 @@ import {
   createTranscriptMessageBatcher,
   fireTranscriptStatusHaptic,
   selectRecoveredTurnsForSession,
+  useAttachmentImageResolver,
   type AwaitingConfirmationTurn,
   type TranscriptStatus,
 } from "../../../../../features/transcript";
+import { buildDaemonHttpOrigin } from "../../../../../features/connect/daemon-connection-store.js";
 import { deriveSessionRouteStatus } from "../../../../../app-shell/session-route-model";
 import {
   buildSessionTranscriptEntries,
@@ -52,6 +54,7 @@ import {
 import { Banner } from "../../../../../ui/primitives";
 import { useAppCore } from "../../../../core-context";
 import {
+  resolveAttachmentDownloadClient,
   resolveQueueModeClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
@@ -166,6 +169,27 @@ function handleAttachPress() {}
  * task's brief both say to close the wiring gap now and state the
  * `expo-sqlite` blocker plainly, not to make the gap invisible by
  * leaving the prop unpassed.
+ *
+ * **T284 mount.** `TranscriptMessageRow` used to get no `resolveImageUri`
+ * prop at all, so a message attachment (a phone photo sent from
+ * `apps/web`, or vice versa) always rendered `MessageAttachments`' honest
+ * reference-card fallback, never the image itself —
+ * `message-attachments-model.ts`'s own module doc named this as the one
+ * thing still missing once T283 shipped the daemon capability. This
+ * component now resolves one via `useAttachmentImageResolver`
+ * (`../../../../../features/transcript`), fed
+ * `resolveAttachmentDownloadClient(core.connection)` (the fourth
+ * `resolve*Client` narrowing of the same live `DaemonClient`
+ * `queueModeClient`/`turnStatusClient`/`transcribeClient` already read,
+ * `../../../../../app-shell/session-route-daemon-clients.ts`), this
+ * component's own `entries`, and a `downloadOrigin` derived the identical
+ * way the files route (`../[agentId]/files/[...path].tsx`) already
+ * derives its own: `useConnectionStatus(core.connection).daemonAddress`
+ * through `buildDaemonHttpOrigin`. `downloadOrigin` is `null` — so every
+ * image still falls back to the reference card, truthfully — on a
+ * relay-paired connection (no direct HTTP endpoint to fetch a token URL
+ * from, the identical limitation that route's own doc comment names) or
+ * with no connection yet.
  */
 function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agentId: string }) {
   const core = useAppCore();
@@ -290,6 +314,25 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
     previousStatusRef.current = status;
   }, [status, core.vibrationPlatform, hapticsEnabled]);
 
+  // T284: real attachment-image resolution — a fresh read of the same
+  // live `DaemonClient` every other `resolve*Client` call on this route
+  // narrows (`resolveAttachmentDownloadClient`, `../../../../../app-shell/
+  // session-route-daemon-clients.ts`), plus `daemonAddress` off the same
+  // `AppCore.connection` snapshot `../[agentId]/files/[...path].tsx`
+  // already derives a `downloadOrigin` from for its own `DownloadPanel`.
+  // `null` on a relay connection or with no connection yet — every image
+  // then renders the honest reference-card fallback
+  // (`message-attachments.tsx`), never a broken `<Image>`.
+  const attachmentDownloadClient = resolveAttachmentDownloadClient(core.connection);
+  const { daemonAddress } = useConnectionStatus(core.connection);
+  const downloadOrigin = daemonAddress ? buildDaemonHttpOrigin(daemonAddress) : null;
+  const resolveImageUri = useAttachmentImageResolver({
+    client: attachmentDownloadClient,
+    agentId,
+    downloadOrigin,
+    entries,
+  });
+
   return (
     <>
       {staleness ? (
@@ -312,7 +355,13 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
             return <TranscriptToolCallRow key={entry.id} entry={entry} testId={testId} />;
           }
           return (
-            <TranscriptMessageRow key={entry.id} entry={entry} streaming={false} testId={testId} />
+            <TranscriptMessageRow
+              key={entry.id}
+              entry={entry}
+              streaming={false}
+              resolveImageUri={resolveImageUri}
+              testId={testId}
+            />
           );
         }}
       />

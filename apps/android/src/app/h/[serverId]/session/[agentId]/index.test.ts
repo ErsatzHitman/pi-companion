@@ -479,9 +479,9 @@ describe("SessionRoute source", () => {
   // that SessionRoute actually calls it and actually passes the result
   // to Composer, never a fixed `undefined`. ------------------------------
 
-  it("T132/T282: imports resolveQueueModeClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
+  it("T132/T282/T284: imports resolveAttachmentDownloadClient/resolveQueueModeClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
     expect(readCode()).toMatch(
-      /import \{\s*resolveQueueModeClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+      /import \{\s*resolveAttachmentDownloadClient,\s*resolveQueueModeClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
     );
   });
 
@@ -530,6 +530,56 @@ describe("SessionRoute source", () => {
     // nothing regardless of connection state — the exact gap this task
     // closed.
     expect(code).not.toMatch(/transcribeClient=\{undefined\}/);
+  });
+
+  // --- T284: wires resolveImageUri into TranscriptMessageRow inside
+  // SessionTranscript's own renderRow — see that component's own "T284
+  // mount" doc comment. Before this task no route anywhere threaded a
+  // resolver through TranscriptMessageRowProps at all (the prop did not
+  // exist), so every attachment always rendered the honest reference
+  // card, on both platforms. Assertions run against
+  // readComponentCode("SessionTranscript") rather than the whole file:
+  // `resolveAttachmentDownloadClient(core.connection)` also appears (with
+  // a different call site) nowhere else, but `useAttachmentImageResolver`
+  // is imported once and called exactly once, inside this component. ---
+
+  it("T284: imports useAttachmentImageResolver from the same features/transcript barrel as the row components", () => {
+    const code = readCode();
+    expect(code).toMatch(/useAttachmentImageResolver,/);
+    expect(code).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/transcript"/);
+  });
+
+  it("T284: imports buildDaemonHttpOrigin from features/connect/daemon-connection-store, the same function the files route already derives its own downloadOrigin from", () => {
+    expect(readCode()).toMatch(
+      /import \{ buildDaemonHttpOrigin \} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/connect\/daemon-connection-store\.js";/,
+    );
+  });
+
+  it("T284: SessionTranscript derives downloadOrigin from useConnectionStatus(core.connection)'s daemonAddress, never a hard-coded literal", () => {
+    const body = readComponentCode("SessionTranscript");
+    expect(body).toMatch(/const \{ daemonAddress \} = useConnectionStatus\(core\.connection\);/);
+    expect(body).toMatch(
+      /const downloadOrigin = daemonAddress \? buildDaemonHttpOrigin\(daemonAddress\) : null;/,
+    );
+  });
+
+  it("T284: SessionTranscript resolves the attachment client via resolveAttachmentDownloadClient(core.connection) and calls useAttachmentImageResolver with it, agentId, downloadOrigin, and entries", () => {
+    const body = readComponentCode("SessionTranscript");
+    expect(body).toMatch(
+      /const attachmentDownloadClient = resolveAttachmentDownloadClient\(core\.connection\);/,
+    );
+    expect(body).toMatch(
+      /const resolveImageUri = useAttachmentImageResolver\(\{\s*client: attachmentDownloadClient,\s*agentId,\s*downloadOrigin,\s*entries,\s*\}\);/,
+    );
+  });
+
+  it("T284: passes the resolved resolveImageUri straight through to TranscriptMessageRow's own prop — deleting it must fail this assertion", () => {
+    const body = readComponentCode("SessionTranscript");
+    expect(body).toMatch(/<TranscriptMessageRow[\s\S]*?resolveImageUri=\{resolveImageUri\}/);
+    // Never the fixed literal that would silently leave every attachment
+    // wired to nothing regardless of connection state — the exact gap
+    // this task closed.
+    expect(body).not.toMatch(/resolveImageUri=\{undefined\}/);
   });
 
   // --- T290: wires real attachmentSource/cameraCapture ports into the
@@ -598,7 +648,7 @@ describe("SessionRoute source", () => {
       /entry\.kind === "tool-call"[\s\S]*?<TranscriptToolCallRow key=\{entry\.id\} entry=\{entry\} testId=\{testId\} \/>/,
     );
     expect(code).toMatch(
-      /<TranscriptMessageRow key=\{entry\.id\} entry=\{entry\} streaming=\{false\} testId=\{testId\} \/>/,
+      /<TranscriptMessageRow\s+key=\{entry\.id\}\s+entry=\{entry\}\s+streaming=\{false\}\s+resolveImageUri=\{resolveImageUri\}\s+testId=\{testId\}\s*\/>/,
     );
     // Never a hand-built `session-transcript-row-${entry.id}` template
     // literal anymore - TranscriptWindowList (features/transcript/

@@ -53,6 +53,18 @@ export {
 } from "./message-attachments-model";
 export type { AttachmentImageContext, ImageAttachmentViewModel } from "./message-attachments-model";
 
+// T284: the attachment-serving capability's route-level resolver — see
+// `attachment-image-resolver-model.ts`'s module doc for why the pure
+// core and the thin hook live in separate files.
+export {
+  applyResolvedAttachmentImage,
+  buildAttachmentDownloadUrl,
+  collectTimelineImages,
+} from "./attachment-image-resolver-model";
+export type { AttachmentDownloadTokenClient } from "./attachment-image-resolver-model";
+export { useAttachmentImageResolver } from "./use-attachment-image-resolver";
+export type { UseAttachmentImageResolverOptions } from "./use-attachment-image-resolver";
+
 export { createTranscriptMessageBatcher } from "./transcript-message-batcher";
 export type {
   TranscriptMessageBatcher,

@@ -16,6 +16,10 @@
  * `MessageAttachments` beneath the message text for `entry.images` — the
  * rendering `message-row-model.ts`'s prior doc comment named as a
  * deliberate gap for this task to close.
+ *
+ * **T284**: forwards `resolveImageUri` unchanged to `MessageAttachments`
+ * — see `message-row-model.ts`'s `TranscriptMessageRowProps.resolveImageUri`
+ * doc comment for who supplies a real one and what renders without it.
  */
 import { memo, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
@@ -36,7 +40,12 @@ import {
 export type { CoreMessageEntry, TranscriptMessageRowProps } from "./message-row-model";
 export { isCoreMessageEntry } from "./message-row-model";
 
-function TranscriptMessageRowImpl({ entry, streaming, testId }: TranscriptMessageRowProps) {
+function TranscriptMessageRowImpl({
+  entry,
+  streaming,
+  resolveImageUri,
+  testId,
+}: TranscriptMessageRowProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const images = entry.images ?? [];
@@ -64,6 +73,7 @@ function TranscriptMessageRowImpl({ entry, streaming, testId }: TranscriptMessag
         images={images}
         entryId={entry.id}
         speaker={speakerFor(entry)}
+        resolveImageUri={resolveImageUri}
         testId={testId ? `${testId}-attachments` : undefined}
       />
     </View>
