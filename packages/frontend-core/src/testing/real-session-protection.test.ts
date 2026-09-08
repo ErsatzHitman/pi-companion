@@ -44,9 +44,9 @@ import type { FixtureFrame } from "../timeline/fixtures/index.js";
  * `packages/server/src/server/agent/providers/pi/history-mapper.ts`
  * (`mapCustomMessage`'s `Reflect.get(message, "display") === false` early
  * return) and the equivalent live-stream check in
- * `packages/server/src/server/agent/providers/pi/agent.ts` (~line 2661,
+ * `packages/server/src/server/agent/providers/pi/agent.ts` (`handleMessageEnd`'s
  * `if (event.message.role === "custom") { if (Reflect.get(event.message,
- * "display") === false) ... }`). Neither Pi's wire vocabulary
+ * "display") === false) ... }` branch). Neither Pi's wire vocabulary
  * (`AgentTimelineItem` in `packages/protocol/src/agent-types.ts`) nor any
  * `agent_stream` payload this package's reducer ever ingests has a
  * `custom`/`hidden` message shape at all — a `display:false` message is
