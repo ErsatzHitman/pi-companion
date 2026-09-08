@@ -1720,6 +1720,51 @@ export const CAPABILITIES = [
       /\bfiles (?:cannot|can'?t) be (?:staged|added) (?:by|via) drag(?:ging)?[- ]?and[- ]?drop in the web (?:app|composer)/i,
     ],
   },
+  {
+    // T289: `resolveTranscribeClient` — measured with `git grep -n
+    // "resolveTranscribeClient" -- 'apps/*/src/*' 'packages/*/src/*'
+    // 'scripts/ci/*' | grep -v '\.test\.'` — declared exactly once, as an
+    // `export function`, in
+    // `apps/android/src/app-shell/session-route-daemon-clients.ts`. Every
+    // other hit across the tree is an import, a call site, or a doc-comment
+    // mention naming it (`index.tsx`, `Composer.tsx`, `voice-model.ts`), so
+    // a plain bare-string member is sufficient — no T168 group or T169
+    // shape-anchor needed.
+    //
+    // This is a DIFFERENT capability from `transcribeVoiceClip` above:
+    // that entry protects the wire method existing on `DaemonClient`, which
+    // shipped (and was registered) before any production mount ever called
+    // it. This entry protects the MOUNT WIRING itself — T282's
+    // `resolveTranscribeClient`, the function the session route calls to
+    // hand `Composer` a live `transcribeClient` prop off `AppCore.
+    // connection`. "The client can transcribe" and "the app actually asks
+    // it to" are two different facts, and only the second is this entry's
+    // subject.
+    //
+    // A FORWARD guard (T162's shape): no live denying sentence exists in
+    // the tree today — verified at the P9-P gate and re-checked here; the
+    // two files that once carried an unwired-mount premise
+    // (`Composer.tsx`, `voice-model.ts`) both now carry a
+    // `CORRECTED at the P9-P merge gate` marker ahead of their corrected
+    // text, which exempts them from the scan and also means neither file's
+    // wording may be lifted for the phrases below (a phrase copied from an
+    // exempt quotation could never fire — the inert-entry shape this
+    // repository has hit at four prior scope boundaries). Every phrase
+    // below is therefore worded fresh, in this entry's own voice, and was
+    // proven able to fire by appending a sentence in that exact wording to
+    // a real tracked in-scope file (`docs/agent-configuration-surface.md`),
+    // confirming `run-guard-capability-prose.mjs` exited 1 naming this
+    // capability, then restoring the file from a scratchpad copy — never
+    // `git checkout --` — and confirming exit 0 with `git status
+    // --porcelain` empty.
+    name: "the Android session mount resolves a real transcribe client for the composer, not just the wire method existing (resolveTranscribeClient)",
+    methodNames: ["resolveTranscribeClient"],
+    denyingPhrases: [
+      /\bthe (?:android )?session (?:route|mount) (?:never|does not) (?:pass(?:es)?|resolve|supply|wire)s? a (?:real |live )?transcribe client to (?:the composer|Composer)/i,
+      /\bno production mount (?:resolves|supplies|passes) a (?:real |live )?transcription client[^.]{0,40}?(?:on android|to the composer)/i,
+      /\bresolveTranscribeClient[^.]{0,60}?(?:does not exist|has never been (?:added|shipped)|is not (?:defined|declared|called))/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

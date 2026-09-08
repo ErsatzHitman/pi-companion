@@ -4870,3 +4870,73 @@ test("T281: on the real committed tree, all three web-trio members resolve as sh
     );
   }
 });
+
+test("T289: a live no-mount-wiring-for-transcribe claim is flagged once resolveTranscribeClient is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/src/app-shell/session-route-daemon-clients.ts",
+      content:
+        "export function resolveTranscribeClient(connection) { return connection.getActiveLifecycle(); }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "The android session route never passes a real transcribe client to the composer today.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "the Android session mount resolves a real transcribe client for the composer, not just the wire method existing (resolveTranscribeClient)",
+  );
+});
+
+test("T289: on the real committed tree, resolveTranscribeClient resolves as shipped from session-route-daemon-clients.ts alone", () => {
+  const real = readCommittedFile("apps/android/src/app-shell/session-route-daemon-clients.ts");
+  const shipped = findShippedCapabilities([
+    { path: "apps/android/src/app-shell/session-route-daemon-clients.ts", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name ===
+        "the Android session mount resolves a real transcribe client for the composer, not just the wire method existing (resolveTranscribeClient)",
+    ),
+    "resolveTranscribeClient capability is no longer declared in session-route-daemon-clients.ts:" +
+      " either it was renamed, or the file moved out of isShippedSourcePath scope",
+  );
+});
+
+test("T289: Composer.tsx and voice-model.ts (each carrying a CORRECTED at the P9-P merge gate marker, which is exactly why this entry's phrases are worded away from their text rather than lifted from it) do not trip the new entry on their real committed content", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/src/app-shell/session-route-daemon-clients.ts",
+      content: readCommittedFile("apps/android/src/app-shell/session-route-daemon-clients.ts"),
+    },
+  ];
+
+  for (const path of [
+    "apps/android/src/features/composer/Composer.tsx",
+    "apps/android/src/features/voice/voice-model.ts",
+  ]) {
+    const content = readCommittedFile(path);
+    assert.match(content, /CORRECTED at the P9-P merge gate/);
+
+    const violations = findCapabilityDenialViolations({
+      shippedFiles,
+      appFiles: [{ path, content }],
+    });
+    assert.equal(
+      violations.filter((v) => v.path === path).length,
+      0,
+      `${path}'s real committed content must not trip the resolveTranscribeClient entry`,
+    );
+  }
+});
