@@ -240,6 +240,13 @@ const config: ExpoConfig = {
         data: acceptedFileMimeTypes.map((mimeType) => ({ mimeType })),
       },
     ] satisfies ShareIntentFilter[],
+    // T294: strips the two legacy storage permissions the manifest merger
+    // otherwise admits from `expo-image-picker`'s bundled manifest — see the
+    // decision record below `plugins` for the measurement and reasoning.
+    blockedPermissions: [
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.READ_EXTERNAL_STORAGE",
+    ],
   },
   // T290: no `expo-image-picker`/`expo-document-picker` plugin entry —
   // a deliberate decision, not an oversight, measured directly against
@@ -289,6 +296,54 @@ const config: ExpoConfig = {
   // (e.g. custom iOS permission copy, were this app ever to grow an iOS
   // target), add it with `{ microphonePermission: false }` explicitly,
   // never with default options.
+  //
+  // T294 — the two storage permissions above are DECIDED: BLOCKED, via
+  // `android.blockedPermissions` above. `app.config.test.ts` proves the
+  // mechanism against the real, on-disk `expo-image-picker` manifest and
+  // against this file's own exported config; the reasoning:
+  //
+  // - This app's `minSdkVersion` is 24, measured (not assumed) from
+  //   `expo-modules-autolinking@3.0.27`'s own Gradle default
+  //   (`defineDefaultProperties`'s `minSdk` fallback of `"24"` in
+  //   `ExpoRootProjectPlugin.kt`, the version this app's installed
+  //   `expo@54.0.37` bundles) — nothing in this file, `eas.json`, or any
+  //   installed plugin overrides it.
+  // - `WRITE_EXTERNAL_STORAGE`/`READ_EXTERNAL_STORAGE` are needed by
+  //   exactly one code path in the whole of `expo-image-picker`'s Android
+  //   source: `ImagePickerModule.kt`'s `getMediaLibraryPermissions`,
+  //   reached only through `launchImageLibraryAsync` (the media-library
+  //   picker), and only below API 33 — it branches to `emptyArray()` at
+  //   `Build.VERSION_CODES.TIRAMISU` and above. That branch is UNREACHED
+  //   in this app today: `./src/app-shell/core.ts`'s `filePicker`
+  //   field constructs `createUnavailableFilePicker()`, not
+  //   `./src/platform/file-picker.ts`'s `createAndroidFilePicker` —
+  //   the one function in this app that would ever call
+  //   `launchImageLibraryAsync` — so nothing wired into production can
+  //   reach the code path these two permissions exist for, on any SDK
+  //   version this app ships.
+  // - Both code paths actually wired into production need neither
+  //   permission on any SDK: `./src/features/composer/
+  //   expo-camera-capture-port.ts`'s `launchCameraAsync` only requires
+  //   `CAMERA` (`ImagePickerModule.kt`'s `ensureCameraPermissionsAreGranted`
+  //   checks `Manifest.permission.CAMERA` alone), and
+  //   `expo-document-picker`'s Storage Access Framework picker
+  //   (`./src/features/composer/expo-attachment-source-port.ts`)
+  //   needs no permission on any SDK — its own bundled
+  //   `AndroidManifest.xml` declares zero `<uses-permission>` entries and
+  //   `DocumentPickerModule.kt` contains no `Manifest.permission`
+  //   reference at all. This directly rules out the specific worry this
+  //   task was filed with (that the document picker's copy-to-cache path
+  //   might need read access on an older device): measured against this
+  //   package's own source, it does not, on any SDK this app supports.
+  //
+  // So, at this app's real `minSdkVersion`, with today's production
+  // wiring, nothing needs these two permissions — blocking them removes
+  // dead attack/consent surface with no device-compatibility cost. If a
+  // future task wires `createAndroidFilePicker`'s media-library branch
+  // into production while this app still supports API < 33, it must
+  // revisit this decision (`./src/platform/file-picker.ts` is where
+  // that branch lives) — filed here by name since that task does not
+  // exist yet and owns none of this file.
   plugins: ["expo-router", "./plugins/with-share-intent-module"],
   experiments: {
     typedRoutes: true,

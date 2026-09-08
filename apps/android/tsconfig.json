@@ -15,6 +15,7 @@
     "src/**/*",
     "e2e/**/*",
     "app.config.ts",
+    "app.config.test.ts",
     "metro.config.js",
     "babel.config.js",
     "expo-env.d.ts",
