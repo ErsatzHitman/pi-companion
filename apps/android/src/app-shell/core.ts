@@ -1386,9 +1386,17 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     // `@picompanion/client`" pattern `AgentStreamCapableClient` above
     // already uses — `@picompanion/client` is not a declared dependency
     // of `apps/android` (confirmed: absent from `package.json`), so a
-    // value import here would trip `run-guard-declared-workspace-deps`
-    // exactly as an undeclared `@picompanion/highlight` import already
-    // does; this cast needs no such import.
+    // value import here would trip `run-guard-declared-workspace-deps`;
+    // this cast needs no such import.
+    //
+    // (CORRECTED at the P9-G merge gate. This said such an import would
+    // trip that guard “exactly as an undeclared `@picompanion/highlight`
+    // import already does”. That stopped being true when T194 added the
+    // `dependencies` line: `apps/android/package.json` declares
+    // `"@picompanion/highlight"` today and the runner exits 0 for
+    // `apps/android`. The claim about `@picompanion/client` — that it is
+    // NOT declared here, so a value import would be caught — is unchanged
+    // and was re-verified at the same gate.)
     createTerminalTransport: (terminalId, slot) =>
       createDaemonTerminalBinaryTransport({
         terminalId,

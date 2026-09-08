@@ -425,7 +425,7 @@ export const AUDIT_BASELINE = [
 ];
 
 function baselineKey(entry) {
-  return `${entry.package} ${entry.severity} ${entry.range}`;
+  return `${entry.package}\0${entry.severity}\0${entry.range}`;
 }
 
 /**

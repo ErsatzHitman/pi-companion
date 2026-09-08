@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   extractWorkspaceImports,
   findUndeclaredWorkspaceDeps,
@@ -7,6 +10,17 @@ import {
   resolvePackageName,
   withSelfDeclared,
 } from "./guard-declared-workspace-deps.mjs";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+// Reads committed content rather than the working tree, per CLAUDE.md's T93:
+// a gate result must be about content a commit contains.
+function readCommittedFile(relativePath) {
+  return execFileSync("git", ["show", `HEAD:${relativePath}`], {
+    encoding: "utf8",
+    cwd: repoRoot,
+  });
+}
 
 // --- resolvePackageName --------------------------------------------------
 
@@ -290,4 +304,48 @@ test("withSelfDeclared never masks a genuinely different missing dependency", ()
   assert.deepEqual(findUndeclaredWorkspaceDeps(files, manifest), [
     { path: "packages/protocol/src/some-subpath.test.ts", packageName: "@picompanion/relay" },
   ]);
+});
+
+// P9-G merge gate: `extractWorkspaceImports` used to match its five import
+// patterns against RAW source, so prose naming a package inside a comment
+// read as a real value import. That is why `packages/highlight` was flagged
+// by T251's widening despite containing zero self-imports. These pin the fix
+// at both ends: a comment must contribute nothing, and real code must still
+// be found in the same file that carries such a comment.
+test("P9-G gate: a comment mentioning a workspace package is not an import", () => {
+  const commentOnly =
+    "/*" +
+    "\n" +
+    ' * A dynamic `import("@picompanion/protocol")` named in prose only,' +
+    "\n" +
+    ' * plus a require("@picompanion/client") mention.' +
+    "\n" +
+    " */" +
+    "\n";
+
+  assert.deepEqual(extractWorkspaceImports(commentOnly), []);
+});
+
+test("P9-G gate: a real import in a file that also comments about another package is still found", () => {
+  const mixed =
+    '// See the lazily-loaded `import("@picompanion/highlight")` note.' +
+    "\n" +
+    'import { X } from "@picompanion/protocol";' +
+    "\n";
+
+  assert.deepEqual(extractWorkspaceImports(mixed), [
+    { packageName: "@picompanion/protocol", typeOnly: false },
+  ]);
+});
+
+test("P9-G gate: packages/highlight's real committed source declares no workspace import", () => {
+  const real = readCommittedFile("packages/highlight/src/lezer-highlighter.ts");
+
+  assert.deepEqual(
+    extractWorkspaceImports(real),
+    [],
+    "packages/highlight/src/lezer-highlighter.ts mentions @picompanion/highlight" +
+      " three times, all inside one JSDoc block. If this fails, either the file" +
+      " gained a real workspace import or comment stripping regressed.",
+  );
 });

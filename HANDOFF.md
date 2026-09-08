@@ -148,12 +148,12 @@ node scripts/ci/run-guard-no-wave-self-revert.mjs '<wave-base>..HEAD'
 
 ### Known-red, known-noisy — do not misreport these as new
 
-| Command                                             | Expected state                                                                                                                                                                                                                          |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `run-guard-declared-workspace-deps`                 | **RED.** `@picompanion/highlight` undeclared in `apps/android` (`file-syntax-highlight.ts`, added in `5b0b5c8`/T35A2). Owned by **T87**. Needs the owner's install grant. This is the only structurally blocked item in the repository. |
-| `run-guard-no-wave-self-revert` with no argument    | **RED by design** — 43 legacy findings over full history. The **range-scoped** form is the real check.                                                                                                                                  |
-| `npm run lint`                                      | 7 pre-existing warnings, 0 errors.                                                                                                                                                                                                      |
-| `npm run test:unit --workspace=@picompanion/server` | 2 Windows parallelism flakes (`checkout-git.test.ts` EBUSY, `relationship-controller.test.ts` timeout) that pass under `--maxWorkers=1`. Filed as **T101**.                                                                             |
+| Command                                             | Expected state                                                                                                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run-guard-declared-workspace-deps`                 | **GREEN** since T194 declared `@picompanion/highlight` in `apps/android/package.json`. Widened by T251 to every `packages/*/src`; still green. (CORRECTED at the P9-G merge gate: this said **RED**, undeclared, "the only structurally blocked item in the repository".) |
+| `run-guard-no-wave-self-revert` with no argument    | **RED by design** — 43 legacy findings over full history. The **range-scoped** form is the real check.                                                                                                                                                                    |
+| `npm run lint`                                      | 7 pre-existing warnings, 0 errors.                                                                                                                                                                                                                                        |
+| `npm run test:unit --workspace=@picompanion/server` | 2 Windows parallelism flakes (`checkout-git.test.ts` EBUSY, `relationship-controller.test.ts` timeout) that pass under `--maxWorkers=1`. Filed as **T101**.                                                                                                               |
 
 ### The RN-in-vitest limitation — proven 23 times
 
@@ -514,7 +514,10 @@ Be honest about this in every report; do not let it quietly become "done".
 
 **Blocked on the owner's `npm install` grant (T87, T88):**
 
-- `run-guard-declared-workspace-deps` is red and stays red.
+- `run-guard-declared-workspace-deps` is GREEN. (CORRECTED at the P9-G merge
+  gate: this said it "is red and stays red". T194 added the missing
+  `dependencies` line; the runner has passed since, and T251's widening to
+  every `packages/*/src` kept it passing.)
 - `expo-sqlite` is not installed, so **no real SQLite file has ever been opened.** Both the
   offline cache (T68) and the turn outbox (T76) are correctly wired and **permanently
   degraded in production** — T76's resend trigger is a guaranteed no-op on a real device.

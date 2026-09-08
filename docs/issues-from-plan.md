@@ -517,6 +517,9 @@ that recomputation has to be domain-specific:
 | T256   | Re-scope source-comment-stripper's four-guards safety claim to its callers      | phase-9   | tooling          | P9-W37 | T252                                                                  |
 | T257   | Make guard-dockerignore-depth mean the same thing locally and in CI             | phase-9   | tooling          | P9-W38 | none                                                                  |
 | T258   | Decide test:integration's three e2e files under a Pi-only registry              | phase-9   | server           | P9-W39 | T250                                                                  |
+| T259   | Widen T251's capability entry to the apps-only framing it misses                | phase-9   | tooling          | P9-W40 | T251                                                                  |
+| T260   | Repoint the two scripts/ci legacy-schema citations at plan.md 5.3               | phase-9   | tooling          | P9-W41 | T253                                                                  |
+| T261   | Record T253's provenance/authority classification durably                       | phase-9   | docs             | P9-W42 | T253                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -864,6 +867,12 @@ the task details always agree.
 |        | state, so its local verdict disagrees with CI's).                        |       |
 | P9-W39 | T258 (filed by the P9-F gate; T250 measured the cause and                | 1     |
 |        | correctly refused the product-scope call it implies).                    |       |
+| P9-W40 | T259 (filed by the P9-G gate; the entry fires only on the                | 1     |
+|        | one sentence it was written against).                                    |       |
+| P9-W41 | T260 (filed by the P9-G gate; two scripts/ci files T253's                | 1     |
+|        | own grep scope could not reach).                                         |       |
+| P9-W42 | T261 (filed by the P9-G gate; T253's own third criterion,                | 1     |
+|        | whose answer lives only in a session report).                            |       |
 
 ---
 
@@ -9219,6 +9228,110 @@ Owns: the three `*.e2e.test.ts` files `test:integration` runs,
 - [ ] Under option 2, the coverage given up is enumerated before it is given up
 - [ ] Under option 1, `plan.md` is amended first, in the same commit or before it
 - [ ] The three files pass locally, run one at a time in the foreground, with the command and exit code recorded
+
+#### T259 — Widen T251's capability entry to the apps-only framing it misses
+
+`labels: phase-9, area: tooling` · `wave: P9-W40` · `depends-on: T251`
+
+T251 registered `discoverPackageTargets` in `CAPABILITIES` and the entry **does** fire — the
+P9-G gate watched it, twice, against the real pre-T251 sentence. But its phrases are calibrated
+to the one sentence it was written against rather than to the capability it names.
+
+Six phrasings run through the real `findCapabilityDenialViolations` at that gate:
+
+| Denial phrasing                                                     | Result     |
+| ------------------------------------------------------------------- | ---------- |
+| the exact sentence T251 fixed                                       | CAUGHT     |
+| `packages/server` swapped for `relay`                               | CAUGHT     |
+| "walks only apps/android and apps/web, so packages are not checked" | **MISSED** |
+| "does not scan `packages/*/src` … never caught"                     | **MISSED** |
+| "The relay package is not covered by the guard today"               | **MISSED** |
+| "that guard does not scan packages today"                           | **MISSED** |
+
+**The apps-only framing is the most likely future denial**, because it is how the guard's own
+scope was described for its whole life before T251 — every reader who learned this guard before
+this wave carries that sentence. An entry that catches only the phrasing already fixed has
+almost no forward value, which is this repository's recurring "check that cannot fail" shape one
+notch weaker: it can fail, but not on the sentence someone will actually write.
+
+Widen the phrases to cover the apps-only framing and the bare "does not scan packages" shape.
+Each new phrase must be proven to fire (restore a denial into a real tracked in-scope file from
+a scratchpad copy, watch exit 1 naming the capability, restore, watch exit 0 — never
+`git checkout --`) and proven not to collide with either guard's own historical narration,
+compared **de-wrapped**, since today's line wrapping is not protection.
+
+Owns: `scripts/ci/guard-capability-prose.mjs` and its test.
+
+- [ ] All four missed phrasings above are caught
+- [ ] Each new phrase is watched firing before it is trusted
+- [ ] The de-wrapped collision check is run against both guards' own narration
+- [ ] `run-guard-capability-prose.mjs` exits 0 on the real tree, tree clean
+
+#### T260 — Repoint the two scripts/ci legacy-schema citations at plan.md §5.3
+
+`labels: phase-9, area: tooling` · `wave: P9-W41` · `depends-on: T253`
+
+T253 gave the RESET/RE-PAIR decision a citable home in `plan.md` §5.3, then repointed the
+`apps/*/src` and `packages/*/src` citations at it. Two `scripts/ci` files still co-cite the
+reference-only `docs/frontend-data-migration.md` §2/§3 for that same decision:
+
+- `scripts/ci/guard-no-legacy-schema-reader.mjs:39-44`
+- `scripts/ci/run-guard-no-legacy-schema-reader.mjs:74-76` — inside a **developer-facing failure
+  message**, so this is the copy a person actually reads when the guard fires.
+
+**Neither is a live violation of T242's corollary today**, and this task must not claim
+otherwise: both pair the reference doc with a legitimate home (the test, and `plan.md` §5.3 at
+line 81), so neither cites a frozen document as its sole authority. This is also **not a T253
+defect** — that task's `Owns:` line is the 19 files its own grep lists, and that grep is scoped
+to `apps/*/src` and `packages/*/src`, which `scripts/ci` is not.
+
+What is true is that the fact now has a `plan.md` home and these two do not point at it, so a
+reader who follows the citation lands in a frozen snapshot rather than in the document that
+governs. Repoint them, keeping any genuinely provenance-shaped mention of the audit as
+provenance — the same sort T253 performed, applied to the two files its scope excluded.
+
+Owns: `scripts/ci/guard-no-legacy-schema-reader.mjs`,
+`scripts/ci/run-guard-no-legacy-schema-reader.mjs`, and their test.
+
+- [ ] Both citations point at `plan.md` §5.3 for the decision, and §5.3 still states it
+- [ ] The failure message a developer reads names the governing document, not the frozen one
+- [ ] Any genuinely provenance-shaped mention is kept and labelled as provenance
+- [ ] No reference-only document is edited
+
+#### T261 — Record T253's provenance/authority classification durably
+
+`labels: phase-9, area: docs` · `wave: P9-W42` · `depends-on: T253`
+
+T253 sorted 19 shipped-source citations of reference-only documents into PROVENANCE (kept, 14)
+and AUTHORITY (repointed at `plan.md`, 3 — plus the 2 the P9-D gate had already done). The P9-G
+gate re-derived the sort and agrees with it: the ledger grep returns 17 files at `b1a6ec0` and
+14 at `2224aa2`, and the three that left are exactly the three repointed.
+
+**The classification itself exists only in a session report.** Nothing in the repository records
+why a fixture scenario may keep its citation while `rpc-types.ts` could not, so T253's own third
+acceptance criterion — "Every remaining citation is classified as provenance (kept) or authority
+(repointed), with the classification recorded" — is unmet on `main`, and the checkbox is
+unticked.
+
+That matters more than a bookkeeping gap, because the distinction is the whole content of
+T242's corollary and it is not self-evident: the next person to run that grep sees 14 live
+citations of frozen documents and no written reason any of them is allowed. The likely outcomes
+are a sweep that repoints all 14 (destroying real provenance) or a second gate re-deriving the
+same sort from scratch.
+
+Write the rule down where the grep's next reader will find it — a short section in `plan.md`
+§5, or beside the corollary in `CLAUDE.md`'s reference-only section — stating the test T253
+actually applied: a comment recording **where a fixture or a shape came from** is provenance and
+may cite the audit; a comment justifying **what the code does today** is authority and must cite
+`plan.md`. Name the two worked examples on each side rather than only the rule.
+
+Owns: whichever of `plan.md` §5 or `CLAUDE.md`'s reference-only section gains the rule, and
+`docs/issues-from-plan.md`'s T253 checkbox.
+
+- [ ] The provenance/authority test is written down where a reader of the grep will find it
+- [ ] At least one worked example on each side is named
+- [ ] T253's third checkbox is ticked, and the 14 kept citations are enumerated somewhere durable
+- [ ] No reference-only document is edited
 
 #### T32A1 — Build the Android connect form
 

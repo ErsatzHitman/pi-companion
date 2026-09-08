@@ -133,9 +133,9 @@ import at the Cloudflare Workers boundary. Measured at
   (`packages/relay` included), each checked against its OWN
   `package.json` `dependencies`, never the root's — measured directly: an
   undeclared `packages/relay` -> `@picompanion/protocol` import added to a
-  scratch copy of `cloudflare-adapter.ts` made `run-guard-declared-
-workspace-deps.mjs` exit 1 naming `packages/relay` and the missing
-  package, and restoring the file returned it to exit 0. This still does
+  scratch copy of `cloudflare-adapter.ts` made
+  `run-guard-declared-workspace-deps.mjs` exit 1 naming `packages/relay` and
+  the missing package, and restoring the file returned it to exit 0. This still does
   not make it safe to ship the import deliberately without declaring it —
   the dependency-declaration/lockfile mechanics below remain the real
   blocker, `packages/relay` still being deployed completely outside the
