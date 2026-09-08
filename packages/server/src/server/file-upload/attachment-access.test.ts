@@ -166,6 +166,36 @@ describe("resolveAttachmentForDownload", () => {
     expect(result.status).toBe("not_found");
   });
 
+  test("refuses a $PASEO_HOME-shaped path outside uploads/, even when recorded on the caller's own timeline", async () => {
+    // T288: pins T283's fourth non-negotiable — "nothing under $PASEO_HOME
+    // outside uploads/ is reachable" — which held by construction (this
+    // module never touches $PASEO_HOME) but no test asserted it. The
+    // fixture root is built and removed entirely under a temp directory
+    // this test owns; it never reads or writes the real $PASEO_HOME, which
+    // is the owner's live daemon state.
+    const paseoHomeFixture = await mkdtemp(join(tmpdir(), "paseo-home-fixture-"));
+    tempDirs.push(paseoHomeFixture);
+    const agentsDir = join(paseoHomeFixture, "agents");
+    await mkdir(agentsDir, { recursive: true });
+    // Deliberately a sibling of `uploads/`, not inside it — this is the
+    // "outside uploads/" half of the criterion.
+    const agentRecordFile = join(agentsDir, "agent-a.json");
+    await writeFile(agentRecordFile, "{}");
+
+    // Membership is satisfied on purpose — recorded, byte-for-byte, on the
+    // requesting agent's own timeline — so containment is the only thing
+    // left standing between this request and the daemon's own state
+    // directory.
+    const ref: AgentTimelineImageRef = { mimeType: "application/json", path: agentRecordFile };
+
+    const result = await resolveAttachmentForDownload(
+      { agentId: "agent-a", path: agentRecordFile },
+      lookupFor({ "agent-a": [ref] }),
+    );
+
+    expect(result.status).toBe("not_found");
+  });
+
   test("refuses a path two levels deep inside the attachment temp root", async () => {
     // The allowed shape is exactly `<tmproot>/paseo-attachments-*/<file>` —
     // one directory, one file. A path claiming to be nested further must

@@ -42,9 +42,10 @@ import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
  * it has the smaller blast radius: a bug in a root-containment check widens
  * exposure to every image the daemon has ever materialized (guessable
  * cross-session by filename alone), while a bug in the membership check
- * here is still caught by the containment check kept below as a second,
- * independent layer — the two layers fail closed independently rather than
- * one being the only thing standing between a bug and an arbitrary read.
+ * here is still caught by the containment check kept below as a second
+ * layer — but, per the corrected note in "Chosen: (1)" below, that second
+ * layer is defense-in-depth, not an equal partner capable of failing closed
+ * on its own.
  *
  * **Chosen: (1).** `resolveAttachmentForDownload` never resolves an
  * attacker-shaped path — it looks up `request.agentId`'s own recorded
@@ -52,8 +53,31 @@ import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
  * `AttachmentTimelineLookup`, backed in production by
  * `AgentManager.getTimeline`) and refuses unless `request.path` is an
  * *exact* match for one already recorded there. Only once that membership
- * check passes does it also apply defense-in-depth root containment
- * (below), so a future bug in either layer alone still fails closed.
+ * check passes does it also apply root containment (below), kept as
+ * defense-in-depth.
+ *
+ * **The two layers are not equal partners; membership is load-bearing.**
+ * CORRECTED (T288, filed by the P9-P merge gate): this section used to claim
+ * the two layers "fail closed independently" and that "a bug in either layer
+ * alone still fails closed". That is false, proven by execution rather than
+ * reasoned: `resolveWithinAttachmentTempRoot` admits *any* first-level
+ * `os.tmpdir()` child whose name starts with `ATTACHMENT_TEMP_DIR_PREFIX`,
+ * and the OS temp root is world-writable, so anything with local execution
+ * can create `tmpdir()/paseo-attachments-EVIL/x.png` itself and have it pass
+ * containment outright — containment is not, on its own, a closed door. It
+ * is not exploitable today only because membership is what actually holds
+ * this shut: `materializeProviderImage`
+ * (`../agent/providers/provider-image-output.ts`) is the sole producer of
+ * `AgentTimelineImageRef` in this tree (verified by search), so nothing
+ * today ever records an attacker-influenced path onto a real agent's
+ * timeline for membership to match against. If that ever stops being true,
+ * containment would not save this module by itself. State it precisely:
+ * membership is load-bearing; containment is defense-in-depth, not an equal
+ * partner. (Tightening containment to a set of directories the daemon
+ * itself created and remembers was considered and rejected: that means
+ * retaining state across process restarts, which this design deliberately
+ * avoids, for a check that is already backstopped by the load-bearing
+ * membership layer above it.)
  *
  * **What is out of scope, and why.** `uploaded_file` attachments
  * (`UploadedFileAttachmentSchema`, `packages/protocol/src/messages.ts`) are
