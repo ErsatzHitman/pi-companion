@@ -35,9 +35,39 @@ describe("buildAttachmentDownloadUrl", () => {
     );
   });
 
+  // The case the `new URL()` implementation this replaced could not serve.
+  // React Native's `Libraries/Blob/URL.js` polyfill validates a base URL with
+  // a regex that rejects a bracketed IPv6 authority, and
+  // `buildDaemonHttpOrigin` produces exactly that shape when `isIpv6` is set.
+  // Node's own `URL` accepts brackets, so this test would have passed against
+  // the broken implementation here while failing on every real device — which
+  // is why the fix is concatenation, not a different `URL` call.
+  it("builds a bracketed IPv6 origin, which React Native's URL polyfill rejects", () => {
+    expect(buildAttachmentDownloadUrl("http://[::1]:6767", "tok_abc123")).toBe(
+      "http://[::1]:6767/api/files/download?token=tok_abc123",
+    );
+    expect(buildAttachmentDownloadUrl("https://[fe80::1]:6767", "tok_abc123")).toBe(
+      "https://[fe80::1]:6767/api/files/download?token=tok_abc123",
+    );
+  });
+
+  it("drops exactly one trailing slash from the origin", () => {
+    expect(buildAttachmentDownloadUrl("http://127.0.0.1:6768/", "tok_abc123")).toBe(
+      "http://127.0.0.1:6768/api/files/download?token=tok_abc123",
+    );
+  });
+
+  // CORRECTED at the P9-Q merge gate, along with the implementation: the
+  // expectation was `tok+a%2Bb`, which is what `URLSearchParams` produces — it
+  // encodes a space as `+` (form-urlencoded), while `encodeURIComponent` uses
+  // `%20`. Both decode back to the same string: the route reads
+  // `req.query.token` through Express's default query parser, which treats `+`
+  // and `%20` alike. `+` itself is `%2B` under either. So this is an encoding
+  // change with no wire-behaviour change, and `%20` is the more conservative of
+  // the two.
   it("percent-encodes a token with reserved characters", () => {
     expect(buildAttachmentDownloadUrl("http://127.0.0.1:6768", "tok a+b")).toBe(
-      "http://127.0.0.1:6768/api/files/download?token=tok+a%2Bb",
+      "http://127.0.0.1:6768/api/files/download?token=tok%20a%2Bb",
     );
   });
 });

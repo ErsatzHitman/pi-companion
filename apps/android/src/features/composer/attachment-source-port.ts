@@ -102,6 +102,19 @@
  * Native's `fetch` reads a local `file://` URI reliably (the
  * `content://` case that motivated `expo-file-system` in the first
  * place never arises here), so no new dependency is needed.
+ *
+ * CORRECTED at the P9-Q merge gate: the paragraph above opens by calling
+ * `readUriAsBytes` "shared by both real ports" and then grounds the
+ * no-`expo-file-system` conclusion entirely in `expo-document-picker` —
+ * `copyToCacheDirectory` is not an option `launchCameraAsync` even has, so
+ * one of the two ports was never measured. The conclusion does hold for the
+ * camera port, by a different mechanism the paragraph never names:
+ * `expo-image-picker`'s `MediaHandler.kt`'s `handleImage` returns
+ * `Uri.fromFile(outputFile)`, so a captured photo is also a plain `file://`
+ * URI. `attachment-model.ts` already carries the correct two-source version
+ * of this claim ("`expo-document-picker`'s `copyToCacheDirectory: true`,
+ * `expo-image-picker`'s `launchCameraAsync` — both measured directly against
+ * their Android source"); prefer that wording if this is ever restated.
  */
 import type { PermissionPort } from "./permission-recovery.js";
 

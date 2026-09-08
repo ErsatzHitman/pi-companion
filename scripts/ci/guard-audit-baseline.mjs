@@ -167,22 +167,45 @@ export const AUDIT_BASELINE = [
   {
     package: "@ai-sdk/gateway",
     severity: "low",
-    range: "<=2.0.147",
+    // Range re-synced at the P9-Q merge gate, the third of three in the same
+    // AI-SDK family whose advisory ranges were re-expressed together upstream
+    // (see `@ai-sdk/provider-utils` and `ai` below). Narrowed, `<=2.0.147` to
+    // `<=2.0.105`; installed version is 2.0.1, inside both, exposure unchanged.
+    range: "<=2.0.105",
     owner: SERVER_BACKEND_OWNER,
     reason: NO_INSTALL_REASON,
   },
   {
     package: "@ai-sdk/provider-utils",
     severity: "low",
-    range: "<=3.0.97",
+    // Range re-synced at the P9-Q merge gate alongside `ai` below. Upstream
+    // NARROWED this one, `<=3.0.97` becoming `<3.0.28` — strictly fewer
+    // versions considered vulnerable than the baseline claimed. Installed
+    // version is 3.0.12, inside both, so exposure is unchanged and this is
+    // bookkeeping. The guard flags a narrowing because it compares the recorded
+    // range against the advisory's current one, and a baseline that is a
+    // superset is as stale as one that is a subset.
+    range: "<3.0.28",
     owner: SERVER_BACKEND_OWNER,
     reason: NO_INSTALL_REASON,
   },
   {
     package: "ai",
     severity: "low",
+    // Range re-synced at the P9-Q merge gate, the second such re-sync after
+    // `expo-linking`'s at P9-P. Upstream did not add a new vulnerable version:
+    // it SPLIT one arm, `3.0.22 - 6.0.0` becoming
+    // `3.0.22 - 5.0.206 || 5.1.0-beta.0 - 6.0.0`, which is a more precise
+    // statement of the same advisory. Measured rather than assumed: the
+    // installed version is 5.0.78, inside `3.0.22 - 5.0.206` both before and
+    // after, so exposure is identical and this is bookkeeping. Nothing in wave
+    // P9-Q touched `package-lock.json` or this guard (`git log <base>..HEAD --`
+    // those two paths returns nothing), so the change came from the registry.
+    // If a future re-sync ever WIDENS coverage to a version this repository did
+    // not previously resolve as vulnerable, that is a new acceptance and needs
+    // the owner, not a range edit.
     range:
-      "<=0.0.0-fd764a60-20260114143805 || 3.0.22 - 6.0.0 || 7.0.0-beta.0 - 7.0.0-beta.1-gr2m-test",
+      "<=0.0.0-fd764a60-20260114143805 || 3.0.22 - 5.0.206 || 5.1.0-beta.0 - 6.0.0 || 7.0.0-beta.0 - 7.0.0-beta.1-gr2m-test",
     owner: SERVER_BACKEND_OWNER,
     reason: NO_INSTALL_REASON,
   },

@@ -4781,9 +4781,16 @@ export class DaemonClient {
    * `agentId`'s own timeline by the daemon
    * (`packages/server/src/server/file-upload/attachment-access.ts`). The
    * token is consumed the same way `requestDownloadToken`'s is, via a GET to
-   * `/api/files/download?token=...`. Not yet called by either app — T284
-   * wires the route-level `ResolveImageSrc`/`ResolveImageUri` seam that will
-   * call this.
+   * `/api/files/download?token=...`. CORRECTED at the P9-Q merge gate: this
+   * said "Not yet called by either app — T284 wires the route-level
+   * `ResolveImageSrc`/`ResolveImageUri` seam that will call this." T284
+   * landed; both apps call it now, through
+   * `apps/web/src/features/transcript/attachment-image-resolver.ts` and
+   * `apps/android/src/features/transcript/attachment-image-resolver-model.ts`.
+   * The stale sentence survived because `guard-capability-prose`'s denial scan
+   * does not reach a package's own `src` tree — that is
+   * `isShippedSourcePath`'s scope, not `isAppSourcePath`'s — so nothing could
+   * have caught it.
    */
   async requestAttachmentDownloadToken(
     agentId: string,

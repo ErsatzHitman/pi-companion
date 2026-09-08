@@ -58,11 +58,42 @@ export interface AttachmentDownloadTokenClient {
  * this app's own `features/files/file-browser-client.ts` either, per
  * this directory's own established "self-contained, no reach into a
  * sibling feature directory" convention (`message-attachments.tsx`'s
- * `formatImageSize` doc comment). */
+ * `formatImageSize` doc comment).
+ *
+ * **Built by concatenation, never `new URL()`.** CORRECTED at the P9-Q
+ * merge gate: this shipped as `new URL("/api/files/download", origin)`
+ * plus `searchParams`, copied from web's body. The convention cited
+ * above is real, but it explains why not to IMPORT the sibling — it was
+ * then used to justify copying web's implementation, and it dropped the
+ * sibling's own stated reason for having a different shape:
+ * `file-browser-client.ts`'s `buildFileDownloadUrl` is deliberately
+ * string concatenation "(unlike web's `buildFileDownloadUrl`) so this
+ * stays usable from the same plain Node `vitest` environment as every
+ * other pure function in this file, with no assumption about which JS
+ * engine's globals are present."
+ *
+ * That assumption is false on this platform. React Native ships no
+ * native `URL`; `react-native`'s `Libraries/Blob/URL.js` polyfills it and
+ * validates the base against a hand-rolled regex that **rejects a
+ * bracketed IPv6 authority**. Executed against that exact regex, taken
+ * from the installed file:
+ *
+ *     http://192.168.1.5:6767          accepted
+ *     http://localhost:6767            accepted
+ *     https://daemon.example.com:6767  accepted
+ *     http://[::1]:6767                THROWS TypeError: Invalid base URL
+ *     http://[fe80::1]:6767            THROWS TypeError: Invalid base URL
+ *
+ * And this app produces exactly that shape on purpose:
+ * `features/connect/daemon-connection-store.ts`'s `buildDaemonHttpOrigin`
+ * brackets the host when `isIpv6` says to. The throw would land inside
+ * the resolver hook's `.then()` and be swallowed by its `.catch()`, so
+ * every attachment on an IPv6 daemon would render the reference card
+ * forever with no error anywhere. Node's WHATWG `URL` accepts brackets,
+ * so no Node-hosted test could ever have caught it. */
 export function buildAttachmentDownloadUrl(origin: string, token: string): string {
-  const url = new URL("/api/files/download", origin);
-  url.searchParams.set("token", token);
-  return url.toString();
+  const trimmed = origin.endsWith("/") ? origin.slice(0, -1) : origin;
+  return `${trimmed}/api/files/download?token=${encodeURIComponent(token)}`;
 }
 
 /** Every unique-by-`path` image reference across `entries`, in the order

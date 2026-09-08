@@ -1788,8 +1788,23 @@ export const CAPABILITIES = [
     //
     // A FORWARD guard (T162's shape): every site this task found
     // asserting the ports were unavailable/unwired was corrected in the
-    // same commit that adds this entry, each with a `CORRECTED`/`this
-    // used to`/"still" marker ahead of its quoted old text (`Composer.tsx`,
+    // same commit that adds this entry, so no live denying sentence
+    // exists in scope today. CORRECTED at the P9-Q merge gate: this said
+    // the sites each carry "a `CORRECTED`/`this used to`/\"still\" marker
+    // ahead of its quoted old text". Two of those three are not markers
+    // at all - `HISTORICAL_QUOTE_MARKERS` matches only `CORRECTED`,
+    // `this said`, `previously said`, `no longer true` and `used to say`,
+    // so neither "this used to" nor "still" exempts anything (executed
+    // against the real regex, not read off it: `used to remain`,
+    // `used to sketch` and `used to disclose` - the wording those files
+    // actually use - all return false). Nine of the sites below carry a
+    // real marker; the other seven were REWRITTEN rather than quoted, so
+    // they contain no denying text and need no exemption. The conclusion
+    // holds, by a different mechanism than the one stated. This matters
+    // to whoever edits next: anyone trusting the old wording would quote
+    // a false sentence verbatim, write "this used to", and turn the guard
+    // red - or delete a real `CORRECTED` believing "still" replaced it.
+    // The sites (`Composer.tsx`,
     // the session mount, `attachment-source-port.ts`, `core.ts`,
     // `core.test.ts`, `file-upload-model.ts`, `sharing.ts`,
     // `file-picker.ts`, `[...path].tsx`, `attachment-model.ts`,
@@ -1840,12 +1855,16 @@ export const CAPABILITIES = [
     // live denying sentence sat in web's `message-attachments.tsx` AND in
     // `apps/android/src/features/transcript/message-attachments-model.ts`,
     // per that gate's own note in `docs/issues-from-plan.md`'s T284
-    // section). Both sites are corrected in this same commit, each with a
-    // `CORRECTED at T284`/`CORRECTED AGAIN at T284` marker ahead of its
-    // quoted old text, alongside every other site this task's own T124
-    // grep found (`message-row.tsx` on web; `message-row-model.ts`,
+    // section). Both sites are corrected in this same commit, alongside
+    // every other site this task's own T124 grep found
+    // (`message-row.tsx` on web; `message-row-model.ts`,
     // `message-attachments.tsx` on Android) — so no live denying sentence
-    // exists in scope today. Proven able to fire by appending a sentence
+    // exists in scope today. CORRECTED at the P9-Q merge gate: this said
+    // the corrected sites each carry a `CORRECTED at T284`/`CORRECTED
+    // AGAIN at T284` marker. Four of the five do; Android's
+    // `message-attachments.tsx` carries none, because its denying text
+    // was rewritten rather than quoted. Same shape as the sibling entry
+    // above, same correction. Proven able to fire by appending a sentence
     // in this entry's own wording to a real tracked in-scope file,
     // confirming `run-guard-capability-prose.mjs` exited 1 naming this
     // capability, then restoring the file from a scratchpad copy — never

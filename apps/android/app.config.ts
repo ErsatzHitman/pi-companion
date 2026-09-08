@@ -264,6 +264,23 @@ const config: ExpoConfig = {
   // (`<uses-permission android:name="android.permission.CAMERA" />`),
   // which Android's own manifest merger includes automatically for
   // every installed native module regardless of this `plugins` array —
+  //
+  // ...and so, CORRECTED at the P9-Q merge gate, does more than `CAMERA`.
+  // That bundled manifest declares THREE permissions, read directly from
+  // `node_modules/expo-image-picker/android/src/main/AndroidManifest.xml`:
+  // `CAMERA`, `WRITE_EXTERNAL_STORAGE` and `READ_EXTERNAL_STORAGE`, none
+  // with a `maxSdkVersion`. This file declares no `permissions` and no
+  // `blockedPermissions` (grepped: zero hits), so the merger admits all
+  // three. The privacy argument above is therefore incomplete about its
+  // own chosen path: it rejects the plugin for adding one permission
+  // while the dependency alone already merges two legacy storage
+  // permissions in. Whether to `blockedPermissions` the two storage
+  // entries is a real decision with a device-compatibility cost on older
+  // Android, so it is filed rather than taken at a merge gate — not
+  // silently accepted. The `RECORD_AUDIO` conclusion below is unaffected:
+  // that permission is added by the PLUGIN, not by the bundled manifest,
+  // so declining the plugin still avoids it.
+  //
   // that array is for `app.config.ts`-driven modifications to generated
   // native files, not for admitting a dependency's own bundled
   // manifest. Adding the plugin here with default options would add

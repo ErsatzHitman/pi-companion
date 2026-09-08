@@ -550,6 +550,8 @@ that recomputation has to be domain-specific:
 | T291   | Re-pin expo-audio to the version this app's own expo bundles                    | phase-9   | android          | P9-W70 | T276                                                                  |
 | T292   | Slash-command completion in the Android composer                                | phase-9   | android          | P9-W71 | none                                                                  |
 | T293   | Serve the composer's current text to an extension (getEditorText)               | phase-9   | server           | P9-W72 | none                                                                  |
+| T294   | Decide the two legacy storage permissions expo-image-picker merges in           | phase-9   | android          | P9-W73 | T290                                                                  |
+| T295   | Settle whether the capability-prose denial scan reaches package source          | phase-9   | tooling          | P9-W74 | none                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -963,6 +965,10 @@ the task details always agree.
 |        | plain text on Android).                                                  |       |
 | P9-W72 | T293 (owner request; the tier-2 bridge can push editor text but          | 1     |
 |        | not read it, so prompt-arbitrage is inert).                              |       |
+| P9-W73 | T294 (filed by the P9-Q gate; the privacy argument is incomplete         | 1     |
+|        | about its own chosen path).                                              |       |
+| P9-W74 | T295 (filed by the P9-Q gate; a sentence T284 falsified sat where        | 1     |
+|        | no guard could see it).                                                  |       |
 
 ---
 
@@ -10987,6 +10993,93 @@ request/response pair, and the composer read on both clients.
 - [ ] `pasteToEditor` is implemented or refused with a recorded reason
 - [ ] `prompt-arbitrage`'s rewrite is exercised, or its non-exercise is stated plainly
 - [ ] No new unknown-method drop is introduced in the area this task touches
+
+#### T294 — Decide the two legacy storage permissions `expo-image-picker` merges in
+
+`labels: phase-9, area: android` · `wave: P9-W73` · `depends-on: T290`
+
+`apps/android/app.config.ts` declines `expo-image-picker`'s config plugin on privacy grounds — at
+default options it adds `android.permission.RECORD_AUDIO` for a video-capture feature this app never
+uses — and relies on Android's manifest merger for the `CAMERA` permission it does need. That
+reasoning is sound as far as it goes.
+
+**What the P9-Q merge gate measured is that the same mechanism admits more than `CAMERA`.** Read
+directly from `node_modules/expo-image-picker/android/src/main/AndroidManifest.xml`, that bundled
+manifest declares **three** permissions — `CAMERA`, `WRITE_EXTERNAL_STORAGE` and
+`READ_EXTERNAL_STORAGE` — none carrying a `maxSdkVersion`. `apps/android/app.config.ts` declares no
+`permissions` and no `blockedPermissions` (grepped: zero hits), so the merger admits all three into
+the shipped manifest. Installing the dependency alone therefore added two legacy storage permissions
+silently, by the very mechanism the decision record praises.
+
+**This is a decision with a real cost either way, which is why the gate recorded it rather than
+taking it.** `blockedPermissions` would strip them, and on modern Android that is very likely
+correct — scoped storage means `READ_EXTERNAL_STORAGE` is ignored for media on API 33+, and the photo
+picker needs no storage permission at all (the gate confirmed `getMediaLibraryPermissions` returns
+`emptyArray()` on API 33+). But this app's `minSdkVersion` is what settles it: on an older device the
+document picker's copy-to-cache path may genuinely need read access, and blocking it would break
+attaching a file for exactly the users least able to diagnose it.
+
+So: **establish this app's real `minSdkVersion`** (from the Expo SDK's own default for `expo@54`
+unless `app.config.ts` overrides it — measure, do not assume), then decide. Either add
+`blockedPermissions` and pin a test or a documented manifest check proving the shipped manifest no
+longer carries them, or accept them explicitly with the SDK range that requires them stated. **Do
+not leave the decision record claiming a privacy posture the manifest does not have.**
+
+If a real device or an APK inspection is needed to confirm what actually ships, say so — T236 is
+already the open owner-blocked task for EAS archive inspection, and this may need to wait on it
+rather than be guessed.
+
+Owns: `apps/android/app.config.ts` and any guard or test pinning the resulting permission set.
+
+- [ ] This app's real `minSdkVersion` is measured, not assumed
+- [ ] The two storage permissions are either blocked or explicitly accepted with a stated reason
+- [ ] If blocked, something pins that the shipped manifest no longer carries them
+- [ ] The `RECORD_AUDIO` conclusion is left intact — it is the plugin's, not the bundled manifest's
+- [ ] Whether an APK inspection is required is stated rather than worked around
+
+#### T295 — Settle whether the capability-prose denial scan should reach package source
+
+`labels: phase-9, area: tooling` · `wave: P9-W74` · `depends-on: none`
+
+The P9-Q merge gate found `packages/client/src/daemon-client.ts` asserting _"Not yet called by
+either app"_ about `requestAttachmentDownloadToken` — a sentence T284 falsified in the same wave that
+wrote it, and one **no guard could have caught**. `guard-capability-prose`'s denial scan is
+`isAppSourcePath`'s scope, which admits `apps/web/src`, `apps/android/src`, `scripts/ci`,
+`packaging/**`, `docs/**`, `.github/workflows/*.yml`, `apps/android/maestro/*.md|*.yaml` and
+`apps/<name>/app.config.ts` — and deliberately **not** a package's own `src` tree. That is
+`isShippedSourcePath`'s scope, and conflating the two is the error `CLAUDE.md` already documents at
+T147, T216, T217 and T224.
+
+**This task decides the question, once, by measuring — it does not assume the answer is "widen".**
+The honest case against widening is strong and must be argued rather than dismissed: `packages/*/src`
+is where the wire protocol and both clients live, so it is dense with legitimately-conditional prose
+("no shipped `DaemonClient` implements this", "not wired by any caller yet") that is _true_ at the
+time of writing and becomes false silently. That is exactly the population this guard exists for —
+and also exactly the population most likely to produce false positives and get the guard disabled,
+the failure mode `CLAUDE.md`'s T217 section describes.
+
+Measure before choosing:
+
+1. Run the existing `CAPABILITIES` entries' denying phrases against every `packages/*/src` file and
+   count real hits versus false positives, classifying each by hand. A widening that would fire on
+   correct prose today is not a widening.
+2. Count how many past waves' falsified-prose findings sat in package source and were caught only by
+   a human gate. One instance (this one) is weak evidence; a pattern is not.
+3. If widening, check whether `SELF_REFERENTIAL_DENIAL_EXCLUSIONS` or a ledger-style exclusion is
+   needed for any package file that narrates its own history, the way `docs/issues-from-plan.md` is
+   excluded.
+
+**A will-not-widen is an acceptable, possibly correct outcome** — but it must be recorded in
+`CLAUDE.md` beside the existing widenings with the measurement that justifies it, so the next gate
+that finds a stale sentence in package source fixes it by hand instead of re-proposing this.
+
+Owns: `scripts/ci/guard-capability-prose.mjs`, its test, and the `CLAUDE.md` paragraph recording the
+decision.
+
+- [ ] The false-positive rate of widening is measured against real package source, hand-classified
+- [ ] The decision is recorded either way, with its measurement, in `CLAUDE.md`
+- [ ] `isAppSourcePath` and `isShippedSourcePath` are each called on real paths, never inferred
+- [ ] If widened, every entry is re-proven able to fire and the full-tree scan still exits 0
 
 #### T32A1 — Build the Android connect form
 
