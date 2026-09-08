@@ -251,6 +251,26 @@ locked, rmdir` failure mode directly (Windows holds a file handle open slightly 
   timeout — and if a timeout is ever raised instead, that choice must be justified in this
   paragraph, not merely committed.
 
+  **A fifth member was added on 2026-09-08, by that rule:**
+  `src/server/workspace-git-service.observation.integration.test.ts`. It turned
+  `server-tests (windows-latest)` red on CI with `Error: Test timed out in 15000ms` and **zero
+  assertion failures** — the signature this paragraph describes — at a commit that touched no
+  `packages/server` file at all (`git show --name-only` on both commits in that push:
+  `apps/android/package.json`, `package-lock.json`, `docs/issues-from-plan.md`), so it was not a
+  regression. Its source carries the shape in a stronger form than any member above: a real
+  `mkdtempSync(tmpdir())` directory it then `rmSync`s recursively, **plus a real native recursive
+  OS filesystem watcher** (`@parcel/watcher`) whose event-delivery latency is the very thing the
+  test asserts on, plus two hard `setTimeout(750)` sleeps and several `vi.waitFor` budgets of
+  5–8s inside one 15s `testTimeout`. It is the ONLY test in this package that imports that
+  watcher — measured with `grep -rln` across `packages/server/src`, not assumed — so the move is
+  exactly one file wide.
+
+  The decisive measurement was not "it failed once". Run **alone**, with zero contention, that
+  single test takes **10.04s of its 15s budget**. Five seconds of headroom against every other
+  parallel file competing for CPU and for OS event delivery is not a margin, and a passing run
+  would have proven nothing about the next one. The timeout was again deliberately NOT raised,
+  for the reason this paragraph already gives about the other four.
+
 ## Wave-end and merge-gate verification MUST run against committed content (T93)
 
 An orphaned uncommitted fix has twice concealed the true state of `main`: at P5-W22 it
