@@ -316,11 +316,13 @@ jobs:
       # actually imports as a value — npm workspace hoisting resolves the
       # import either way, so this catches drift before it becomes the kind
       # of near-miss recorded in this guard's own header comment, rather than
-      # after a build-ordering or lockfile change stops masking it. Runs here
-      # (not in the unconditional guard-* jobs above) because it needs `npm
-      # ci` to have already produced a lockfile-consistent tree to audit
-      # against, and this job already pays that cost unconditionally.
-      - name: Guard / apps declare every workspace package they import
+      # after a build-ordering or lockfile change stops masking it. T251
+      # widened the same check to every `packages/*` with a `src` directory,
+      # each checked against its OWN manifest, for the identical reason.
+      # Runs here (not in the unconditional guard-* jobs above) because it
+      # needs `npm ci` to have already produced a lockfile-consistent tree to
+      # audit against, and this job already pays that cost unconditionally.
+      - name: Guard / every workspace declares the packages it imports
         run: node scripts/ci/run-guard-declared-workspace-deps.mjs
 
       # Backend packages resolve each other through built `dist/*.d.ts`

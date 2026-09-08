@@ -126,11 +126,21 @@ import at the Cloudflare Workers boundary. Measured at
   points at `packages/protocol` on this tree) — but doing that on purpose
   is the exact undeclared-workspace-dependency shape
   `scripts/ci/guard-declared-workspace-deps.mjs` (T60B) exists to catch for
-  `apps/android` and `apps/web`; that guard does not scan `packages/relay`
-  today, so an undeclared import here would not be caught, which makes it
-  worse, not safer, to ship deliberately in the one package deployed
-  completely outside the rest of this monorepo's own build tooling
-  (`wrangler deploy`, not `npm run build`).
+  `apps/android` and `apps/web`. **CORRECTED (T251):** this paragraph
+  previously said that guard "does not scan `packages/relay`" and that "an
+  undeclared import here would not be caught" — both true when written,
+  both false now. T251 widened the guard's walk to every `packages/*/src`
+  (`packages/relay` included), each checked against its OWN
+  `package.json` `dependencies`, never the root's — measured directly: an
+  undeclared `packages/relay` -> `@picompanion/protocol` import added to a
+  scratch copy of `cloudflare-adapter.ts` made `run-guard-declared-
+workspace-deps.mjs` exit 1 naming `packages/relay` and the missing
+  package, and restoring the file returned it to exit 0. This still does
+  not make it safe to ship the import deliberately without declaring it —
+  the dependency-declaration/lockfile mechanics below remain the real
+  blocker, `packages/relay` still being deployed completely outside the
+  rest of this monorepo's own build tooling (`wrangler deploy`, not
+  `npm run build`).
   Declaring the dependency correctly requires adding
   `"@picompanion/protocol": "0.3.0-beta.2"` to
   `packages/relay/package.json`'s `dependencies` — and `package-lock.json`

@@ -5,6 +5,7 @@ import {
   findUndeclaredWorkspaceDeps,
   isTestFile,
   resolvePackageName,
+  withSelfDeclared,
 } from "./guard-declared-workspace-deps.mjs";
 
 // --- resolvePackageName --------------------------------------------------
@@ -227,4 +228,66 @@ test("extractWorkspaceImports does not flag a bare-word mention inside a comment
   const content =
     "/**\n * `@picompanion/highlight` is not declared in apps/android's dependencies.\n */\nexport const x = 1;\n";
   assert.deepEqual(extractWorkspaceImports(content), []);
+});
+
+// --- withSelfDeclared (T251): a package importing its own published name --
+
+test("withSelfDeclared adds the manifest's own name to dependencies", () => {
+  const manifest = { name: "@picompanion/protocol", version: "0.3.0-beta.2", dependencies: {} };
+  assert.deepEqual(withSelfDeclared(manifest), {
+    name: "@picompanion/protocol",
+    version: "0.3.0-beta.2",
+    dependencies: { "@picompanion/protocol": "0.3.0-beta.2" },
+  });
+});
+
+test("withSelfDeclared returns the manifest unchanged when it has no name", () => {
+  const manifest = { dependencies: { "@picompanion/zod": "1.0.0" } };
+  assert.equal(withSelfDeclared(manifest), manifest);
+});
+
+test("withSelfDeclared preserves an already-declared dependency alongside the self entry", () => {
+  const manifest = {
+    name: "@picompanion/server",
+    version: "0.3.0-beta.2",
+    dependencies: { "@picompanion/protocol": "0.3.0-beta.2" },
+  };
+  assert.deepEqual(withSelfDeclared(manifest).dependencies, {
+    "@picompanion/protocol": "0.3.0-beta.2",
+    "@picompanion/server": "0.3.0-beta.2",
+  });
+});
+
+// --- withSelfDeclared feeding into findUndeclaredWorkspaceDeps: the exact
+// shape T251 measured on this tree — a package importing its own published
+// name via a self-referencing subpath (`packages/protocol`'s `"./*"`
+// `exports` wildcard makes `@picompanion/protocol/some-subpath` resolvable
+// from inside `packages/protocol` itself) must not require a
+// `dependencies` entry naming the package's own name -----------------------
+
+test("a self-referencing subpath import is not a violation once withSelfDeclared is applied", () => {
+  const files = [
+    {
+      path: "packages/protocol/src/some-subpath.test.ts",
+      content: 'import { X } from "@picompanion/protocol/some-subpath";\n',
+    },
+  ];
+  const manifest = withSelfDeclared({ name: "@picompanion/protocol", version: "0.3.0-beta.2" });
+
+  assert.deepEqual(findUndeclaredWorkspaceDeps(files, manifest), []);
+});
+
+test("withSelfDeclared never masks a genuinely different missing dependency", () => {
+  const files = [
+    {
+      path: "packages/protocol/src/some-subpath.test.ts",
+      content:
+        'import { X } from "@picompanion/protocol/some-subpath";\nimport { Y } from "@picompanion/relay";\n',
+    },
+  ];
+  const manifest = withSelfDeclared({ name: "@picompanion/protocol", version: "0.3.0-beta.2" });
+
+  assert.deepEqual(findUndeclaredWorkspaceDeps(files, manifest), [
+    { path: "packages/protocol/src/some-subpath.test.ts", packageName: "@picompanion/relay" },
+  ]);
 });

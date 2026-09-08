@@ -1,20 +1,34 @@
 #!/usr/bin/env node
 // CLI entry point for the declared-workspace-dependency guard. Run from the
 // repository root (CI runs it via `node scripts/ci/run-guard-declared-workspace-deps.mjs`).
-// See scripts/ci/guard-declared-workspace-deps.mjs for the checked rule and
-// its type-only-import decision.
+// See scripts/ci/guard-declared-workspace-deps.mjs for the checked rule, its
+// type-only-import decision, and (T251) `withSelfDeclared`'s self-import
+// allowance.
 //
-// Walks `apps/android/src` and `apps/web/src`, collects every `@picompanion/*`
-// specifier each app's source actually imports as a VALUE (not type-only),
-// and fails when that package is not declared in the app's own
-// `package.json` (`dependencies`, or `devDependencies` from a test file —
-// see guard-declared-workspace-deps.mjs's TEST_FILE_PATTERN).
+// Walks `apps/android/src`, `apps/web/src`, and (T251) every `packages/*/src`
+// that has both a `package.json` and a `src` directory, collects every
+// `@picompanion/*` specifier each target's source actually imports as a
+// VALUE (not type-only), and fails when that package is not declared in the
+// target's OWN `package.json` (`dependencies`, or `devDependencies` from a
+// test file — see guard-declared-workspace-deps.mjs's TEST_FILE_PATTERN).
+// Each target is checked against its own manifest, never the root's — some
+// packages legitimately import declared siblings (`server` -> `protocol`).
+//
+// T251 measured admitting every `packages/*/src` at once (not just
+// `packages/relay`, the one T230 named) before choosing this scope: with
+// `withSelfDeclared` applied, all ten `packages/*` with a `src` directory
+// come back clean on this tree. Without it, two packages
+// (`@picompanion/highlight`, `@picompanion/protocol`) each flagged exactly
+// one "undeclared" package — their OWN name, reached via a self-referencing
+// subpath import (`@picompanion/protocol`'s `"./*"` `exports` wildcard makes
+// this resolvable) — never a real missing dependency. See this task's
+// report for the full per-package table.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { findUndeclaredWorkspaceDeps } from "./guard-declared-workspace-deps.mjs";
+import { findUndeclaredWorkspaceDeps, withSelfDeclared } from "./guard-declared-workspace-deps.mjs";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -35,6 +49,46 @@ const APPS = [
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 const IGNORE_DIR_NAMES = new Set(["node_modules", "dist", ".expo", "android", "ios"]);
+
+/**
+ * T251: every `packages/<dir>` that has its own `package.json` (with a
+ * `name`) and a `src` directory becomes a scan target, discovered fresh on
+ * every run rather than hand-listed — the same reason `apps/*` above is the
+ * one hand-listed pair left (there are only two, and a third app is a
+ * structural change this guard's own scope does not anticipate).
+ * @returns {{ name: string, packageName: string, srcDir: string, manifestPath: string }[]}
+ */
+function discoverPackageTargets() {
+  const targets = [];
+  let entries;
+  try {
+    entries = readdirSync(join(repoRoot, "packages"));
+  } catch {
+    return targets;
+  }
+  for (const entry of entries.sort()) {
+    const manifestPath = join(repoRoot, "packages", entry, "package.json");
+    let manifest;
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    } catch {
+      continue; // not a package directory (or no package.json) — skip.
+    }
+    if (!manifest.name) continue;
+    try {
+      if (!statSync(join(repoRoot, "packages", entry, "src")).isDirectory()) continue;
+    } catch {
+      continue; // no `src` directory to scan.
+    }
+    targets.push({
+      name: `packages/${entry}`,
+      packageName: manifest.name,
+      srcDir: `packages/${entry}/src`,
+      manifestPath: `packages/${entry}/package.json`,
+    });
+  }
+  return targets;
+}
 
 /** @returns {string[]} absolute paths of every file under `dir` */
 function walk(dir) {
@@ -93,11 +147,14 @@ function readSourceFiles(absoluteSrcDir, repoRelativeSrcDir) {
 
 function main() {
   const workspaceVersions = readWorkspacePackageVersions();
+  const targets = [...APPS, ...discoverPackageTargets()];
   let anyViolations = false;
 
-  for (const app of APPS) {
+  for (const app of targets) {
     const files = readSourceFiles(join(repoRoot, app.srcDir), app.srcDir);
-    const manifest = JSON.parse(readFileSync(join(repoRoot, app.manifestPath), "utf8"));
+    const manifest = withSelfDeclared(
+      JSON.parse(readFileSync(join(repoRoot, app.manifestPath), "utf8")),
+    );
     const violations = findUndeclaredWorkspaceDeps(files, manifest);
 
     if (violations.length === 0) {

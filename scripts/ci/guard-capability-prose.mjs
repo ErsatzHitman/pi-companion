@@ -1318,6 +1318,57 @@ export const CAPABILITIES = [
       /(?:run-)?guard-secret-scan(?:\.mjs)?[^.]{0,140}?(?:does not|never|cannot) reads? (?:the )?(?:content|bytes) of/i,
     ],
   },
+  {
+    // T251: `scripts/ci/guard-declared-workspace-deps.mjs`
+    // (T60B) used to walk only `apps/android/src` and `apps/web/src`. T230
+    // named that scope as one reason `packages/relay` keeps its own
+    // `CURRENT_RELAY_VERSION` literal instead of importing
+    // `@picompanion/protocol`'s: an undeclared `packages/relay` ->
+    // `packages/protocol` import would resolve locally through the
+    // workspace symlink and pass every guard, only failing on a fresh
+    // `npm ci` checkout. T251's `discoverPackageTargets`
+    // (`run-guard-declared-workspace-deps.mjs`) closes that gap for every
+    // `packages/*/src` at once, each checked against its OWN
+    // `package.json` `dependencies` via the paired `withSelfDeclared`
+    // (`guard-declared-workspace-deps.mjs`) — measured on this tree before
+    // landing: admitting every package unmodified flagged only two
+    // self-referencing subpath imports, never a real missing dependency,
+    // so the whole `packages/*` set was admitted rather than `relay` alone.
+    //
+    // NOT a forward guard: a live denial of this exact capability existed
+    // in `docs/security-and-version-drift.md` §1.2 the moment this entry
+    // was written ("that guard does not scan `packages/relay` today, so an
+    // undeclared import here would not be caught") and was corrected in
+    // the same commit that adds this entry, with a "CORRECTED (T251)"
+    // marker directly before the quoted original sentence. Confirmed
+    // directly: `run-guard-capability-prose.mjs` exits 1 naming this
+    // capability against the pre-correction file with this entry
+    // registered, and exits 0 against the corrected file — see this
+    // task's own report for both exit codes.
+    //
+    // `methodNames`: a bare `discoverPackageTargets` is a real
+    // `function`-declared name, measured directly against the whole tree —
+    // exactly one declaring file, `scripts/ci/run-guard-declared-
+    // workspace-deps.mjs`, which `isShippedSourcePath` already admits
+    // under `scripts/ci` (T156's widening). No AND-group or `RegExp`
+    // shape-anchor needed, the same reasoning `findUndeclaredRootDependencies`
+    // and `readContentForScan` give for their own bare names.
+    //
+    // `denyingPhrases`: worded away from the docs file's own corrected
+    // sentence (never lifted verbatim) and away from this entry's own
+    // header comments above and the two files' present-tense narration of
+    // what the widened guard now does — compared DE-WRAPPED (`//` gutters
+    // stripped, whitespace collapsed) against all three files' full text
+    // before being kept, so a future comment reflow welding a wrapped
+    // clause onto one line cannot create the collision CLAUDE.md's T215
+    // section describes.
+    name: "declared-workspace-deps guard scans every packages/*/src (discoverPackageTargets)",
+    methodNames: ["discoverPackageTargets"],
+    denyingPhrases: [
+      /(?:that|the) guard (?:does not|doesn'?t|never) scans? `?packages\/relay`?/i,
+      /an undeclared import (?:here|in packages\/relay|under packages\/relay) (?:would|could|is) (?:not (?:be )?caught|never (?:be )?(?:caught|detected|flagged))/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
