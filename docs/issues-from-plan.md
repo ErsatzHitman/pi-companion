@@ -10076,22 +10076,33 @@ the app is therefore inert today, and `mic-press-model.ts`'s own header says so
 `VoiceStopOutcome`), `mic-press-model.ts` (the one-permission-resolution-per-press invariant T83
 closed), and `Composer.tsx`'s `handleMicPress`.
 
-**Ship a real port.** `packages/expo-two-way-audio` is already in this repository and already
-carries `ios/MicrophonePermissionRequester.swift`; establish first whether it can serve as the
-recorder or whether a separate Expo audio dependency is required. **If the package needed is not
-installed, that is a hard stop under this repository's install rules** — build behind the existing
-port, prove against a fake, report the exact install command, and say plainly that the real package
-was never installed. Do not vendor or stub a live-looking module.
+**Ship a real port. The dependency question is already settled — do not re-open it.**
+`expo-audio@~1.0.13` (resolves 1.0.16) was installed by the owner at `fad6be1` for this task, and
+is the SDK 54 recorder; `expo-av` is deprecated and is the wrong choice here. The in-repo
+`@picompanion/expo-two-way-audio` was measured and rejected for capture: its API
+(`toggleRecording`/`isRecording`/`playPCMData`, `MicrophoneDataEvent`) is built for a live two-way
+voice stream, so using it would mean hand-accumulating frames into a buffer. Its permission calls
+map onto `VoiceCapturePort` cleanly; its capture model does not. `expo-file-system` is already
+installed, so nothing further is needed to read a finished clip.
+
+The API surface, read from the installed package's own declarations:
+
+| Need       | `expo-audio`                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Permission | `getRecordingPermissionsAsync()` / `requestRecordingPermissionsAsync()` — map to `PermissionPort`                                                      |
+| Capture    | `useAudioRecorder` / `AudioRecorder` with `prepareToRecordAsync`, `record()`, `stop()`, `uri`                                                          |
+| Format     | `RecordingOptions` carries `sampleRate`, `numberOfChannels`, `extension`, `outputFormat` — so 16 kHz mono can be REQUESTED rather than resampled after |
+| Presets    | `RecordingPresets.HIGH_QUALITY` / `LOW_QUALITY` — neither is 16 kHz mono; configure explicitly                                                         |
+
+**Request 16 kHz mono explicitly and then VERIFY what you actually got.** A preset will not give
+it, and a device may not honour the request. Read the real recording's rate and channel count back
+and state the measured values — never the requested ones — in the port's doc comment.
 
 The port must resolve `{ kind: "audio", audioBase64, format }` — **not** `"transcript"`. That arm
 already exists in `VoiceCaptureOutcome` and is currently dead: `voice-model.ts` answers it with
 `{ outcome: "raw-audio-unsupported" }`. Closing that dead end is the NEXT task's job, not this
 one; this task ships the capture and leaves the outcome honestly unsupported, with a test pinning
 that it is reached.
-
-Target format is **16 kHz mono**, which is what a cloud STT endpoint wants and what avoids a
-resample later. Record it if the platform allows; if it does not, record the device's native rate
-and say so in the port's doc comment rather than claiming a rate you did not verify.
 
 **The permission invariant is load-bearing.** T83 closed a double-prompt bug: exactly one
 permission resolution per press, inside `requestStart()`. A real recorder is the first build where
