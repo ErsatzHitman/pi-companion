@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -57,7 +57,15 @@ describe("resolveAttachmentForDownload", () => {
 
     expect(result.status).toBe("ok");
     if (result.status !== "ok") throw new Error("unreachable");
-    expect(result.file.absolutePath).toBe(ref.path);
+    // The served path is the REALPATH, not the string the caller sent. That is
+    // deliberate and is a security property: handing back the client's own
+    // string would defeat the containment check that produced it. Asserted
+    // against `realpath(ref.path)` rather than `ref.path` because the two can
+    // differ — GitHub's `windows-latest` runner exposes `os.tmpdir()` as an 8.3
+    // short path (`C:\Users\RUNNER~1\...`) whose realpath is the long form
+    // (`C:\Users\runneradmin\...`), so the original assertion passed on every
+    // developer machine and failed only on CI.
+    expect(result.file.absolutePath).toBe(await realpath(ref.path));
     expect(result.file.mimeType).toBe("image/png");
     expect(result.file.size).toBe(bytes.byteLength);
 
