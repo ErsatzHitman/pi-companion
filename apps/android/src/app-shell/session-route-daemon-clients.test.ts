@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   resolveAttachmentDownloadClient,
   resolveQueueModeClient,
+  resolveSlashCommandsClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
   type SessionRouteConnectionSource,
@@ -54,6 +55,15 @@ function createCountingFakeDaemonClient() {
         return { text: "hello from groq", error: null };
       },
     ),
+    listCommands: vi.fn(async (agentId: string) => {
+      calls.push(["listCommands", agentId]);
+      return {
+        agentId,
+        commands: [{ name: "help", description: "Show help", argumentHint: "" }],
+        error: null,
+        requestId: "req_t292",
+      };
+    }),
     requestAttachmentDownloadToken: vi.fn(async (agentId: string, path: string) => {
       calls.push(["requestAttachmentDownloadToken", agentId, path]);
       return { token: "tok_1", mimeType: "image/png", error: null };
@@ -218,6 +228,38 @@ describe("resolveQueueModeClient and resolveTurnStatusClient read the SAME under
     const queueModeClient = resolveQueueModeClient(connection);
     const turnStatusClient = resolveTurnStatusClient(connection);
     expect(queueModeClient).toBe(turnStatusClient as unknown as typeof queueModeClient);
+  });
+});
+
+describe("resolveSlashCommandsClient", () => {
+  it("returns the exact live client reference unchanged — never a wrapper or a clone", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSlashCommandsClient(connectionWithClient(fakeClient));
+    expect(resolved).toBe(fakeClient as unknown as typeof resolved);
+  });
+
+  it("a listCommands call on the resolved client reaches the real counting fake and its resolved value round-trips", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSlashCommandsClient(connectionWithClient(fakeClient));
+
+    const result = await resolved!.listCommands!("agt_t292_slash_commands");
+
+    expect(fakeClient.listCommands).toHaveBeenCalledTimes(1);
+    expect(fakeClient.calls).toEqual([["listCommands", "agt_t292_slash_commands"]]);
+    expect(result.commands).toEqual([{ name: "help", description: "Show help", argumentHint: "" }]);
+    expect(result.error).toBeNull();
+  });
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveSlashCommandsClient(connection)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveSlashCommandsClient(connection)).toBeUndefined();
   });
 });
 

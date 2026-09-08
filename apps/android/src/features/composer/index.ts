@@ -17,6 +17,7 @@ export {
   FOLLOW_UP_ACTION_LABEL,
   MIC_ACTION_LABEL,
   QUEUE_MODE_LABEL,
+  SLASH_COMMANDS_ACTION_LABEL,
   STEER_ACTION_LABEL,
   abortTurn,
   canAbort,
@@ -208,3 +209,21 @@ export type {
 } from "./turn-status-model";
 export { TurnStatusBanner } from "./TurnStatusBanner";
 export type { TurnStatusBannerProps } from "./TurnStatusBanner";
+
+// --- T292: slash-command completion ---------------------------------------
+export {
+  INITIAL_SLASH_COMMANDS_STATE,
+  createSlashCommandsController,
+  describeSlashCommand,
+  isBareSlashPrefix,
+  slashCommandDraftText,
+} from "./slash-command-model";
+export type {
+  DaemonSlashCommandSource,
+  SlashCommand,
+  SlashCommandsController,
+  SlashCommandsControllerDeps,
+  SlashCommandsState,
+} from "./slash-command-model";
+export { SlashCommandPicker } from "./SlashCommandPicker";
+export type { SlashCommandPickerProps } from "./SlashCommandPicker";

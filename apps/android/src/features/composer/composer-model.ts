@@ -479,3 +479,5 @@ export const STEER_ACTION_LABEL = "Redirect current response";
 export const FOLLOW_UP_ACTION_LABEL = "Queue follow-up message";
 export const ABORT_ACTION_LABEL = "Stop current response";
 export const QUEUE_MODE_LABEL = "Queue mode";
+/** T292: the composer's manual slash-command-palette toggle — opens `SlashCommandPicker` for discoverability, same rationale web's own "Commands" button gives (`apps/web/src/features/composer/Composer.tsx`), independent of typing "/". */
+export const SLASH_COMMANDS_ACTION_LABEL = "Show slash commands";

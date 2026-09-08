@@ -307,3 +307,55 @@ describe("T33B3 queue depth and mode are wired into the composer, not literals o
     expect(handlerBody).toMatch(/revertDispatchMode\(current, previousMode\)/);
   });
 });
+
+describe("T292: slash-command palette is wired into Composer, sits above PromptBar, and never blocks a send", () => {
+  const code = readCode("Composer.tsx");
+
+  it("mounts SlashCommandPicker strictly before <PromptBar in the render tree (an inline row, never an overlay covering it)", () => {
+    const pickerIndex = code.indexOf("<SlashCommandPicker");
+    const promptBarIndex = code.indexOf("<PromptBar");
+    expect(pickerIndex).toBeGreaterThan(-1);
+    expect(promptBarIndex).toBeGreaterThan(pickerIndex);
+  });
+
+  it("the controller is built from the injected slashCommandsClient prop, not a hard-coded command source", () => {
+    expect(code).toMatch(
+      /createSlashCommandsController\(\{ agentId: resolvedSessionId, client: slashCommandsClient \}\)/,
+    );
+  });
+
+  it("handleValueChange notifies the slash-commands controller on every keystroke, alongside (not instead of) updating state.draft", () => {
+    const handlerStart = code.indexOf("const handleValueChange = useCallback(");
+    expect(handlerStart).toBeGreaterThan(-1);
+    const handlerEnd = code.indexOf("[slashCommandsController],", handlerStart);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    const handlerBody = code.slice(handlerStart, handlerEnd);
+    expect(handlerBody).toMatch(
+      /setState\(\(current\) => \(\{ \.\.\.current, draft: value \}\)\);/,
+    );
+    expect(handlerBody).toMatch(/slashCommandsController\.notifyDraftChanged\(value\);/);
+  });
+
+  it('a manual toggle (glyph "/") opens the palette via handleOpenSlashCommands, using SLASH_COMMANDS_ACTION_LABEL as its accessible name', () => {
+    expect(code).toMatch(
+      /<ComposerIconAction\s*\n\s*glyph=\{"\/"\}\s*\n\s*accessibleName=\{SLASH_COMMANDS_ACTION_LABEL\}\s*\n\s*onPress=\{handleOpenSlashCommands\}/,
+    );
+  });
+
+  it("selecting a command (handleSelectSlashCommand) never references onSubmit or handleSend — it can only ever replace the draft and dismiss", () => {
+    const handlerStart = code.indexOf("const handleSelectSlashCommand = useCallback(");
+    expect(handlerStart).toBeGreaterThan(-1);
+    const handlerEnd = code.indexOf("[slashCommandsController],", handlerStart);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    const handlerBody = code.slice(handlerStart, handlerEnd);
+    expect(handlerBody).toMatch(/draft: slashCommandDraftText\(command\)/);
+    expect(handlerBody).toMatch(/slashCommandsController\.dismiss\(\);/);
+    expect(handlerBody).not.toMatch(/onSubmit/);
+    expect(handlerBody).not.toMatch(/handleSend/);
+  });
+
+  it("SlashCommandPicker's onSelect/onDismiss are wired to the real handlers, not inline no-ops", () => {
+    expect(code).toMatch(/onSelect=\{handleSelectSlashCommand\}/);
+    expect(code).toMatch(/onDismiss=\{handleDismissSlashCommands\}/);
+  });
+});

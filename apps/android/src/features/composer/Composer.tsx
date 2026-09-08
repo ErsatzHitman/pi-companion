@@ -68,6 +68,14 @@ import {
 } from "./queue-mode-model";
 import { QueueModePicker } from "./QueueModePicker";
 import {
+  INITIAL_SLASH_COMMANDS_STATE,
+  createSlashCommandsController,
+  slashCommandDraftText,
+  type DaemonSlashCommandSource,
+  type SlashCommand,
+} from "./slash-command-model";
+import { SlashCommandPicker } from "./SlashCommandPicker";
+import {
   INITIAL_TURN_STATUS_STATE,
   createTurnStatusController,
   type DaemonTurnStatusSource,
@@ -96,6 +104,7 @@ import {
   FOLLOW_UP_ACTION_LABEL,
   MIC_ACTION_LABEL,
   QUEUE_MODE_LABEL,
+  SLASH_COMMANDS_ACTION_LABEL,
   STEER_ACTION_LABEL,
   abortTurn,
   canAbort,
@@ -395,6 +404,20 @@ export interface ComposerProps {
    * prop's own doc comment.
    */
   turnStatusClient?: DaemonTurnStatusSource;
+  /**
+   * T292 (owner request): slash-command palette transport, mirrors
+   * `packages/client/src/daemon-client.ts`'s real `listCommands(agentId,
+   * requestId?)` — see `slash-command-model.ts`'s module doc for why
+   * this is a real, wire-connected method (never a hard-coded set) and
+   * why this feature deliberately carries no availability enum the way
+   * `modelThinkingClient`/`queueModeClient` do. Optional, same "no
+   * client yet" seam as every sibling client prop on this component: an
+   * omitted prop (or one whose `listCommands` is itself missing) leaves
+   * `SlashCommandPicker` unrendered — commands stay at `[]`, so the
+   * palette's own `isOpen` can never become `true` — rather than an
+   * enabled control with nothing to show.
+   */
+  slashCommandsClient?: DaemonSlashCommandSource;
   placeholder?: string;
   testId?: string;
 }
@@ -530,6 +553,7 @@ export function Composer({
   modelThinkingClient,
   queueModeClient,
   turnStatusClient,
+  slashCommandsClient,
   placeholder,
   testId,
 }: ComposerProps) {
@@ -628,6 +652,50 @@ export function Composer({
         .then(() => setQueueModesState(queueModesController.getState()));
     },
     [queueModesController],
+  );
+
+  // --- T292: slash-command palette -----------------------------------------
+  // Same one-controller-per-(client, agentId)-identity shape as
+  // `modelThinkingController`/`queueModesController` above — see
+  // `slash-command-model.ts`'s module doc for why this controller
+  // carries no availability enum the way those two do. `load()` fetches
+  // the list once per identity; every keystroke additionally calls
+  // `notifyDraftChanged` (see `handleValueChange` below) so the palette
+  // can auto-open the instant the draft becomes a bare "/" prefix
+  // without waiting on a network round trip.
+  const slashCommandsController = useMemo(
+    () =>
+      createSlashCommandsController({ agentId: resolvedSessionId, client: slashCommandsClient }),
+    [slashCommandsClient, resolvedSessionId],
+  );
+  const [slashCommandsState, setSlashCommandsState] = useState(INITIAL_SLASH_COMMANDS_STATE);
+  useEffect(() => {
+    let cancelled = false;
+    void slashCommandsController.load().then(() => {
+      if (!cancelled) setSlashCommandsState(slashCommandsController.getState());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slashCommandsController]);
+  const handleOpenSlashCommands = useCallback(() => {
+    slashCommandsController.open();
+    setSlashCommandsState(slashCommandsController.getState());
+  }, [slashCommandsController]);
+  const handleDismissSlashCommands = useCallback(() => {
+    slashCommandsController.dismiss();
+    setSlashCommandsState(slashCommandsController.getState());
+  }, [slashCommandsController]);
+  // Replaces the draft with the selected command's own trigger text and
+  // closes the palette — never calls onSubmit, so this can never itself
+  // send anything (see `SlashCommandPicker.tsx`'s doc comment).
+  const handleSelectSlashCommand = useCallback(
+    (command: SlashCommand) => {
+      setState((current) => ({ ...current, draft: slashCommandDraftText(command) }));
+      slashCommandsController.dismiss();
+      setSlashCommandsState(slashCommandsController.getState());
+    },
+    [slashCommandsController],
   );
 
   // --- T39C: retry/compaction live status ---------------------------------
@@ -737,9 +805,31 @@ export function Composer({
     return `composer-entry-${Date.now().toString(36)}-${sequenceRef.current}`;
   }, []);
 
-  const handleValueChange = useCallback((value: string) => {
-    setState((current) => ({ ...current, draft: value }));
-  }, []);
+  // T292: this is the ONE call site where the composer's draft text
+  // changes from user typing (a selected slash command instead goes
+  // through `handleSelectSlashCommand` above, which also updates
+  // `slashCommandsState` itself). `notifyDraftChanged` recomputes the
+  // palette's auto-open trigger on every keystroke; the `setState`
+  // still runs unconditionally regardless of what the controller
+  // decides. NAMED SEAM for T293 (`getEditorText`, reading the
+  // composer's current draft for an extension): `value` here is
+  // exactly the live draft text a `getEditorText` handler would need to
+  // read. Nothing today mirrors it anywhere outside this component's
+  // own `state.draft` — a future `onDraftChange?: (text: string) =>
+  // void` prop added to `ComposerProps` and called here (alongside, not
+  // instead of, the two lines below) is the seam to extend, letting the
+  // session route mirror the current draft into a ref the daemon-facing
+  // `getEditorText` wiring can read. Not added by this task — T293 owns
+  // the daemon/client side of that capability and decides the exact
+  // shape it needs.
+  const handleValueChange = useCallback(
+    (value: string) => {
+      setState((current) => ({ ...current, draft: value }));
+      slashCommandsController.notifyDraftChanged(value);
+      setSlashCommandsState(slashCommandsController.getState());
+    },
+    [slashCommandsController],
+  );
 
   // Uploads one already-picked file. `uploadClient?.uploadFile` is
   // optional — see `ComposerProps.uploadClient`'s doc comment — so a
@@ -1202,6 +1292,12 @@ export function Composer({
             onPress={handleCapturePress}
             testId={`${composerTestId}-capture`}
           />
+          <ComposerIconAction
+            glyph={"/"}
+            accessibleName={SLASH_COMMANDS_ACTION_LABEL}
+            onPress={handleOpenSlashCommands}
+            testId={`${composerTestId}-commands`}
+          />
           <Text style={styles.attachmentLimits} testID={`${composerTestId}-attachment-limits`}>
             {describeAttachmentLimits(limits)}
           </Text>
@@ -1326,6 +1422,12 @@ export function Composer({
             </View>
           </>
         ) : null}
+        <SlashCommandPicker
+          state={slashCommandsState}
+          onSelect={handleSelectSlashCommand}
+          onDismiss={handleDismissSlashCommands}
+          testId={`${composerTestId}-commands-picker`}
+        />
         <PromptBar
           label={COMPOSER_INPUT_LABEL}
           placeholder={placeholder ?? "Message"}

@@ -56,6 +56,7 @@ import { useAppCore } from "../../../../core-context";
 import {
   resolveAttachmentDownloadClient,
   resolveQueueModeClient,
+  resolveSlashCommandsClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
 } from "../../../../../app-shell/session-route-daemon-clients";
@@ -783,6 +784,10 @@ export default function SessionRoute() {
   // Composer's transcribeClient prop — see resolveTranscribeClient's own
   // doc comment and this component's "T282 mount" doc comment above.
   const transcribeClient = resolveTranscribeClient(core.connection);
+  // T292: identical fresh-read cast, off the same live DaemonClient, for
+  // Composer's slashCommandsClient prop — see resolveSlashCommandsClient's
+  // own doc comment.
+  const slashCommandsClient = resolveSlashCommandsClient(core.connection);
   // T290: real OS-permission ports for attachment picking/camera
   // capture — see this component's own "T290 mount" doc comment above.
   // Unlike queueModeClient/turnStatusClient/transcribeClient above,
@@ -819,6 +824,7 @@ export default function SessionRoute() {
             queueModeClient={queueModeClient}
             turnStatusClient={turnStatusClient}
             transcribeClient={transcribeClient}
+            slashCommandsClient={slashCommandsClient}
             attachmentSource={attachmentSource}
             cameraCapture={cameraCapture}
             outbox={core.turnOutbox.getOutbox() ?? undefined}

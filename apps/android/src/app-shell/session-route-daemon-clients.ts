@@ -35,6 +35,17 @@
  * `DaemonClient` instance this file already narrows three times above
  * satisfies this fourth port as-is too, with no adapter.
  *
+ * **T292 adds `resolveSlashCommandsClient` below**, the same pattern a
+ * fifth time: `Composer.tsx`'s `slashCommandsClient` prop wants a
+ * `DaemonSlashCommandSource` (`../features/composer`'s
+ * `{ listCommands?(agentId): Promise<{ commands, error }> }`), and the
+ * real `DaemonClient.listCommands(agentId, requestId?)`
+ * (`packages/client/src/daemon-client.ts`) resolves a payload that is a
+ * strict superset of that shape (`{ agentId, commands, error,
+ * requestId }`) — so the one live `DaemonClient` instance this file
+ * already narrows four times above satisfies this fifth port as-is
+ * too, with no adapter.
+ *
 
  * ## Why this is its own file, not inlined in `index.tsx` like
  * `SessionApprovals`'s cast
@@ -54,7 +65,11 @@
  * regex: "whatever `getDaemonClient()` returns reaches the caller
  * unchanged" is a plain data-flow claim, not a rendering one.
  */
-import type { DaemonQueueModeSource, DaemonTurnStatusSource } from "../features/composer";
+import type {
+  DaemonQueueModeSource,
+  DaemonSlashCommandSource,
+  DaemonTurnStatusSource,
+} from "../features/composer";
 import type { AttachmentDownloadTokenClient } from "../features/transcript";
 import type { VoiceTranscriptionClient } from "../features/voice";
 
@@ -153,6 +168,29 @@ export function resolveAttachmentDownloadClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | AttachmentDownloadTokenClient
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T292: same fresh-read contract as the four functions above, cast to
+ * `DaemonSlashCommandSource` instead — the fifth narrow port this one
+ * live `DaemonClient` instance satisfies (the real
+ * `listCommands(agentId, requestId?)`, see that method's own doc
+ * comment in `packages/client/src/daemon-client.ts`). `undefined`
+ * (never `null`) with no active lifecycle or no live client yet,
+ * matching every sibling resolver above — `Composer`'s
+ * `slashCommandsController` then leaves `commands` at its empty
+ * default (`slash-command-model.ts`'s "no client yet" seam) rather
+ * than attempting a list request with nothing to send it to.
+ */
+export function resolveSlashCommandsClient(
+  connection: SessionRouteConnectionSource,
+): DaemonSlashCommandSource | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | DaemonSlashCommandSource
       | null
       | undefined) ?? undefined
   );
