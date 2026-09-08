@@ -14,6 +14,8 @@ import type { UseComposerOptions } from "./use-composer.js";
 import { useComposer } from "./use-composer.js";
 import type { ComposerAttachment } from "./use-attachments.js";
 import { formatAttachmentSize } from "./use-attachments.js";
+import { useComposerPaste } from "./use-clipboard-paste.js";
+import { useDragAndDrop } from "./use-drag-and-drop.js";
 import { useModelThinking } from "./use-model-thinking.js";
 import { useQueueModes } from "./use-queue-modes.js";
 import { useSlashCommands } from "./use-slash-commands.js";
@@ -154,6 +156,24 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * §10.5). `submit()` (in `use-composer.ts`) is what actually attaches
  * the resulting refs to the outbox entry and the daemon message once
  * every staged upload settles.
+ *
+ * Drag-and-drop, paste, and inline previews (T279): the file dialog
+ * above is one of four ways a file reaches this composer, and all four
+ * route through `useAttachments.addFiles` (the file dialog's
+ * `pickAndAddFiles` is defined in terms of it) — one acceptance path, so
+ * a dropped or pasted 200 MB file hits the exact same ceiling a picked
+ * one does. `useDragAndDrop`'s `dropZoneHandlers` are spread onto this
+ * component's own wrapper (not `window`), and its `isDraggingOver` drives
+ * a highlight that is quiet until a drag is actually over the target —
+ * see that hook's own doc comment for how a drop outside the target is
+ * still kept from navigating the tab away. `useComposerPaste`'s
+ * `handlePaste` is wired onto the same wrapper rather than the
+ * `<textarea>` itself: a DOM `paste` event bubbles, so this still fires
+ * for a paste inside `PromptBar`'s input without this component reaching
+ * into that recipe to add an `onPaste` prop. See that hook's own doc
+ * comment for the argued pasted-link rule. An image attachment's
+ * `previewUrl` (set by `useAttachments` once its `URL.createObjectURL`
+ * preview is ready) renders as a small thumbnail beside its chip.
  */
 export function Composer({
   label = "Message Pi",
@@ -192,6 +212,12 @@ export function Composer({
   const queueModes = useQueueModes({
     sessionId: composerOptions.sessionId,
     client: composerOptions.client,
+  });
+
+  const dragAndDrop = useDragAndDrop({ onFiles: attachments.addFiles });
+  const handlePaste = useComposerPaste({
+    onFiles: attachments.addFiles,
+    now: () => composerOptions.clock.now(),
   });
 
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -236,9 +262,23 @@ export function Composer({
   const slashCommandsToggleTestId = testId ? `${testId}-slash-commands-toggle` : undefined;
   const attachTestId = testId ? `${testId}-attach` : undefined;
   const attachmentsTestId = testId ? `${testId}-attachments` : undefined;
+  const dropHintTestId = testId ? `${testId}-drop-hint` : undefined;
+  const composerClassName = dragAndDrop.isDraggingOver
+    ? "pc-composer pc-composer--drop-active"
+    : "pc-composer";
 
   return (
-    <div className="pc-composer" ref={wrapperRef}>
+    <div
+      className={composerClassName}
+      ref={wrapperRef}
+      onPaste={handlePaste}
+      {...dragAndDrop.dropZoneHandlers}
+    >
+      {dragAndDrop.isDraggingOver ? (
+        <div className="pc-composer__drop-hint" data-testid={dropHintTestId} aria-hidden="true">
+          Drop to attach
+        </div>
+      ) : null}
       <PromptBar
         label={label}
         placeholder={placeholder}
@@ -272,6 +312,18 @@ export function Composer({
           <ChipGroup ariaLabel="Staged attachments">
             {attachments.attachments.map((attachment) => (
               <span className="pc-composer__attachment" key={attachment.id}>
+                {attachment.previewUrl ? (
+                  <img
+                    className="pc-composer__attachment-preview"
+                    src={attachment.previewUrl}
+                    alt=""
+                    data-testid={
+                      attachmentsTestId
+                        ? `${attachmentsTestId}-${attachment.id}-preview`
+                        : undefined
+                    }
+                  />
+                ) : null}
                 <Chip
                   label={attachmentLabel(attachment)}
                   tone={attachmentTone(attachment.status)}

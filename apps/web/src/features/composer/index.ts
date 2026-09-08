@@ -60,3 +60,17 @@ export type {
   UseAttachmentsOptions,
   UseAttachmentsState,
 } from "./use-attachments.js";
+export {
+  filesFromClipboardItems,
+  filesFromDataTransfer,
+  synthesizePastedImageName,
+  toPickedFile,
+} from "./browser-file-inputs.js";
+export { useDragAndDrop } from "./use-drag-and-drop.js";
+export type {
+  DropZoneHandlers,
+  UseDragAndDropOptions,
+  UseDragAndDropState,
+} from "./use-drag-and-drop.js";
+export { useComposerPaste } from "./use-clipboard-paste.js";
+export type { UseClipboardPasteOptions } from "./use-clipboard-paste.js";

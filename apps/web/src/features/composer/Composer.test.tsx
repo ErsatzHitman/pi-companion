@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Composer } from "./Composer.js";
 import type { AgentModelOption } from "./agent-turn-client.js";
@@ -1011,4 +1011,168 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
 
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
+});
+
+function makeBrowserFile(name: string, mimeType: string): File {
+  return new File(["x"], name, { type: mimeType });
+}
+
+describe("Composer drag-and-drop, paste, and inline previews (T279)", () => {
+  it("stages a dropped file through the same tray a picked file uses", async () => {
+    const client = new FakeAgentTurnClient();
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    fireEvent.drop(screen.getByTestId("composer"), {
+      dataTransfer: { types: ["Files"], files: [makeBrowserFile("dropped.txt", "text/plain")] },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-attachments").textContent).toContain("dropped.txt"),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-attachments").textContent).not.toContain("uploading"),
+    );
+    expect(client.uploadFileCalls).toEqual([expect.objectContaining({ fileName: "dropped.txt" })]);
+  });
+
+  it("prevents the default dragover action, so a drop is not lost to browser navigation", () => {
+    render(<Composer {...baseProps()} testId="composer" />);
+    const wrapper = screen.getByTestId("composer");
+
+    const event = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"] } });
+    wrapper.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("shows the drop-target hint only while a file drag is over the composer — quiet otherwise", () => {
+    render(<Composer {...baseProps()} testId="composer" />);
+    const wrapper = screen.getByTestId("composer");
+
+    expect(screen.queryByTestId("composer-drop-hint")).toBeNull();
+
+    fireEvent.dragEnter(wrapper, { dataTransfer: { types: ["Files"] } });
+    expect(screen.getByTestId("composer-drop-hint")).toBeTruthy();
+
+    fireEvent.dragLeave(wrapper, { dataTransfer: { types: ["Files"] } });
+    expect(screen.queryByTestId("composer-drop-hint")).toBeNull();
+  });
+
+  it("hides the drop-target hint again once the drop completes", async () => {
+    render(<Composer {...baseProps()} testId="composer" />);
+    const wrapper = screen.getByTestId("composer");
+
+    fireEvent.dragEnter(wrapper, { dataTransfer: { types: ["Files"] } });
+    expect(screen.getByTestId("composer-drop-hint")).toBeTruthy();
+
+    fireEvent.drop(wrapper, {
+      dataTransfer: { types: ["Files"], files: [makeBrowserFile("a.txt", "text/plain")] },
+    });
+
+    expect(screen.queryByTestId("composer-drop-hint")).toBeNull();
+  });
+
+  it("a dropped file over the existing 100 MiB ceiling is rejected exactly like an oversized picked file", async () => {
+    render(<Composer {...baseProps()} testId="composer" />);
+    const oversized = Object.defineProperty(
+      makeBrowserFile("huge.bin", "application/octet-stream"),
+      "size",
+      {
+        value: 200 * 1024 * 1024,
+      },
+    );
+
+    fireEvent.drop(screen.getByTestId("composer"), {
+      dataTransfer: { types: ["Files"], files: [oversized] },
+    });
+
+    const tray = await screen.findByTestId("composer-attachments");
+    expect(tray.textContent).toContain("huge.bin");
+    expect(tray.textContent?.toLowerCase()).toContain("failed");
+  });
+
+  it("pasting a bare URL is never swallowed: no attachment is staged", () => {
+    const client = new FakeAgentTurnClient();
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    fireEvent.paste(screen.getByLabelText("Message Pi"), {
+      clipboardData: {
+        items: [{ kind: "string", getAsFile: () => null }],
+        getData: () => "https://example.com",
+      },
+    });
+
+    expect(screen.queryByTestId("composer-attachments")).toBeNull();
+    expect(client.uploadFileCalls).toEqual([]);
+  });
+
+  it("pasting an image stages it as an attachment with an inline preview", async () => {
+    const client = new FakeAgentTurnClient();
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const image = makeBrowserFile("", "image/png");
+    fireEvent.paste(screen.getByLabelText("Message Pi"), {
+      clipboardData: {
+        items: [
+          { kind: "file", getAsFile: () => image },
+          { kind: "string", getAsFile: () => null },
+        ],
+        getData: () => "https://example.com/cat.png",
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-attachments").textContent).toContain("pasted-image-"),
+    );
+    await waitFor(() => expect(client.uploadFileCalls).toHaveLength(1));
+  });
+
+  it("has no axe violations while the drop hint is showing", async () => {
+    const { container } = render(<Composer {...baseProps()} testId="composer" />);
+    fireEvent.dragEnter(screen.getByTestId("composer"), { dataTransfer: { types: ["Files"] } });
+
+    expect(await axe(container)).toHaveNoViolations();
+  }, 20_000);
+
+  describe("with a stubbed URL.createObjectURL (jsdom has none of its own)", () => {
+    afterEach(() => {
+      delete (URL as unknown as Record<string, unknown>).createObjectURL;
+      delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
+    });
+
+    it("renders an inline preview thumbnail for a dropped image attachment", async () => {
+      URL.createObjectURL = vi.fn(
+        () => "blob:mock-preview",
+      ) as unknown as typeof URL.createObjectURL;
+      URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+      render(<Composer {...baseProps()} testId="composer" />);
+
+      fireEvent.drop(screen.getByTestId("composer"), {
+        dataTransfer: { types: ["Files"], files: [makeBrowserFile("photo.png", "image/png")] },
+      });
+
+      const preview = await screen.findByAltText("");
+      expect(preview.tagName).toBe("IMG");
+      expect(preview.getAttribute("src")).toBe("blob:mock-preview");
+    });
+
+    it("revokes the preview's object URL when the attachment is removed", async () => {
+      const revokeObjectURL = vi.fn();
+      URL.createObjectURL = vi.fn(
+        () => "blob:mock-preview",
+      ) as unknown as typeof URL.createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL as unknown as typeof URL.revokeObjectURL;
+      render(<Composer {...baseProps()} testId="composer" />);
+
+      fireEvent.drop(screen.getByTestId("composer"), {
+        dataTransfer: { types: ["Files"], files: [makeBrowserFile("photo.png", "image/png")] },
+      });
+      await screen.findByAltText("");
+
+      await userEvent.setup().click(screen.getByRole("button", { name: /^Remove/ }));
+
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-preview");
+    });
+  });
 });

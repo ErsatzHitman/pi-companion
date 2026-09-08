@@ -37,6 +37,25 @@ import type { AgentTurnClient, AgentUploadedAttachment } from "./agent-turn-clie
  * reconnect mid-upload or fails explicitly" holds either way: `uploadFile`
  * only ever resolves (survived) or rejects (explicit failure), never
  * hangs silently forever.
+ *
+ * One acceptance path for every input source (T279, plan.md §12.4): the
+ * file dialog (`pickAndAddFiles`), a drop (`use-drag-and-drop.ts`), and a
+ * pasted image (`use-clipboard-paste.ts`) all end up calling the single
+ * `addFiles` below, which is exactly this hook's own pre-existing
+ * staging/size-ceiling/upload logic — there is no second, parallel
+ * acceptance path that a dropped or pasted file could slip past the
+ * `maxBytes` check through.
+ *
+ * Inline image previews (T279): a staged attachment whose `mimeType`
+ * starts with `image/` gets a local, ui-only `previewUrl` — a
+ * `URL.createObjectURL` blob built from the same bytes `readAsBytes()`
+ * hands the upload — set asynchronously once ready (never blocking
+ * staging or upload). `previewUrl` is revoked in exactly two places,
+ * matching the brief's "on removal and on send": `remove()`, and
+ * `clear()` (called by `use-composer.ts`'s `submit()` the instant a
+ * submission's attachments travel out — see that file's own doc
+ * comment), so a long session never accumulates blob URLs no other code
+ * would ever notice leaking.
  */
 
 export type ComposerAttachmentStatus = "uploading" | "uploaded" | "error";
@@ -52,6 +71,14 @@ export interface ComposerAttachment {
   uploaded?: AgentUploadedAttachment;
   /** Present once `status` is `"error"`, explaining what a retry should expect. */
   error?: string;
+  /**
+   * Local-only `URL.createObjectURL` preview (T279), present once ready
+   * for an image attachment (`mimeType` starting with `image/`). Never
+   * sent to the daemon — purely for the inline thumbnail this feature
+   * renders in the prompt bar. Revoked on `remove()` and `clear()`; see
+   * this file's own doc comment above.
+   */
+  previewUrl?: string;
 }
 
 export interface UseAttachmentsOptions {
@@ -78,6 +105,14 @@ export interface UseAttachmentsState {
    * dismisses the picker without choosing a file.
    */
   pickAndAddFiles: () => Promise<void>;
+  /**
+   * Stages + uploads files that arrived through a source other than the
+   * file dialog — a drop or a pasted image (T279). Identical staging,
+   * size-ceiling, and upload logic to `pickAndAddFiles`; that method is
+   * now defined in terms of this one, so there is exactly one acceptance
+   * path regardless of how a file arrived.
+   */
+  addFiles: (files: readonly PickedFile[]) => void;
   /** Removes a staged attachment outright (uploading, uploaded, or errored). */
   remove: (id: string) => void;
   /** Retries an errored attachment's upload. No-op for any other status or an unknown id. */
@@ -136,6 +171,19 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsSt
   // something this hook's own state should serialize or compare on every
   // render.
   const filesRef = useRef<Map<string, PickedFile>>(new Map());
+  // Mirrors exactly which ids are currently staged (T279's `createPreview`
+  // below reads it). Deliberately NOT derived by reading `attachments`
+  // state from inside an async continuation's `setAttachments` updater: a
+  // `setState` functional updater is not guaranteed to run synchronously
+  // once it is dispatched outside of a batched event — measured directly
+  // here (`addFiles`'s own `upload()` call, resolving around the same
+  // microtask, was enough to make React skip its "eager state" fast path),
+  // so a local variable set only inside that updater and read immediately
+  // after dispatching it is not a reliable way to ask "is this id still
+  // staged?". A plain ref, updated synchronously by `addFiles`/`remove`/
+  // `clear` themselves (the same three places that touch `attachments`
+  // state), has no such race.
+  const liveAttachmentIdsRef = useRef<Set<string>>(new Set());
 
   const makeId = useCallback(
     (): string => generateAttachmentId?.() ?? defaultGenerateAttachmentId(),
@@ -175,13 +223,50 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsSt
     [client, updateAttachment],
   );
 
-  const stageAndUpload = useCallback(
+  // Inline image preview (T279). Best-effort and entirely independent of
+  // `upload` above: a preview failure (or an environment with no
+  // `URL.createObjectURL` at all — jsdom's does not implement it) must
+  // never affect staging or upload. Guards against the attachment having
+  // already been removed by the time the read settles (checked against
+  // `liveAttachmentIdsRef`, not `attachments` state — see that ref's own
+  // doc comment for why), in which case the freshly-created object URL is
+  // revoked immediately rather than ever being attached to state —
+  // nothing else has a reference to it yet.
+  const createPreview = useCallback((id: string, file: PickedFile): void => {
+    if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return;
+    void (async () => {
+      try {
+        const bytes = await file.readAsBytes();
+        // `BlobPart` requires an `ArrayBufferView<ArrayBuffer>`, not the
+        // wider `ArrayBufferLike` (which also admits `SharedArrayBuffer`)
+        // `PickedFile.readAsBytes()` is typed to return; copying into a
+        // fresh `Uint8Array` backed by a plain `ArrayBuffer` satisfies that
+        // without changing `PickedFile`'s own platform-neutral signature
+        // (owned by `packages/frontend-core`, out of this task's scope).
+        const blobBytes = new Uint8Array(bytes);
+        const blob = new Blob([blobBytes], { type: file.mimeType || "application/octet-stream" });
+        const previewUrl = URL.createObjectURL(blob);
+        if (!liveAttachmentIdsRef.current.has(id)) {
+          URL.revokeObjectURL(previewUrl);
+          return;
+        }
+        setAttachments((prev) =>
+          prev.map((entry) => (entry.id === id ? { ...entry, previewUrl } : entry)),
+        );
+      } catch {
+        // Preview is a nice-to-have; the attachment itself is unaffected.
+      }
+    })();
+  }, []);
+
+  const addFiles = useCallback(
     (files: readonly PickedFile[]): void => {
       for (const file of files) {
         const id = makeId();
         const mimeType = file.mimeType || "application/octet-stream";
         const size = file.size ?? 0;
         if (size > maxBytes) {
+          liveAttachmentIdsRef.current.add(id);
           setAttachments((prev) => [
             ...prev,
             {
@@ -196,25 +281,45 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsSt
           continue;
         }
         filesRef.current.set(id, file);
+        liveAttachmentIdsRef.current.add(id);
         setAttachments((prev) => [
           ...prev,
           { id, name: file.name, mimeType, size, status: "uploading" },
         ]);
         void upload(id, file);
+        if (mimeType.startsWith("image/")) createPreview(id, file);
       }
     },
-    [makeId, maxBytes, upload],
+    [makeId, maxBytes, upload, createPreview],
   );
 
   const pickAndAddFiles = useCallback(async (): Promise<void> => {
     const picked = await filePicker.pickFiles({ multiple: true });
-    stageAndUpload(picked);
-  }, [filePicker, stageAndUpload]);
+    addFiles(picked);
+  }, [filePicker, addFiles]);
 
-  const remove = useCallback((id: string): void => {
-    filesRef.current.delete(id);
-    setAttachments((prev) => prev.filter((entry) => entry.id !== id));
+  const revokePreview = useCallback((entry: ComposerAttachment): void => {
+    if (
+      entry.previewUrl &&
+      typeof URL !== "undefined" &&
+      typeof URL.revokeObjectURL === "function"
+    ) {
+      URL.revokeObjectURL(entry.previewUrl);
+    }
   }, []);
+
+  const remove = useCallback(
+    (id: string): void => {
+      filesRef.current.delete(id);
+      liveAttachmentIdsRef.current.delete(id);
+      setAttachments((prev) => {
+        const target = prev.find((entry) => entry.id === id);
+        if (target) revokePreview(target);
+        return prev.filter((entry) => entry.id !== id);
+      });
+    },
+    [revokePreview],
+  );
 
   const retry = useCallback(
     (id: string): void => {
@@ -228,8 +333,12 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsSt
 
   const clear = useCallback((): void => {
     filesRef.current.clear();
-    setAttachments([]);
-  }, []);
+    liveAttachmentIdsRef.current.clear();
+    setAttachments((prev) => {
+      for (const entry of prev) revokePreview(entry);
+      return [];
+    });
+  }, [revokePreview]);
 
   const hasPendingUploads = attachments.some((entry) => entry.status === "uploading");
   const uploadedAttachments = useMemo<AgentUploadedAttachment[]>(
@@ -246,6 +355,7 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsSt
   return {
     attachments,
     pickAndAddFiles,
+    addFiles,
     remove,
     retry,
     hasPendingUploads,

@@ -6,10 +6,56 @@
  */
 
 .pc-composer {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
   max-width: 36rem;
+  border-radius: var(--radius-card);
+  transition: box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+/* Drag-and-drop (T279): quiet until a file drag is actually over the
+ * composer — this is the ONLY state that adds the highlight, so there is
+ * never a permanently visible dashed rectangle (`use-drag-and-drop.ts`'s
+ * own doc comment). Mirrors the accent ring `.pc-prompt-bar__input` already
+ * shows on focus, so a drag-over reads as "the same kind of active state"
+ * rather than a novel treatment. */
+.pc-composer--drop-active {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.pc-composer__drop-hint {
+  position: absolute;
+  top: 0;
+  left: var(--spacing-2);
+  transform: translateY(-100%);
+  margin-bottom: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-chip);
+  background-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  box-shadow: var(--shadow-hairline);
+  pointer-events: none;
+  /* Beautiful UI's signature `pop-in`, 200ms `cubic-bezier(.23,1,.32,1)`
+   * (`--motion-duration-moderate` / `--motion-easing-standard` — see
+   * `packages/design-tokens/src/tokens.ts`'s own doc comment naming that
+   * exact curve "Beautiful UI's signature easing"). */
+  animation: pc-composer-drop-hint-pop-in var(--motion-duration-moderate)
+    var(--motion-easing-standard) both;
+}
+
+@keyframes pc-composer-drop-hint-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-100%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-100%) scale(1);
+  }
 }
 
 .pc-composer__controls {
@@ -67,4 +113,30 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-2);
+  /* Beautiful UI's `.att` chip pop-in (T279), same curve as the drop
+   * hint above: 200ms `cubic-bezier(.23,1,.32,1)`. */
+  animation: pc-composer-attachment-pop-in var(--motion-duration-moderate)
+    var(--motion-easing-standard) both;
+}
+
+@keyframes pc-composer-attachment-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Inline image preview thumbnail (T279): a small square beside the
+ * attachment's chip, present once `useAttachments` has a `previewUrl`
+ * ready for that entry. */
+.pc-composer__attachment-preview {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-chip);
+  object-fit: cover;
+  box-shadow: var(--shadow-hairline);
 }
