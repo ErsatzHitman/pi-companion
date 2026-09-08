@@ -76,6 +76,39 @@
 // documented trade-off, not a defect the mutation proof below hides — see
 // this task's report for the exact input where the guard's coverage stops.
 //
+// T257: that disk walk is now ALSO filtered to skip anything `.gitignore`
+// already covers (see `isGitIgnoredPath` below and `gitIgnoredEntries` in
+// run-guard-dockerignore-depth.mjs) — measured at the P9-F gate to disagree
+// with CI on the exact same commit: a live working tree with ordinary local
+// build/test state found six bare names nested (`.github, node_modules,
+// *.tsbuildinfo, dist, .tmp, test-results`) and failed on `.tmp/`, while a
+// clean `git worktree` of the identical commit found only `.github` and
+// passed — because `ci.yml` runs this guard straight after `checkout` +
+// `setup-node`, with no `npm ci` and no test run, so CI's disk is always
+// clean and never carries any of that. This is the mirror of the stale-
+// `dist` trap `CLAUDE.md` documents (there, local green hides CI red; here,
+// local red hides nothing but cost six consecutive merge gates the time to
+// re-derive that the failure was noise).
+//
+// This WIDENS the `*.log` gap above rather than narrowing it: `.gitignore`'s
+// own bare `*.log` line (no `/`, so it matches at every depth, unlike
+// `.dockerignore`'s equivalent bare pattern) means a real nested `.log` file
+// is *itself* normally gitignored — so filtering the walk by `.gitignore`
+// removes the one case that disclosed gap's "on a checkout that already
+// happens to carry a stray `.log` file" fallback depended on. That fallback
+// was already non-deterministic (present or absent per developer, never
+// present in CI) and, by this repository's own T93 doctrine, verification
+// should track committed content, not incidental local disk state — a local
+// verdict that differs from CI's on the identical commit is exactly what
+// T93 exists to prevent, regardless of which side is red. The alternative —
+// document the divergence instead of closing it, on the grounds that a
+// developer's own `.dockerignore` mistakes are worth catching locally even
+// when untracked — was rejected for that reason: this guard's local verdict
+// should mean what CI's means, and the residual disk-walk value (an
+// untracked path `.gitignore` does NOT cover, e.g. a stray directory a
+// developer creates by hand outside every ignore rule) still functions
+// unchanged, proven in guard-dockerignore-depth.test.mjs.
+//
 // A pattern containing an internal path separator (`apps/android/.expo/`) is
 // already anchored to one specific, unambiguous location by design — adding
 // `**/` to it would broaden its meaning to match that suffix at ANY depth,
@@ -200,6 +233,39 @@ export function findTrackedNestedNames(trackedFiles, bareNames) {
     }
   }
   return found;
+}
+
+/**
+ * T257: does `relPath` (posix-separated, relative to the repository root,
+ * no leading `./`) fall inside one of `ignoredEntries` — the set
+ * `git ls-files --others --ignored --exclude-standard --directory -z`
+ * reports (gathered in `gitIgnoredEntries`, run-guard-dockerignore-
+ * depth.mjs)? Each entry is either a whole ignored directory (git's own
+ * `--directory` flag returns ONE entry with a trailing `/` for a directory
+ * that is entirely ignored, rather than enumerating every file inside it —
+ * which is also what keeps this cheap: no need to walk into a `node_modules`
+ * to know it is ignored) or a single ignored file (no trailing `/`).
+ * `relPath` matches when it equals an entry outright, or sits at or below a
+ * directory entry.
+ *
+ * Pure and dependency-free like every other function in this file — the
+ * actual `git` invocation that produces `ignoredEntries` lives in
+ * run-guard-dockerignore-depth.mjs, matching this file's existing split
+ * (this file decides; the CLI entry point gathers).
+ *
+ * @param {string} relPath
+ * @param {Iterable<string>} ignoredEntries
+ * @returns {boolean}
+ */
+export function isGitIgnoredPath(relPath, ignoredEntries) {
+  for (const entry of ignoredEntries) {
+    if (entry === relPath) return true;
+    if (entry.endsWith("/")) {
+      const dir = entry.slice(0, -1);
+      if (relPath === dir || relPath.startsWith(entry)) return true;
+    }
+  }
+  return false;
 }
 
 /**

@@ -7,6 +7,13 @@
 // own precedent, since this wave has multiple agents editing files
 // concurrently and `git show HEAD:<path>` is immune to that (this
 // repository's own T93 principle: test committed content).
+//
+// T257 adds `isGitIgnoredPath` unit tests below. The `.gitignore`-fetching
+// half (`gitIgnoredEntries` in run-guard-dockerignore-depth.mjs) is real
+// `git` I/O, not a pure function, and that file's `main()` runs unguarded at
+// import time — so it is proven at the CLI level instead (this task's
+// report), the same way `findRealNestedOccurrences`'s disk walk always has
+// been: nothing in this file imports run-guard-dockerignore-depth.mjs.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -18,6 +25,7 @@ import {
   bareTargetName,
   findDockerignoreDepthViolations,
   findTrackedNestedNames,
+  isGitIgnoredPath,
   nameGlobToRegExp,
   parseDockerignoreLines,
   RECURRING_ARTIFACT_FAMILIES,
@@ -143,6 +151,36 @@ test("nameGlobToRegExp handles the .metro-health-check* trailing wildcard", () =
   assert.equal(re.test(".metro-health-check-1700000000000"), true);
   assert.equal(re.test(".metro-health-check"), true);
   assert.equal(re.test(".metro-health"), false);
+});
+
+// --- isGitIgnoredPath (T257) ------------------------------------------------
+
+test("isGitIgnoredPath: an exact ignored file entry matches", () => {
+  assert.equal(isGitIgnoredPath("npm-debug.log", new Set(["npm-debug.log"])), true);
+});
+
+test("isGitIgnoredPath: a path strictly below an ignored directory entry matches", () => {
+  const ignored = new Set(["apps/web/e2e/.tmp/"]);
+  assert.equal(isGitIgnoredPath("apps/web/e2e/.tmp", ignored), true);
+  assert.equal(isGitIgnoredPath("apps/web/e2e/.tmp/e2e-ports.json", ignored), true);
+});
+
+test("isGitIgnoredPath: a sibling that merely shares a prefix does NOT match", () => {
+  // Regression guard for a naive `startsWith` over the bare directory name
+  // (no trailing "/"): "apps/web/e2e/.tmpfoo" is a different, real, un-
+  // ignored path that happens to start with the same characters as
+  // "apps/web/e2e/.tmp" — it must not be swallowed by the ignored entry.
+  const ignored = new Set(["apps/web/e2e/.tmp/"]);
+  assert.equal(isGitIgnoredPath("apps/web/e2e/.tmpfoo", ignored), false);
+});
+
+test("isGitIgnoredPath: a path outside every ignored entry does NOT match", () => {
+  const ignored = new Set(["node_modules/", "dist/"]);
+  assert.equal(isGitIgnoredPath("packages/server/src/index.ts", ignored), false);
+});
+
+test("isGitIgnoredPath: an empty ignored set matches nothing", () => {
+  assert.equal(isGitIgnoredPath("node_modules", new Set()), false);
 });
 
 // --- bareNameNeedsDepthAgnostic (synthetic evidence) -----------------------
