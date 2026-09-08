@@ -772,10 +772,25 @@ here cannot judge semantic drift either, only line existence.** The re-run grep 
 unfenced form is:
 
 ```
-git grep -noiE '\b(at |on |see )?lines? ~?[0-9]{2,4}(-[0-9]+)?\b' HEAD \
+git grep -noiE '\b(at |on |see )?lines? ~?[0-9]{1,4}(-[0-9]+)?\b' HEAD \
   -- 'packages/*/src/*' 'apps/*/src/*' 'scripts/ci/*' 'docs/*' 'plan.md' \
   ':!docs/issues-from-plan.md'
 ```
+
+(CORRECTED at the P9-L merge gate. The band was `{2,4}`, byte-identical to the fenced-form
+grep this one was written to extend, so it could not see a **single-digit** line number.
+Measured: `{2,4}` returns 16 hits, `{1,4}` returns 65. Forty-six of the 49 it hid are
+fixture content — `diff-highlighter.test.ts`, `terminal.test.ts`, `checkout-git.test.ts`
+and the renderer tests assert literal `"line 3"`-shaped strings by the dozen, which is why
+the wider band is noisier and why every hit still has to be classified by hand. But THREE
+were real citations in the very form the rule forbids, two of them in files T272 owned and
+had already converted other citations in: `docs/android-apk-release.md`'s ``.gitignore` line
+2`` — the twin, 166 lines away, of one it did convert — `guard-capability-prose.mjs`'s
+"(line ~1)", and `guard-capability-prose.test.mjs`'s "(lines 9, 35, 295, 332)", whose four
+numbers have themselves since rotted. The first two are fixed; the third is filed as T275.
+The band is widened rather than the exclusion merely documented, because a recovery
+procedure that silently cannot see part of what its own rule forbids is the
+"check that cannot fail" shape this file warns about in two other sections.)
 
 Every hit this found at T272's own HEAD was classified, individually, into one of three
 buckets, never assumed from a file-level pattern: real citations this task owned and

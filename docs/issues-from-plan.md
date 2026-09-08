@@ -529,6 +529,9 @@ that recomputation has to be domain-specific:
 | T268   | Restore pronoun coverage to T265's anchored phrases                             | phase-9   | tooling          | P9-W49 | T265                                                                  |
 | T269   | Stop citing shipped source by line number, and guard it                         | phase-9   | tooling          | P9-W50 | none                                                                  |
 | T272   | Close the prose-form line-number population T269 never measured                 | phase-9   | docs             | P9-W51 | T269                                                                  |
+| T273   | Repoint real-session-protection.test.ts's rotted agent.ts citation              | phase-9   | core             | P9-W52 | T269                                                                  |
+| T274   | Retire the bundle-budget guard's overtaken missing-rationale claim              | phase-9   | tooling          | P9-W53 | T269                                                                  |
+| T275   | Date or recount the four-marker citation that has rotted                        | phase-9   | tooling          | P9-W54 | T272                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -900,6 +903,12 @@ the task details always agree.
 |        | line-number citations, one of them on arrival).                          |       |
 | P9-W51 | T272 (filed by the P9-K gate; the rule forbids a prose                   | 1     |
 |        | form its own recovery grep cannot find).                                 |       |
+| P9-W52 | T273 (filed by the P9-L gate; a citation that has drifted                | 1     |
+|        | 69 lines, found by T272 and outside its Owns).                           |       |
+| P9-W53 | T274 (filed by the P9-L gate; the rationale the comment                  | 1     |
+|        | calls missing is now the test's own title).                              |       |
+| P9-W54 | T275 (filed by the P9-L gate; invisible to T272's grep                   | 1     |
+|        | twice over -- single-digit, then bare numbers).                          |       |
 
 ---
 
@@ -9938,6 +9947,95 @@ Owns: the listed files, plus `CLAUDE.md`'s T269 closing paragraph.
 - [x] `guard-capability-prose.mjs`'s two are converted, or argued as non-citations
 - [x] `CLAUDE.md`'s recorded re-run grep matches the prose form, replacing the P9-K pointer
 - [x] No guard is built, and the reason is stated
+
+#### T273 — Repoint `real-session-protection.test.ts`'s rotted `agent.ts` citation
+
+`labels: phase-9, area: core` · `wave: P9-W52` · `depends-on: T269`
+
+`packages/frontend-core/src/testing/real-session-protection.test.ts`'s header comment cites the
+live-stream `"custom"`-role display check in
+`packages/server/src/server/agent/providers/pi/agent.ts` as **"~line 2661"**. Measured at the
+P9-L merge gate: `grep -n 'role === "custom"' agent.ts` returns **2730**, and only 2730. The
+citation has drifted 69 lines.
+
+This is the exact failure mode T269's rule exists to prevent, and it was found by T272's own
+measurement — reported honestly by that task as outside its `Owns` grant rather than touched.
+Nothing about it is new information; it needs an owner.
+
+Convert to a symbol citation per `CLAUDE.md`'s "Cite shipped source by symbol name, never by
+line number" rule. Read what is actually at the cited construct before writing the replacement:
+the comment makes a claim about what that check does, and a citation that drifted 69 lines is a
+citation nobody has verified in a while.
+
+Owns: `packages/frontend-core/src/testing/real-session-protection.test.ts` only.
+
+- [ ] The `~line 2661` citation is replaced with a symbol citation
+- [ ] The claim the comment makes about that check is re-read against the real code and corrected if wrong
+- [ ] No line-number citation remains in that file
+
+#### T274 — `guard-web-session-bundle-budget.mjs`'s comment calls a rationale missing that now exists
+
+`labels: phase-9, area: tooling` · `wave: P9-W53` · `depends-on: T269`
+
+`scripts/ci/guard-web-session-bundle-budget.mjs`'s module comment says:
+
+> What is genuinely missing is a RATIONALE, not an assertion: nothing at that assertion connects
+> 60 ms to §14.5's 20 msg/s, and it sits inside a test titled about something else (that same
+> file, line 127: "uses constructor windowMs instead of a hard-coded value") …
+
+Both halves are false today, measured at the P9-L merge gate by reading
+`packages/server/src/server/agent/agent-stream-coalescer.test.ts`:
+
+- **Line 127** is now `test("pins AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS at 60, which plan.md §14.5's 20 msg/s per-agent bridge budget depends on", …)`. The rationale the comment calls missing **is the test's title**.
+- The `"uses constructor windowMs instead of a hard-coded value"` test moved to **line 130**.
+
+So this is not a rotted number to repoint — it is a **claim that has been overtaken**. Repointing
+the citation at a symbol while leaving the surrounding sentence would preserve a false statement
+in a more durable-looking form, which is the specific harm `CLAUDE.md`'s T269 section warns about.
+
+Retire or rewrite the paragraph: state that the pin now carries its own rationale in its title,
+and say what (if anything) this guard still needs to do about it. If the answer is "nothing", say
+so and delete the paragraph rather than leaving a stale worry in a shipped guard's header.
+
+Owns: `scripts/ci/guard-web-session-bundle-budget.mjs` only. Do **not** edit
+`agent-stream-coalescer.test.ts` — it is already correct.
+
+- [ ] The "missing rationale" claim is removed or rewritten against what the test title says today
+- [ ] No line-number citation remains in that comment
+- [ ] `node scripts/ci/run-guard-web-session-bundle-budget.mjs` still exits 0
+
+#### T275 — `guard-capability-prose.test.mjs`'s four-marker citation has rotted
+
+`labels: phase-9, area: tooling` · `wave: P9-W54` · `depends-on: T272`
+
+`scripts/ci/guard-capability-prose.test.mjs` carries, inside a `CORRECTED (P8-W6 merge gate)`
+narration, the claim that `docs/legacy-retirement.md` **"carries FOUR such markers (lines 9, 35,
+295, 332)"**. Measured at the P9-L merge gate: `grep -n CORRECTED docs/legacy-retirement.md`
+returns **six** hits, at **9, 15, 43, 323, 326, 374**. One of the four cited numbers still lands
+on a marker; the other three do not, and the count itself is wrong.
+
+Invisible to T272's recovery grep twice over, which is why it survived: the keyword-bearing
+number (`lines 9`) is **single-digit**, and the other three are bare numbers in a comma list with
+no `line`/`lines` token in front of them at all. The P9-L gate widened that grep's digit band,
+which is what surfaced this.
+
+**Decide the class first, and argue it.** `CLAUDE.md`'s T269 rule exempts "a line number in a
+commit message or a gate report" as a dated snapshot. This sentence is a gate's narration of what
+it found at P8-W6 — so the exemption plausibly applies, and the honest fix may be to **date it**
+("as of the P8-W6 gate, four markers at …") rather than to convert or recount. What is not
+defensible is leaving it reading as a present-tense claim about a file that now says something
+else. Whichever route is taken, state the reason.
+
+If the recount route is chosen, re-derive the marker set yourself; do not copy the six numbers
+above without checking each is a real `HISTORICAL_QUOTE_MARKERS` trigger in context.
+
+Owns: `scripts/ci/guard-capability-prose.test.mjs` only. Do **not** edit
+`docs/legacy-retirement.md`.
+
+- [ ] The marker set is re-derived directly, not copied from this brief
+- [ ] The route (date it / recount it / convert it) is chosen and argued against the alternatives
+- [ ] The sentence no longer reads as a present-tense claim that is false
+- [ ] `node --test scripts/ci/guard-capability-prose.test.mjs` all-pass
 
 #### T32A1 — Build the Android connect form
 

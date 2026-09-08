@@ -146,12 +146,17 @@ should not be mistaken for this one:
 
 - `packages/server/src/server/agent/provider-subagents/store.ts`'s
   `ProviderSubagentDescriptor` and the `subagents:fleet` published channel
-  (`plan.md` §11.4's renderer registry, "Published channels remain `subagents:fleet`,
+  (`plan.md` §11.7's published-channels sentence, "Published channels remain `subagents:fleet`,
   ...") track **running or completed subagent instances** a
   session has spawned — status, title, parent turn — as live telemetry. This is a
-  roster of _invocations_, already fully live per `plan.md`'s architecture (§11.4's
-  renderer registry table, `subagents` row:
+  roster of _invocations_, already fully live per `plan.md`'s architecture (§11.7's
+  "First-class UI through bridge elements" table, `subagents` row:
   "prominent roster with running, blocked, done, usage, and cancel/open actions").
+  (CORRECTED at the P9-L merge gate. Both citations here said §11.4 and described it as
+  a "renderer registry table". §11.4 _is_ titled "Renderer registry", but it is a bullet
+  list with no table and contains neither quoted string; T272 dropped these two sites'
+  rotted line numbers without checking the section label they were attached to, and
+  authored the table descriptor in the same edit.)
 - What T50 is asked about is a **catalog of configured subagent types/roles** the
   agent could invoke before any of them runs (the way some agent tools let a user
   browse named subagent personas). No such catalog concept appears anywhere in Pi's

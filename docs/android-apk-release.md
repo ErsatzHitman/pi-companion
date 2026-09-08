@@ -345,7 +345,8 @@ T44B2's own commit. T44B2's record of the resulting install-time collision
 This is the single largest open question for criterion three, and this task could
 not settle it without running a real `eas build` (owner-blocked, §4).
 
-- `dist/` is `.gitignore`d repository-wide (`.gitignore` line 2), so
+- `dist/` is `.gitignore`d repository-wide (the repository root `.gitignore`'s
+  `dist/` entry), so
   `packages/protocol/dist`, `packages/design-tokens/dist`,
   `packages/highlight/dist`, and `packages/frontend-core/dist` — everything §3.1's
   build step produces on the GitHub Actions runner — are all untracked by git.

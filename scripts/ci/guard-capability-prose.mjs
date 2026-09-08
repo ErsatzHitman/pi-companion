@@ -1473,7 +1473,7 @@ export const CAPABILITIES = [
     // "s" — structurally cannot match `walks?\s+only` here because the
     // mandatory "s" is exactly what a present-tense claim needs and a
     // "used to walk" past-tense claim does not have. This entry's own
-    // header comment above (line ~1) does say "used to walk only
+    // header comment above does say "used to walk only
     // `apps/android/src` and `apps/web/src`" for the same reason and is
     // safe on a second, independent ground: `guard-capability-prose.mjs`
     // is one of `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`'s three files, so
