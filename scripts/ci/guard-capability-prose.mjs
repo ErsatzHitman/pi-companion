@@ -1384,6 +1384,36 @@ export const CAPABILITIES = [
     // four new phrases close exactly those four, worded away from every
     // one of them verbatim.
     //
+    // T265 (P9-I gate): T259's phrases (1/4) and (2/4) below carried no
+    // anchor tying them to THIS guard, so each fires on a true statement
+    // about an unrelated one. Reproduced directly:
+    // "the orphan-module walk does not scan `packages/*/src`." fired
+    // (phrase 2/4) — true of `run-orphan-modules.mjs`, which genuinely does
+    // not walk `packages/*/src` as a declaration check.
+    // "guard-no-android-web-files scans only apps/android and apps/web by
+    // design." fired (phrase 1/4) — true of `guard-no-android-web-files.mjs`,
+    // which genuinely scans only the two app trees. Not a live failure: no
+    // such sentence existed in the tree, so this was drift risk, not a red.
+    // Both phrases now require the guard's own name (`declared-workspace-
+    // deps`, with or without a `guard-`/`.mjs` wrapper) or its function name
+    // (`discoverPackageTargets`) to appear ahead of the denial clause, the
+    // same "SCOPED TO THIS GUARD BY NAME" shape `guard-secret-scan`'s own
+    // entry above already uses. Anchoring can only ever REMOVE matches, not
+    // add any: every string the anchored regex matches necessarily contains
+    // the un-anchored core pattern as a substring, so the four T259 non-
+    // collision cases below (already zero matches) stay at zero — confirmed
+    // by re-running them, not merely inferred. Phrase (2/4)'s own T259 test
+    // fixture named no guard at all, so anchoring it required rewording that
+    // fixture to include the guard's name — the fixture changes, never the
+    // shipped regex's intent; the T259 (2/4) framing ("bare does-not-scan
+    // packages/*/src") still fires, just no longer un-anchored. Phrases
+    // (3/4) and (4/4) were not touched: T265's own reproduction targeted
+    // only (1/4) and (2/4), and neither carries the same unanchored risk —
+    // (3/4) requires the `relay package`/`packages/relay` literal, specific
+    // to this capability, and (4/4) requires "guard" immediately before
+    // "does not scan packages ... today", which the two false positives
+    // above do not supply as a contiguous match.
+    //
     // Trap 1 (collision with true history): both
     // `guard-declared-workspace-deps.mjs` ("T251: widened from
     // `apps/android/src`/`apps/web/src` ALONE to every `packages/*/src`
@@ -1430,15 +1460,21 @@ export const CAPABILITIES = [
     denyingPhrases: [
       /(?:that|the) guard (?:does not|doesn'?t|never) scans? `?packages\/relay`?/i,
       /an undeclared import (?:here|in packages\/relay|under packages\/relay) (?:would|could|is) (?:not (?:be )?caught|never (?:be )?(?:caught|detected|flagged))/i,
-      // T259 (1/4): the apps-only framing — "it walks only apps/android
-      // and apps/web" — is the phrasing every pre-T251 reader carries.
-      // Mandatory trailing "s" on the verb structurally excludes a
+      // T259 (1/4), T265-anchored: the apps-only framing — "it walks only
+      // apps/android and apps/web" — is the phrasing every pre-T251 reader
+      // carries. Mandatory trailing "s" on the verb structurally excludes a
       // "used to walk only ..." past-tense narration (see Trap 1 above).
-      /\b(?:walks|scans)\s+only\b[^.]{0,120}?apps\/android(?:\/src)?[^.]{0,60}?(?:and|&)[^.]{0,20}?apps\/web(?:\/src)?/i,
-      // T259 (2/4): the bare "does not scan packages/*/src" shape, with no
-      // `packages/relay` literal — anchored to the actual glob this
-      // capability's own scope uses, not a paraphrase of it.
-      /(?:does not|doesn'?t|never) scans?[^.]{0,30}?`?packages\/\*\/src`?/i,
+      // T265 requires the guard's own name or function name ahead of the
+      // clause, since the bare pattern is also a true statement about
+      // `guard-no-android-web-files.mjs` (see the T265 comment above).
+      /\b(?:(?:guard-)?declared-workspace-deps(?:\.mjs)?|discoverPackageTargets)\b[^.]{0,60}?\b(?:walks|scans)\s+only\b[^.]{0,120}?apps\/android(?:\/src)?[^.]{0,60}?(?:and|&)[^.]{0,20}?apps\/web(?:\/src)?/i,
+      // T259 (2/4), T265-anchored: the bare "does not scan packages/*/src"
+      // shape, with no `packages/relay` literal — anchored to the actual
+      // glob this capability's own scope uses, not a paraphrase of it. T265
+      // requires the guard's own name or function name ahead of the clause,
+      // since the bare pattern is also a true statement about
+      // `run-orphan-modules.mjs` (see the T265 comment above).
+      /\b(?:(?:guard-)?declared-workspace-deps(?:\.mjs)?|discoverPackageTargets)\b[^.]{0,60}?(?:does not|doesn'?t|never) scans?[^.]{0,30}?`?packages\/\*\/src`?/i,
       // T259 (3/4): "the relay package is not covered by the guard".
       /(?:relay package|packages\/relay) is not[^.]{0,20}?covered by[^.]{0,20}?(?:the|this) guard\b/i,
       // T259 (4/4): the bare, guard-scoped "does not scan packages today"

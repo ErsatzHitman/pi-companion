@@ -4286,13 +4286,14 @@ test("T259 (1/4): the apps-only framing -- 'walks only apps/android and apps/web
   assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
 });
 
-test("T259 (2/4): the bare 'does not scan packages/*/src' shape, with no packages/relay literal, fires", () => {
+test("T259 (2/4), T265-anchored: the bare 'does not scan packages/*/src' shape, with no packages/relay literal, fires when the guard is named", () => {
   const appFiles = [
     {
       path: "docs/some-other-doc.md",
       content:
-        "This check does not scan `packages/*/src` at all, so an undeclared\n" +
-        "workspace import under any package would never be caught.\n",
+        "The declared-workspace-deps guard does not scan `packages/*/src` at\n" +
+        "all, so an undeclared workspace import under any package would\n" +
+        "never be caught.\n",
     },
   ];
 
@@ -4373,6 +4374,62 @@ test("T259: a synthetic past-tense 'used to walk only apps/android and apps/web'
         "widened it to every packages/*/src too.\n",
     },
   ];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
+
+// T265: T259's phrases (1/4) and (2/4) carried no anchor tying them to THIS
+// guard, so each fired on a TRUE statement about a different guard. Both
+// sentences below were confirmed, before this task's fix, to fire against
+// `run-guard-capability-prose.mjs` -- reproduced at the P9-I merge gate and
+// re-confirmed directly against the pre-fix regexes while writing this task.
+// Pinned here as fixture non-collision tests so a later widening of this
+// entry cannot silently reintroduce the reach.
+
+test("T265: 'the orphan-module walk does not scan packages/*/src' (true of run-orphan-modules.mjs) does not fire", () => {
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "the orphan-module walk does not scan `packages/*/src`.\n",
+    },
+  ];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
+
+test("T265: 'guard-no-android-web-files scans only apps/android and apps/web by design' (true of guard-no-android-web-files.mjs) does not fire", () => {
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "guard-no-android-web-files scans only apps/android and apps/web by design.\n",
+    },
+  ];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
+
+test("T265: run-orphan-modules.mjs's own real, committed narration does not collide", () => {
+  const real = readCommittedFile("scripts/ci/run-orphan-modules.mjs");
+  const appFiles = [{ path: "scripts/ci/run-orphan-modules.mjs", content: real }];
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
+    [],
+  );
+});
+
+test("T265: guard-no-android-web-files.mjs's own real, committed narration does not collide", () => {
+  const real = readCommittedFile("scripts/ci/guard-no-android-web-files.mjs");
+  const appFiles = [{ path: "scripts/ci/guard-no-android-web-files.mjs", content: real }];
 
   assert.deepEqual(
     findCapabilityDenialViolations({ shippedFiles: T259_SHIPPED_FILES, appFiles }),
