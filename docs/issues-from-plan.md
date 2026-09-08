@@ -10887,6 +10887,79 @@ Owns: `apps/android/package.json`'s `expo-audio` pin (owner-run), and
 - [ ] After any bump, `RecorderState`/`RecordingStatus` are re-read and T276's conclusion re-checked
 - [ ] If the drift is benign, that is recorded and the task closes without a change
 
+**Measured at `89b58c5` — a bump is warranted; not attempted (`npm install` is refused here).**
+
+`expo-audio@1.0.16`'s own `package.json` declares `"expo": "*"` in `peerDependencies` — npm's
+own dependency resolver enforces nothing here, so the mismatch is invisible to `npm ls`, to
+`npm install`, and to `run-guard-version-drift.mjs` alike. The only thing that actually knows
+this pin is wrong is Expo's own compatibility data. Run foreground from `apps/android`:
+
+```
+$ npx expo install --check
+The following packages should be updated for best compatibility with the installed expo version:
+  expo-audio@1.0.16 - expected version: ~1.1.1
+  expo-secure-store@57.0.3 - expected version: ~15.0.8
+  @types/react@19.2.18 - expected version: ~19.1.10
+Your project may not work correctly until you install the expected versions of the packages.
+Found outdated dependencies
+```
+
+(The other two flagged packages are outside this task's scope — its `Owns` line names only the
+`expo-audio` pin.)
+
+Nothing in this repository's CI can observe the drift failing **today**, and that was checked
+rather than assumed: `.github/workflows/ci.yml`'s `android-tests` job runs `expo prebuild
+--platform android --no-install` (config-plugin codegen only, no native compile) and
+`apps/android`'s own JS-level typecheck/test suite, neither of which touches expo-audio's
+compiled native code — `expo-audio-voice-capture-port.ts`'s own header already documents that
+its real `expo-audio` binding is never loaded under vitest (`vi.mock` before a dynamic
+`import()`). The two workflows that DO run a real native compile
+(`android-apk-release.yml`, `android-maestro-e2e.yml`) both intentionally no-op their
+`eas build` step today, pending the `EXPO_TOKEN` secret those files' own headers say is not yet
+configured (tracked as T44). So the drift cannot be caught failing by anything that currently
+runs, in either direction — this is a latent-risk judgment call, not a reproduced failure.
+
+Given that, the call is made on Expo's own signal rather than on a semver reading of "only a
+minor version, probably fine": `npx expo install --check` exists precisely because Expo's SDK
+bundles native modules as a tested set, in a way plain semver peer ranges (`"expo": "*"` here)
+cannot express, and it is the tool this task's own brief named as authoritative. It reports
+this pin as outdated for the installed `expo@54.0.37`. Downloaded `expo-audio@1.1.1`'s real
+tarball via `npm pack expo-audio@1.1.1` into the scratchpad (a read-only registry fetch —
+no `package.json`/`package-lock.json` edit, no install into this repository's `node_modules`)
+to check what the bump would actually change: the native `android/build.gradle` diff is
+additive only (`androidx.appcompat` `1.7.0` → `1.7.1`, two new `androidx.media3` deps for
+background-audio session/UI support introduced between 1.0.16 and 1.1.1) — nothing removed,
+no `compileSdkVersion`/`targetSdkVersion` change. That is consistent with "does not currently
+crash a build" but is not proof a real EAS compile would tolerate it; only a real EAS build,
+which this repository cannot run today, tells you that for certain.
+
+**The `Audio.types.d.ts` half of the checklist — the one this task can answer with certainty.**
+Diffed the installed 1.0.16 copy against the downloaded 1.1.1 tarball's copy byte-for-byte:
+`RecorderState` (`canRecord`/`isRecording`/`durationMillis`/`mediaServicesDidReset`/
+`metering`/`url`) and `RecordingStatus` (`id`/`isFinished`/`hasError`/`error`/`url`) are
+**identical field sets in both versions** — every diffed change between the two files sits in
+unrelated playback/interruption-mode/background-recording types
+(`InterruptionMode`/`AudioMetadata`/`allowsBackgroundRecording`), never in either recorder
+type. **T276's "unmeasurable" conclusion in `expo-audio-voice-capture-port.ts`'s header is
+unaffected by this bump** — sample rate and channel count still have no JS-level API to read
+back in 1.1.1, so that header needs no edit, before or after the owner runs the install below.
+
+**The exact command for the owner**, scoped to this one package only (`--fix` would also touch
+the other two flagged packages, which this task does not own):
+
+```
+cd apps/android && npx expo install expo-audio
+```
+
+After running it, re-run `npx expo install --check` from `apps/android` and confirm `expo-audio`
+no longer appears in its output; no further header re-check is needed unless that command's own
+resolved version differs from `~1.1.1` above, in which case re-diff `Audio.types.d.ts` the same
+way this entry did.
+
+Owns note: no file under `apps/android` was edited by this measurement — `package.json`'s pin
+stays owner-run per the `Owns` line above, and the header needed no correction because the API
+surface it depends on did not move.
+
 #### T292 — Slash-command completion in the Android composer
 
 `labels: phase-9, area: android` · `wave: P9-W71` · `depends-on: none`
