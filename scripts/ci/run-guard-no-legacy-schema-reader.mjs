@@ -71,16 +71,17 @@ export function main() {
   for (const { path, fields } of violations) {
     console.error(
       `  ${path}: discriminates on version === 1 and reads ${fields.join("/")} back out of a ` +
-        `value — this is a legacy §3 envelope reader, which docs/frontend-data-migration.md §2/§3 ` +
-        `and apps/android/src/platform/offline/versioned-import.test.ts both say must not exist ` +
-        "in this repository.",
+        `value — this is a legacy §3 envelope reader, which plan.md §5.3 (reset, not migrate — no ` +
+        `import path or schema migration for legacy drafts, hosts, or attachments) and ` +
+        `apps/android/src/platform/offline/versioned-import.test.ts both say must not exist in this ` +
+        "repository.",
     );
   }
   console.error(
     "  Remove the import path (any future export/import utility belongs in the legacy checkout " +
-      "per plan.md §5.3, never here — see docs/frontend-data-migration.md §3), or, if the Phase 0 " +
-      "decision has genuinely been reversed in writing, update that decision doc and this guard " +
-      "together.",
+      "per plan.md §5.3, never here — the version-1 envelope shape is recorded in " +
+      "docs/frontend-data-migration.md §3), or, if the Phase 0 decision has genuinely been " +
+      "reversed in writing, update plan.md §5.3 and this guard together.",
   );
   process.exitCode = 1;
 }

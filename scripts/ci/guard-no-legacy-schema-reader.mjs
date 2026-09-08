@@ -38,12 +38,14 @@
 //
 // The prohibition this enforces is written down in
 // `apps/android/src/platform/offline/versioned-import.test.ts`'s own doc
-// comment (T42B2) and in `docs/frontend-data-migration.md` §2/§3: Phase 0
-// decided RESET/RE-PAIR — no export utility is created, and if one is ever
-// built later it "would live in the legacy checkout ... never in
-// `D:\pi-companion`", with T42 adding an import test against it only at
-// that time. Until then, no code in this repository may read the §3
-// envelope shape and turn it into live hosts, drafts, or attachments.
+// comment (T42B2) and in `plan.md` §5.3: the Phase 0 audit found no legacy
+// client data worth exporting and took the "skip and re-pair" branch —
+// reset, not migrate — so this repository adds no import path or schema
+// migration for legacy drafts, hosts, or attachments (T42). Until that
+// decision is reversed in writing, no code in this repository may read the
+// version-1 envelope shape recorded in `docs/frontend-data-migration.md` §3
+// (the synthetic export's `hosts`/`drafts`/`attachments` fields keyed to
+// `version === 1`) and turn it into live hosts, drafts, or attachments.
 //
 // The P8-W7 merge gate established exactly where that written-down claim
 // stopped being enforced: `versioned-import.test.ts`'s own suite
