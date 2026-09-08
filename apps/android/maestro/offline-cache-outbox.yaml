@@ -52,11 +52,19 @@ tags:
 #   fallback (`in-memory-outbox-runtime.ts`, used today) or T68's future
 #   real `SqliteStructuredStorage`. "Flush a safe outbox item" against
 #   the real outbox therefore has no UI path to drive at all yet, on any
-#   emulator, until an attachment picker is wired
-#   (`attachment-source-port.ts`'s own "To wire a real picker" note —
-#   blocked on `expo-image-picker`/`expo-document-picker`, both on this
-#   wave's known-uninstallable list) — a `Composer.tsx` gap, not this
-#   flow's or T68's to close. See
+#   emulator — a `Composer.tsx` gap, not this flow's or T68's to close.
+#   **CORRECTED (T290)**: this used to say the gap was open "until an
+#   attachment picker is wired... blocked on `expo-image-picker`/
+#   `expo-document-picker`, both on this wave's known-uninstallable
+#   list". That premise is stale for a reason unrelated to T290:
+#   `../e2e/flows/offline-cache-outbox.contract.test.ts`'s own "T75"
+#   comment records that `handleSend` no longer gates `sendWithOutbox`
+#   on `attachmentsToSend.length > 0` at all — every send, text-only
+#   included, now reaches the real outbox unconditionally. This whole
+#   "attachment-bearing branch only" framing predates that fix and was
+#   found stale while grepping for T290's own capability, not verified
+#   or rewritten in full here — filed as a finding for whoever next owns
+#   this flow. See
 #   `../e2e/flows/offline-cache-outbox.contract.test.ts`'s "the durable
 #   outbox is unreachable from any text-only send" describe block for
 #   the exact `readFunctionCode` proof of the gate, kept

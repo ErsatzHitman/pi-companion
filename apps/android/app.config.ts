@@ -241,6 +241,37 @@ const config: ExpoConfig = {
       },
     ] satisfies ShareIntentFilter[],
   },
+  // T290: no `expo-image-picker`/`expo-document-picker` plugin entry —
+  // a deliberate decision, not an oversight, measured directly against
+  // each package's own Android config plugin source before deciding:
+  //
+  // - `expo-document-picker`'s config plugin
+  //   (`plugin/build/withDocumentPicker.js`) only calls `with
+  //   DocumentPickerIOS` — it is iOS-only and a no-op for this
+  //   Android-only app (`platforms: ["android"]` above).
+  // - `expo-image-picker`'s config plugin
+  //   (`plugin/build/withImagePicker.js`) has exactly one Android-side
+  //   effect at DEFAULT options: `withAndroidImagePickerPermissions`
+  //   ADDS `android.permission.RECORD_AUDIO` (for the library's video
+  //   capture feature, which `./expo-camera-capture-port.ts` never
+  //   uses — it only calls `launchCameraAsync` for still photos). This
+  //   app has no reason to request a real, privacy-sensitive
+  //   microphone permission this feature never needs.
+  //
+  // The `CAMERA` permission `expo-camera-capture-port.ts` actually
+  // needs is already granted with NO plugin entry at all: it comes from
+  // `expo-image-picker`'s own bundled `AndroidManifest.xml`
+  // (`<uses-permission android:name="android.permission.CAMERA" />`),
+  // which Android's own manifest merger includes automatically for
+  // every installed native module regardless of this `plugins` array —
+  // that array is for `app.config.ts`-driven modifications to generated
+  // native files, not for admitting a dependency's own bundled
+  // manifest. Adding the plugin here with default options would add
+  // `RECORD_AUDIO` — a regression, not an improvement — for zero
+  // capability gained. If a future feature genuinely needs the plugin
+  // (e.g. custom iOS permission copy, were this app ever to grow an iOS
+  // target), add it with `{ microphonePermission: false }` explicitly,
+  // never with default options.
   plugins: ["expo-router", "./plugins/with-share-intent-module"],
   experiments: {
     typedRoutes: true,

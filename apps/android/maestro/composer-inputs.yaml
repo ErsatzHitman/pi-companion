@@ -1,5 +1,5 @@
 appId: ${APP_ID}
-name: "composer inputs — keyboard entry live; voice recording now real (permission-gated); attachment picking and share intent blocked, named"
+name: "composer inputs — keyboard entry live; voice recording and attachment picking now real (permission-gated); share intent blocked, named"
 tags:
   - composer
 ---
@@ -37,11 +37,19 @@ tags:
 # proves the tap itself is live and real; it asserts nothing about what
 # follows, and says so at the point it stops. Nothing yet navigates to
 # `/share` automatically (filed against T32S15 by T69), so no share can
-# be reached from here. Attachment *picking* is similarly stubbed:
-# `attachment-source-port.ts`'s own doc comment records that no
-# `expo-image-picker`/`expo-document-picker` dependency is installed in
-# this workspace, so `createUnavailableAttachmentSourcePort` is its only
-# production implementation.
+# be reached from here. **T290 GAP CLOSED**: attachment *picking* used
+# to be similarly stubbed (`attachment-source-port.ts`'s own doc comment
+# recorded that no `expo-image-picker`/`expo-document-picker` dependency
+# was installed, so `createUnavailableAttachmentSourcePort` was its only
+# production implementation). The owner installed both packages and
+# T290 wired a real, `expo-document-picker`-backed
+# `createExpoAttachmentSourcePort()` at the session mount — pressing
+# attach now opens the real native document/photo picker, the same
+# "live tap, unobservable outcome" shape as the MIC BUTTON section
+# above: this flow has no emulator/device/Maestro binary to drive or
+# read the native picker UI, so the ATTACH BUTTON section below stops
+# at the tap exactly like the mic one does, rather than asserting the
+# now-untrue "unavailable" banner.
 #
 # So this flow proves what is actually true today, split into two
 # halves:
@@ -88,18 +96,18 @@ tags:
 #      — not because the prop is unwired any more, but because this flow
 #      talks to no daemon at all (see "Reaching the composer without
 #      pairing" below). The mic and attach buttons are both live (real,
-#      tappable, real testIds), but they no longer share one outcome:
-#      attach still resolves the honest "unavailable" fallback, real,
-#      shipped behavior (`permission-recovery.ts`'s `"unavailable"`
-#      state, distinct from a user's own `"denied"` choice) — never a
-#      completed pick, since no picker package is installed
-#      (`expo-image-picker`/`expo-document-picker`, still neither
-#      resolvable from `apps/android` — re-checked for T282, unchanged).
-#      Mic no longer resolves "unavailable" at all (that state is now
-#      reserved for a caller that explicitly disables voice, which
-#      nothing does here) — a real device now shows the OS's own
-#      permission dialog, which this flow taps into but does not attempt
-#      to drive further (see above).
+#      tappable, real testIds), and — since T290 — share the SAME
+#      outcome shape mic already had: neither resolves "unavailable" any
+#      more. Mic no longer resolves "unavailable" at all (that state is
+#      now reserved for a caller that explicitly disables voice, which
+#      nothing does here); attach no longer does either, now that T290
+#      wired a real `createExpoAttachmentSourcePort()` (backed by
+#      `expo-document-picker`, which needs no Android permission at all
+#      — see that module's own header) — a real device now opens the
+#      native document/photo picker directly, no permission prompt in
+#      the way, which this flow taps into but does not attempt to drive
+#      further (see above), the identical limitation the mic dialog
+#      already has.
 #   2. SHARE INTENT — cannot be exercised at all, on a device or
 #      otherwise, and this flow does not try to fake one. `Composer`
 #      has no share-intent affordance of its own to begin with (a share
@@ -228,18 +236,22 @@ tags:
 - tapOn:
     id: "composer-mic"
 
-# --- ATTACH BUTTON: same shape as mic — live, tappable, honest
-# --- "unavailable" fallback (no `expo-image-picker`/`expo-document-
-# --- picker` installed). Real picking is blocked on those packages
-# --- being installed and a second `AttachmentSourcePort` implementation
-# --- added behind this same seam (`attachment-source-port.ts`'s own "To
-# --- wire a real picker" note) — neither exists this wave.
+# --- ATTACH BUTTON (T290): live and tappable, and — since T290 — backed
+# --- by a real `AttachmentSourcePort` (`createExpoAttachmentSourcePort()`,
+# --- Composer.tsx's own default at the session mount), not the
+# --- "unavailable" fallback this section used to assert. That real port
+# --- is backed by `expo-document-picker`, which needs no Android
+# --- permission at all (Storage Access Framework — see that module's
+# --- own header), so `composer-attachment-permission-notice` never
+# --- renders any more (`PermissionRecoveryNotice` renders nothing for
+# --- "granted" — see its own doc comment) and pressing attach goes
+# --- straight to the real native document/photo picker. This flow stops
+# --- at the tap, the identical limitation the MIC BUTTON section above
+# --- already has: no emulator/device/Maestro binary in this wave to
+# --- drive or observe the native picker UI, so nothing below asserts
+# --- what follows.
 - tapOn:
     id: "composer-attach"
-- assertVisible:
-    id: "composer-attachment-permission-notice"
-- assertVisible:
-    text: "Photo and file access unavailable. Photo and file access isn't available in this build."
 # --- SHARE INTENT: deliberately not exercised here — see this file's
 # --- header comment section 2 for exactly why (no in-app receiver
 # --- mounted, no native module to deliver a real ACTION_SEND intent

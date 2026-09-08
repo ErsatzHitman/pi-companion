@@ -189,11 +189,16 @@ export interface ComposerProps {
   turnService: TurnService;
   /**
    * T33B7: picker + OS-permission port for attachments. Optional and
-   * defaults to `createUnavailableAttachmentSourcePort()` — no photo/
-   * document picker is installed in this workspace yet (see that
-   * module's doc comment). Passing a real implementation is what turns
-   * the attach action from an honest "unavailable" notice into a real
-   * pick/upload flow; nothing else about this component changes.
+   * defaults to `createUnavailableAttachmentSourcePort()` — the
+   * injection fallback for a caller that wants attachment picking
+   * explicitly disabled. **T290**: the session mount's own default is
+   * now `createExpoAttachmentSourcePort()` (`./expo-attachment-source-
+   * port.ts`), a real `expo-document-picker`-backed picker — see that
+   * module's header for why it always resolves `"granted"` (the
+   * document picker needs no Android permission). Passing a real
+   * implementation is what turns the attach action from an honest
+   * "unavailable" notice into a real pick/upload flow; nothing else
+   * about this component changes.
    */
   attachmentSource?: AttachmentSourcePort;
   /**
@@ -218,13 +223,18 @@ export interface ComposerProps {
    * `attachment-source-port.ts`'s `CameraCapturePort` doc comment for
    * why this is a sibling port rather than a second method on
    * `AttachmentSourcePort`). Optional and defaults to
-   * `createUnavailableCameraCapturePort()` — no camera dependency is
-   * installed in this workspace yet (same constraint as
-   * `attachmentSource`). A captured photo is staged and uploaded
-   * through the exact same `evaluateAttachmentCandidate`/
-   * `stageAttachment`/`uploadClient` pipeline as a picked file — see
-   * `stageAndUploadFiles` below — so every limit in `attachmentLimits`
-   * applies to it identically.
+   * `createUnavailableCameraCapturePort()` — the injection fallback for
+   * a caller that wants camera capture explicitly disabled. **T290**:
+   * the session mount's own default is now
+   * `createExpoCameraCapturePort()` (`./expo-camera-capture-port.ts`), a
+   * real `expo-image-picker`-backed capture (see that module's header
+   * for the one disclosed native-layer permission quirk
+   * `attachment-source-port.ts`'s `CameraCapturePort` doc comment
+   * documents). A captured photo is staged and uploaded through the
+   * exact same `evaluateAttachmentCandidate`/`stageAttachment`/
+   * `uploadClient` pipeline as a picked file — see `stageAndUploadFiles`
+   * below — so every limit in `attachmentLimits` applies to it
+   * identically.
    */
   cameraCapture?: CameraCapturePort;
   /**

@@ -1765,6 +1765,60 @@ export const CAPABILITIES = [
       /\bresolveTranscribeClient[^.]{0,60}?(?:does not exist|has never been (?:added|shipped)|is not (?:defined|declared|called))/i,
     ],
   },
+  {
+    // T290: `createExpoAttachmentSourcePort`
+    // (`apps/android/src/features/composer/expo-attachment-source-port.ts`)
+    // and `createExpoCameraCapturePort`
+    // (`apps/android/src/features/composer/expo-camera-capture-port.ts`) —
+    // measured with `git grep -n "createExpoAttachmentSourcePort\|
+    // createExpoCameraCapturePort" -- 'apps/*/src/*' 'packages/*/src/*'
+    // 'scripts/ci/*'` — each declared exactly once, as an `export
+    // function`, in its own file. Every other hit is an import, a call
+    // site, or a doc-comment mention naming it, so a plain bare-string
+    // OR pair is sufficient — no T168 group needed (they are two
+    // separate real ports, not one capability split across files the
+    // way a group protects).
+    //
+    // This is a DIFFERENT capability from the queue-mode trio at the top
+    // of this file: this entry protects the MOUNT WIRING — the session
+    // route actually passing real ports to `Composer` — not merely the
+    // ports existing. Mirrors T289's `resolveTranscribeClient` entry
+    // immediately above for the identical reason ("the client can do X"
+    // and "the app actually asks it to" are different facts).
+    //
+    // A FORWARD guard (T162's shape): every site this task found
+    // asserting the ports were unavailable/unwired was corrected in the
+    // same commit that adds this entry, each with a `CORRECTED`/`this
+    // used to`/"still" marker ahead of its quoted old text (`Composer.tsx`,
+    // the session mount, `attachment-source-port.ts`, `core.ts`,
+    // `core.test.ts`, `file-upload-model.ts`, `sharing.ts`,
+    // `file-picker.ts`, `[...path].tsx`, `attachment-model.ts`,
+    // `composer-inputs.yaml`, `composer-inputs.contract.test.ts`,
+    // `background-kill-restore.contract.test.ts`,
+    // `accessibility-audit.yaml`, `files-and-terminal.yaml`,
+    // `offline-cache-outbox.yaml`), so no live denying sentence exists in
+    // scope today. Every phrase below is therefore worded fresh, in this
+    // entry's own voice, deliberately avoiding "(no picker package
+    // installed)"/"not installed"/"not yet installed" — wording several
+    // of those corrections legitimately still use in PAST tense
+    // ("before this task...", "used to say...") to narrate real history
+    // in the same commit that fixes it, which a phrase built on that
+    // wording would collide with. Proven able to fire by appending a
+    // sentence in this entry's own wording to a real tracked in-scope
+    // file, confirming `run-guard-capability-prose.mjs` exited 1 naming
+    // this capability, then restoring the file from a scratchpad copy —
+    // never `git checkout --` — and confirming exit 0 with `git status
+    // --porcelain` empty.
+    name: "the Android session mount passes real attachment/camera ports to the composer, not just the ports existing (createExpoAttachmentSourcePort/createExpoCameraCapturePort)",
+    methodNames: ["createExpoAttachmentSourcePort", "createExpoCameraCapturePort"],
+    denyingPhrases: [
+      /\b(?:the )?attach(?:ment)? (?:button|action|picking)\s+(?:only |still )?(?:ever )?reaches?\s+an?\s+"?unavailable"?\s+fallback\b/i,
+      /\b(?:the )?(?:android )?session (?:route|mount) (?:never|does not) pass(?:es)? a (?:real|live) (?:attachment source|camera capture) port to (?:the composer|Composer)/i,
+      /\bcreateExpoAttachmentSourcePort[^.]{0,60}?(?:does not exist|has never been (?:added|shipped)|is not (?:defined|declared|called|wired))/i,
+      /\bcreateExpoCameraCapturePort[^.]{0,60}?(?:does not exist|has never been (?:added|shipped)|is not (?:defined|declared|called|wired))/i,
+      /\bpressing (?:attach|the camera action) (?:only ever )?(?:reaches|resolves|settles)[^.]{0,40}?"?unavailable"?/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

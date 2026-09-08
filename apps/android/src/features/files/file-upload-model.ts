@@ -137,9 +137,11 @@ export const DEFAULT_FILE_UPLOAD_TIMEOUT_MS = 60_000;
  *
  * Before T78, `selectFile()`'s `.catch()` discarded this value entirely
  * — a denied permission or `createUnavailableFilePicker()`'s always-
- * unavailable production stub (see that factory's own doc comment; no
- * `expo-document-picker`/`expo-image-picker` install exists yet) made
- * the "Choose file" button look inert, with no explanation anywhere.
+ * unavailable production stub (see that factory's own doc comment; still
+ * the field's real value today — `createAndroidFilePicker` needs a
+ * router-root wiring T32S11 owns, not done by T290's `expo-image-picker`/
+ * `expo-document-picker` install) made the "Choose file" button look
+ * inert, with no explanation anywhere.
  * `explainOversizedUpload` above is this function's sibling for the
  * other `"refused"`-status trigger (a bound checked after a file *is*
  * picked, not before).

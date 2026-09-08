@@ -85,11 +85,15 @@ tags:
 #     *behind* the mic/attach buttons' OS-permission check) — already
 #     disclosed by `composer-inputs.yaml` (T37E3): both buttons are live,
 #     tappable, 48dp, and correctly labelled (which is everything this
-#     flow's own scope covers), but pressing either only ever reaches an
-#     honest "unavailable" fallback (no `expo-audio`/`expo-image-picker`/
-#     `expo-document-picker` installed). This flow does not re-tap either
-#     button past its own touch-target/label proof above — that walk-
-#     through already belongs to `composer-inputs.yaml`.
+#     flow's own scope covers). Pressing either used to only ever reach
+#     an honest "unavailable" fallback (no `expo-audio`/`expo-image-
+#     picker`/`expo-document-picker` installed); T276 and T290 closed
+#     that gap — both now open a real OS permission check and a real
+#     recorder/picker, unobservable here the same way (no emulator/
+#     device/Maestro binary in this wave — see `composer-inputs.yaml`'s
+#     own header for the full disclosure). This flow does not re-tap
+#     either button past its own touch-target/label proof above — that
+#     walk-through already belongs to `composer-inputs.yaml`.
 #   - **Share intent** — no in-app receiver is mounted anywhere under
 #     `apps/android/src/app/` (`features/share/index.ts`'s own "Nothing
 #     imports the receiver/port yet" note, still true as of this

@@ -574,7 +574,7 @@ describe("AppCore.shareIntentPort (T69, P5-W21)", () => {
 });
 
 describe("AppCore.filePicker (T78)", () => {
-  it("is a real, present FilePicker — not undefined, not omitted — whose pickFiles() rejects with the real, honest FILE_PICKER_UNAVAILABLE sentinel (no expo-document-picker/expo-image-picker install exists in this workspace)", async () => {
+  it("is a real, present FilePicker — not undefined, not omitted — whose pickFiles() rejects with the real, honest FILE_PICKER_UNAVAILABLE sentinel (createAndroidFilePicker is not wired here yet — T32S11's job, not T290's; see core.ts's own filePicker doc comment)", async () => {
     const core = createAppCore();
 
     expect(core.filePicker).toBeDefined();

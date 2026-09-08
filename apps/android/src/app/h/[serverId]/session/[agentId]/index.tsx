@@ -9,7 +9,11 @@ import {
   ApprovalsContainer,
   type DaemonPermissionsSource,
 } from "../../../../../features/approvals";
-import { Composer } from "../../../../../features/composer";
+import {
+  Composer,
+  createExpoAttachmentSourcePort,
+  createExpoCameraCapturePort,
+} from "../../../../../features/composer";
 import { useConnectionStatus } from "../../../../../features/connect";
 import {
   PiUiElementView,
@@ -567,30 +571,44 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * `turnStatusClient` are, and the mic still shows the honest
  * `"transcription-unavailable"` outcome rather than a silent no-op.
  *
- * `attachmentSource`/`cameraCapture` remain unset at this mount, and
- * deliberately so — not an oversight this task missed. Both ports'
- * only production implementations are still
- * `createUnavailableAttachmentSourcePort`/`createUnavailableCameraCapturePort`
- * (`../../../../../features/composer/attachment-source-port.ts`), because
- * `apps/android/package.json` declares neither `expo-image-picker` nor
- * `expo-document-picker` and neither resolves from this workspace today
- * (checked directly: `require.resolve("expo-image-picker", { paths:
- * ["apps/android/src"] })` and the `expo-document-picker` equivalent
- * both throw `Cannot find module`, from both `apps/android/node_modules`
- * and the repository root's). This task may not run `npm install`.
- * Closing this gap needs, in order: the owner running
- *
- *   npm install --workspace=@picompanion/android expo-image-picker@~17.0.11
- *   npm install --workspace=@picompanion/android expo-document-picker@~14.0.8
- *
- * (versions pinned to *this app's own* installed `expo`'s
- * `bundledNativeModules.json`, per `attachment-source-port.ts`'s own
- * header), then a real `AttachmentSourcePort`/`CameraCapturePort`
- * implementation added behind that same file's already-drawn seam, then
- * this route passing them here exactly like `transcribeClient` above.
- * Nothing in `Composer.tsx`, `attachment-model.ts`, or
- * `attachment-capture-model.ts` needs to change for that — the whole
- * point of the seam those files already describe.
+ * **T290 mount.** `attachmentSource`/`cameraCapture` used to remain
+ * unset at this mount — the owner had not yet installed
+ * `expo-image-picker`/`expo-document-picker`, so `Composer.tsx`'s own
+ * `?? createUnavailableAttachmentSourcePort()`/`?? createUnavailable
+ * CameraCapturePort()` fallbacks were the only production behaviour,
+ * and the attach/camera actions always resolved the honest
+ * `"unavailable"` state. The owner ran the install at `488c4dc`
+ * (`expo-image-picker@~17.0.11`, `expo-document-picker@~14.0.8`, both
+ * the pins this app's own `expo`'s `bundledNativeModules.json` gives),
+ * and this task closed the gap: `attachmentSource` and `cameraCapture`
+ * are now real ports, memoized once per mount with `useMemo` (unlike
+ * `queueModeClient`/`turnStatusClient`/`transcribeClient` above, they
+ * do not depend on `core.connection` at all — an OS document/camera
+ * picker works with no daemon paired). `createExpoAttachmentSourcePort`
+ * (`../../../../../features/composer/expo-attachment-source-port.ts`)
+ * is backed by `expo-document-picker` alone, not `expo-image-picker` —
+ * see that module's header (and `attachment-source-port.ts`'s own
+ * header) for why: measured directly against both packages' Android
+ * source, `expo-document-picker` needs no Android permission at all
+ * (Storage Access Framework), and `expo-image-picker`'s own media-
+ * library permission requests **zero** permissions on API 33+ anyway
+ * (`READ_MEDIA_IMAGES` is never referenced in that package's Android
+ * source), so routing through the always-permission-free document
+ * picker — whose own UI already includes images — is strictly better.
+ * `createExpoCameraCapturePort`
+ * (`../../../../../features/composer/expo-camera-capture-port.ts`) is
+ * backed by `expo-image-picker`'s `launchCameraAsync`, gated on the
+ * real Android `CAMERA` permission via that same package's
+ * `getCameraPermissionsAsync`/`requestCameraPermissionsAsync` — see
+ * `attachment-source-port.ts`'s `CameraCapturePort` doc comment for one
+ * disclosed native-layer quirk (`launchCameraAsync` itself re-checks
+ * `CAMERA` permission internally, beneath this port's own control; no
+ * double OS PROMPT results, since Android no-ops an already-granted
+ * permission request, but it is a real second native-layer check this
+ * port's own TypeScript code neither makes nor can prevent). Nothing in
+ * `Composer.tsx`, `attachment-model.ts`, or `attachment-capture-
+ * model.ts` needed to change for this — the whole point of the seam
+ * those files already described.
  *
  * `turnRunning` is no longer the fixed `false` literal this comment used
  * to disclose as a gap. T64 landed mid-wave with a real per-agent signal
@@ -716,6 +734,14 @@ export default function SessionRoute() {
   // Composer's transcribeClient prop — see resolveTranscribeClient's own
   // doc comment and this component's "T282 mount" doc comment above.
   const transcribeClient = resolveTranscribeClient(core.connection);
+  // T290: real OS-permission ports for attachment picking/camera
+  // capture — see this component's own "T290 mount" doc comment above.
+  // Unlike queueModeClient/turnStatusClient/transcribeClient above,
+  // these do not depend on core.connection at all (an OS picker works
+  // with no daemon paired), so they are memoized once per mount instead
+  // of re-derived every render.
+  const attachmentSource = useMemo(() => createExpoAttachmentSourcePort(), []);
+  const cameraCapture = useMemo(() => createExpoCameraCapturePort(), []);
 
   return (
     <>
@@ -744,6 +770,8 @@ export default function SessionRoute() {
             queueModeClient={queueModeClient}
             turnStatusClient={turnStatusClient}
             transcribeClient={transcribeClient}
+            attachmentSource={attachmentSource}
+            cameraCapture={cameraCapture}
             outbox={core.turnOutbox.getOutbox() ?? undefined}
           />
         }

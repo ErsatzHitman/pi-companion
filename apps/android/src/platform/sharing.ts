@@ -25,8 +25,12 @@ import { MAX_DOWNLOAD_BYTES } from "../features/files/file-browser-client.js";
  * ---------------------------------------------------------------------
  * Text sharing: genuinely installable today, still ported behind a port
  * ---------------------------------------------------------------------
- * Unlike `expo-document-picker`/`expo-image-picker`/`expo-sharing`
- * (none installed — see below), plain-text sharing on Android needs
+ * Unlike `expo-sharing` (not installed — see below; **CORRECTED
+ * (T290)**: this used to also list `expo-document-picker`/
+ * `expo-image-picker` here as uninstalled — the owner installed both at
+ * `488c4dc` and T290 used them for `../features/composer`'s own
+ * `AttachmentSourcePort`/`CameraCapturePort`; `expo-sharing` remains the
+ * only one of the three still absent), plain-text sharing on Android needs
  * nothing beyond `react-native`'s own `Share.share()`, which *is*
  * already a dependency of this app. This module still declares
  * `NativeShareModule` as an injected port rather than importing

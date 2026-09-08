@@ -12,11 +12,16 @@ import { resolvePermission } from "../features/composer/permission-recovery.js";
  * that interface — not a second one — the way `../platform/
  * native-network-reachability.ts` implements `NetworkReachability`
  * against an injected `NetInfoModule`-shaped port: no
- * `expo-document-picker` or `expo-image-picker` import here, because
- * neither is installed in this workspace (`apps/android/package.json`
- * carries neither, and this task may not `npm install` — see
- * `CLAUDE.md`). Instead this file declares two small ports shaped
- * exactly like those libraries' real exports (`DocumentPickerModule`,
+ * `expo-document-picker` or `expo-image-picker` import here, so this
+ * file stays provable in plain `vitest` against scripted fakes the same
+ * way that `NetInfoModule` port already is. **CORRECTED (T290)**: this
+ * used to give the reason as "neither is installed in this workspace
+ * (`apps/android/package.json` carries neither...)" — the owner
+ * installed both at `488c4dc` and T290 used them for
+ * `../features/composer`'s own `AttachmentSourcePort`/
+ * `CameraCapturePort`. `apps/android/package.json` now carries both;
+ * this file still declares two small ports shaped exactly like those
+ * libraries' real exports (`DocumentPickerModule`,
  * `ImageLibraryPickerModule`) and a byte-reading port
  * (`FileUriBytesReader`), and takes all three as constructor
  * dependencies, so every rule below is real and provable in plain
@@ -112,16 +117,33 @@ import { resolvePermission } from "../features/composer/permission-recovery.js";
  * production — there is no live `DocumentPickerModule`/
  * `ImageLibraryPickerModule`/`FileUriBytesReader` to hand it yet, and
  * wiring one is the router root's job (T32S11), not this task's — see
- * this task's report for the exact call site. Once the following are
- * installed (versions pinned by *this app's own*
+ * this task's report for the exact call site. **CORRECTED (T290)**: the
+ * two `npm install` commands below used to both be open; the owner ran
+ * the first two (not the third) at `488c4dc`:
+ *
+ *     npm install --workspace=@picompanion/android expo-document-picker@~14.0.8   [DONE, 488c4dc]
+ *     npm install --workspace=@picompanion/android expo-image-picker@~17.0.11    [DONE, 488c4dc]
+ *     npm install --workspace=@picompanion/android expo-file-system@~19.0.24     [still open]
+ *
+ * (versions pinned by *this app's own*
  * `apps/android/node_modules/expo/bundledNativeModules.json`, matching
  * `apps/android/package.json`'s `"expo": "^54.0.18"` — not whatever a
  * differently-versioned `expo` hoisted from another worktree's install
- * happens to report at the repo root):
- *
- *     npm install --workspace=@picompanion/android expo-document-picker@~14.0.8
- *     npm install --workspace=@picompanion/android expo-image-picker@~17.0.11
- *     npm install --workspace=@picompanion/android expo-file-system@~19.0.24
+ * happens to report at the repo root.) T290 used the first two for
+ * `../features/composer`'s own `AttachmentSourcePort`/
+ * `CameraCapturePort` — see that feature's `expo-attachment-source-
+ * port.ts` for why `expo-file-system` turned out to be avoidable there
+ * (a `copyToCacheDirectory: true` default makes every URI `file://`,
+ * which `fetch`/`Blob`/`FileReader` reads reliably with no new
+ * dependency). **Noticed, not resolved, while making that same check
+ * here**: `createAndroidFilePicker`'s own document-picker branch below
+ * also hardcodes `copyToCacheDirectory: true`, which — by the identical
+ * reasoning — would also produce `file://` URIs, not the `content://`
+ * ones this section's very next paragraph says motivate
+ * `expo-file-system`. Whether that makes `expo-file-system` avoidable
+ * here too (for the document-picker branch; the image-library branch's
+ * URI shape was not checked) is `T32S11`'s question to answer when it
+ * actually wires this file, not decided either way by this task.
  *
  * `expo-document-picker`'s and `expo-image-picker`'s default exports
  * already structurally satisfy `DocumentPickerModule` and

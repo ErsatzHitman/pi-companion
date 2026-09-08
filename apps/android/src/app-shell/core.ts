@@ -381,13 +381,18 @@ export interface AppCore {
    * `notifications`/`shareIntentPort` already are. Not
    * `createAndroidFilePicker` (that factory needs a real
    * `DocumentPickerModule`/`ImageLibraryPickerModule`/`FileUriBytesReader`
-   * this workspace cannot construct): `expo-document-picker` and
-   * `expo-image-picker` are not installed, and this task may not run an
-   * install (see `../platform/file-picker.ts`'s own doc comment for the
-   * exact commands: `npm install --workspace=@picompanion/android
-   * expo-document-picker@~14.0.8 expo-image-picker@~17.0.11
-   * expo-file-system@~19.0.24`). Every `pickFiles()` call therefore
-   * rejects with the real, honest `FILE_PICKER_UNAVAILABLE` sentinel —
+   * this workspace cannot construct here). **CORRECTED (T290)**: this
+   * used to say `expo-document-picker` and `expo-image-picker` "are not
+   * installed" — the owner installed both at `488c4dc` and T290 used
+   * them for `../features/composer`'s own `AttachmentSourcePort`/
+   * `CameraCapturePort`. This field stays `createUnavailableFilePicker()`
+   * for a narrower, still-real reason: wiring `createAndroidFilePicker`
+   * here is `T32S11`'s job (a real `DocumentPickerModule`/
+   * `ImageLibraryPickerModule`/`FileUriBytesReader` triple constructed
+   * from those packages), not done by T290 (out of that task's `Owns`
+   * grant) — see `../platform/file-picker.ts`'s own doc comment. Every
+   * `pickFiles()` call therefore still rejects with the real, honest
+   * `FILE_PICKER_UNAVAILABLE` sentinel —
    * never a stub that hangs or silently resolves an empty pick — which
    * `../features/files/file-upload-model.ts`'s `selectFile()` now (T78)
    * turns into a named, visible `"refused"` state via

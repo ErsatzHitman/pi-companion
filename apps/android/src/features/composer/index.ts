@@ -106,12 +106,24 @@ export type {
   StagedAttachment,
   StagedAttachmentStatus,
 } from "./attachment-model";
-export { createUnavailableAttachmentSourcePort } from "./attachment-source-port";
+export {
+  createUnavailableAttachmentSourcePort,
+  createUnavailableCameraCapturePort,
+  readUriAsBytes,
+} from "./attachment-source-port";
 export type {
   AttachmentFilePickOptions,
   AttachmentSourcePort,
+  CameraCapturePort,
   PickedAttachmentFile,
 } from "./attachment-source-port";
+// T290: the real, `expo-document-picker`/`expo-image-picker`-backed
+// ports. Exported from their own files, not `attachment-source-port.ts`
+// — see that file's header for why (transitively importing
+// `react-native`). Mirrors `../voice/index.ts`'s identical treatment of
+// `createExpoAudioVoiceCapturePort`.
+export { createExpoAttachmentSourcePort } from "./expo-attachment-source-port";
+export { createExpoCameraCapturePort } from "./expo-camera-capture-port";
 export { describePermissionRecovery, resolvePermission } from "./permission-recovery";
 export type {
   PermissionKind,

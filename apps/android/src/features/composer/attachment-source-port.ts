@@ -19,47 +19,89 @@
  * `packages/frontend-core` is out of scope to edit this wave. Android
  * has no such adapter yet — see below.
  *
- * **No photo/document picker dependency is installed in this
- * workspace.** `apps/android/package.json` carries no `expo-image-
- * picker` or `expo-document-picker` today, and this task may not run
- * `npm install`. `createUnavailableAttachmentSourcePort` below is
- * therefore this module's only production implementation: it always
- * reports `"unavailable"` and never returns a picked file, which
- * `Composer.tsx` renders through `permission-recovery.ts`'s own
- * `"unavailable"` copy — a distinct, honest state from a user's own
- * `"denied"` choice.
+ * **GAP CLOSED by T290.** Until this task, `apps/android/package.json`
+ * carried no `expo-image-picker` or `expo-document-picker`, and
+ * `createUnavailableAttachmentSourcePort` below was this module's only
+ * production implementation. The owner ran the install at `488c4dc`
+ * (`expo-image-picker@~17.0.11`, `expo-document-picker@~14.0.8`, both
+ * the pins this app's own `expo@54.0.37` gives in
+ * `apps/android/node_modules/expo/bundledNativeModules.json`), and the
+ * real port now lives in `./expo-attachment-source-port.ts`
+ * (`createExpoAttachmentSourcePort`) — a separate file for the same
+ * reason `../voice/expo-audio-voice-capture-port.ts` is split from
+ * `../voice/voice-capture-port.ts`: `expo-document-picker` transitively
+ * imports `react-native` (via `expo-modules-core`'s `Platform.ts`),
+ * which this file and every test that imports it directly must stay
+ * clear of.
  *
- * **Re-checked directly for T282** (which wired `Composer.tsx`'s sibling
- * `transcribeClient` prop at the session mount and considered wiring
- * these two ports at the same time): neither package resolves from this
- * workspace today. `require.resolve("expo-image-picker", { paths:
- * ["apps/android/src"] })` and the same call for `expo-document-picker`
- * both throw `Cannot find module`, checked against both
- * `apps/android/node_modules` and the repository root's — this is still
- * a real install gap, not a stale claim carried forward unchecked.
+ * **The real port is backed by `expo-document-picker` alone, not
+ * `expo-image-picker` — measured, not the design this header used to
+ * sketch before either package was installed.** Two things were
+ * measured directly against the resolved packages' own Android source,
+ * not assumed from either README:
  *
- * To wire a real picker once available (versions pinned exactly per
- * `apps/android/node_modules/expo/bundledNativeModules.json` — read
- * from *this app's own* installed `expo` (54.0.37, matching
- * `apps/android/package.json`'s `"expo": "^54.0.18"`), not the
- * differently-versioned `expo` (57.0.18) hoisted into the repo root's
- * `node_modules` from other worktrees' installs — those pins are for a
- * different Expo SDK and would mismatch this app's):
+ * - `expo-document-picker`'s `AndroidManifest.xml` declares no
+ *   `<uses-permission>` at all (only an intent `<queries>` entry), and
+ *   its `DocumentPickerModule.kt` contains zero permission checks —
+ *   Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT`) needs no
+ *   app-level grant on any SDK. Its system browser UI already surfaces
+ *   "Images", "Downloads", "Recent" and every other document provider
+ *   in one screen, which is literally "pick images and documents" from
+ *   a single native affordance — matching this port's one `pickFiles()`
+ *   call with no accept filter to route on the way
+ *   `../../platform/file-picker.ts` (T32P2, unwired pending this same
+ *   install) already routes an unfiltered request to the document
+ *   picker rather than the image library.
+ * - `expo-image-picker`'s own `getMediaLibraryPermissions` (Android
+ *   source: `ImagePickerModule.kt`) requests **zero** Android
+ *   permissions on API 33+ (`Build.VERSION.SDK_INT >=
+ *   Build.VERSION_CODES.TIRAMISU` branches to `emptyArray<String>()`),
+ *   because `launchImageLibraryAsync` on those devices opens the system
+ *   Photo Picker, which itself needs no runtime grant. `READ_MEDIA_
+ *   IMAGES` — the permission Android 13 is commonly assumed to have
+ *   introduced for this purpose — is never referenced anywhere in this
+ *   package's Android source (`grep -rn "READ_MEDIA_IMAGES"
+ *   node_modules/expo-image-picker` returns nothing). Below API 33 it
+ *   requests the legacy `WRITE_EXTERNAL_STORAGE`/`READ_EXTERNAL_STORAGE`
+ *   pair. Routing `pickFiles` through this path instead would have
+ *   added a real permission dance for a picker that, on modern Android,
+ *   needs none either — strictly worse for the user with no capability
+ *   gained, since the document picker's own UI already includes images.
  *
- *   npm install --workspace=@picompanion/android expo-image-picker@~17.0.11
- *   npm install --workspace=@picompanion/android expo-document-picker@~14.0.8
+ * So `getPermissionStatus`/`requestPermission` below genuinely have
+ * nothing to gate and always resolve `"granted"` — an honest state, not
+ * a shortcut: there is no OS permission standing between a press and
+ * the picker opening. `permission-recovery.ts`'s `"photos"` copy
+ * (`Composer.tsx`'s `PermissionRecoveryNotice kind="photos"`) stays
+ * declared for the vocabulary's sake and is simply never rendered by
+ * this real port, the same way it already renders nothing for any
+ * `"granted"` read (`PermissionRecoveryNotice.tsx`'s own doc comment).
  *
- * — then add a second implementation of `AttachmentSourcePort` backed
- * by `expo-image-picker`'s `getMediaLibraryPermissionsAsync`/
- * `requestMediaLibraryPermissionsAsync` (mapping its
- * `PermissionStatus`/`canAskAgain` onto `PermissionState` — Expo's
- * `canAskAgain: false` alongside `status: "denied"` is exactly
- * `"denied-permanently"`) and `launchImageLibraryAsync`/
- * `expo-document-picker`'s `getDocumentAsync` for `pickFiles`, wrapping
- * each result's `uri` in a `readAsBytes()` that reads it lazily via
- * `expo-file-system`. Nothing in `attachment-model.ts` or
- * `Composer.tsx` needs to change for that swap — the whole point of
- * this seam.
+ * `expo-image-picker` is still a real, used dependency: it backs
+ * `./expo-camera-capture-port.ts`'s `CameraCapturePort` below. Both
+ * packages the owner installed are in real production use, just for
+ * different ports.
+ *
+ * `readUriAsBytes` below (shared by both real ports) reads a picked or
+ * captured file's bytes using only `fetch`/`Blob`/`FileReader` — the
+ * same globals React Native itself ships that
+ * `../voice/expo-audio-voice-capture-port.ts` already relies on for the
+ * identical reason: `apps/android/package.json` declares no
+ * `expo-file-system`, and the only resolvable copy from
+ * `apps/android/src` is the repository root's differently-versioned
+ * hoist (`57.0.6`, for a different Expo SDK generation than this app's
+ * own `54.0.37`). This task may not edit `package.json`. It also turns
+ * out to be moot either way: `expo-document-picker`'s default
+ * `copyToCacheDirectory: true` (kept as the default in
+ * `expo-attachment-source-port.ts`) makes a copied result's `uri` a
+ * plain `file://` URI in the app's own cache directory — measured
+ * directly against `DocumentPickerModule.kt`'s
+ * `copyDocumentToCacheDirectory`, which returns
+ * `Uri.fromFile(outputFile)`, never the `content://` URI Storage Access
+ * Framework hands back for `copyToCacheDirectory: false`. React
+ * Native's `fetch` reads a local `file://` URI reliably (the
+ * `content://` case that motivated `expo-file-system` in the first
+ * place never arises here), so no new dependency is needed.
  */
 import type { PermissionPort } from "./permission-recovery.js";
 
@@ -107,7 +149,51 @@ export interface AttachmentSourcePort extends PermissionPort {
   pickFiles(options?: AttachmentFilePickOptions): Promise<PickedAttachmentFile[]>;
 }
 
-/** This build's only production `AttachmentSourcePort` — see module docstring. */
+/**
+ * Reads a local `file://` URI's full bytes using only globals React
+ * Native itself ships (`fetch`/`Blob`/`FileReader`) — see this module's
+ * header for why `expo-file-system` is neither available nor needed.
+ * Shared by both real ports (`./expo-attachment-source-port.ts`'s
+ * `pickFiles`, `./expo-camera-capture-port.ts`'s `capturePhoto`) so
+ * `PickedAttachmentFile.readAsBytes()` behaves identically regardless
+ * of which source produced the file. Declared here (not in either real
+ * port file) because it needs no `expo-image-picker`/`expo-document-
+ * picker` import at all — only globals — so it stays reachable from
+ * this RN-free file without dragging `react-native` into it. Mirrors
+ * `../voice/expo-audio-voice-capture-port.ts`'s `readClipAsBase64`,
+ * swapping `readAsDataURL` for `readAsArrayBuffer` since this port's
+ * contract (`PickedAttachmentFile.readAsBytes`) promises raw bytes, not
+ * base64.
+ */
+export async function readUriAsBytes(uri: string): Promise<Uint8Array> {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Could not read the picked file"));
+    };
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (!(result instanceof ArrayBuffer)) {
+        reject(new Error("Unexpected FileReader result reading the picked file"));
+        return;
+      }
+      resolve(new Uint8Array(result));
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+/**
+ * This build's DEFAULT injection fallback for `AttachmentSourcePort` —
+ * used whenever a caller passes none (`Composer.tsx`'s
+ * `attachmentSource ?? createUnavailableAttachmentSourcePort()`) or
+ * wants attachment picking explicitly disabled. `./expo-attachment-
+ * source-port.ts`'s `createExpoAttachmentSourcePort` is the real
+ * production port the session mount actually passes (T290) — see this
+ * module's header.
+ */
 export function createUnavailableAttachmentSourcePort(): AttachmentSourcePort {
   return {
     async getPermissionStatus() {
@@ -162,18 +248,44 @@ export function createUnavailableAttachmentSourcePort(): AttachmentSourcePort {
  *   this port's own one-resolution-per-press discipline is kept, and
  *   that module's tests for the proof.
  *
- * No camera dependency is installed in this workspace either (same
- * constraint as `AttachmentSourcePort` above), so
- * `createUnavailableCameraCapturePort` below is this port's only
- * production implementation. To wire a real one, reuse the SAME
- * `expo-image-picker` install already named above (no additional
- * package needed — a standalone `expo-camera` dependency would only be
- * necessary for a custom in-app camera viewfinder, which this feature
- * does not build): call `launchCameraAsync` for `capturePhoto`, backed
- * by `getCameraPermissionsAsync`/`requestCameraPermissionsAsync` for
- * this port's `PermissionPort` half. Nothing in `attachment-model.ts`,
- * `attachment-capture-model.ts`, or `Composer.tsx` needs to change for
- * that swap — the whole point of this seam.
+ * **GAP CLOSED by T290.** The real port lives in
+ * `./expo-camera-capture-port.ts` (`createExpoCameraCapturePort`),
+ * reusing the same `expo-image-picker` install `./expo-attachment-
+ * source-port.ts`'s header names (no additional package needed — a
+ * standalone `expo-camera` dependency is only necessary for a custom
+ * in-app camera viewfinder, which this feature does not build):
+ * `getCameraPermissionsAsync`/`requestCameraPermissionsAsync` back this
+ * port's `PermissionPort` half, and `launchCameraAsync` backs
+ * `capturePhoto`. Nothing in `attachment-model.ts`,
+ * `attachment-capture-model.ts`, or `Composer.tsx` changed for it — the
+ * whole point of this seam.
+ *
+ * **One disclosed limit `capturePhoto`'s doc comment below cannot fully
+ * hold to, measured directly against `expo-image-picker`'s own Android
+ * source, not assumed.** That comment says a real implementation "must
+ * not re-resolve permission inside `capturePhoto` itself" — true of
+ * every line this port's own code writes: `capturePhoto` calls
+ * `launchCameraAsync` and nothing else, never a second
+ * `getCameraPermissionsAsync`/`requestCameraPermissionsAsync`. But
+ * `expo-image-picker`'s native `launchCameraAsync` handler
+ * (`ImagePickerModule.kt`'s `AsyncFunction("launchCameraAsync")`)
+ * unconditionally calls its own private `ensureCameraPermissionsAreGranted()`
+ * first, which issues a REAL `askForPermissions(CAMERA)` call inside the
+ * vendor library — a second native-layer permission check this port's
+ * TypeScript code neither makes nor can prevent, since it happens
+ * beneath `launchCameraAsync`'s own boundary. In practice this causes no
+ * double prompt: Android's permission API no-ops (shows no dialog) for
+ * a permission already granted, and by the time `capturePhoto` runs,
+ * `runCapturePress` (`attachment-capture-model.ts`) has already resolved
+ * it to `"granted"` via this port's own methods. But it means the
+ * on-device call graph genuinely asks the OS for `CAMERA` twice per
+ * press — something no counting-fake test at the port boundary
+ * (`attachment-capture-model.test.ts`) can see or prevent, since it
+ * originates inside the vendor library's native code, not in this
+ * port's TypeScript. Disclosed here rather than hidden: this is a
+ * property of `expo-image-picker` itself, not a resolution this port's
+ * own code adds (the exact trap this task's brief warned against
+ * adding deliberately).
  */
 export interface CameraCapturePort extends PermissionPort {
   /**
@@ -191,7 +303,13 @@ export interface CameraCapturePort extends PermissionPort {
   capturePhoto(): Promise<PickedAttachmentFile | null>;
 }
 
-/** This build's only production `CameraCapturePort` — see this interface's own doc comment. */
+/**
+ * This build's DEFAULT injection fallback for `CameraCapturePort` — used
+ * whenever a caller passes none or wants camera capture explicitly
+ * disabled. `./expo-camera-capture-port.ts`'s
+ * `createExpoCameraCapturePort` is the real production port the session
+ * mount actually passes (T290) — see this interface's own doc comment.
+ */
 export function createUnavailableCameraCapturePort(): CameraCapturePort {
   return {
     async getPermissionStatus() {

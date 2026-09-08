@@ -103,18 +103,24 @@
  * tens of megabytes per file, and a caller that forgot to route through
  * either one would have leaked it.
  *
- * What this module does NOT own: if a future real
- * `AttachmentSourcePort`/`CameraCapturePort` implementation copies the
- * picked/captured image into a cache directory to produce the URI it
- * hands back (as Expo's `expo-image-picker` does), cleaning up that
- * on-disk temp file is that implementation's job, not this module's —
- * this module never touches a filesystem itself (see this doc
- * comment's own opening paragraph), so it has no path to delete from.
- * Filed for whoever wires a real picker/camera: that implementation's
- * own doc comment should say plainly whether it cleans up its cache
- * files, and if not, why leaving them is acceptable (Expo's own picker
- * cache is normally reclaimed by the OS under storage pressure, but
- * that is the OS's policy, not a guarantee this module can rely on).
+ * What this module does NOT own: the real `AttachmentSourcePort`/
+ * `CameraCapturePort` implementations (T290,
+ * `./expo-attachment-source-port.ts`/`./expo-camera-capture-port.ts`)
+ * copy the picked/captured file into the app's own cache directory to
+ * produce the `file://` URI they hand back (`expo-document-picker`'s
+ * `copyToCacheDirectory: true`, `expo-image-picker`'s `launchCameraAsync`
+ * — both measured directly against their Android source), and cleaning
+ * up that on-disk temp file is that implementation's job, not this
+ * module's — this module never touches a filesystem itself (see this
+ * doc comment's own opening paragraph), so it has no path to delete
+ * from. **Disclosed, not fixed, by T290**: neither real port deletes its
+ * cache file after `readAsBytes()` reads it or after upload completes —
+ * this repository's known-uninstallable `expo-file-system` (see
+ * `attachment-source-port.ts`'s own header) is exactly the package a
+ * cleanup step would need, so both cache directories only shrink via
+ * Android's own storage-pressure reclamation, not this app. Filed for
+ * whoever revisits either port: neither `expo-attachment-source-port.ts`
+ * nor `expo-camera-capture-port.ts` claims otherwise in its own header.
  */
 
 export type StagedAttachmentStatus = "uploading" | "uploaded" | "error";

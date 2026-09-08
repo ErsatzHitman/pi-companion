@@ -132,7 +132,7 @@ describe("composer-inputs.yaml anchors exist in source", () => {
     it("SessionRoute mounts Composer with a real turnService, a real onSubmit wired to core.startTurn, and a real turnRunning signal — no pairing needed for keyboard entry", () => {
       const code = readComponentCode(SESSION_ROUTE_TSX, "SessionRoute");
       expect(code).toMatch(
-        /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
+        /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
       );
       expect(code).toMatch(
         /const turnService = useMemo\(\(\) => core\.createTurnService\(agentId \?\? ""\), \[core, agentId\]\);/,
@@ -213,7 +213,7 @@ describe("composer-inputs.yaml anchors exist in source", () => {
     });
   });
 
-  describe("mic and attach buttons are live and honest; attach's picking is still blocked, mic's capture no longer is (T276)", () => {
+  describe("mic and attach buttons are live and honest; both real now (T276, T290)", () => {
     it('the mic ComposerIconAction carries testId="${composerTestId}-mic"', () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
       expect(code).toMatch(
@@ -238,7 +238,18 @@ describe("composer-inputs.yaml anchors exist in source", () => {
       );
     });
 
-    it('describePermissionRecovery("photos", "unavailable") is exactly the banner text the flow asserts for attach', () => {
+    // T290: attach no longer resolves "unavailable" by default either
+    // (that state is now reserved for a caller that explicitly disables
+    // attachment picking, which nothing does at this mount) —
+    // `describePermissionRecovery`'s own photos copy still exists and is
+    // still correct, it is just no longer what THIS flow's attach path
+    // reaches. `COMPOSER_INPUTS_FLOW.attachmentUnavailableBannerText` is
+    // kept (describes real, valid product copy `PermissionRecoveryNotice
+    // kind="photos"` still renders for a real "unavailable" port — e.g.
+    // a caller that disables attachments explicitly), but this file no
+    // longer claims the yaml asserts it — see the "read from disk"
+    // describe block below for the positive proof that it does not.
+    it('describePermissionRecovery("photos", "unavailable") still renders real, valid copy — just not what this flow\'s attach path reaches any more', () => {
       const photos = describePermissionRecovery("photos", "unavailable");
       expect(`${photos.title}. ${photos.message}`).toBe(
         COMPOSER_INPUTS_FLOW.attachmentUnavailableBannerText,
@@ -260,11 +271,27 @@ describe("composer-inputs.yaml anchors exist in source", () => {
       expect(`${mic.title}. ${mic.message}`).toBe(COMPOSER_INPUTS_FLOW.micUnavailableBannerText);
     });
 
-    it("the default, only-installed port for attachments is the unavailable one (no picker package installed)", () => {
+    // CORRECTED (T290): this used to be "the default, only-installed
+    // port for attachments is the unavailable one (no picker package
+    // installed)", matching `createUnavailableAttachmentSourcePort`
+    // against `attachment-source-port.ts`. That premise is gone — the
+    // owner installed `expo-image-picker`/`expo-document-picker` and
+    // T290 wired a real `createExpoAttachmentSourcePort()`
+    // (`../../src/features/composer/expo-attachment-source-port.ts`) as
+    // the session mount's own default. `createUnavailableAttachment
+    // SourcePort` still exists — it is the injection FALLBACK for a
+    // caller that wants attachment picking explicitly disabled, not "the
+    // only production implementation" any more — so this case now
+    // proves both halves of that fact rather than the stale one.
+    it("createUnavailableAttachmentSourcePort remains the injection fallback, and createExpoAttachmentSourcePort is the real port T290 added", () => {
       const attachmentPort = readCode("../../src/features/composer/attachment-source-port.ts");
       expect(attachmentPort).toMatch(
         /export function createUnavailableAttachmentSourcePort\(\): AttachmentSourcePort \{/,
       );
+      const expoAttachmentPort = readCode(
+        "../../src/features/composer/expo-attachment-source-port.ts",
+      );
+      expect(expoAttachmentPort).toMatch(/export function createExpoAttachmentSourcePort\(/);
     });
   });
 
@@ -349,15 +376,18 @@ describe("composer-inputs.yaml anchors exist in source", () => {
       },
     );
 
-    it("asserts the attach 'unavailable' banner copy exactly as describePermissionRecovery renders it today", () => {
+    // CORRECTED (T290): this used to assert the yaml DOES contain the
+    // attach "unavailable" banner text. It no longer does — see the
+    // negative case right below, which is this test's replacement, in
+    // the exact shape T276 already established for mic.
+    it("T290: no longer asserts the attach 'unavailable' banner or its permission-notice id — that outcome is no longer this flow's real one", () => {
       const assertedTexts = steps
         .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
         .map((step) => step.text as string);
+      const ids = steps.filter((step) => step.id !== undefined).map((step) => step.id as string);
       const photos = describePermissionRecovery("photos", "unavailable");
-      expect(
-        assertedTexts,
-        'composer-inputs.yaml should assert describePermissionRecovery("photos", "unavailable")\'s real copy',
-      ).toContain(`${photos.title}. ${photos.message}`);
+      expect(assertedTexts).not.toContain(`${photos.title}. ${photos.message}`);
+      expect(ids).not.toContain(COMPOSER_INPUTS_FLOW.composerAttachmentPermissionNotice);
     });
 
     // T276: this is the positive half of the "blocked modes" correction
@@ -374,17 +404,17 @@ describe("composer-inputs.yaml anchors exist in source", () => {
       expect(ids).not.toContain(COMPOSER_INPUTS_FLOW.composerMicPermissionNotice);
     });
 
-    it("taps/asserts the entries container, composer-mic and composer-attach ids exactly as Composer.tsx names them", () => {
+    it("taps the entries container, composer-mic and composer-attach ids exactly as Composer.tsx names them", () => {
       // composer-mic/composer-attach are TAPPED (`tapOn`), not asserted
-      // visible by id — only attach's permission notice is asserted
-      // visible (mic's is not, since T276 — see above) — so this reads
-      // ids off every step kind, not just `assertVisible`.
+      // visible by id — neither permission notice is asserted visible
+      // any more (mic since T276, attach since T290 — see both cases
+      // above) — so this reads ids off every step kind, not just
+      // `assertVisible`.
       const ids = steps.filter((step) => step.id !== undefined).map((step) => step.id as string);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerRoot);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerEntriesContainer);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerMicButton);
       expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerAttachButton);
-      expect(ids).toContain(COMPOSER_INPUTS_FLOW.composerAttachmentPermissionNotice);
     });
 
     it("never names the production daemon's port, in any form including comments", () => {

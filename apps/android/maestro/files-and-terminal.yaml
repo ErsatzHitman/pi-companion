@@ -80,11 +80,20 @@ tags:
 #      on the first real device run.
 #
 #      Still honest about what that panel can DO: `AppCore.filePicker` is
-#      `createUnavailableFilePicker()` (no `expo-document-picker`/
-#      `expo-image-picker` install exists in this workspace), so pressing
-#      "Choose file" settles a named, visible `FILE_PICKER_UNAVAILABLE`
-#      refusal rather than opening a picker. This flow asserts the panel
-#      is present, not that a pick succeeds.
+#      `createUnavailableFilePicker()`, so pressing "Choose file" settles
+#      a named, visible `FILE_PICKER_UNAVAILABLE` refusal rather than
+#      opening a picker. **CORRECTED (T290)**: this used to give the
+#      reason as "no `expo-document-picker`/`expo-image-picker` install
+#      exists in this workspace" — the owner installed both at `488c4dc`
+#      and T290 used them for `features/composer`'s own
+#      `AttachmentSourcePort`/`CameraCapturePort`. `core.ts`'s
+#      `filePicker` is still `createUnavailableFilePicker()` for a
+#      DIFFERENT reason: `../platform/file-picker.ts`'s own
+#      `createAndroidFilePicker` (T32P2) needs the router root to wire
+#      real `DocumentPickerModule`/`ImageLibraryPickerModule`/
+#      `FileUriBytesReader` dependencies, which is `T32S11`'s job, not
+#      done by T290 (out of that task's `Owns` grant). This flow asserts
+#      the panel is present, not that a pick succeeds.
 #
 #      CORRECTED AT THE P5-W20 MERGE GATE: this paragraph used to say
 #      the route passes no `fetchImpl` either, and quoted that claim from
@@ -209,9 +218,12 @@ tags:
 # --- KNOWN BLOCKER (1) above, now CLOSED by T78 (P5-W22): a real
 # --- filePicker is wired into this route, so uploadController is
 # --- non-null and UploadPanel renders. Its "Choose file" button still
-# --- settles a named FILE_PICKER_UNAVAILABLE refusal (no picker package
-# --- is installed) — this asserts the panel is present, not that a pick
-# --- succeeds.
+# --- settles a named FILE_PICKER_UNAVAILABLE refusal — see this file's
+# --- own header comment (CORRECTED at T290) for why: not because no
+# --- picker package is installed any more, but because
+# --- `createAndroidFilePicker` is not wired into `AppCore.filePicker`
+# --- yet (T32S11's still-open job) — this asserts the panel is present,
+# --- not that a pick succeeds.
 - assertVisible:
     id: "files-screen-e2e-host-e2e-files-agent-upload"
 - back

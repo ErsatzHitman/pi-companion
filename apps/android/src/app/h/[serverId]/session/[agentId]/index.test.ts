@@ -452,7 +452,7 @@ describe("SessionRoute source", () => {
     // the same reasoning `handleSubmit`/`turnRunning`'s cases above use.
     const code = readCode();
     expect(code).toMatch(
-      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
+      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
     );
   });
 
@@ -530,6 +530,49 @@ describe("SessionRoute source", () => {
     // nothing regardless of connection state — the exact gap this task
     // closed.
     expect(code).not.toMatch(/transcribeClient=\{undefined\}/);
+  });
+
+  // --- T290: wires real attachmentSource/cameraCapture ports into the
+  // production Composer mount — see this component's own "T290 mount"
+  // doc comment. Before this task both remained unset (the owner had
+  // not yet installed `expo-image-picker`/`expo-document-picker`), so
+  // the attach and camera-capture actions always resolved
+  // `Composer.tsx`'s own `createUnavailableAttachmentSourcePort`/
+  // `createUnavailableCameraCapturePort` fallbacks. Unlike
+  // queueModeClient/turnStatusClient/transcribeClient above, these two
+  // do not derive from `core.connection` at all — they are memoized
+  // once with `useMemo`, since an OS document/camera picker works with
+  // no daemon paired. -------------------------------------------------
+
+  it("T290: imports createExpoAttachmentSourcePort/createExpoCameraCapturePort from ../../../../../features/composer", () => {
+    const code = readCode();
+    expect(code).toMatch(/createExpoAttachmentSourcePort/);
+    expect(code).toMatch(/createExpoCameraCapturePort/);
+    expect(code).toMatch(
+      /import \{\s*Composer,\s*createExpoAttachmentSourcePort,\s*createExpoCameraCapturePort,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/composer";/,
+    );
+  });
+
+  it("T290: derives attachmentSource/cameraCapture with useMemo, calling each real constructor with no arguments and an empty dependency array", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /const attachmentSource = useMemo\(\(\) => createExpoAttachmentSourcePort\(\), \[\]\);/,
+    );
+    expect(code).toMatch(
+      /const cameraCapture = useMemo\(\(\) => createExpoCameraCapturePort\(\), \[\]\);/,
+    );
+  });
+
+  it("T290: passes both resolved values straight through to Composer's own props — deleting either prop must fail this assertion", () => {
+    const code = readCode();
+    expect(code).toMatch(/<Composer[\s\S]*?attachmentSource=\{attachmentSource\}/);
+    expect(code).toMatch(/<Composer[\s\S]*?cameraCapture=\{cameraCapture\}/);
+    // Never the fixed literal that would silently leave attach/camera
+    // wired to the unavailable fallback regardless of the real install
+    // this task's dependency wall coming down made possible — the exact
+    // gap this task closed.
+    expect(code).not.toMatch(/attachmentSource=\{undefined\}/);
+    expect(code).not.toMatch(/cameraCapture=\{undefined\}/);
   });
 
   // --- T32S10: TranscriptWindowList (T33A6) had no live importer --------

@@ -86,11 +86,16 @@ import { useAppCore } from "../../../../../core-context";
  * `AppCore.sharing` (`../../../../../app-shell/core.ts`), the same
  * "read the process-lifetime singleton `AppCore` already built, never
  * construct one locally" shape every other prop on this route already
- * follows. Both are real, honestly-degraded adapters, not stubs: no
- * `expo-document-picker`/`expo-image-picker`/`expo-sharing` install
- * exists in this workspace (see `AppCore["filePicker"]`/
- * `AppCore["sharing"]`'s own doc comments for the exact install
- * commands), so `filePicker.pickFiles()` always rejects
+ * follows. Both are real, honestly-degraded adapters, not stubs.
+ * **CORRECTED (T290)**: this used to say no `expo-document-picker`/
+ * `expo-image-picker`/`expo-sharing` install existed in this workspace
+ * — the owner installed the first two at `488c4dc` and T290 used them
+ * for `../../../../../features/composer`'s own `AttachmentSourcePort`/
+ * `CameraCapturePort`; `expo-sharing` remains uninstalled.
+ * `AppCore.filePicker` stays unavailable for a narrower reason now:
+ * `createAndroidFilePicker` needs a router-root wiring T32S11 owns, not
+ * done by T290 (see `AppCore["filePicker"]`'s own doc comment). So
+ * `filePicker.pickFiles()` still always rejects
  * `FILE_PICKER_UNAVAILABLE` and `sharing.shareFiles()` always rejects
  * `SHARING_FILES_UNAVAILABLE` today — `sharing.shareText()` is
  * genuinely real, reaching React Native's own `Share.share`, since that
