@@ -79,7 +79,15 @@ import { stripComments as sharedStripComments } from "./source-comment-stripper.
  *   where a member NAME alone (`cancel`) cannot distinguish the capability's
  *   own declaration from an unrelated same-named member elsewhere in the
  *   SAME file.
- * @typedef {{ name: string, methodNames: (CapabilityMember | CapabilityMember[])[], denyingPhrases: RegExp[] }} Capability
+ * @typedef {{ pattern: RegExp, onlyOnPath: RegExp }} ScopedDenyingPhrase A
+ *   denying phrase that only applies when the `appFile` under judgment has a
+ *   `path` matching `onlyOnPath` — T268, for a pronoun form ("this guard",
+ *   "it") that is true of many DIFFERENT guards and can only be attributed
+ *   to THIS one when the file being read is that guard's own source. A bare
+ *   `RegExp` in `denyingPhrases` (the common case) has no such restriction
+ *   and is checked against every `appFile` regardless of path, exactly as
+ *   before this typedef existed.
+ * @typedef {{ name: string, methodNames: (CapabilityMember | CapabilityMember[])[], denyingPhrases: (RegExp | ScopedDenyingPhrase)[] }} Capability
  */
 //
 // T168: a `methodNames` entry is normally a single member (an OR across
@@ -313,6 +321,19 @@ const STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER =
 // violation object, never re-declaring this walk.
 const STALE_WORKSPACE_TEST_COVERAGE_ALLOWLIST_WALK_MEMBER =
   /for\s*\(\s*const\s*\[\s*workspace\s*,\s*allowlistReason\s*\]\s*of\s*Object\.entries\(\s*allowlist\s*\)\s*\)/;
+
+// T268: the two files that ARE `guard-declared-workspace-deps` — its check
+// module and its CLI runner. A stale comment inside either one naturally
+// says "this guard" or "this check", never the file's own name (nobody
+// writes their own filename in their own header — see this entry's T268
+// comment below for the measurement that motivated this). Used to SCOPE
+// two pronoun-form `denyingPhrases` below to exactly these two paths, so a
+// true pronoun sentence about a DIFFERENT guard (`run-orphan-modules.mjs`,
+// `guard-no-android-web-files.mjs`) can never be judged against it — those
+// files' own paths never match this pattern, so a scoped phrase is
+// unreachable there regardless of wording.
+const DECLARED_WORKSPACE_DEPS_OWN_SOURCE_FILES =
+  /^scripts\/ci\/(?:guard-declared-workspace-deps|run-guard-declared-workspace-deps)\.mjs$/;
 
 /** @type {Capability[]} */
 export const CAPABILITIES = [
@@ -1405,9 +1426,25 @@ export const CAPABILITIES = [
     // by re-running them, not merely inferred. Phrase (2/4)'s own T259 test
     // fixture named no guard at all, so anchoring it required rewording that
     // fixture to include the guard's name — the fixture changes, never the
-    // shipped regex's intent; the T259 (2/4) framing ("bare does-not-scan
-    // packages/*/src") still fires, just no longer un-anchored. Phrases
-    // (3/4) and (4/4) were not touched: T265's own reproduction targeted
+    // shipped regex's intent.
+    //
+    // CORRECTED (T268): this comment used to end that sentence "...the T259
+    // (2/4) framing (\"bare does-not-scan packages/*/src\") still fires,
+    // just no longer un-anchored." That was false the moment T265 shipped:
+    // the BARE, un-guard-named framing T259 (2/4) actually measured
+    // ("This check does not scan `packages/*/src` at all, so an undeclared
+    // workspace import under any package would never be caught.") does NOT
+    // fire any more — only a version renamed to carry the guard's own name
+    // does, and that renamed version is a different sentence, not "the T259
+    // (2/4) framing" the parenthetical claimed. Reproduced directly at the
+    // P9-J merge gate: the exact T259 (2/4) fixture sentence, unrenamed,
+    // against `run-guard-capability-prose.mjs` exits silent. T268's two new
+    // `ScopedDenyingPhrase` entries below restore that framing WITHOUT
+    // reopening the two collisions T265 fixed, by requiring the pronoun
+    // sentence to sit in the guard's own two source files rather than
+    // requiring the guard's name in the sentence itself.
+    //
+    // Phrases (3/4) and (4/4) were not touched: T265's own reproduction targeted
     // only (1/4) and (2/4), and neither carries the same unanchored risk —
     // (3/4) requires the `relay package`/`packages/relay` literal, specific
     // to this capability, and (4/4) requires "guard" immediately before
@@ -1484,6 +1521,48 @@ export const CAPABILITIES = [
       // "packages" would otherwise also match that literal, which is why
       // "today" is required rather than left open).
       /(?:that|this) guard (?:does not|doesn'?t|never) scans? packages\b[^.]{0,40}?today/i,
+      // T268: restores the two pronoun-form framings T265's guard-name
+      // anchor silenced along with the two collisions it fixed — see this
+      // entry's "CORRECTED (T268)" comment above for the measurement (the
+      // P9-J merge gate ran all six rows of its own table through this
+      // exact function). Both are `ScopedDenyingPhrase`s
+      // (`{ pattern, onlyOnPath }`, not a bare `RegExp`): "this guard"/"this
+      // check"/"it" is true of ANY guard that behaves this way, so
+      // attributing it to `declared-workspace-deps` specifically is only
+      // safe when the sentence sits in that guard's OWN two source files
+      // (`DECLARED_WORKSPACE_DEPS_OWN_SOURCE_FILES`, defined above the
+      // `CAPABILITIES` array) — the shape a stale self-description
+      // naturally takes, since nobody writes their own filename in their
+      // own header. `onlyOnPath` does the exclusion the guard-name anchor
+      // used to do: FP-1 ("the orphan-module walk does not scan
+      // `packages/*/src`.") and FP-2 ("guard-no-android-web-files scans
+      // only apps/android and apps/web by design.") are never checked
+      // against this pair at all, because `run-orphan-modules.mjs` and
+      // `guard-no-android-web-files.mjs` never match
+      // `DECLARED_WORKSPACE_DEPS_OWN_SOURCE_FILES` — the exclusion holds
+      // regardless of wording, not because either FP sentence happens to
+      // avoid the pronoun form (it doesn't need to). Confirmed directly:
+      // both FP sentences, re-run at THIS guard's own two paths (a
+      // deliberately adversarial placement, stronger than their real
+      // paths), still produce zero violations from this pair, because
+      // neither is itself a pronoun match for these two patterns (FP-1
+      // names "the orphan-module walk", not "this guard"/"this check"/"it";
+      // FP-2 names "guard-no-android-web-files", not a pronoun either) —
+      // see `guard-capability-prose.test.mjs`'s "T268" block.
+      {
+        // Restores T259 (2/4)'s original, un-renamed framing: "this
+        // check"/"this guard"/"it" + "does not scan `packages/*/src`".
+        pattern:
+          /\b(?:this (?:guard|check)|it)\b[^.]{0,60}?(?:does not|doesn'?t|never) scans?[^.]{0,30}?`?packages\/\*\/src`?/i,
+        onlyOnPath: DECLARED_WORKSPACE_DEPS_OWN_SOURCE_FILES,
+      },
+      {
+        // Restores T259 (1/4)'s pronoun form: "it walks only apps/android
+        // ... apps/web".
+        pattern:
+          /\b(?:this (?:guard|check)|it)\b[^.]{0,60}?\b(?:walks|scans)\s+only\b[^.]{0,120}?apps\/android(?:\/src)?[^.]{0,60}?(?:and|&)[^.]{0,20}?apps\/web(?:\/src)?/i,
+        onlyOnPath: DECLARED_WORKSPACE_DEPS_OWN_SOURCE_FILES,
+      },
     ],
   },
   {
@@ -1904,8 +1983,17 @@ export function findCapabilityDenialViolations({ shippedFiles, appFiles }) {
       const flat = flattenProse(content);
 
       for (const phrase of capability.denyingPhrases) {
-        const flags = phrase.flags.includes("g") ? phrase.flags : `${phrase.flags}g`;
-        const globalPhrase = new RegExp(phrase.source, flags);
+        // T268: a `ScopedDenyingPhrase` (never a bare `RegExp`) restricts
+        // itself to the `appFile` whose `path` matches `onlyOnPath` — used
+        // for a pronoun form that would otherwise be true of many different
+        // guards. `RegExp` has no `pattern`/`onlyOnPath` fields, so this
+        // check is false for every phrase that predates T268, which is why
+        // adding this branch changes nothing for any other entry.
+        const isScoped = !(phrase instanceof RegExp);
+        if (isScoped && !phrase.onlyOnPath.test(path)) continue;
+        const pattern = isScoped ? phrase.pattern : phrase;
+        const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+        const globalPhrase = new RegExp(pattern.source, flags);
         let match;
         while ((match = globalPhrase.exec(flat)) !== null) {
           const contextStart = Math.max(0, match.index - HISTORICAL_CONTEXT_WINDOW);

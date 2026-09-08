@@ -4436,3 +4436,160 @@ test("T265: guard-no-android-web-files.mjs's own real, committed narration does 
     [],
   );
 });
+
+// T268: T265's guard-name anchor correctly silenced the two FALSE POSITIVES
+// above, but as a side effect it also silenced the PRONOUN form of the same
+// two framings ("this guard"/"this check"/"it", rather than
+// "declared-workspace-deps"/"discoverPackageTargets" by name) — the shape a
+// stale comment inside the guard's OWN two source files would naturally
+// take, since nobody writes their own filename in their own header. Two new
+// `ScopedDenyingPhrase` entries restore that coverage, gated to exactly
+// `scripts/ci/guard-declared-workspace-deps.mjs` and
+// `scripts/ci/run-guard-declared-workspace-deps.mjs` so the two FP sentences
+// -- which name a DIFFERENT guard, never this one, and never sit in either
+// of these two files in real life -- cannot reopen the collision T265 fixed.
+//
+// All six rows of the P9-J merge gate's own table are pinned below, each
+// re-derived directly against the real, current `CAPABILITIES` entry (not
+// retyped from the table) -- the T217/T193 lesson that a re-typed
+// approximation of a phrase tests the author's typing, not the guard.
+
+const T268_OWN_SOURCE_PATHS = [
+  "scripts/ci/guard-declared-workspace-deps.mjs",
+  "scripts/ci/run-guard-declared-workspace-deps.mjs",
+];
+
+const T268_GENERIC_PATH = "docs/some-other-doc.md";
+
+test("T268 row 1: the named-guard bare 'does not scan packages/*/src' framing still fires everywhere (unaffected by this task)", () => {
+  const sentence = "guard-declared-workspace-deps does not scan `packages/*/src` at all.";
+  for (const testPath of [T268_GENERIC_PATH, ...T268_OWN_SOURCE_PATHS]) {
+    const appFiles = [{ path: testPath, content: sentence }];
+    const violations = findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles,
+    });
+    assert.equal(violations.length, 1, `expected a violation at ${testPath}`);
+    assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+  }
+});
+
+test("T268 row 2: T259's own un-renamed pronoun fixture ('this check does not scan packages/*/src') fires ONLY at the guard's own two source files", () => {
+  const sentence =
+    "This check does not scan `packages/*/src` at all, so an undeclared " +
+    "workspace import under any package would never be caught.";
+
+  // Direction A: silent at a generic path, exactly as T265 left it -- this
+  // task does not make the pronoun form fire unconditionally.
+  assert.deepEqual(
+    findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: T268_GENERIC_PATH, content: sentence }],
+    }),
+    [],
+    "the pronoun form must stay silent away from the guard's own source",
+  );
+
+  // Direction B: fires at each of the guard's own two source files.
+  for (const ownPath of T268_OWN_SOURCE_PATHS) {
+    const violations = findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: ownPath, content: sentence }],
+    });
+    assert.equal(violations.length, 1, `expected a violation at ${ownPath}`);
+    assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+  }
+});
+
+test("T268 row 3: the pronoun form 'this guard does not scan packages/*/src' fires ONLY at the guard's own two source files", () => {
+  const sentence =
+    "This guard does not scan `packages/*/src`, so an undeclared import is " + "never caught.";
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: T268_GENERIC_PATH, content: sentence }],
+    }),
+    [],
+  );
+
+  for (const ownPath of T268_OWN_SOURCE_PATHS) {
+    const violations = findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: ownPath, content: sentence }],
+    });
+    assert.equal(violations.length, 1, `expected a violation at ${ownPath}`);
+    assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+  }
+});
+
+test("T268 row 4: the pronoun form 'it walks only apps/android and apps/web' fires ONLY at the guard's own two source files", () => {
+  const sentence = "It walks only apps/android and apps/web, so packages are not checked.";
+
+  assert.deepEqual(
+    findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: T268_GENERIC_PATH, content: sentence }],
+    }),
+    [],
+  );
+
+  for (const ownPath of T268_OWN_SOURCE_PATHS) {
+    const violations = findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: ownPath, content: sentence }],
+    });
+    assert.equal(violations.length, 1, `expected a violation at ${ownPath}`);
+    assert.equal(violations[0].capability, T259_CAPABILITY_NAME);
+  }
+});
+
+test("T268 row 5 (FP-1): 'the orphan-module walk does not scan packages/*/src' stays silent EVEN when placed adversarially at the guard's own two source files", () => {
+  const sentence = "the orphan-module walk does not scan `packages/*/src`.";
+  for (const testPath of [T268_GENERIC_PATH, ...T268_OWN_SOURCE_PATHS]) {
+    assert.deepEqual(
+      findCapabilityDenialViolations({
+        shippedFiles: T259_SHIPPED_FILES,
+        appFiles: [{ path: testPath, content: sentence }],
+      }),
+      [],
+      `expected no violation at ${testPath}`,
+    );
+  }
+});
+
+test("T268 row 6 (FP-2): 'guard-no-android-web-files scans only apps/android and apps/web by design' stays silent EVEN when placed adversarially at the guard's own two source files", () => {
+  const sentence = "guard-no-android-web-files scans only apps/android and apps/web by design.";
+  for (const testPath of [T268_GENERIC_PATH, ...T268_OWN_SOURCE_PATHS]) {
+    assert.deepEqual(
+      findCapabilityDenialViolations({
+        shippedFiles: T259_SHIPPED_FILES,
+        appFiles: [{ path: testPath, content: sentence }],
+      }),
+      [],
+      `expected no violation at ${testPath}`,
+    );
+  }
+});
+
+test("T268: guard-declared-workspace-deps.mjs's own real, committed content produces zero violations against the two new scoped phrases", () => {
+  const real = readCommittedFile("scripts/ci/guard-declared-workspace-deps.mjs");
+  assert.deepEqual(
+    findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: "scripts/ci/guard-declared-workspace-deps.mjs", content: real }],
+    }),
+    [],
+  );
+});
+
+test("T268: run-guard-declared-workspace-deps.mjs's own real, committed content produces zero violations against the two new scoped phrases", () => {
+  const real = readCommittedFile("scripts/ci/run-guard-declared-workspace-deps.mjs");
+  assert.deepEqual(
+    findCapabilityDenialViolations({
+      shippedFiles: T259_SHIPPED_FILES,
+      appFiles: [{ path: "scripts/ci/run-guard-declared-workspace-deps.mjs", content: real }],
+    }),
+    [],
+  );
+});
