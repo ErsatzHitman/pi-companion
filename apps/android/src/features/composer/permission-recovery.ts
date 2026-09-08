@@ -159,6 +159,43 @@ const KIND_PURPOSE: Record<PermissionKind, string> = {
 };
 
 /**
+ * Exists only so `PERMISSION_KINDS` below can be *derived* rather than
+ * hand-listed: `Record<PermissionKind, true>` cannot compile with a
+ * member missing (unlike `KIND_LABEL`/`KIND_PURPOSE` above, whose
+ * exhaustiveness is a side effect of a table someone might reasonably
+ * narrow to `Partial<...>` later, the way `UNDETERMINED_TITLE_OVERRIDE`
+ * already is). Follows `apps/web/src/features/files/
+ * file-syntax-highlight.ts`'s `STYLE_TO_SYNTAX_VAR` ->
+ * `Object.keys(...) as HighlightStyle[]` shape, the repository's
+ * existing idiom for "derive the exhaustive array from the union
+ * instead of listing it a second time" (T285, P9-W64) — the value type
+ * there is `string`; here it is the bare marker `true`, since nothing
+ * but the key is ever read.
+ */
+const PERMISSION_KIND_KEYS: Record<PermissionKind, true> = {
+  photos: true,
+  microphone: true,
+  camera: true,
+  "photo-capture": true,
+  notifications: true,
+};
+
+/**
+ * Every `PermissionKind`, exhaustively. `permission-recovery.test.ts`'s
+ * own battery drives its per-kind loops off this array instead of a
+ * hand-copied literal list — a hand-copied `readonly PermissionKind[]`
+ * is type-legal as a SUBSET (T285's own finding: T278 added
+ * `"photo-capture"` to the union and the test's literal array silently
+ * stayed at four), so `tsc` cannot catch an omission there. Adding a
+ * sixth `PermissionKind` without adding it to `PERMISSION_KIND_KEYS`
+ * above is a compile error, which is what makes this array actually
+ * exhaustive rather than merely usually-kept-in-sync.
+ */
+export const PERMISSION_KINDS: readonly PermissionKind[] = Object.keys(
+  PERMISSION_KIND_KEYS,
+) as PermissionKind[];
+
+/**
  * T60F's filed, now-applied copy decision (T60G, P5-W18): for the
  * `"undetermined"` state only, `"notifications"` gets a bespoke title
  * instead of the generic `"{Kind} access needed"` pattern every other

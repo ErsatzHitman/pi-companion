@@ -2,13 +2,21 @@ import { describe, expect, it } from "vitest";
 
 import {
   describePermissionRecovery,
+  PERMISSION_KINDS,
   resolvePermission,
   type PermissionKind,
   type PermissionPort,
   type PermissionState,
 } from "./permission-recovery";
 
-const KINDS: readonly PermissionKind[] = ["photos", "microphone", "camera", "notifications"];
+// Every `PermissionKind`, derived (not hand-listed) from
+// `permission-recovery.ts`'s own `Record<PermissionKind, true>` — see
+// that module's `PERMISSION_KIND_KEYS`/`PERMISSION_KINDS` doc comments.
+// A hand-listed `readonly PermissionKind[]` here is exactly the shape
+// T285 was filed to close: it is type-legal as a SUBSET of the union,
+// so adding a sixth `PermissionKind` to the source file could silently
+// leave this battery exercising only five of six kinds forever.
+const KINDS: readonly PermissionKind[] = PERMISSION_KINDS;
 const STATES: readonly PermissionState[] = [
   "undetermined",
   "granted",
@@ -88,6 +96,17 @@ describe("describePermissionRecovery — every state has a named, non-empty exit
     const blocked = describePermissionRecovery("camera", "denied-permanently");
     expect(blocked.action).toBe("open-settings");
     expect(blocked.message.toLowerCase()).toContain("pairing qr code");
+  });
+
+  it("photo-capture copy (T278, attachment-source-port.ts's CameraCapturePort) names camera but its OWN purpose, not camera's QR-pairing one", () => {
+    const denied = describePermissionRecovery("photo-capture", "denied");
+    expect(denied.message.toLowerCase()).toContain("camera");
+    expect(denied.message.toLowerCase()).not.toContain("microphone");
+
+    const blocked = describePermissionRecovery("photo-capture", "denied-permanently");
+    expect(blocked.action).toBe("open-settings");
+    expect(blocked.message.toLowerCase()).toContain("take a photo for your message");
+    expect(blocked.message.toLowerCase()).not.toContain("pairing qr code");
   });
 
   it("notifications copy (T60D, folded in for features/notifications/) names notifications", () => {
