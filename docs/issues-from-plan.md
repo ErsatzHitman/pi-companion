@@ -546,6 +546,8 @@ that recomputation has to be domain-specific:
 | T287   | Correct resolveGroqSttCredentials's model-always-Groq-valid claim               | phase-9   | server           | P9-W66 | T277                                                                  |
 | T288   | Pin T283's $PASEO_HOME criterion and drop the layer-symmetry claim              | phase-9   | server           | P9-W67 | T283                                                                  |
 | T289   | Register resolveTranscribeClient in guard-capability-prose                      | phase-9   | tooling          | P9-W68 | T282                                                                  |
+| T290   | Ship real AttachmentSourcePort and CameraCapturePort at the mount               | phase-9   | android          | P9-W69 | T278, T282                                                            |
+| T291   | Re-pin expo-audio to the version this app's own expo bundles                    | phase-9   | android          | P9-W70 | T276                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -951,6 +953,10 @@ the task details always agree.
 |        | pins is the one a later widening would break).                           |       |
 | P9-W68 | T289 (filed by the P9-P gate; T282 shipped the mount wiring              | 1     |
 |        | and registered nothing -- P9-O's omission again).                        |       |
+| P9-W69 | T290 (owner ran the picker install at 488c4dc; T278's whole              | 1     |
+|        | feature is unreachable until these two ports exist).                     |       |
+| P9-W70 | T291 (found while verifying that install; expo-audio is pinned           | 1     |
+|        | below what this app's own expo bundles).                                 |       |
 
 ---
 
@@ -10755,6 +10761,119 @@ Owns: `scripts/ci/guard-capability-prose.mjs` and its test.
 - [ ] No phrase is lifted from a file carrying a `CORRECTED at the P9-P merge gate` marker
 - [ ] The entry's shape is chosen from a measured declaration count, not assumed
 - [ ] `run-guard-capability-prose.mjs` exits 0 on the real tree afterward
+
+#### T290 — Ship real `AttachmentSourcePort` and `CameraCapturePort`, and wire both at the mount
+
+`labels: phase-9, area: android` · `wave: P9-W69` · `depends-on: T278, T282`
+
+**Owner request, and the dependency wall is now down.** The owner ran the install at `488c4dc`:
+`expo-image-picker@~17.0.11` and `expo-document-picker@~14.0.8`, both the pins this app's own
+`expo@54.0.37` gives in `apps/android/node_modules/expo/bundledNativeModules.json`. T282 shipped its
+mount wiring for `transcribeClient` only and disclosed these two as blocked; this closes them.
+
+**What is inert today, and why.** `Composer.tsx` resolves
+`attachmentSource ?? createUnavailableAttachmentSourcePort()` and
+`cameraCapture ?? createUnavailableCameraCapturePort()`, and the mount
+(`apps/android/src/app/h/[serverId]/session/[agentId]/index.tsx`) passes neither. Those stubs return
+`"unavailable"` from both permission methods, `[]` from `pickFiles`, and `null` from `capturePhoto`.
+So T278's whole feature — thumbnails, the compact chip, the capture action — cannot be reached in
+production: `previewUri` is sourced from `PickedAttachmentFile.uri`, which nothing can populate.
+
+**Read the ports' own contracts first** (`attachment-source-port.ts`, `camera-capture-port.ts`) and
+implement to them. Do not change either interface to suit the library; if a genuine mismatch exists,
+that is a finding worth reporting rather than a reason to reshape the port that four other files
+already depend on.
+
+**Two invariants this app already enforces, both of which this task can break silently:**
+
+- **T83's one-permission-resolution-per-press.** `runCapturePress` and `runMicPress` each reach
+  exactly one `resolvePermission` in the whole press call graph, and there are tests that fail if a
+  second appears. `expo-image-picker` exposes its own
+  `requestMediaLibraryPermissionsAsync`/`requestCameraPermissionsAsync`, so it is very easy to add a
+  second resolution inside the port and satisfy every type. Prove the invariant still holds by
+  mutation: add a speculative permission read inside your port, watch the named test go RED, then
+  restore **from a scratchpad copy — never `git checkout --`**.
+- **The single acceptance path.** Every picked, captured, dropped or pasted file must pass the same
+  `evaluateAttachmentCandidate` ceiling. `stageAndUploadFiles` is the only caller with `limits`, and
+  both press handlers already route through it. Do not add a second path.
+
+**The permission strings are part of the deliverable, not a detail.** `expo-image-picker` ships an
+`app.plugin.js` config plugin. Decide whether `app.config.ts` needs a `plugins` entry for the
+media-library/camera permission copy, and if so write copy that says why this app wants the
+permission — the same standard `permission-recovery.ts`'s `KIND_PURPOSE` already sets. Note that
+`app.config.ts` is inside `isShippedSourcePath`'s scope (T246), so a capability shipped there is
+visible to `guard-capability-prose`.
+
+**Android 13+ media permissions changed shape** (`READ_MEDIA_IMAGES` replacing
+`READ_EXTERNAL_STORAGE`). State which permission this actually requests on the minimum SDK this app
+targets, measured from the resolved library rather than assumed from its README, and make sure
+`permission-recovery.ts`'s `"photos"`/`"photo-capture"` copy is still accurate for it.
+
+**No device exists in this environment.** So say plainly what could not be exercised. A port whose
+real picker path has never run is still a large improvement over a stub that cannot — but it must not
+be reported as proven. Do **not** fake a picker result to make a test pass.
+
+**T124 applies, in the same commit.** This lands a capability whose absence is asserted in several
+places — `attachment-source-port.ts`'s and `camera-capture-port.ts`'s own headers,
+`Composer.tsx`'s `attachmentSource`/`cameraCapture` prop docs, `maestro/composer-inputs.yaml`'s
+"attach still resolves the honest unavailable fallback", and the mount's own comment. Run the grep;
+do not work from this list. Register the capability in `guard-capability-prose.mjs`'s
+`CAPABILITIES` too, and prove the entry can fire.
+
+Owns: `apps/android/src/features/composer/attachment-source-port.ts`,
+`camera-capture-port.ts`, the new real port implementations, the session route mount,
+`apps/android/app.config.ts` if a plugin entry is needed, and the `CAPABILITIES` entry.
+**Do not edit `Composer.tsx`'s renderer body** — both props already exist.
+
+- [ ] A real `AttachmentSourcePort` picks images and documents through the installed libraries
+- [ ] A real `CameraCapturePort` captures a photo
+- [ ] Both are passed at the mount, and the unavailable stubs remain as the injection default
+- [ ] T83's one-resolution-per-press invariant is proven still held, by mutation
+- [ ] No second path bypasses `evaluateAttachmentCandidate`'s ceiling
+- [ ] The permission this actually requests on the targeted SDK is stated, measured not assumed
+- [ ] Permission copy exists and says why the app wants it
+- [ ] Every prose site asserting these ports do not exist is corrected in this same commit
+- [ ] The capability is registered in `CAPABILITIES` and watched firing
+- [ ] What could not be exercised without a device is stated plainly
+
+#### T291 — Re-pin `expo-audio` to the version this app's own expo bundles
+
+`labels: phase-9, area: android` · `wave: P9-W70` · `depends-on: T276`
+
+`apps/android/package.json` declares `expo-audio: "~1.0.13"` (resolving 1.0.16). This app's own
+`expo@54.0.37` gives `expo-audio -> ~1.1.1` in
+`apps/android/node_modules/expo/bundledNativeModules.json` — measured at the P9-P follow-up, while
+verifying the picker install.
+
+**This is the exact rule `expo-audio-voice-capture-port.ts`'s own header states** and cites as the
+reason to read _this app's_ `bundledNativeModules.json` rather than the differently-versioned `expo`
+hoisted into the repo root. The rule was followed for the two pickers and not for `expo-audio`.
+
+**Why it matters beyond tidiness, and what to check before assuming it does.** A bundled-native-module
+version below what the installed `expo` expects is the classic source of a native build that succeeds
+locally and fails, or misbehaves, in an EAS build — the native module and the SDK's expectations are
+compiled together. `run-guard-version-drift.mjs` does **not** catch it (verified: it exits 0 on the
+current tree), so nothing in CI will report this.
+
+Establish first whether the drift is real for THIS app rather than acting on the mismatch alone:
+`expo-audio@1.0.16`'s own peer/`expo` constraint, and whether `npx expo install --check` (read-only)
+reports it. If the drift turns out to be benign for SDK 54, record that finding and close the task —
+do not change a dependency to silence a mismatch that does not bite.
+
+**The version bump itself needs the owner** (`npm install` is refused here). If a bump is the answer,
+state the exact single-line command and stop; then re-verify
+`apps/android/src/features/voice/expo-audio-voice-capture-port.ts` against the new version's
+`Audio.types.d.ts`, because that module's decision record rests on `RecorderState`/`RecordingStatus`
+exposing no sample-rate or channel-count field. **If 1.1.x adds either, that changes T276's
+"unmeasurable" conclusion** and the header must be rewritten rather than left standing.
+
+Owns: `apps/android/package.json`'s `expo-audio` pin (owner-run), and
+`expo-audio-voice-capture-port.ts`'s header if the API surface moved.
+
+- [ ] Whether the drift actually bites SDK 54 is established, not assumed from the mismatch
+- [ ] If a bump is needed, the exact command is stated for the owner rather than attempted
+- [ ] After any bump, `RecorderState`/`RecordingStatus` are re-read and T276's conclusion re-checked
+- [ ] If the drift is benign, that is recorded and the task closes without a change
 
 #### T32A1 — Build the Android connect form
 
