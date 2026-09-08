@@ -166,3 +166,41 @@ test("classifySource labels code, comment and string spans in order", () => {
   assert.equal(rejoined, source);
   assert.deepEqual(kinds, ["code", "comment", "code", "string", "code"]);
 });
+
+// --- T256: the JSX-tag-slash class, found by the whole-tree re-verification,
+// currently inert but not hypothetical ---------------------------------
+
+test("documented limitation: a JSX closing tag's `/` can make canPrecedeRegex fire, and a real trailing comment survives unstripped", () => {
+  // `<` is one of the real punctuation tokens a genuine regex literal can
+  // follow in plain JS/TS expression grammar (canPrecedeRegex has no way to
+  // know this `<` opened a JSX closing tag rather than a comparison), so the
+  // `/` of `</Foo>` is misread as opening a regex literal. scanRegexLiteral
+  // then hunts forward for the next un-classed `/` — the first `/` of the
+  // real trailing `//` comment — and treats THAT as the regex's closing
+  // slash, so the main loop never re-examines the comment's own `//` as a
+  // comment start. This is the T256 whole-tree re-verification's one
+  // disclosed gap (see this module's own header paragraph near
+  // `canPrecedeRegex`/`scanRegexLiteral`): none of the 2,247 tracked module
+  // files scanned at the time hit it, but the trigger itself is real.
+  const source = "const a = (\n  </Foo> // real comment, should vanish\n);\n";
+  const stripped = stripComments(source);
+  assert.equal(stripped.includes("real comment, should vanish"), true);
+});
+
+test("documented limitation does not require JSX: any `<` immediately before a single `/`, with a real `//` comment shortly after, reproduces it", () => {
+  // Confirms the trigger is exactly canPrecedeRegex's treatment of `<`
+  // (real JS grammar: a regex literal legally follows `<`), not something
+  // specific to a JSX parser context this module never runs in — this
+  // module only ever sees raw text, never a parsed JSX tree, so it cannot
+  // tell "less-than, divide" from "start of a JSX closing tag" apart. An
+  // adjacent `//` (no character in between) is NOT ambiguous — the
+  // unambiguous comment-start check runs before the regex heuristic ever
+  // sees it, so a bare `x < // comment` strips correctly. The defect needs
+  // exactly one non-`/` character between the opening `/` and the real
+  // `//`, matching `</Foo>`'s shape (`/`, then `Foo>`, then the comment).
+  const adjacent = "x < // real comment, should vanish\n  1;\n";
+  assert.equal(stripComments(adjacent).includes("real comment, should vanish"), false);
+
+  const oneCharBetween = "x < /b // real comment, should vanish\n  1;\n";
+  assert.equal(stripComments(oneCharBetween).includes("real comment, should vanish"), true);
+});

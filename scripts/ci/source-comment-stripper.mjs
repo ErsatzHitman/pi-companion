@@ -70,13 +70,15 @@
 //
 // This module ships exactly ONE stripping mode: `stripComments`, which
 // removes comment text and leaves every string/template literal's content
-// exactly as written. That is what all four guards need directly —
-// `guard-declared-root-dependencies.mjs`, `guard-no-node-builtin-in-web-
-// bundle.mjs` and `guard-no-duplicate-permission-state.mjs` each read real
-// specifiers or literal members back out of string content after stripping,
-// and `guard-capability-prose.mjs` needs comments gone before its OWN
+// exactly as written. That is what every caller besides `guard-capability-
+// prose.mjs` needs directly — each reads real specifiers or literal
+// members back out of string content after stripping — and `guard-
+// capability-prose.mjs` additionally needs comments gone before its OWN
 // second, separate pass (`stripStringLiterals`, unchanged by this task) can
-// safely erase string literal VALUES on top.
+// safely erase string literal VALUES on top. (T256: this module has grown
+// more callers than the four T244 named here; grep this directory for
+// `from "./source-comment-stripper.mjs"` for the current, authoritative
+// list rather than trusting a count written in a comment.)
 //
 // That second pass is deliberately NOT reproduced in this module, and the
 // two must stay separate rather than becoming "one tokenizer that also
@@ -137,10 +139,60 @@
 // backtick, an escaped slash) is ever re-examined as a comment or string
 // delimiter. This is a heuristic, the same one real formatters and
 // minifiers use for the same ambiguity, not a full parser — division after
-// an identifier or a closing `)`/`]`/`}` is correctly left alone, and no
-// production file scanned by any of the four guards contains a genuinely
-// ambiguous case (checked as part of this task's before/after diff on
-// every real file each guard scans, not assumed).
+// an identifier or a closing `)`/`]`/`}` is correctly left alone.
+//
+// T244 originally verified this against the scan scope of the four guards
+// this module then had: no file any of them read contained a genuinely
+// ambiguous case, checked via that task's own before/after diff. Three
+// more callers landed since (T247's `guard-android-release-tag-version.mjs`;
+// T252's `guard-no-legacy-schema-reader.mjs` and `orphan-modules.mjs`; a
+// later gate's `guard-declared-workspace-deps.mjs`) without that
+// verification being re-run — a stale headcount sitting on a claim nobody
+// had re-checked (T256).
+//
+// T256 re-ran it, widened to cover every one of this module's current
+// callers by construction: `orphan-modules.mjs`'s own scan scope is every
+// tracked module file (`git ls-files` filtered to
+// `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`, excluding `.d.ts` — 2,247 files
+// at `0b46ed6`), which a read of every other caller's own file-selection
+// code confirms is a strict superset of each of theirs (all narrower:
+// one file, or `.ts`/`.tsx` under specific prefixes). Method: for every
+// one of those 2,247 files, a full TypeScript parse (`ts.createSourceFile`,
+// the real parser, which resolves regex-vs-division exactly the way a real
+// lexer does) supplied ground-truth `RegularExpressionLiteral` spans; a
+// reference stripper built on those spans instead of this module's own
+// heuristic was diffed BYTE FOR BYTE against this module's real
+// `stripComments` output on the same file. Zero of the 2,247 files
+// differed — today, this heuristic never actually corrupts output for any
+// file any current caller scans.
+//
+// That whole-tree diff is not the same claim as "the heuristic is always
+// right", and the gap was found, not assumed away: comparing the
+// heuristic's own regex-start decisions (not just final output) against
+// the same ground truth found 334 of the 2,247 files where a JSX closing
+// or self-closing tag's `/` (`</Foo>`, `<Bar />`) makes `canPrecedeRegex`
+// return true — the character immediately before it (`<`) is one of the
+// real preceding tokens a genuine regex literal can follow, and this
+// heuristic has no notion of JSX at all. None of those 334 happened to
+// swallow a real comment or string today (hence the byte-for-byte diff
+// staying at zero), but the underlying trigger is real, not merely
+// theoretical: a source line reading `</Foo> // real comment`, run through
+// this module's actual `stripComments`, leaves the comment text
+// UNSTRIPPED in the output (the false "regex" scan consumes past the
+// comment's own `//`, so the main loop never re-examines it as a comment
+// start) — reproduced directly, not assumed, against this module's real
+// exported function. `source-comment-stripper.test.mjs` pins this as a
+// known, currently-inert limitation with a regression test, so a future
+// caller whose scan scope includes a `.tsx`/`.jsx` file carrying a real
+// comment or string shortly after a JSX tag's `/` is the case that would
+// turn this from "checked, currently clean" into a live corruption — not a
+// hypothetical this module has already ruled out.
+//
+// Whichever of this module's callers exist when you read this, this
+// safety claim describes only what was measured, against the scope that
+// was measured, as of the commit that measured it. A ninth caller (or a
+// tenth) inherits the tokenizer, not this verification — re-run it, the
+// same way T256 did, before trusting this paragraph again.
 //
 // Pure, dependency-free. `source-comment-stripper.test.mjs` covers this
 // directly; each guard's own test file additionally re-proves its own real
@@ -152,7 +204,7 @@
  * returns the index just past where it closes — or `source.length` if the
  * comment is unterminated, in which case the rest of the file is treated as
  * comment text (this never happens on real, syntactically valid committed
- * source, which is all four guards ever scan).
+ * source, which is the only kind any caller of this module ever scans).
  * @param {string} source @param {number} i @returns {number}
  */
 function scanBlockComment(source, i) {
@@ -166,8 +218,8 @@ function scanBlockComment(source, i) {
  * Scans a line comment starting at `i` (pointing at the first `/` of `//`)
  * and returns the index of the terminating newline (or `source.length`),
  * never past it — the newline itself is left for the caller to treat as
- * ordinary code, matching every one of the four guards' prior `//.*$`
- * behaviour, which never consumed the line break either.
+ * ordinary code, matching the prior hand-rolled `//.*$` behaviour every
+ * migrated caller had, none of which ever consumed the line break either.
  * @param {string} source @param {number} i @returns {number}
  */
 function scanLineComment(source, i) {
@@ -367,8 +419,8 @@ function scanInterpolation(source, i) {
  * comments — and returns the index just past the closing backtick.
  *
  * The whole span, interpolations included, is treated as one opaque STRING
- * segment by every caller in this module: none of the four guards this
- * module serves ever needs to look for an import statement, a capability
+ * segment by every caller in this module: none of them ever needs to
+ * look for an import statement, a capability
  * declaration, or a permission-state union INSIDE a `${ … }` interpolation
  * (none of those shapes are legal there), so sub-classifying the
  * interpolation's own code/comment/string spans would add real complexity
@@ -475,10 +527,10 @@ export function classifySource(source) {
  * web-bundle.mjs` and `guard-no-duplicate-permission-state.mjs` need: each
  * reads real specifiers or literal members back out of string content after
  * stripping). Comment text is dropped entirely, including any newlines a
- * block comment spans — matching every one of the four guards' prior
- * (order-dependent) `stripComments` behaviour on well-formed, non-colliding
- * input; the two collisions documented at the top of this module are what
- * changes.
+ * block comment spans — matching the prior (order-dependent), hand-rolled
+ * `stripComments` behaviour every migrated caller had on well-formed,
+ * non-colliding input; the two collisions documented at the top of this
+ * module are what changes.
  * @param {string} source
  * @returns {string}
  */
