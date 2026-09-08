@@ -91,8 +91,24 @@ export type PermissionState =
  * directory is unowned; see this module's header) were added without
  * changing `PermissionState` or `describePermissionRecovery`'s shape at
  * all — kind-parameterisation was already there.
+ *
+ * `"photo-capture"` (T278, `attachment-source-port.ts`'s
+ * `CameraCapturePort`) is a DELIBERATE sibling of `"camera"`, not a
+ * reuse of it, even though both gate the same physical Android `CAMERA`
+ * permission. `KIND_PURPOSE` is a static per-KIND lookup, not
+ * per-caller, and `"camera"`'s entry is hard-pinned to the QR-pairing
+ * purpose (`permission-recovery.test.ts`'s "names camera and its
+ * QR-pairing purpose" case asserts the denied-permanently copy contains
+ * `"pairing qr code"`) — so rewording `"camera"` to also cover "take a
+ * photo for a message" would falsify that pin, and there is no
+ * mechanism here to give one kind two different purposes depending on
+ * who calls it. Adding a second kind for the second purpose is exactly
+ * what this comment's first line asks for. Naming it after the ACTION
+ * ("photo-capture") rather than the hardware ("camera") also reads
+ * better next to the existing `"photos"` kind: `"photos"` picks an
+ * existing image, `"photo-capture"` takes a new one.
  */
-export type PermissionKind = "photos" | "microphone" | "camera" | "notifications";
+export type PermissionKind = "photos" | "microphone" | "camera" | "photo-capture" | "notifications";
 
 /**
  * Minimal permission surface shared by every OS-permission port in this
@@ -130,6 +146,7 @@ const KIND_LABEL: Record<PermissionKind, string> = {
   photos: "Photo and file",
   microphone: "Microphone",
   camera: "Camera",
+  "photo-capture": "Camera",
   notifications: "Notification",
 };
 
@@ -137,6 +154,7 @@ const KIND_PURPOSE: Record<PermissionKind, string> = {
   photos: "attach files to a message",
   microphone: "record a voice message",
   camera: "scan a pairing QR code",
+  "photo-capture": "take a photo for your message",
   notifications: "show updates about your agents",
 };
 

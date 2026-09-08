@@ -210,3 +210,51 @@ describe("staging lifecycle", () => {
     expect(attachmentStatusLabel("error")).toBe("Failed");
   });
 });
+
+describe("T278: stageAttachment's preview channel is image-types-only", () => {
+  it("carries previewUri through for an image candidate", () => {
+    const state = stageAttachment(EMPTY_ATTACHMENTS_STATE, "s1", {
+      name: "a.png",
+      mimeType: "image/png",
+      size: 10,
+      previewUri: "file:///cache/a.png",
+    });
+    expect(state.entries[0]?.previewUri).toBe("file:///cache/a.png");
+  });
+
+  it("drops previewUri for a non-image candidate, even when the caller supplies one", () => {
+    const state = stageAttachment(EMPTY_ATTACHMENTS_STATE, "s1", {
+      name: "a.pdf",
+      mimeType: "application/pdf",
+      size: 10,
+      previewUri: "file:///cache/a.pdf",
+    });
+    expect(state.entries[0]?.previewUri).toBeUndefined();
+  });
+
+  it("leaves previewUri undefined when the candidate never supplied one, image or not", () => {
+    const image = stageAttachment(EMPTY_ATTACHMENTS_STATE, "s1", {
+      name: "a.jpg",
+      mimeType: "image/jpeg",
+      size: 10,
+    });
+    expect(image.entries[0]?.previewUri).toBeUndefined();
+
+    const doc = stageAttachment(EMPTY_ATTACHMENTS_STATE, "s2", {
+      name: "a.txt",
+      mimeType: "text/plain",
+      size: 10,
+    });
+    expect(doc.entries[0]?.previewUri).toBeUndefined();
+  });
+
+  it("an over-limit image candidate is still rejected by evaluateAttachmentCandidate — a preview never bypasses a limit", () => {
+    const result = evaluateAttachmentCandidate(
+      EMPTY_ATTACHMENTS_STATE,
+      { name: "big.png", mimeType: "image/png", size: 101, previewUri: "file:///cache/big.png" },
+      LIMITS,
+    );
+    expect(result.accepted).toBe(false);
+    if (!result.accepted) expect(result.reason).toBe("file-too-large");
+  });
+});

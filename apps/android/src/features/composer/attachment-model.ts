@@ -35,7 +35,86 @@
  * one sentence so `Composer.tsx` can surface them *before* a user opens
  * the picker (plan.md's own "explain the boundary before the failure"
  * expectation for this task), and `evaluateAttachmentCandidate` is
- * exercised at the exact boundary in `attachment-model.test.ts`.
+ * exercised at the exact boundary in `attachment-model.test.ts`. A
+ * previewable image is still subject to every one of these ceilings —
+ * `previewUri` (below) is never itself checked against a limit, only
+ * carried alongside a candidate that already passed
+ * `evaluateAttachmentCandidate` on `size`/`mimeType`/count exactly as
+ * before.
+ *
+ * ## T278: the preview channel, and why it is a URI, not bytes
+ *
+ * `StagedAttachment.previewUri` is an OPTIONAL, IMAGE-TYPES-ONLY field
+ * (`stageAttachment` below only ever copies it through when
+ * `mimeType.startsWith("image/")` — a non-image candidate's
+ * `previewUri` is dropped even if a caller mistakenly supplies one, so
+ * the "images only" rule holds at this module's boundary, not merely as
+ * a convention a renderer has to remember). Non-image attachments stay
+ * the plain name/size/remove chip they always were — **no preview for
+ * them, by decision**, not an oversight: a generic document icon
+ * carries no information a thumbnail would add, and every renderer in
+ * this feature already draws that compact chip correctly.
+ *
+ * Two shapes were on the table for what `previewUri` actually holds:
+ *
+ * 1. **A local platform URI** (what this module does) — a `file://` or
+ *    `content://` string naming wherever the OS picker/camera already
+ *    put the image, handed through by `attachment-source-port.ts`'s
+ *    `PickedAttachmentFile.uri`. `Composer.tsx` passes this straight to
+ *    React Native's `<Image source={{ uri }} />`, which decodes and
+ *    caches the bitmap natively, downsampled to display size — none of
+ *    that decoded memory is ever a JS string or a `Uint8Array` this
+ *    module holds.
+ * 2. **A data URI** (`data:image/...;base64,...`) — portable (no
+ *    platform-specific scheme, survives a serialize/deserialize round
+ *    trip) but requires reading the ENTIRE file into memory via
+ *    `readAsBytes()` and base64-encoding it, up front, the moment the
+ *    file is staged — before a user has even seen a thumbnail, let
+ *    alone sent the message.
+ *
+ * **Measured, not estimated** (`node -e` against a real `Buffer`, not a
+ * paper calculation): encoding one 25 MiB (`26,214,400` byte) buffer —
+ * this feature's own `maxBytesPerFile` ceiling — to base64 produces a
+ * `34,952,536`-character string, and holding both the raw buffer and
+ * its encoded string at once (exactly what building a data URI
+ * requires) raised the measuring Node process's RSS by `58.34 MB` for
+ * that ONE file. Repeating the measurement for `DEFAULT_ATTACHMENT_LIMITS`'s
+ * own worst case — six 25 MiB images staged at once, `maxCount` — and
+ * holding all twelve buffers (six raw + six encoded) live
+ * simultaneously (the shape `AttachmentsState.entries` would need if
+ * every entry carried a data URI) raised RSS by `350.35 MB` over the
+ * same process's baseline: `150 MiB` of raw source bytes plus
+ * `~200 MB` of base64 text (`209,715,354` characters total), for one
+ * feature's optional preview strip. A local URI's cost for the same six
+ * files is six short strings — on the order of a few hundred bytes
+ * combined, not megabytes — because the image bytes themselves are
+ * never copied into this module's state at all.
+ *
+ * **What is released, and when.** Because `previewUri` is only ever a
+ * string reference, there is no separate buffer this module ever holds
+ * to release: `removeAttachment` and `clearAttachments` (below) already
+ * drop the entry from `AttachmentsState.entries` — on removal, and on a
+ * successful send respectively — and the string (and, on the JS side,
+ * any native bitmap React Native cached for it) becomes eligible for
+ * garbage collection at that same moment, with no extra step this
+ * module needs to take. This is the whole practical payoff of choosing
+ * a URI over a data URI: had this module held the base64 text itself,
+ * the SAME two call sites would have needed to be the place that frees
+ * tens of megabytes per file, and a caller that forgot to route through
+ * either one would have leaked it.
+ *
+ * What this module does NOT own: if a future real
+ * `AttachmentSourcePort`/`CameraCapturePort` implementation copies the
+ * picked/captured image into a cache directory to produce the URI it
+ * hands back (as Expo's `expo-image-picker` does), cleaning up that
+ * on-disk temp file is that implementation's job, not this module's —
+ * this module never touches a filesystem itself (see this doc
+ * comment's own opening paragraph), so it has no path to delete from.
+ * Filed for whoever wires a real picker/camera: that implementation's
+ * own doc comment should say plainly whether it cleans up its cache
+ * files, and if not, why leaving them is acceptable (Expo's own picker
+ * cache is normally reclaimed by the OS under storage pressure, but
+ * that is the OS's policy, not a guarantee this module can rely on).
  */
 
 export type StagedAttachmentStatus = "uploading" | "uploaded" | "error";
@@ -57,6 +136,16 @@ export interface StagedAttachment {
   mimeType: string;
   size: number;
   status: StagedAttachmentStatus;
+  /**
+   * A local platform URI (`file://…`, `content://…`) to render this
+   * staged file as an image thumbnail — present only when `mimeType`
+   * starts with `"image/"` (see this module's "T278: the preview
+   * channel" doc comment for why a URI, not a data URI, and why
+   * non-image types never carry one). `undefined` for every non-image
+   * attachment, which is the signal `Composer.tsx`'s
+   * `StagedAttachmentRow` uses to fall back to the plain name/size chip.
+   */
+  previewUri?: string;
   /** Present once `status` is `"uploaded"`. */
   uploaded?: ComposerUploadedAttachment;
   /** Present once `status` is `"error"`, explaining what a retry should expect. */
@@ -120,6 +209,16 @@ export interface AttachmentCandidate {
   name: string;
   mimeType: string;
   size: number;
+  /**
+   * Optional local platform URI for an image candidate — see
+   * `StagedAttachment.previewUri`'s doc comment. Ignored by
+   * `evaluateAttachmentCandidate` (a preview is never itself checked
+   * against a limit) and dropped by `stageAttachment` for any
+   * `mimeType` that is not `"image/…"`, so passing one for a non-image
+   * candidate is a harmless no-op, not a way to bypass the "images
+   * only" rule.
+   */
+  previewUri?: string;
 }
 
 export type AttachmentRejectionReason = "count-limit" | "file-too-large" | "total-limit";
@@ -174,12 +273,16 @@ export function stageAttachment(
   id: string,
   candidate: AttachmentCandidate,
 ): AttachmentsState {
+  const isImage = candidate.mimeType.startsWith("image/");
   const entry: StagedAttachment = {
     id,
     name: candidate.name,
     mimeType: candidate.mimeType,
     size: candidate.size,
     status: "uploading",
+    // Images only, enforced here rather than trusted from the caller —
+    // see `AttachmentCandidate.previewUri`'s doc comment.
+    previewUri: isImage ? candidate.previewUri : undefined,
   };
   return { entries: [...state.entries, entry] };
 }

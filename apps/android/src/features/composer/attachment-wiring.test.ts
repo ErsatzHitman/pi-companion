@@ -110,3 +110,57 @@ describe("Composer.tsx really drives the injected attachment/mic ports (T33B7)",
     expect(code).toMatch(/entry\.attachments\.map\(\(attachment\) => attachment\.fileName\)/);
   });
 });
+
+/**
+ * T278: camera capture is a SECOND source, not the same one — proven
+ * through source text the same way as the rest of this file (comments
+ * stripped, full call expressions matched, never a bare identifier).
+ * `attachment-capture-model.test.ts` carries the behavioural half (that
+ * `runCapturePress` really resolves permission exactly once); this file
+ * carries the wiring half (that `Composer.tsx` really calls it, and
+ * really routes a captured photo through the SAME staging pipeline a
+ * picked file uses, rather than a second, drifting copy of it).
+ *
+ * Every assertion below was mutation-checked the same way as this
+ * file's T33B7/T83 cases above: the real call was deleted or
+ * restructured (comments and imports left intact), the corresponding
+ * `it` was confirmed to fail, and the file was restored byte-for-byte
+ * from a backup taken outside the repo (`diff` confirmed empty) before
+ * this suite was left green. See this task's final report for the
+ * exact mutation and result recorded per case.
+ */
+describe("Composer.tsx really drives camera capture as a distinct source (T278)", () => {
+  const code = readCode();
+
+  it("resolves camera permission and captures through runCapturePress(resolvedCameraCapture) — not a second, ad-hoc resolve", () => {
+    expect(code).toMatch(/runCapturePress\(resolvedCameraCapture\)/);
+  });
+
+  it("never resolves camera permission through a bare resolvePermission(resolvedCameraCapture) call outside runCapturePress — that would be a second resolution site", () => {
+    expect(code).not.toMatch(/resolvePermission\(resolvedCameraCapture\)/);
+  });
+
+  it("a captured photo is routed through the SAME stageAndUploadFiles pipeline a picked file uses — both handleAttachPress and handleCapturePress call it", () => {
+    expect(code).toMatch(/stageAndUploadFiles\(picked\)/);
+    expect(code).toMatch(/stageAndUploadFiles\(\[result\.file\]\)/);
+  });
+
+  it("a picked or captured file's local uri is carried onto the staged candidate as previewUri — stageAttachment itself keeps this images-only, not this call site", () => {
+    expect(code).toMatch(/previewUri:\s*file\.uri/);
+  });
+
+  it('mounts PermissionRecoveryNotice for kind="photo-capture" — a distinct permission from the photo-library kind="photos" notice above', () => {
+    expect(code).toMatch(/<PermissionRecoveryNotice[\s\S]{0,80}kind="photo-capture"/);
+  });
+
+  it("renders an image thumbnail only when the staged attachment carries a previewUri — every other type keeps the plain chip", () => {
+    expect(code).toMatch(/if\s*\(attachment\.previewUri\)\s*\{/);
+    expect(code).toMatch(/source=\{\{\s*uri:\s*attachment\.previewUri\s*\}\}/);
+  });
+
+  it("the capture action fires ComposerIconAction's onPress through handleCapturePress, with its own accessible name distinct from attach/mic", () => {
+    expect(code).toMatch(
+      /accessibleName=\{CAPTURE_ACTION_LABEL\}\s*onPress=\{handleCapturePress\}/,
+    );
+  });
+});

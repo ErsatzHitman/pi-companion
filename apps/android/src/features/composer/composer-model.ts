@@ -473,6 +473,8 @@ export const COMPOSER_ACCESSIBILITY_LABEL = "Message composer";
 export const COMPOSER_INPUT_LABEL = "Message";
 export const MIC_ACTION_LABEL = "Record voice message";
 export const ATTACH_ACTION_LABEL = "Add attachment";
+/** T278: the composer's camera-capture control — a distinct action from `ATTACH_ACTION_LABEL` above (see `attachment-source-port.ts`'s `CameraCapturePort` doc comment for why capture is a second source, not the file picker). */
+export const CAPTURE_ACTION_LABEL = "Take photo";
 export const STEER_ACTION_LABEL = "Redirect current response";
 export const FOLLOW_UP_ACTION_LABEL = "Queue follow-up message";
 export const ABORT_ACTION_LABEL = "Stop current response";

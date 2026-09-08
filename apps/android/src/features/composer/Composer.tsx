@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import type { Clock, StructuredStorage } from "@picompanion/frontend-core";
 import { composer as coreComposer } from "@picompanion/frontend-core";
@@ -22,6 +28,7 @@ import {
   clearAttachments,
   describeAttachmentLimits,
   evaluateAttachmentCandidate,
+  formatAttachmentBytes,
   hasPendingUploads as attachmentsHavePendingUploads,
   markAttachmentError,
   markAttachmentUploaded,
@@ -36,9 +43,12 @@ import {
 } from "./attachment-model";
 import {
   createUnavailableAttachmentSourcePort,
+  createUnavailableCameraCapturePort,
   type AttachmentSourcePort,
+  type CameraCapturePort,
   type PickedAttachmentFile,
 } from "./attachment-source-port";
+import { runCapturePress } from "./attachment-capture-model";
 import { ComposerIconAction } from "./composer-icon-action";
 import { createInMemoryStructuredStorage, createSystemClock } from "./in-memory-outbox-runtime";
 import { runMicPress } from "./mic-press-model";
@@ -76,6 +86,7 @@ import {
 import {
   ABORT_ACTION_LABEL,
   ATTACH_ACTION_LABEL,
+  CAPTURE_ACTION_LABEL,
   COMPOSER_ACCESSIBILITY_LABEL,
   COMPOSER_INPUT_LABEL,
   EMPTY_COMPOSER_STATE,
@@ -198,6 +209,21 @@ export interface ComposerProps {
    * Defaults to `DEFAULT_ATTACHMENT_LIMITS`.
    */
   attachmentLimits?: AttachmentLimits;
+  /**
+   * T278: capturing a NEW photo with the device camera — a SECOND
+   * attachment source, distinct from `attachmentSource` above (see
+   * `attachment-source-port.ts`'s `CameraCapturePort` doc comment for
+   * why this is a sibling port rather than a second method on
+   * `AttachmentSourcePort`). Optional and defaults to
+   * `createUnavailableCameraCapturePort()` — no camera dependency is
+   * installed in this workspace yet (same constraint as
+   * `attachmentSource`). A captured photo is staged and uploaded
+   * through the exact same `evaluateAttachmentCandidate`/
+   * `stageAttachment`/`uploadClient` pipeline as a picked file — see
+   * `stageAndUploadFiles` below — so every limit in `attachmentLimits`
+   * applies to it identically.
+   */
+  cameraCapture?: CameraCapturePort;
   /**
    * T70: the actual recorder behind the mic action — T33B7 deliberately
    * left "recording itself" for a later task; this is that task. When
@@ -432,6 +458,7 @@ export function Composer({
   attachmentSource,
   uploadClient,
   attachmentLimits,
+  cameraCapture,
   voiceCapture,
   outbox: outboxProp,
   structuredStorage: structuredStorageProp,
@@ -456,6 +483,10 @@ export function Composer({
   const resolvedVoiceCapture = useMemo(
     () => voiceCapture ?? createUnavailableVoiceCapturePort(),
     [voiceCapture],
+  );
+  const resolvedCameraCapture = useMemo(
+    () => cameraCapture ?? createUnavailableCameraCapturePort(),
+    [cameraCapture],
   );
   const limits = attachmentLimits ?? DEFAULT_ATTACHMENT_LIMITS;
   const resolvedSessionId = sessionId ?? "local";
@@ -617,6 +648,9 @@ export function Composer({
   const [attachmentPermissionState, setAttachmentPermissionState] =
     useState<PermissionState | null>(null);
   const [micPermissionState, setMicPermissionState] = useState<PermissionState | null>(null);
+  const [capturePermissionState, setCapturePermissionState] = useState<PermissionState | null>(
+    null,
+  );
 
   // `turnRunning` is host-controlled (since T32S13 it is fed by a live
   // signal — see `ComposerProps.turnRunning`'s doc comment). Mirror it into
@@ -674,6 +708,52 @@ export function Composer({
     [uploadClient],
   );
 
+  // Shared by `handleAttachPress` (picked files) and `handleCapturePress`
+  // (a single captured photo) below — T278 pulled this out of
+  // `handleAttachPress` so both sources run through the IDENTICAL
+  // evaluate/stage/upload pipeline (and therefore the identical
+  // `limits`), rather than a second, easily-drifting copy of the loop.
+  // A picked or captured file whose `mimeType` starts with `"image/"`
+  // carries its `uri` through as `previewUri` (`attachment-model.ts`'s
+  // `AttachmentCandidate.previewUri`) — `stageAttachment` itself drops
+  // it for anything else, so this call site does not need its own
+  // image check to keep that rule.
+  const stageAndUploadFiles = useCallback(
+    (files: readonly PickedAttachmentFile[]) => {
+      if (files.length === 0) return;
+
+      let working = attachmentsStateRef.current;
+      const toUpload: Array<{ id: string; file: PickedAttachmentFile }> = [];
+      for (const file of files) {
+        const mimeType = file.mimeType || "application/octet-stream";
+        const size = file.size ?? 0;
+        const id = generateAttachmentId();
+        const acceptance = evaluateAttachmentCandidate(
+          working,
+          { name: file.name, mimeType, size },
+          limits,
+        );
+        working = stageAttachment(working, id, {
+          name: file.name,
+          mimeType,
+          size,
+          previewUri: file.uri,
+        });
+        if (acceptance.accepted) {
+          toUpload.push({ id, file });
+        } else {
+          working = markAttachmentError(working, id, acceptance.message);
+        }
+      }
+      attachmentsStateRef.current = working;
+      setAttachmentsState(working);
+      for (const { id, file } of toUpload) {
+        void uploadPickedFile(id, file);
+      }
+    },
+    [limits, generateAttachmentId, uploadPickedFile],
+  );
+
   // Fires `onAttachPress` immediately (unchanged T33B1 contract — see
   // `ComposerProps.onAttachPress`'s doc comment), then runs the T33B7
   // permission + pick + stage + upload flow. `resolvePermission` mirrors
@@ -693,33 +773,9 @@ export function Composer({
       if (status !== "granted") return;
 
       const picked = await resolvedAttachmentSource.pickFiles({ multiple: true });
-      if (picked.length === 0) return;
-
-      let working = attachmentsStateRef.current;
-      const toUpload: Array<{ id: string; file: PickedAttachmentFile }> = [];
-      for (const file of picked) {
-        const mimeType = file.mimeType || "application/octet-stream";
-        const size = file.size ?? 0;
-        const id = generateAttachmentId();
-        const acceptance = evaluateAttachmentCandidate(
-          working,
-          { name: file.name, mimeType, size },
-          limits,
-        );
-        working = stageAttachment(working, id, { name: file.name, mimeType, size });
-        if (acceptance.accepted) {
-          toUpload.push({ id, file });
-        } else {
-          working = markAttachmentError(working, id, acceptance.message);
-        }
-      }
-      attachmentsStateRef.current = working;
-      setAttachmentsState(working);
-      for (const { id, file } of toUpload) {
-        void uploadPickedFile(id, file);
-      }
+      stageAndUploadFiles(picked);
     })();
-  }, [onAttachPress, resolvedAttachmentSource, limits, generateAttachmentId, uploadPickedFile]);
+  }, [onAttachPress, resolvedAttachmentSource, stageAndUploadFiles]);
 
   const handleRemoveAttachment = useCallback((id: string) => {
     setAttachmentsState((current) => removeAttachment(current, id));
@@ -734,6 +790,35 @@ export function Composer({
 
   const handleDismissAttachmentNotice = useCallback(() => {
     setAttachmentPermissionState(null);
+  }, []);
+
+  // T278: the camera-capture press — delegates the whole
+  // permission-resolve-then-capture decision to `runCapturePress`
+  // (`attachment-capture-model.ts`), exactly one resolution per press,
+  // mirroring `handleAttachPress` above rather than
+  // `mic-press-model.ts`'s internal-resolve shape (see that model's
+  // header for why both shapes satisfy the same invariant). A captured
+  // photo runs through the SAME `stageAndUploadFiles` pipeline as a
+  // picked file — camera is a second SOURCE, not a second acceptance
+  // path.
+  const handleCapturePress = useCallback(() => {
+    void (async () => {
+      const result = await runCapturePress(resolvedCameraCapture);
+      setCapturePermissionState(result.permissionState);
+      if (result.file === null) return;
+      stageAndUploadFiles([result.file]);
+    })();
+  }, [resolvedCameraCapture, stageAndUploadFiles]);
+
+  const handleRequestCapturePermission = useCallback(() => {
+    void (async () => {
+      const status = await resolvedCameraCapture.requestPermission();
+      setCapturePermissionState(status);
+    })();
+  }, [resolvedCameraCapture]);
+
+  const handleDismissCaptureNotice = useCallback(() => {
+    setCapturePermissionState(null);
   }, []);
 
   // Fires `onMicPress` immediately (unchanged T33B1 contract — see
@@ -1017,6 +1102,12 @@ export function Composer({
             onPress={handleAttachPress}
             testId={`${composerTestId}-attach`}
           />
+          <ComposerIconAction
+            glyph={"\u{1F4F7}"}
+            accessibleName={CAPTURE_ACTION_LABEL}
+            onPress={handleCapturePress}
+            testId={`${composerTestId}-capture`}
+          />
           <Text style={styles.attachmentLimits} testID={`${composerTestId}-attachment-limits`}>
             {describeAttachmentLimits(limits)}
           </Text>
@@ -1052,6 +1143,16 @@ export function Composer({
             onOpenSettings={openSystemSettings}
             onDismiss={handleDismissMicNotice}
             testId={`${composerTestId}-mic-permission-notice`}
+          />
+        ) : null}
+        {capturePermissionState !== null ? (
+          <PermissionRecoveryNotice
+            kind="photo-capture"
+            state={capturePermissionState}
+            onRequest={handleRequestCapturePermission}
+            onOpenSettings={openSystemSettings}
+            onDismiss={handleDismissCaptureNotice}
+            testId={`${composerTestId}-capture-permission-notice`}
           />
         ) : null}
         {/* T70: a value of the voice-entry kind — this row is the only
@@ -1184,7 +1285,30 @@ function ComposerEntryRow({
     </View>
   );
 }
-
+/**
+ * T278: one staged attachment row. Renders an image THUMBNAIL when
+ * `attachment.previewUri` is set (image types only —
+ * `attachment-model.ts`'s `stageAttachment` is what enforces that, not
+ * this component); every other type keeps the plain name/size/remove
+ * chip this row always rendered — **no preview for non-image types, by
+ * decision** (see `attachment-model.ts`'s "T278: the preview channel"
+ * doc comment for the full argument). `formatAttachmentBytes(
+ * attachment.size)` is shown for a non-image entry so the chip still
+ * carries the one extra fact a thumbnail would otherwise have implied
+ * (roughly how big the file is) — an image entry omits it since the
+ * thumbnail itself is the size-relevant signal a user actually wants
+ * (what it looks like), matching `D:\beautiful-ui`'s own attachment
+ * chip, which never prints a byte count either.
+ *
+ * Entrance uses the same Reanimated fade/scale-up `Toast.tsx` already
+ * uses (`motion.duration.moderate` + `motion.easing.easeOutStrong`,
+ * `[0.23, 1, 0.32, 1]`) — this IS `D:\beautiful-ui\components\
+ * primitives\PromptBar.tsx`'s `.att`-chip entrance
+ * (`animation: "pop-in 200ms cubic-bezier(0.23,1,0.32,1) both"`,
+ * `opacity 0→1` + `scale(0.95)→scale(1)`), reimplemented with
+ * `react-native-reanimated` since there is no CSS `@keyframes` on
+ * native.
+ */
 function StagedAttachmentRow({
   attachment,
   onRemove,
@@ -1194,7 +1318,7 @@ function StagedAttachmentRow({
   onRemove: (id: string) => void;
   testId: string;
 }) {
-  const { theme } = useTheme();
+  const { theme, motion } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const tone: ChipTone =
     attachment.status === "uploaded"
@@ -1203,24 +1327,69 @@ function StagedAttachmentRow({
         ? "danger"
         : "info";
 
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(1, {
+      duration: motion.duration.moderate,
+      easing: Easing.bezier(...motion.easing.easeOutStrong),
+    });
+    // Runs once per mounted row — a staged attachment's identity (its
+    // `id`) never changes underneath this component, so there is
+    // nothing to re-trigger the entrance for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ scale: 0.95 + 0.05 * progress.value }],
+  }));
+
+  const remove = (
+    <Button
+      kind="secondary"
+      label="Remove"
+      onPress={() => onRemove(attachment.id)}
+      testId={`${testId}-remove`}
+    />
+  );
+  const errorText =
+    attachment.status === "error" && attachment.error ? (
+      <Text style={styles.entryAttachments}>{attachment.error}</Text>
+    ) : null;
+
+  if (attachment.previewUri) {
+    return (
+      <Animated.View style={[styles.entryRow, animatedStyle]} testID={testId}>
+        <Image
+          source={{ uri: attachment.previewUri }}
+          style={styles.thumbnail}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          testID={`${testId}-thumbnail`}
+        />
+        <View style={styles.entryTextColumn}>
+          <Text style={styles.entryText} numberOfLines={1}>
+            {attachment.name}
+          </Text>
+          {errorText}
+        </View>
+        <Chip label={attachmentStatusLabel(attachment.status)} tone={tone} />
+        {remove}
+      </Animated.View>
+    );
+  }
+
   return (
-    <View style={styles.entryRow} testID={testId}>
+    <Animated.View style={[styles.entryRow, animatedStyle]} testID={testId}>
       <View style={styles.entryTextColumn}>
         <Text style={styles.entryText} numberOfLines={1}>
           {attachment.name}
         </Text>
-        {attachment.status === "error" && attachment.error ? (
-          <Text style={styles.entryAttachments}>{attachment.error}</Text>
-        ) : null}
+        <Text style={styles.entryAttachments}>{formatAttachmentBytes(attachment.size)}</Text>
+        {errorText}
       </View>
       <Chip label={attachmentStatusLabel(attachment.status)} tone={tone} />
-      <Button
-        kind="secondary"
-        label="Remove"
-        onPress={() => onRemove(attachment.id)}
-        testId={`${testId}-remove`}
-      />
-    </View>
+      {remove}
+    </Animated.View>
   );
 }
 
@@ -1238,6 +1407,14 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       paddingVertical: theme.spacing[1],
     },
     entryTextColumn: { flex: 1, gap: theme.spacing[1] },
+    // T278: the image-thumbnail chip — `radii.chip` matches
+    // `D:\beautiful-ui`'s `rounded-chip` attachment-chip radius.
+    thumbnail: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radii.chip,
+      backgroundColor: theme.colors.inset,
+    },
     entryText: {
       color: theme.colors.ink,
       fontSize: theme.typography.variant.bodySmall.fontSize,
