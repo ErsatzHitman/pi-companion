@@ -3,10 +3,12 @@
 // coexist with prose in `apps/web/src`, `apps/android/src`, `scripts/ci`,
 // `packaging/**` (T179 widened the denial scan to the latter two), `docs/**`
 // (T197), or `.github/workflows/*.yml`/`apps/android/maestro/*.md` (T207) —
-// widened to `apps/android/maestro/*.yaml` too by T281 — asserting that
-// capability is absent. `run-guard-capability-prose.mjs`'s
-// `isAppSourcePath` is the authoritative scope check — read it rather than
-// trusting this list, which cannot watch itself.
+// widened to `apps/android/maestro/*.yaml` too by T281, and to
+// `packages/*/src` by T295 (measured, not assumed — see that guard's own
+// `PACKAGES_SRC_DENIAL_PATTERN` comment) — asserting that capability is
+// absent. `run-guard-capability-prose.mjs`'s `isAppSourcePath` is the
+// authoritative scope check — read it rather than trusting this list, which
+// cannot watch itself.
 //
 // The history this encodes: at P6-W6, T110 landed as the wave's FIRST
 // commit (adding real `getQueueModes`/`setSteeringMode`/`setFollowUpMode`

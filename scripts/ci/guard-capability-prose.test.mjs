@@ -364,6 +364,21 @@ test("T147: isShippedSourcePath excludes test files and non-src paths", () => {
 // scope (T147 widened THAT to cover it) but has never been
 // `isAppSourcePath` (denial) scope. Retitled to say exactly that.
 //
+// CORRECTED AGAIN (T295): the retitled claim above — that a package's own
+// `src/` tree "has never been `isAppSourcePath` scope" — is what this task
+// falsified. The P9-Q merge gate found `packages/client/src/daemon-
+// client.ts` carrying a live "Not yet called by either app" denial that
+// T284 had already made false in the same wave, and no guard could have
+// caught it for exactly the reason this comment used to state as
+// permanent fact. T295 measured the widening (zero false positives against
+// every real `packages/*/src` file, both excluding and including test
+// files, run through every existing `CAPABILITIES` entry's real
+// `denyingPhrases`) and a real pattern of the identical defect shape
+// landing there across multiple waves — see CLAUDE.md's T295 section for
+// the full measurement — and widened `isAppSourcePath` to admit it, the
+// same way it already admits `apps/web/src` and `apps/android/src`. The
+// test below is retitled and its assertions flipped to match.
+//
 // Each area's own positive coverage lives beside the task that added
 // each one, not here: apps/web/src (this test, below), apps/android/src
 // (the "T216" test immediately after this one — the one area with no
@@ -373,8 +388,9 @@ test("T147: isShippedSourcePath excludes test files and non-src paths", () => {
 // ("T179: isAppSourcePath now covers scripts/ci/*.mjs..." above),
 // packaging/** ("T179: isAppSourcePath now covers packaging/**..." above),
 // docs/** ("T197: isAppSourcePath now covers docs/*.md..." below),
-// .github/workflows/*.yml and apps/android/maestro/*.md ("T207: ..." below).
-// The two denial-scope exclusions have their own coverage too:
+// .github/workflows/*.yml and apps/android/maestro/*.md ("T207: ..." below),
+// and now every package's own `src/` tree (this test, T295 below). The two
+// denial-scope exclusions have their own coverage too:
 // SELF_REFERENTIAL_DENIAL_EXCLUSIONS ("T179: guard-capability-prose.mjs,
 // its own test file, and its CLI entry point are excluded..." above) and
 // DOCS_LEDGER_DENIAL_EXCLUSIONS ("T197: isAppSourcePath excludes
@@ -391,11 +407,69 @@ test("T147: isShippedSourcePath excludes test files and non-src paths", () => {
 // isMaestroProsePath are separate branches failing different named tests.
 // The enumeration above was and is complete; only the tally was wrong, and
 // a tally beside a complete enumeration carries nothing the enumeration
-// does not.)
-test("T147: packages/*/src counts as shipped-scope (T147's own widening of isShippedSourcePath) but not denial-scope — isAppSourcePath still excludes it, unlike apps/web/src", () => {
+// does not. T295 adds an eighth branch, `PACKAGES_SRC_DENIAL_PATTERN`; the
+// same caution applies to any new tally, so none is written here either.)
+test("T147/T295: packages/*/src counts as shipped-scope (T147) AND denial-scope (T295, widened after the P9-Q merge gate) — isAppSourcePath admits it the same way it admits apps/web/src", () => {
   assert.equal(isAppSourcePath("apps/web/src/features/composer/Composer.test.tsx"), true);
-  assert.equal(isAppSourcePath("packages/client/src/daemon-client.ts"), false);
-  assert.equal(isAppSourcePath("packages/protocol/src/agent-types.ts"), false);
+  assert.equal(isAppSourcePath("packages/client/src/daemon-client.ts"), true);
+  assert.equal(isAppSourcePath("packages/protocol/src/agent-types.ts"), true);
+});
+
+// T295: mirrors T216's own reasoning one area over — apps/android/src had
+// no direct `isAppSourcePath(...) === true` assertion in this file before
+// T216 closed that gap; `packages/*/src` test-file inclusion (as opposed to
+// non-test `.ts`/`.tsx` inclusion, already covered above) had none either.
+// Confirmed by mutation: appending `!isTestSourcePath(path)` to the new
+// `PACKAGES_SRC_DENIAL_PATTERN` branch in a scratch copy of
+// `run-guard-capability-prose.mjs` made exactly this test fail (and no
+// other), then the file was restored from a scratchpad copy.
+test("T295: isAppSourcePath admits packages/*/src test files too, the same way it admits apps/web/src and apps/android/src test files", () => {
+  assert.equal(isAppSourcePath("packages/client/src/daemon-client.test.ts"), true);
+  assert.equal(
+    isAppSourcePath("packages/server/src/server/daemon-e2e/queue-mode-routing.e2e.test.ts"),
+    true,
+  );
+});
+
+test("T295: BEFORE this task's widening, a live denial sitting only in packages/*/src could not trip the guard (the file was never in appFiles)", () => {
+  // Reproduces the exact shape the P9-Q merge gate found in
+  // packages/client/src/daemon-client.ts: a real, shipped capability with a
+  // live denying sentence sitting in a package's own src/ tree, which the
+  // pre-T295 appFiles set could never contain regardless of what the
+  // sentence said.
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: DAEMON_CLIENT_WITH_TRIO,
+    },
+  ];
+  const appFiles = [
+    // Simulates the pre-T295 scope: packages/client/src/daemon-client.ts
+    // itself is simply absent from appFiles, the same way it always was
+    // before this task, no matter what it said.
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("T295: AFTER widening, the same denial sitting in packages/*/src trips, naming the right capability", () => {
+  const shippedFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: DAEMON_CLIENT_WITH_TRIO,
+    },
+  ];
+  const appFiles = [
+    {
+      path: "packages/client/src/daemon-client.ts",
+      content: DAEMON_CLIENT_WITH_TRIO + "\n// no shipped `DaemonClient` implements this yet.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.match(violations[0].capability, /queue-mode trio/);
 });
 
 // T216: apps/android/src had NO direct `isAppSourcePath(...) === true`

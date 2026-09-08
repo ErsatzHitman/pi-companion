@@ -446,6 +446,64 @@ const SELF_REFERENTIAL_DENIAL_EXCLUSIONS = new Set([
   "scripts/ci/run-guard-capability-prose.mjs",
 ]);
 
+// T295: DECISION — WIDEN. The P9-Q merge gate found `packages/client/src/
+// daemon-client.ts` asserting "Not yet called by either app" about
+// `requestAttachmentDownloadToken` — a sentence T284 falsified in the same
+// wave that wrote it, and one no guard could have caught: `isAppSourcePath`
+// never reached a package's own `src/` tree at all. That is
+// `isShippedSourcePath`'s scope, and conflating the two is the error
+// CLAUDE.md already documents at T147, T216, T217 and T224.
+//
+// This task decided the question by measuring, not by assuming the answer —
+// the honest case AGAINST widening is real: `packages/*/src` is where the
+// wire protocol and both clients live, dense with legitimately-conditional
+// prose ("no shipped `DaemonClient` implements this", "not wired by any
+// caller yet") that is true when written and becomes false silently, which
+// is also exactly the shape most likely to produce false positives and get
+// this guard disabled (CLAUDE.md's T217 section).
+//
+// MEASURED before widening: every one of the real `CAPABILITIES` entries'
+// `denyingPhrases`, run through the real `findCapabilityDenialViolations`,
+// against every tracked `packages/*/src` file — first the 645 non-test
+// files, then again against all 1106 files with `.test.ts`/`.test.tsx`/
+// `.test.mjs` included (the same treatment `apps/web/src`, `apps/android/
+// src` and `scripts/ci` already get from this scan, and the treatment this
+// widening gives `packages/*/src` too, below) — produced ZERO violations in
+// both runs. The dense, legitimately-conditional prose this file's own
+// package source carries did not trip a single existing entry.
+//
+// The pattern check this task's own brief required (a search of
+// `docs/issues-from-plan.md` and the real tree's own `CORRECTED` markers,
+// not just the one P9-Q instance) found the identical defect shape landing
+// in `packages/*/src` at least three times, none of them ever reachable by
+// this guard: `packages/frontend-core/src/actions/arbitration.ts` carried
+// "[agent_permission_resolved] had no client identity field" until the
+// P6-W7 merge gate corrected it once T111 added exactly that field in the
+// same wave; `packages/server/src/server/daemon-e2e/queue-mode-routing.e2e.
+// test.ts` carried a stale present-tense mention of a retired queue-mode-
+// visibility mechanism, corrected by hand at a later gate and explicitly
+// disclosed there as outside that task's own `Owns` grant; and this file's
+// `daemon-client.ts`/`requestAttachmentDownloadToken` sentence is the third.
+//
+// No new exclusion (`SELF_REFERENTIAL_DENIAL_EXCLUSIONS`- or
+// `DOCS_LEDGER_DENIAL_EXCLUSIONS`-shaped) was needed: none of this guard's
+// own three self-referential files live under `packages/*/src`, and every
+// `packages/*/src` file measured above that narrates its own past mistakes
+// (`daemon-client.ts`, `arbitration.ts`, and others) already does so with a
+// "CORRECTED ... this said" marker `HISTORICAL_QUOTE_MARKERS` already
+// exempts — confirmed directly by the zero-violation runs above, which
+// included every one of those files' real, committed text, not a synthetic
+// stand-in.
+//
+// `packages/*/src` now joins the denial scan the same way `apps/web/src`
+// and `apps/android/src` already do: every source-extensioned file, with
+// test files INCLUDED (not excluded the way `isShippedSourcePath` excludes
+// them) — the same reasoning already given for those two trees and for
+// `scripts/ci` applies unchanged: a false denial in a package's own test
+// title is exactly as live a defect as one in its doc comment, and the
+// `queue-mode-routing.e2e.test.ts` instance above is a real example of it.
+const PACKAGES_SRC_DENIAL_PATTERN = /^packages\/[^/]+\/src\//;
+
 function isPackagingProsePath(path) {
   if (!path.startsWith(PACKAGING_PREFIX)) return false;
   const basename = path.slice(path.lastIndexOf("/") + 1);
@@ -530,16 +588,20 @@ function isMaestroProsePath(path) {
  * `apps/android/maestro/*.md`; T254 added `apps/<name>/app.config.ts` (the
  * same `APP_ROOT_CONFIG_PATTERN` `isShippedSourcePath` already used); T281
  * widened the maestro half to `apps/android/maestro/*.yaml` as well (see
- * `MAESTRO_EXTENSIONS`'s own comment for the measurement) — except
- * this guard's own three files (see `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`)
- * and the task ledger, `docs/issues-from-plan.md` (see
- * `DOCS_LEDGER_DENIAL_EXCLUSIONS`). Comments AND test files both included
- * throughout (one of the ten P6-W6 sites this guard exists to catch was a
- * test title, not a doc comment).
+ * `MAESTRO_EXTENSIONS`'s own comment for the measurement); T295 added every
+ * package's own `src/` tree (see `PACKAGES_SRC_DENIAL_PATTERN`'s own comment
+ * for the measurement that justified it) — except this guard's own three files
+ * (see `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`) and the task ledger,
+ * `docs/issues-from-plan.md` (see `DOCS_LEDGER_DENIAL_EXCLUSIONS`).
+ * Comments AND test files both included throughout (one of the ten P6-W6
+ * sites this guard exists to catch was a test title, not a doc comment).
  */
 export function isAppSourcePath(path) {
   if (SELF_REFERENTIAL_DENIAL_EXCLUSIONS.has(path)) return false;
   if (APP_SRC_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    return hasSourceExtension(path);
+  }
+  if (PACKAGES_SRC_DENIAL_PATTERN.test(path)) {
     return hasSourceExtension(path);
   }
   if (path.startsWith(SCRIPTS_CI_DENIAL_PREFIX)) {
@@ -571,9 +633,9 @@ export function main() {
     console.log(
       `guard-capability-prose: OK — ${CAPABILITIES.length} capability group(s) checked against ` +
         `${shippedPaths.length} packages/*/src|apps/*/src|scripts/ci file(s) and ${appPaths.length} ` +
-        `apps/web|android src + scripts/ci + packaging/** + docs/** + .github/workflows/*.yml + ` +
-        `apps/android/maestro/*.md|*.yaml + apps/*/app.config.ts file(s); no live denial found ` +
-        `for a shipped capability.`,
+        `packages/*/src + apps/web|android src + scripts/ci + packaging/** + docs/** + ` +
+        `.github/workflows/*.yml + apps/android/maestro/*.md|*.yaml + apps/*/app.config.ts ` +
+        `file(s); no live denial found for a shipped capability.`,
     );
     return;
   }

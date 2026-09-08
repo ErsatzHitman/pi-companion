@@ -662,6 +662,72 @@ was needed — every one of the 14 files is ordinary Maestro flow YAML with narr
 `#`-comments, the same genre `README.md` (already in scope) carries, not adversarial or
 profanity-filter-shaped content the way this guard's own three self-referential files are.
 
+### T295: the denial scan is widened to reach `packages/*/src`
+
+The P9-Q merge gate found `packages/client/src/daemon-client.ts` asserting _"Not yet called by
+either app"_ about `requestAttachmentDownloadToken` — a sentence T284 falsified in the same wave
+that wrote it, and one no guard could have caught: `isAppSourcePath`'s denial scan never reached a
+package's own `src/` tree at all. That is `isShippedSourcePath`'s scope, and conflating the two is
+the error this section already documents at T147, T216, T217 and T224.
+
+**Decision: WIDEN — measured, not assumed, per this task's own instruction not to take the answer
+for granted.** The honest case against widening is real and was argued rather than dismissed
+before any code changed: `packages/*/src` is where the wire protocol and both clients live, dense
+with legitimately-conditional prose ("no shipped `DaemonClient` implements this", "not wired by
+any caller yet") that is true when written and becomes false silently — exactly the population
+most likely to produce false positives and get a guard disabled (this file's own T217 section).
+
+Three measurements, in the order this task's brief required:
+
+1. **False-positive rate.** Every one of the real `CAPABILITIES` entries' `denyingPhrases`, run
+   through the real `findCapabilityDenialViolations`, against every tracked `packages/*/src` file
+   — first the 645 non-test files, then again against all 1106 files with test files included
+   (the same treatment `apps/web/src`, `apps/android/src` and `scripts/ci` already get from this
+   scan) — produced **zero violations in both runs**. The dense, legitimately-conditional prose
+   this population actually carries today did not trip a single existing entry.
+2. **The pattern, not just the one instance.** A search of `docs/issues-from-plan.md` and the
+   real tree's own `CORRECTED` markers for the identical defect shape found it landing in
+   `packages/*/src` at least three times, none of them ever reachable by this guard:
+   `packages/frontend-core/src/actions/arbitration.ts` carried "[agent_permission_resolved] had no
+   client identity field" until the P6-W7 merge gate corrected it once T111 added exactly that
+   field in the same wave; `packages/server/src/server/daemon-e2e/queue-mode-routing.e2e.test.ts`
+   carried a stale present-tense mention of a retired queue-mode-visibility mechanism, corrected
+   by hand at a later gate and explicitly disclosed there as outside that task's own `Owns` grant;
+   and `daemon-client.ts`'s `requestAttachmentDownloadToken` sentence above is the third.
+3. **Self-referential exclusion check.** None was needed: none of `guard-capability-prose.mjs`'s
+   own three self-referential files live under `packages/*/src`, and every `packages/*/src` file
+   measured in (1) that narrates its own past mistakes (`daemon-client.ts`, `arbitration.ts`, and
+   others) already does so with a "CORRECTED ... this said" marker `HISTORICAL_QUOTE_MARKERS`
+   already exempts — confirmed directly by the zero-violation runs in (1), which read every one of
+   those files' real, committed text, not a synthetic stand-in.
+
+`isAppSourcePath` now admits every package's own `src/` tree the same way it already admits
+`apps/web/src` and `apps/android/src` — every source-extensioned file, with test files INCLUDED
+(not excluded the way `isShippedSourcePath` excludes them), for the same reason those two trees
+and `scripts/ci` already include their own test files: a false denial in a package's test title is
+exactly as live a defect as one in its doc comment, and the `queue-mode-routing.e2e.test.ts`
+instance above is a real example of it. Every existing `CAPABILITIES` entry was re-run against the
+real, widened full-tree scan (`node scripts/ci/run-guard-capability-prose.mjs`, exit 0, now scanning
+2124 app-source files against 1250 shipped-source files) and a sample spanning a bare-string
+member (the queue-mode trio), a member shipped only in `scripts/ci` (`findBuildOrderViolations`, to
+show the widening reaches a capability whose ONLY declaring file sits outside `packages/*/src`
+entirely), an AND-group member (transfer cancellation), and test-file inclusion (a package's own
+`.test.ts`) was each proven able to FIRE by appending that entry's real denying phrase to a real,
+scratchpad-backed-up tracked `packages/*/src` file, confirming exit 1 naming the right capability,
+then restoring from the scratchpad copy — never `git checkout --` — and confirming exit 0 with
+`git status --porcelain` empty for that file each time.
+
+One gap disclosed rather than fixed, because this task's `Owns` grant is exactly
+`scripts/ci/guard-capability-prose.mjs`, its test, and this paragraph: this file's own T217
+section, a few paragraphs below, describes `isAppSourcePath`'s scope in the present tense without
+`packages/*/src` (e.g. "`isAppSourcePath`'s own scope: `apps/web/src` and `apps/android/src`,
+`scripts/ci`, `packaging/**`, `docs/**` ... and `apps/android/maestro/*.md`") and is now one
+directory further out of date, the identical shape T246 and T254 each found a prior widening leave
+behind. `guard-capability-prose` cannot see this file's own prose (`CLAUDE.md` is not under
+`docs/**` or any of `isAppSourcePath`'s other admitted trees), so nothing will ever flag it — the
+next task or gate that touches the T217 section should correct that sentence in the same commit
+that touches anything else there.
+
 ## T217: a guard for count claims in committed prose was investigated and rejected
 
 Four consecutive merge gates removed a stale figure from committed prose: `CLAUDE.md`'s
