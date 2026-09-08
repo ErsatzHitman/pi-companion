@@ -120,6 +120,7 @@ import {
   type AgentPermissionResponse,
   type AgentRunOptions,
   type AgentSessionConfig,
+  type AgentTimelineImageRef,
 } from "./agent/agent-sdk-types.js";
 import type { StoredAgentRecord } from "./agent/agent-storage.js";
 import type { AgentStorage } from "./agent/agent-storage.js";
@@ -174,6 +175,7 @@ import type { HubRelationshipManagement } from "./hub/relationship-controller.js
 import { HubExecutionController } from "./hub/execution-controller.js";
 import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
+import { resolveAttachmentForDownload } from "./file-upload/attachment-access.js";
 import { PushTokenStore } from "./push/token-store.js";
 import {
   archivePersistedWorkspaceRecord,
@@ -667,6 +669,7 @@ export class Session {
   private readonly chatScheduleLoopSession: ChatScheduleLoopSession;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
+  private readonly downloadTokenStore: DownloadTokenStore;
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
   private readonly daemonSession: DaemonSession;
@@ -748,6 +751,7 @@ export class Session {
       clientId: this.clientId,
       sessionId: this.sessionId,
     });
+    this.downloadTokenStore = downloadTokenStore;
     this.workspaceFilesSession = new WorkspaceFilesSession({
       host: {
         emit: (msg, source) => this.emitForSource(msg, source),
@@ -2447,6 +2451,8 @@ export class Session {
         return this.handleProjectIconGetRequest(msg.projectId, msg.requestId);
       case "file_download_token_request":
         return this.workspaceFilesSession.handleFileDownloadTokenRequest(msg);
+      case "attachment_download_token_request":
+        return this.handleAttachmentDownloadTokenRequest(msg);
       case "file.upload.request":
         this.workspaceFilesSession.handleFileUploadRequest(msg);
         return undefined;
@@ -6801,6 +6807,98 @@ export class Session {
         source,
       );
     }
+  }
+
+  /**
+   * T283: issues a short-lived download token for a timeline attachment,
+   * capability-scoped by cross-referencing `msg.path` against `msg.agentId`'s
+   * own persisted timeline before ever touching the filesystem — see
+   * `file-upload/attachment-access.ts`'s module doc comment for the full
+   * design rationale. Reuses the exact `DownloadTokenStore` and
+   * `/api/files/download` HTTP route `file_download_token_request` already
+   * does; only the request-side authorization differs.
+   */
+  private async handleAttachmentDownloadTokenRequest(
+    msg: Extract<SessionInboundMessage, { type: "attachment_download_token_request" }>,
+  ): Promise<void> {
+    const { agentId, path: requestedPath, requestId } = msg;
+
+    try {
+      await ensureAgentLoaded(agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+    } catch (error) {
+      // Falls through to resolveAttachmentForDownload's own "not_found" path:
+      // an agent that cannot be loaded has no timeline to match against, so
+      // the outcome is identical either way and the caller learns nothing
+      // about whether agentId exists versus whether the path matched it.
+      this.sessionLogger.debug(
+        { err: error, agentId },
+        "attachment_download_token_request: agent could not be loaded",
+      );
+    }
+
+    const result = await resolveAttachmentForDownload(
+      { agentId, path: requestedPath },
+      {
+        getAgentTimelineImages: (id) => {
+          if (!this.agentManager.getAgent(id)) {
+            return null;
+          }
+          const images: AgentTimelineImageRef[] = [];
+          for (const item of this.agentManager.getTimeline(id)) {
+            if (
+              (item.type === "user_message" || item.type === "assistant_message") &&
+              item.images
+            ) {
+              images.push(...item.images);
+            }
+          }
+          return images;
+        },
+      },
+    );
+
+    if (result.status !== "ok") {
+      this.emit({
+        type: "attachment_download_token_response",
+        payload: {
+          agentId,
+          path: requestedPath,
+          token: null,
+          fileName: null,
+          mimeType: null,
+          size: null,
+          error: result.status === "error" ? result.error : "Attachment not found",
+          requestId,
+        },
+      });
+      return;
+    }
+
+    const entry = this.downloadTokenStore.issueToken({
+      path: requestedPath,
+      absolutePath: result.file.absolutePath,
+      fileName: result.file.fileName,
+      mimeType: result.file.mimeType,
+      size: result.file.size,
+    });
+
+    this.emit({
+      type: "attachment_download_token_response",
+      payload: {
+        agentId,
+        path: requestedPath,
+        token: entry.token,
+        fileName: entry.fileName,
+        mimeType: entry.mimeType,
+        size: entry.size,
+        error: null,
+        requestId,
+      },
+    });
   }
 
   private async handleAgentTimelineListPromptsRequest(

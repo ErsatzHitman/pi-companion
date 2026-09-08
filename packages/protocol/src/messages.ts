@@ -2546,6 +2546,25 @@ export const FileDownloadTokenRequestSchema = z.object({
   requestId: z.string(),
 });
 
+/**
+ * T283: requests a short-lived download token for an attachment referenced by
+ * a timeline entry's `AgentTimelineImageRef.path` (agent-types.ts) — never a
+ * client-authored filesystem path resolved through a generic scoped-root
+ * policy. `path` here is required to be the *exact* string a
+ * `fetch_agent_timeline_request` response already handed this client for one
+ * of `agentId`'s own images; the daemon looks it up against its own record of
+ * that agent's timeline rather than trusting it as a location to open (see
+ * `packages/server/src/server/file-upload/attachment-access.ts`). The issued
+ * token is consumed through the same `/api/files/download` HTTP route
+ * `file_download_token_request` already uses (plan.md §12.4).
+ */
+export const AttachmentDownloadTokenRequestSchema = z.object({
+  type: z.literal("attachment_download_token_request"),
+  agentId: z.string(),
+  path: z.string(),
+  requestId: z.string(),
+});
+
 export const FileUploadRequestSchema = z.object({
   type: z.literal("file.upload.request"),
   fileName: z.string().min(1),
@@ -2992,6 +3011,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProjectIconRequestSchema,
   ProjectIconGetRequestSchema,
   FileDownloadTokenRequestSchema,
+  AttachmentDownloadTokenRequestSchema,
   FileUploadRequestSchema,
   FileUploadCancelRequestSchema,
   TranscribeVoiceClipRequestSchema,
@@ -5295,6 +5315,20 @@ export const FileDownloadTokenResponseSchema = z.object({
   }),
 });
 
+export const AttachmentDownloadTokenResponseSchema = z.object({
+  type: z.literal("attachment_download_token_response"),
+  payload: z.object({
+    agentId: z.string(),
+    path: z.string(),
+    token: z.string().nullable(),
+    fileName: z.string().nullable(),
+    mimeType: z.string().nullable(),
+    size: z.number().nullable(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
 export const FileUploadResponseSchema = z.object({
   type: z.literal("file.upload.response"),
   payload: z.object({
@@ -5908,6 +5942,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProjectIconResponseSchema,
   ProjectIconGetResponseSchema,
   FileDownloadTokenResponseSchema,
+  AttachmentDownloadTokenResponseSchema,
   FileUploadResponseSchema,
   FileUploadCancelResponseSchema,
   TranscribeVoiceClipResponseSchema,
@@ -6366,6 +6401,8 @@ export type ProjectIconGetResponse = z.infer<typeof ProjectIconGetResponseSchema
 export type ProjectIcon = z.infer<typeof ProjectIconSchema>;
 export type FileDownloadTokenRequest = z.infer<typeof FileDownloadTokenRequestSchema>;
 export type FileDownloadTokenResponse = z.infer<typeof FileDownloadTokenResponseSchema>;
+export type AttachmentDownloadTokenRequest = z.infer<typeof AttachmentDownloadTokenRequestSchema>;
+export type AttachmentDownloadTokenResponse = z.infer<typeof AttachmentDownloadTokenResponseSchema>;
 export type FileUploadRequest = z.infer<typeof FileUploadRequestSchema>;
 export type FileUploadResponse = z.infer<typeof FileUploadResponseSchema>;
 export type FileUploadCancelRequest = z.infer<typeof FileUploadCancelRequestSchema>;

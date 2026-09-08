@@ -24,6 +24,7 @@ import type {
   CreateAgentRequestMessage,
   CreatePaseoWorktreeRequest,
   FileDownloadTokenResponse,
+  AttachmentDownloadTokenResponse,
   FileUploadResponse,
   FileUploadCancelResponse,
   FileExplorerResponse,
@@ -459,6 +460,7 @@ export interface FileUploadInput {
 export type FileUploadResult = FileUploadResponse["payload"];
 export type FileUploadCancelResult = FileUploadCancelResponse["payload"];
 type FileDownloadTokenPayload = FileDownloadTokenResponse["payload"];
+type AttachmentDownloadTokenPayload = AttachmentDownloadTokenResponse["payload"];
 type ListProviderFeaturesPayload = ListProviderFeaturesResponseMessage["payload"];
 type ListProviderModelsPayload = ListProviderModelsResponseMessage["payload"];
 type ListProviderModesPayload = ListProviderModesResponseMessage["payload"];
@@ -4769,6 +4771,33 @@ export class DaemonClient {
         path,
       },
       responseType: "file_download_token_response",
+    });
+  }
+
+  /**
+   * T283: exchanges a timeline attachment's `AgentTimelineImageRef.path`
+   * (echoed back verbatim from a prior `fetch_agent_timeline_request`, never
+   * a path this client invents) for a short-lived download token, scoped to
+   * `agentId`'s own timeline by the daemon
+   * (`packages/server/src/server/file-upload/attachment-access.ts`). The
+   * token is consumed the same way `requestDownloadToken`'s is, via a GET to
+   * `/api/files/download?token=...`. Not yet called by either app — T284
+   * wires the route-level `ResolveImageSrc`/`ResolveImageUri` seam that will
+   * call this.
+   */
+  async requestAttachmentDownloadToken(
+    agentId: string,
+    path: string,
+    requestId?: string,
+  ): Promise<AttachmentDownloadTokenPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "attachment_download_token_request",
+        agentId,
+        path,
+      },
+      responseType: "attachment_download_token_response",
     });
   }
 

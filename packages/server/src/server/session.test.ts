@@ -1,5 +1,13 @@
 import { execSync } from "child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join, resolve as resolvePath } from "path";
 import pino from "pino";
@@ -20,6 +28,7 @@ import {
 } from "@picompanion/protocol/binary-frames/index";
 import { isSessionRpcAllowed, Session } from "./session.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
+import { ATTACHMENT_TEMP_DIR_PREFIX } from "./file-upload/attachment-access.js";
 import { StructuredAgentFallbackError } from "./agent/agent-response-loop.js";
 import type { StoredAgentRecord } from "./agent/agent-storage.js";
 import type { AgentManagerEvent } from "./agent/agent-manager.js";
@@ -28,6 +37,7 @@ import { createPersistedProjectRecord } from "./workspace-registry.js";
 import { deriveProjectKey } from "./project-key.js";
 import type { SessionOptions } from "./session.js";
 import type { SessionInboundMessage, SessionOutboundMessage } from "./messages.js";
+import type { AgentTimelineImageRef, AgentTimelineItem } from "@picompanion/protocol/agent-types";
 import {
   asSessionInternals as asSessionInternalsHelper,
   asAgentManager,
@@ -5949,5 +5959,136 @@ describe("pi.ui.action.response / pi_ui_action_result carry answeredBy (T128)", 
       broadcast && "payload" in broadcast ? (broadcast.payload as { event?: object }) : {};
     const event = "event" in payload ? (payload.event as object) : {};
     expect(Object.prototype.hasOwnProperty.call(event, "answeredBy")).toBe(false);
+  });
+});
+
+// T283: end-to-end (message in, message out) coverage for
+// `attachment_download_token_request`, exercised through the real `Session`
+// dispatch — not just `resolveAttachmentForDownload` in isolation — so the
+// agent-access wiring (`ensureAgentLoaded`, `agentManager.getTimeline`) and
+// the `DownloadTokenStore` reuse are proven together, the same way a real
+// remote client would exercise them.
+describe("attachment_download_token_request", () => {
+  const attachmentDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of attachmentDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function makeAttachmentFile(bytes: string): string {
+    const dir = mkdtempSync(join(tmpdir(), ATTACHMENT_TEMP_DIR_PREFIX));
+    attachmentDirs.push(dir);
+    const filePath = join(dir, "deadbeef.png");
+    writeFileSync(filePath, bytes, "utf-8");
+    return filePath;
+  }
+
+  function timelineWithImage(images: AgentTimelineImageRef[]): AgentTimelineItem[] {
+    return [{ type: "user_message", text: "here's a screenshot", images }];
+  }
+
+  test("issues a token for an image recorded on the requesting agent's own timeline, and the token serves the exact bytes", async () => {
+    const bytes = "real materialized image bytes";
+    const imagePath = makeAttachmentFile(bytes);
+    const ref: AgentTimelineImageRef = { mimeType: "image/png", path: imagePath, bytes: 30 };
+    const downloadTokenStore = new DownloadTokenStore({ ttlMs: 60_000 });
+    const messages: SessionOutboundMessage[] = [];
+
+    const session = createSessionForTest({
+      messages,
+      downloadTokenStore,
+      agentManager: {
+        getAgent: vi.fn((id: string) => (id === "agent-a" ? { id, provider: "codex" } : null)),
+        waitForAgentClose: vi.fn(async () => undefined),
+        getTimeline: vi.fn((id: string) => (id === "agent-a" ? timelineWithImage([ref]) : [])),
+      },
+    });
+
+    await session.handleMessage({
+      type: "attachment_download_token_request",
+      agentId: "agent-a",
+      path: imagePath,
+      requestId: "req-1",
+    });
+
+    expect(messages).toHaveLength(1);
+    const [response] = messages;
+    if (response?.type !== "attachment_download_token_response") {
+      throw new Error(`unexpected response type: ${response?.type}`);
+    }
+    expect(response.payload.error).toBeNull();
+    expect(response.payload.token).toEqual(expect.any(String));
+    expect(response.payload.mimeType).toBe("image/png");
+    expect(response.payload.size).toBe(Buffer.byteLength(bytes));
+
+    // The token consumes to the exact bytes that were materialized — this is
+    // the same `DownloadTokenStore` / `/api/files/download` pathway
+    // `file_download_token_request` already uses, unmodified by this task.
+    const entry = downloadTokenStore.consumeToken(response.payload.token as string);
+    expect(entry).not.toBeNull();
+    const servedBytes = readFileSync(entry?.absolutePath as string, "utf-8");
+    expect(servedBytes).toBe(bytes);
+  });
+
+  test("refuses an attachment that belongs to a different agent's session (cross-tenant read)", async () => {
+    const imagePath = makeAttachmentFile("agent-a's private screenshot");
+    const ref: AgentTimelineImageRef = { mimeType: "image/png", path: imagePath };
+    const messages: SessionOutboundMessage[] = [];
+
+    const session = createSessionForTest({
+      messages,
+      agentManager: {
+        getAgent: vi.fn((id: string) =>
+          id === "agent-a" || id === "agent-b" ? { id, provider: "codex" } : null,
+        ),
+        waitForAgentClose: vi.fn(async () => undefined),
+        getTimeline: vi.fn((id: string) => (id === "agent-a" ? timelineWithImage([ref]) : [])),
+      },
+    });
+
+    // agent-b asking for agent-a's own recorded attachment path.
+    await session.handleMessage({
+      type: "attachment_download_token_request",
+      agentId: "agent-b",
+      path: imagePath,
+      requestId: "req-2",
+    });
+
+    expect(messages).toHaveLength(1);
+    const [response] = messages;
+    if (response?.type !== "attachment_download_token_response") {
+      throw new Error(`unexpected response type: ${response?.type}`);
+    }
+    expect(response.payload.token).toBeNull();
+    expect(response.payload.error).not.toBeNull();
+  });
+
+  test("refuses when the agent does not exist", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const session = createSessionForTest({
+      messages,
+      agentManager: {
+        getAgent: vi.fn(() => null),
+        waitForAgentClose: vi.fn(async () => undefined),
+        getTimeline: vi.fn(() => []),
+      },
+    });
+
+    await session.handleMessage({
+      type: "attachment_download_token_request",
+      agentId: "ghost-agent",
+      path: "/tmp/paseo-attachments-x/deadbeef.png",
+      requestId: "req-3",
+    });
+
+    expect(messages).toHaveLength(1);
+    const [response] = messages;
+    if (response?.type !== "attachment_download_token_response") {
+      throw new Error(`unexpected response type: ${response?.type}`);
+    }
+    expect(response.payload.token).toBeNull();
+    expect(response.payload.error).not.toBeNull();
   });
 });
