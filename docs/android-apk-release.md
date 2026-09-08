@@ -519,7 +519,8 @@ switch the dev/prod package id and app name — confirmed by
 workflow sets no `env:` on the `production-apk` build call, so `APP_VARIANT` is
 unset during a release build and `isDevelopmentClient` evaluates `false` — the only
 thing making `sh.picompanion` (not `sh.picompanion.debug`) the package name that
-ships, confirmed by reading `app.config.ts:75` and the workflow's own EAS build
+ships, confirmed by reading `app.config.ts`'s `isDevelopmentClient` constant and its
+`package:` field and the workflow's own EAS build
 step (no `env:` block).
 
 ---

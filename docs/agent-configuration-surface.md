@@ -32,7 +32,7 @@ records exactly where that limit bites.
 
 ### Models — reportable today, already surfaced as an editor
 
-Pi's `get_available_models` request (`rpc-types.d.ts:49-51`) returns
+Pi's `get_available_models` request (installed Pi's `rpc-types.d.ts`) returns
 `{ models: Model<any>[] }` — the full catalog, not just the active one. Our mirror
 carries this arm (`rpc-types.ts`; §9.2 marks it "Mirrored — Pre-existing") and it is
 wired end-to-end: T28B5 ("Add model and thinking-level selection",
@@ -46,14 +46,14 @@ already, not a gap.
 ### Skills — partially reportable, and only indirectly
 
 Pi's RPC surface has no `list_skills`/`get_skills` request anywhere in
-`rpc-types.d.ts` (confirmed by grepping the entire 456-line file for `skill`: the only
-hit is the `source: "extension" | "prompt" | "skill"` field on `RpcSlashCommand`,
-`:141`). The one signal that exists is `get_commands`, which Pi already mirrors as
+`rpc-types.d.ts` (confirmed by grepping the entire file for `skill`: the only
+hit is the `source: "extension" | "prompt" | "skill"` field on `RpcSlashCommand`).
+The one signal that exists is `get_commands`, which Pi already mirrors as
 `get_commands`/`PiRpcSlashCommand` (§9.2: "Mirrored (added by this task)", T51A) and
 which our daemon already forwards to the client as `list_commands_request` /
-`list_commands_response` (`packages/protocol/src/messages.ts:5422-5436`,
-`AgentSlashCommandSchema`). `packages/server/src/server/agent/providers/pi/agent.ts`'s
-`mapPiCommandKind` (lines 136-141) maps Pi's `source: "skill"` to our wire's
+`list_commands_response` (`AgentSlashCommandSchema` in
+`packages/protocol/src/messages.ts`). `packages/server/src/server/agent/providers/pi/agent.ts`'s
+`mapPiCommandKind` function maps Pi's `source: "skill"` to our wire's
 `kind: "skill"` — so **a skill that exposes a slash command is visible today**, tagged,
 with name/description/argument hint, through the exact same channel that already
 powers the composer's `/`-completion (`apps/web/src/features/composer/
@@ -92,7 +92,7 @@ MCP config Pi launches with**. `packages/server/src/server/agent/providers/pi/ag
   launch.
 - `createPiMcpConfigFile` (lines 632-664) merges that global file's `mcpServers` (or
   legacy `mcp-servers`) with the per-session `AgentSessionConfig.mcpServers`
-  (`agent-sdk-types.ts:72`, `McpServerConfig` — stdio/http/sse variants, each
+  (`McpServerConfig`, declared in `agent-sdk-types.ts` — stdio/http/sse variants, each
   optionally carrying `env`/`headers`), including the internally-injected `paseo`
   server (`runtime-mcp-config.ts`'s `withRuntimePaseoMcpServer`), and writes the
   merged result to a temp file Pi actually reads.
@@ -113,7 +113,7 @@ be filled in, not merely called.
 ### Extensions — least visible of the five; no daemon-side read of any kind exists
 
 `rpc-types.d.ts`'s only extension-shaped members are `RpcExtensionUIRequest`/
-`RpcExtensionUIResponse` (`:385-455`) — a live, bidirectional protocol for an
+`RpcExtensionUIResponse` — a live, bidirectional protocol for an
 _already-running_ extension to ask the connected client for input (`select`,
 `confirm`, `input`, etc.) and receive an answer. Both are mirrored functionally in
 `PiRuntimeEvent`'s `extension_ui_request`/`respondToExtensionUiRequest` (§9.2's
@@ -158,13 +158,13 @@ should not be mistaken for this one:
 
 ### Summary table
 
-| Surface              | Daemon can report today?                                                                                               | Evidence checked                                                                                              | New work needed                                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Models               | Yes, fully (catalog + active)                                                                                          | `rpc-types.d.ts:49-51`; `rpc-types.ts` (`get_available_models`); T28B5                                        | None — already an editor                                                                             |
-| Skills               | Partially (only skills with a slash command, name/description only, indistinguishable from extension-sourced commands) | `rpc-types.d.ts:141`; `messages.ts:5422-5436`; `agent.ts`'s `mapPiCommandKind`                                | A diagnostics fetch reusing `AgentTurnClient.listCommands` (no daemon change)                        |
-| MCP servers          | No via Pi RPC; yes via a daemon-side file the daemon already parses                                                    | `rpc-types.d.ts` (zero `mcp` hits); `agent.ts`'s `readPiGlobalMcpConfig`/`createPiMcpConfigFile`              | New daemon report path with redaction of `env`/`headers`; `listFeatures()` is a stub, not a shortcut |
-| Extensions           | No                                                                                                                     | `rpc-types.d.ts` (only live UI protocol); `agent.ts` (`extensionPaths` never reads a real registry)           | New daemon-side extension-registry read, then a report path — two steps, not one                     |
-| Subagent definitions | No — and no such concept exists in Pi's surface, `plan.md`, or this repo                                               | `rpc-types.d.ts` (zero `subagent` hits); `provider-subagents/store.ts` is a different (runtime-fleet) concept | Not scoped anywhere; would need product definition before daemon work                                |
+| Surface              | Daemon can report today?                                                                                               | Evidence checked                                                                                                 | New work needed                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Models               | Yes, fully (catalog + active)                                                                                          | `rpc-types.d.ts`; `rpc-types.ts` (`get_available_models`); T28B5                                                 | None — already an editor                                                                             |
+| Skills               | Partially (only skills with a slash command, name/description only, indistinguishable from extension-sourced commands) | `rpc-types.d.ts`'s `RpcSlashCommand`; `messages.ts`'s `AgentSlashCommandSchema`; `agent.ts`'s `mapPiCommandKind` | A diagnostics fetch reusing `AgentTurnClient.listCommands` (no daemon change)                        |
+| MCP servers          | No via Pi RPC; yes via a daemon-side file the daemon already parses                                                    | `rpc-types.d.ts` (zero `mcp` hits); `agent.ts`'s `readPiGlobalMcpConfig`/`createPiMcpConfigFile`                 | New daemon report path with redaction of `env`/`headers`; `listFeatures()` is a stub, not a shortcut |
+| Extensions           | No                                                                                                                     | `rpc-types.d.ts` (only live UI protocol); `agent.ts` (`extensionPaths` never reads a real registry)              | New daemon-side extension-registry read, then a report path — two steps, not one                     |
+| Subagent definitions | No — and no such concept exists in Pi's surface, `plan.md`, or this repo                                               | `rpc-types.d.ts` (zero `subagent` hits); `provider-subagents/store.ts` is a different (runtime-fleet) concept    | Not scoped anywhere; would need product definition before daemon work                                |
 
 ## 2. What the frontend already surfaces
 

@@ -30,20 +30,21 @@
  * functionally equivalent surface is:
  *
  *  - `fetchAgent(agentId, requestId?): Promise<FetchAgentResult | null>`
- *    (`packages/client/src/daemon-client.ts:2441`) — `.agent.provider`/
+ *    (declared on `DaemonClient` in
+ *    `packages/client/src/daemon-client.ts`) — `.agent.provider`/
  *    `.model`/`.thinkingOptionId`/`.effectiveThinkingOptionId` is this
- *    agent's live model/thinking snapshot (`AgentSnapshotPayloadSchema`,
- *    `packages/protocol/src/messages.ts:820`).
+ *    agent's live model/thinking snapshot (`AgentSnapshotPayloadSchema` in
+ *    `packages/protocol/src/messages.ts`).
  *  - `listProviderModels(provider, options?):
- *    Promise<ListProviderModelsPayload>` (`:4658`) — `.models` is an
- *    array of `AgentModelDefinition` (`packages/protocol/src/
- *    agent-types.ts:75`), each carrying its OWN `.thinkingOptions`.
+ *    Promise<ListProviderModelsPayload>` (also on `DaemonClient`) —
+ *    `.models` is an array of `AgentModelDefinition` (`packages/protocol/src/
+ *    agent-types.ts`), each carrying its OWN `.thinkingOptions`.
  *    There is no separate "list thinking options for this agent"
  *    request — same as web's `use-model-thinking.ts`, which derives
  *    `thinkingOptions` from the selected model, not a fifth RPC.
- *  - `setAgentModel(agentId, modelId): Promise<void>` (`:3247`).
+ *  - `setAgentModel(agentId, modelId): Promise<void>` (also on `DaemonClient`).
  *  - `setAgentThinkingOption(agentId, thinkingOptionId):
- *    Promise<AgentProviderNotice | null>` (`:3302`).
+ *    Promise<AgentProviderNotice | null>` (also on `DaemonClient`).
  *
  * All four exist and are real, wire-connected methods — this is a
  * naming gap in the task brief, not a missing capability. See this

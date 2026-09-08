@@ -21,7 +21,7 @@ import type { ResolveImageSrc } from "./message-attachments.js";
  * only `PiTextContent` blocks out of the prompt content array). T52A1
  * fixed that mapper to also extract and materialize image blocks, and
  * T52A2 threaded the result onto `TranscriptEntry.images`
- * (`AgentTimelineImageRef[]`, `packages/protocol/src/agent-types.ts:357`).
+ * (`AgentTimelineImageRef[]`, declared in `packages/protocol/src/agent-types.ts`).
  * This file renders that field through `MessageAttachments` below.
  * `AgentAttachment` (forge/GitHub issue and PR references, uploaded
  * files, review comments) is a *separate* shape from an image block and

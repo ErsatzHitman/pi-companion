@@ -2,7 +2,7 @@
 //
 // Proves that `PiRpcCommand`'s "prompt" arm carries `streamingBehavior?`
 // exactly as the installed Pi's own `dist/modes/rpc/rpc-types.d.ts`
-// `RpcCommand` "prompt" arm declares it (`rpc-types.d.ts:17-19`):
+// `RpcCommand` "prompt" arm declares it:
 //
 //   streamingBehavior?: "steer" | "followUp";
 //

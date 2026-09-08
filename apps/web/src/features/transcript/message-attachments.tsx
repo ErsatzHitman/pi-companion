@@ -24,7 +24,8 @@ import "./message-attachments.css";
  * be *relative to a workspace `cwd`*
  * (`packages/server/src/server/file-explorer/service.ts`'s
  * `resolveScopedPath`, which throws "Access outside of workspace is not
- * allowed" — `service.ts:100` — for anything outside `root`). The `path`
+ * allowed" — that file's `ACCESS_OUTSIDE_WORKSPACE_MESSAGE` constant —
+ * for anything outside `root`). The `path`
  * an inbound message image carries is not workspace-relative: it points
  * into a process-wide temp directory
  * (`os.tmpdir()/paseo-attachments-*`,

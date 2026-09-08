@@ -1423,7 +1423,7 @@ Because the ported backend preserves data formats and no daemon-data migration i
     (`packages/protocol/src/provider-manifest.ts`) has always been an open `z.string()`, never
     an enum, and `AGENT_PROVIDER_DEFINITIONS` has always had exactly one entry, `id: "pi"`. With
     non-Pi providers a stated non-goal (§2.3), the set this gate filtered is pi-only IN
-    PRODUCTION — `config.ts:527` passes `agentClients: {}`, so nothing is ever overlaid onto the
+    PRODUCTION — `config.ts`'s default config object passes `agentClients: {}`, so nothing is ever overlaid onto the
     manifest-derived registry on a real daemon. **CORRECTED at the P9-I merge gate:** this said
     the set "can never again contain anything this product's own client would reject",
     unconditionally. That is false for any daemon with a non-empty `agentClients` — every test
@@ -1446,7 +1446,8 @@ Because the ported backend preserves data formats and no daemon-data migration i
     make the set's own name false (`"pi"` is not legacy, it is the only provider) while leaving
     the whole now-pointless apparatus in place to be misapplied again; bumping
     `ANDROID_DAEMON_APP_VERSION` past `"0.1.45"` would pass this one gate, but that constant is
-    an unexamined literal with no documented protocol meaning of its own (`core.ts:113-124`
+    an unexamined literal with no documented protocol meaning of its own (`core.ts`'s doc comment
+    on `ANDROID_DAEMON_APP_VERSION`
     records it "was a bare `"0.1.0"` literal repeated at both construction sites", where web's
     `DAEMON_APP_VERSION` calls itself a fixed protocol-compatibility declaration) — a version
     number should describe what a client actually does, not be moved until an unrelated check

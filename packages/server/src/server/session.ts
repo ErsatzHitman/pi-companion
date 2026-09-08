@@ -1790,10 +1790,11 @@ export class Session {
   // an open `z.string()`, not an enum -- and its own manifest
   // (`AGENT_PROVIDER_DEFINITIONS`) has always had exactly one entry,
   // `id: "pi"`. Non-Pi providers are a stated non-goal (plan.md §2.3), so
-  // IN PRODUCTION the set this gate filtered is pi-only: `config.ts:527`
-  // passes `agentClients: {}`, reaching `ProviderSnapshotManager` as
-  // `extraClients` via `bootstrap.ts:831`, so nothing is ever overlaid onto
-  // the manifest-derived registry on a real daemon.
+  // IN PRODUCTION the set this gate filtered is pi-only: `config.ts`'s
+  // default config object sets `agentClients: {}`, reaching
+  // `ProviderSnapshotManager` as `extraClients` via `bootstrap.ts`'s
+  // `new ProviderSnapshotManager({...})` construction, so nothing is ever
+  // overlaid onto the manifest-derived registry on a real daemon.
   //
   // (CORRECTED at the P9-I merge gate. This said "the set this gate
   // filtered can never again contain anything this product's own client
@@ -1839,8 +1840,8 @@ export class Session {
   //    something for a client that ships today.
   //  - Bumping `ANDROID_DAEMON_APP_VERSION` past "0.1.45" would satisfy
   //    this one gate, but the constant is an unexamined literal with no
-  //    documented protocol meaning of its own -- `core.ts:113-124` records
-  //    that it "was a bare `\"0.1.0\"` literal repeated at both
+  //    documented protocol meaning of its own -- `core.ts`'s doc comment on
+  //    `ANDROID_DAEMON_APP_VERSION` records that it "was a bare `\"0.1.0\"` literal repeated at both
   //    construction sites", where `apps/web`'s `DAEMON_APP_VERSION`
   //    comment explicitly calls itself a fixed protocol-compatibility
   //    declaration. Moving a meaningless literal until an unrelated check

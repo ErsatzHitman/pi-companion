@@ -404,7 +404,8 @@ function SessionSheetExtensions({ agentId }: { agentId: string }) {
  * (`packages/frontend-core/src/connection/daemon-client-lifecycle.ts`)
  * declares six members and neither `respondToPermission` nor `on(...)`,
  * although the real `DaemonClient` returned by `getDaemonClient()` in
- * production has both (`packages/client/src/daemon-client.ts:4728`).
+ * production has both (both declared on `DaemonClient` in
+ * `packages/client/src/daemon-client.ts`).
  * Widening `DaemonClientLike` itself belongs to `frontend-core`, outside
  * this task's `Owns` grant — this cast documents the gap rather than
  * silently working around it; the widening still needs to be filed

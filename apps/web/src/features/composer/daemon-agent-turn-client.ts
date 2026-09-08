@@ -55,8 +55,8 @@
  * `options.streamingBehavior` reaches the real `DaemonClient` and, since
  * the P6-W7 merge gate, is spread onto the `send_agent_message_request`
  * it builds. `packages/protocol`'s `SendAgentMessageRequestSchema` and the
- * daemon side (T97/T38B0c; `session.ts:6872` lifts it into `runOptions`)
- * already handled it. CLOSED (P6-W7 merge gate): a `GAP` block here used
+ * daemon side (T97/T38B0c; `session.ts`'s `handleSendAgentMessageRequest`
+ * lifts it into `runOptions`) already handled it. CLOSED (P6-W7 merge gate): a `GAP` block here used
  * to record that `SendMessageOptions` had no `streamingBehavior` field, so
  * the choice died one call past this adapter with no banner and no error.
  * `daemon-agent-turn-client.fixture.test.ts` now proves the value reaches

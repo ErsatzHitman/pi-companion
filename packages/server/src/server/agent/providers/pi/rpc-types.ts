@@ -43,9 +43,9 @@ export interface PiCompactionUsage {
 }
 
 // T143: mirrors Pi's own `CompactionResult<T = unknown>` (installed Pi's
-// `dist/core/compaction/compaction.d.ts:18-27`, v0.84.1) as carried on the
+// `dist/core/compaction/compaction.d.ts`, v0.84.1) as carried on the
 // `compaction_end` `AgentSessionEvent` (installed Pi's
-// `dist/core/agent-session.d.ts:65-70`: `result: CompactionResult |
+// `dist/core/agent-session.d.ts`: `result: CompactionResult |
 // undefined`, unparametrized — so `details` below is that interface's
 // generic `T` at its default, `unknown`, not a compile-time guarantee of
 // any shape). Pi's own doc comment on `CompactionDetails`
@@ -157,7 +157,7 @@ export interface PiSessionState {
   isStreaming: boolean;
   isCompacting: boolean;
   // T38B0b: Pi's own `RpcSessionState` (installed Pi's
-  // `dist/modes/rpc/rpc-types.d.ts:145-156`) declares `steeringMode` and
+  // `dist/modes/rpc/rpc-types.d.ts`) declares `steeringMode` and
   // `followUpMode` as REQUIRED fields — every real `get_state` response
   // carries both. They stay optional here, unlike Pi's own type, because
   // this mirror is also the shape used for `PiRpcAgentSession`'s
@@ -203,7 +203,7 @@ export interface PiSessionStats {
 }
 
 // T51A: audited against the installed Pi's real `RpcSlashCommand`
-// (`dist/modes/rpc/rpc-types.d.ts:135-144`) and found to have two
+// (`dist/modes/rpc/rpc-types.d.ts`) and found to have two
 // pre-existing drifts, neither introduced by this task and neither fixed
 // here (see plan.md §4.2 "Pi RPC command mirror drift disclosure" for
 // the citable record):
@@ -304,7 +304,7 @@ export type PiRpcCommand =
   | { id?: string; type: "set_session_name"; name: string }
   // T38B0b: mirrors the installed Pi's real `RpcCommand` "set_steering_mode"
   // arm field-for-field: `{ id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }`
-  // (`dist/modes/rpc/rpc-types.d.ts:62-65`), proven against that same file by
+  // (`dist/modes/rpc/rpc-types.d.ts`), proven against that same file by
   // `rpc-types.pi-mirror.contract.test.ts`. Sets the session's steering
   // queue mode; the daemon must read the mode back through `get_state`
   // (`PiSessionState.steeringMode` above) rather than caching the value this
@@ -313,12 +313,12 @@ export type PiRpcCommand =
   | { id?: string; type: "set_steering_mode"; mode: PiQueueMode }
   // T38B0b: mirrors the installed Pi's real `RpcCommand` "set_follow_up_mode"
   // arm field-for-field: `{ id?: string; type: "set_follow_up_mode"; mode: "all" | "one-at-a-time" }`
-  // (`dist/modes/rpc/rpc-types.d.ts:66-69`), proven the same way. Same
+  // (`dist/modes/rpc/rpc-types.d.ts`), proven the same way. Same
   // read-back rule as `set_steering_mode` applies to `followUpMode`.
   | { id?: string; type: "set_follow_up_mode"; mode: PiQueueMode }
   // T51A: mirrors the installed Pi's real `RpcCommand` "get_commands" arm
   // field-for-field: `{ id?: string; type: "get_commands" }`
-  // (`dist/modes/rpc/rpc-types.d.ts:130-133`) — no fields beyond `id`/`type`.
+  // (`dist/modes/rpc/rpc-types.d.ts`) — no fields beyond `id`/`type`.
   // Lists available slash commands (response shaped by `PiRpcSlashCommand`
   // above, whose own two drifts are documented on that interface).
   // `PiCliRuntime.getCommands()` already sends this command in production

@@ -260,10 +260,11 @@ function renderEntryRow(
  * **No `"retry"` row exists, and cannot yet exist here.** T28A7's other
  * half — "retry markers" — has no `TranscriptEntry` kind to render:
  * `compaction-row.tsx`'s doc comment has the full citation trail
- * (`packages/protocol/src/agent-types.ts:419`'s `pi_retry` is a
+ * (`packages/protocol/src/agent-types.ts`'s `AgentStreamEvent` union's
+ * `pi_retry` member is a
  * top-level `AgentStreamEvent`, never folded into an
  * `AgentTimelineItem`, and `packages/frontend-core/src/timeline/
- * reducer.ts:281-284`'s `ingestAgentStreamMessage` drops every
+ * reducer.ts`'s `ingestAgentStreamMessage` drops every
  * non-`"timeline"` event as a documented no-op) — so no retry data ever
  * reaches this component's `entries` prop. This is a frontend-core gap
  * outside every file `apps/web/src/features/transcript/` owns, not a

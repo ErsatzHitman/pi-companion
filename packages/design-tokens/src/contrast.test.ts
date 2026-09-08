@@ -26,9 +26,9 @@
  * `field` and `hover` ARE text backdrops and are audited here. An earlier
  * draft of this file excluded them on the claim that "no call site paints
  * ink-2/ink-3/accent/status tones on these backdrops"; that claim was
- * false. `apps/android/src/ui/primitives/TextField.tsx:34`,
- * `TextArea.tsx:28`, `SearchField.tsx:25`,
- * `apps/android/src/ui/recipes/CommandSearch.tsx:66` and `PromptBar.tsx:49`
+ * false. `apps/android/src/ui/primitives/TextField.tsx`,
+ * `TextArea.tsx`, `SearchField.tsx`,
+ * `apps/android/src/ui/recipes/CommandSearch.tsx` and `PromptBar.tsx`
  * all pass `theme.colors["ink-3"]` as `placeholderTextColor` on an input
  * whose `backgroundColor` is `theme.colors.field`. Excluding `field` let
  * dark `ink-3` ship at 4.08:1. Every text role is now measured against

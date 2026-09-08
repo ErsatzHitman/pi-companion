@@ -495,7 +495,8 @@ export interface AppCore {
    * is this field's one production consumer so far: it reads
    * `hapticsEnabled` off this controller's snapshot instead of the
    * hardcoded `true` literal T33A6/T32S9 left in place pending a real
-   * settings surface. `features/approvals/use-approvals-queue.ts:102`
+   * settings surface. `useApprovalsQueue`'s `hapticsEnabled = true`
+   * default parameter (in `features/approvals/use-approvals-queue.ts`)
    * still hardcodes the identical literal and is **not** in this task's
    * `Owns` grant — see this task's report for the exact one-line seam to
    * thread `core.settings` there too, so both call sites read the same
@@ -575,7 +576,7 @@ export interface AppCore {
    * `createDaemonTurnService` (`../features/sessions/turn-service.js`).
    * Replaces `app/h/[serverId]/session/[agentId]/index.tsx`'s
    * `NO_OP_TURN_SERVICE` fixed stand-in, which the same route's own
-   * `index.test.ts:79` used to pin shut with a negative-shaped assertion
+   * `index.test.ts` used to pin shut with a negative-shaped assertion
    * (`turnService={NO_OP_TURN_SERVICE}`) — removed by this task, per
    * "never write a negative assertion that pins an unfinished thing
    * shut" once the thing stopped being unfinished.

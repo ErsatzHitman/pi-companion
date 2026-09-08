@@ -356,7 +356,7 @@ if (invocation.argv.length === 0) {
 completely bare invocation (zero arguments) is rewritten to `onboard` before
 the command parser ever sees it. `paseo --version` and `paseo --help` have
 one argument each, so this branch is never reached for them —
-`createCliParseArgv`'s `argv.length === 0` check (`packages/cli/src/run.ts:30`)
+`createCliParseArgv`'s `argv.length === 0` check (in `packages/cli/src/run.ts`)
 is the only gate.
 
 (CORRECTED at the P9-W6 merge gate: this named `classifyInvocation`. That

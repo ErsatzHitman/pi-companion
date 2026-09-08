@@ -330,7 +330,7 @@ describe("PiSessionState matches the vendored Pi RpcSessionState snapshot (T38B0
       const ourResolvedType = resolveTypeAlias(ourSource, ourField.type);
 
       // Pi's own `RpcSessionState` declares both fields REQUIRED (verified:
-      // `dist/modes/rpc/rpc-types.d.ts:150-151`, mirrored verbatim in the
+      // `dist/modes/rpc/rpc-types.d.ts`, mirrored verbatim in the
       // vendored fragment above). Our mirror deliberately keeps them
       // optional — see the doc comment on `PiSessionState` in
       // `rpc-types.ts` for why — so only the value union is compared here;

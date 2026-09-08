@@ -29,7 +29,7 @@ describe("describeAnsweredBy", () => {
   });
 
   // T134: every production emitter — `session.ts`'s `dispatchPiUiMessage`
-  // (`:1955`, `:1965`) and `handleAgentPermissionResponse` (`:4127`) — sets
+  // and `handleAgentPermissionResponse` (both `answeredBy` sites) — sets
   // exactly `{ clientId: this.clientId }` and never a `label`. This test
   // builds that exact payload shape (no hand-supplied `label`, the defect
   // T134 exists to fix) and asserts the text a real user actually reads.
@@ -112,7 +112,7 @@ describe("buildOutcomeNotice", () => {
     expect(notice?.message.toLowerCase()).toContain("unknown");
   });
 
-  // T134: `handleAgentPermissionResponse` (`session.ts:4127`) — the one real
+  // T134: `handleAgentPermissionResponse` (in `session.ts`) — the one real
   // production site that answers a permission request — supplies exactly
   // `{ clientId: this.clientId }`, never a `label`. This builds the
   // resolution with that exact shape (no hand-supplied `label`) and asserts

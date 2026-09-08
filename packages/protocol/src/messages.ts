@@ -1726,10 +1726,11 @@ export const GetQueueModesResponseMessageSchema = z.object({
 // ============================================================================
 //
 // Mirrors Pi's `set_auto_compaction` RPC command
-// (`packages/server/src/server/agent/providers/pi/cli-runtime.ts:142-144`)
+// (`cli-runtime.ts`'s `setAutoCompaction` method in
+// `packages/server/src/server/agent/providers/pi/`)
 // and the `autoCompactionEnabled` field of `get_state`'s response
-// (`PiSessionState.autoCompactionEnabled`,
-// `packages/server/src/server/agent/providers/pi/rpc-types.ts:127`), the
+// (`PiSessionState.autoCompactionEnabled`, declared on `PiSessionState` in
+// `packages/server/src/server/agent/providers/pi/rpc-types.ts`), the
 // same "set + dedicated get, modeled as its own request/response pair"
 // shape `SetSteeringModeRequestMessageSchema`/`GetQueueModesRequestMessageSchema`
 // use above. Auto-retry has no equivalent daemon-internal path today — see

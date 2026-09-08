@@ -1272,7 +1272,7 @@ export const CAPABILITIES = [
     //
     // `methodNames`: a bare `readContentIfWorthwhile` is a real,
     // camel-cased function name declared in exactly ONE file
-    // (`scripts/ci/run-guard-signing-material.mjs:86`) — measured directly:
+    // (`scripts/ci/run-guard-signing-material.mjs`) — measured directly:
     // `git grep -n "readContentIfWorthwhile"` across the whole tracked tree
     // returns that one declaration plus mentions inside its own test file
     // (import/usage, never a second declaration) and two doc references in
@@ -1583,8 +1583,8 @@ export const CAPABILITIES = [
     //
     // `methodNames`: `gitIgnoredEntries` ALONE, and the omission of
     // `isGitIgnoredPath` is deliberate and measured, not an oversight.
-    // `isGitIgnoredPath` is ALSO declared in
-    // `packages/server/src/utils/directory-suggestions.ts:327`, an entirely
+    // `isGitIgnoredPath` is ALSO declared as a function in
+    // `packages/server/src/utils/directory-suggestions.ts`, an entirely
     // unrelated function answering a different question about a different
     // input — so a bare-name member for it would resolve as "shipped" from
     // that file even if T257 were reverted outright, the exact

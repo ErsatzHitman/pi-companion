@@ -17,8 +17,8 @@
  * imported elsewhere on Android, e.g. `features/connect/daemon-connect-
  * attempt.ts`, via `@picompanion/frontend-core`'s `connection` module)
  * satisfies `DaemonPermissionsSource` as-is with no adapter class
- * needed. `DaemonClient.respondToPermission` is defined at
- * `packages/client/src/daemon-client.ts:4728`.
+ * needed. `DaemonClient.respondToPermission` is defined on `DaemonClient`
+ * in `packages/client/src/daemon-client.ts`.
  *
  * No Android route wires a live `DaemonClient` into this feature yet —
  * see this task's report for exactly what a mount needs.

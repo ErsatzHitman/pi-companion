@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  * plain vitest setup, so this is a source-level contract test.
  *
  * CORRECTED (P6-W6 merge gate). This file previously matched against the
- * RAW `readFileSync` text, so `session-tree-lab.tsx:10`'s own doc comment
+ * RAW `readFileSync` text, so `session-tree-lab.tsx`'s own doc comment
  * — which quotes `React.lazy(() => import("../../dev/session-tree-lab"))`
  * verbatim — satisfied the lazy-import assertion by itself. Both
  * mutations passed against the raw reader: repointing the real `lazy()` at

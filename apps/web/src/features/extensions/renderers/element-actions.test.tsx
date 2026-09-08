@@ -114,8 +114,8 @@ describe("ElementActionsRow attribution against a real production payload (T134)
   // This builds that exact payload shape via `ingestActionResponse` (no
   // hand-supplied `label`) and asserts the text a real user reads.
   it("renders the error alone for a self-answered response naming only a clientId, never the raw id", () => {
-    // Mirrors session.ts's actual failure emit at `dispatchPiUiMessage`
-    // (`:1965`): `{ requestId, ok: false, error: message, answeredBy: {
+    // Mirrors session.ts's actual failure emit in `dispatchPiUiMessage`:
+    // `{ requestId, ok: false, error: message, answeredBy: {
     // clientId: this.clientId } }` — no `label`, ever, today.
     const controller = newController();
     void controller.dispatch({ ...TARGET, requestId: "req-self" });

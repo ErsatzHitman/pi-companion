@@ -345,8 +345,9 @@ export interface SendMessageOptions {
    * `SendMessageOptions` did not carry it, so every choice was dropped
    * here, one call past `createDaemonAgentTurnClient`, without a banner or
    * an error. `packages/protocol`'s `SendAgentMessageRequestSchema` and the
-   * daemon side (`session.ts:6872` reads it into `runOptions`) both already
-   * handled it. Omitting it keeps the daemon's own default.
+   * daemon side (`session.ts`'s `handleSendAgentMessageRequest` reads it
+   * into `runOptions`) both already handled it. Omitting it keeps the
+   * daemon's own default.
    */
   streamingBehavior?: SendAgentMessageRequest["streamingBehavior"];
 }

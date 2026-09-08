@@ -17,8 +17,9 @@
  * all**: a live `pi_retry` `AgentStreamEvent` reaching
  * `packages/frontend-core/src/timeline/reducer.ts`'s `ingestAgentStreamMessage`
  * is silently dropped before it ever becomes a `TimelineRow`
- * (`reducer.ts:281-284`, "every other `AgentStreamEvent` variant ...
- * belongs to a different frontend-core domain ... and is a no-op
+ * (`reducer.ts`'s `ingestAgentStreamMessage` doc comment, "every other
+ * `AgentStreamEvent` variant ... belongs to a different frontend-core
+ * domain ... and is a no-op
  * here"). Closing that gap needs a `packages/frontend-core` change
  * neither `compaction-row.tsx`'s task nor this one owns (T39C's `Owns`
  * grant is `apps/android/src/features/composer/` only).
@@ -35,7 +36,8 @@
  *
  *  - `{ type: "pi_retry", phase, attempt, maxAttempts, delayMs?, error?,
  *    turnId? }` — a top-level `AgentStreamEvent` variant
- *    (`packages/protocol/src/agent-types.ts:450-458`).
+ *    (the `AgentStreamEvent` union's `"pi_retry"` member in
+ *    `packages/protocol/src/agent-types.ts`).
  *  - `{ type: "timeline", item: { type: "compaction", status, trigger?,
  *    preTokens?, summary?, estimatedTokensAfter?, filesRead?,
  *    filesModified? } }` — the `timeline` variant wrapping a
@@ -45,8 +47,8 @@
  *    compaction result, no longer discarded at the daemon boundary.
  *
  * `DaemonTurnStatusSource.on` below is named and shaped after the REAL
- * `DaemonClient.on<TType>(type, handler): () => void` overload
- * (`daemon-client.ts:1542`), narrowed to the one literal `"agent_stream"`
+ * `DaemonClient.on<TType>(type, handler): () => void` overload in
+ * `daemon-client.ts`, narrowed to the one literal `"agent_stream"`
  * this feature needs — same "match the real method so a real client
  * satisfies this structurally, no adapter" convention
  * `model-thinking-model.ts`'s `DaemonModelThinkingSource` and
@@ -70,7 +72,7 @@
  * an error).
  */
 
-/** The `pi_retry` `AgentStreamEvent` variant, matched field-for-field (`packages/protocol/src/agent-types.ts:450-458`). */
+/** The `pi_retry` `AgentStreamEvent` variant, matched field-for-field (the `AgentStreamEvent` union's `"pi_retry"` member in `packages/protocol/src/agent-types.ts`). */
 export interface TurnRetryEvent {
   readonly type: "pi_retry";
   readonly phase: "assistant" | "compaction" | "branchSummary";

@@ -209,8 +209,8 @@ renders), the solid `accent`/`red` fills under primary/danger button text, and `
 `field` and `hover` were excluded from the first pass of this audit on the belief that only `ink`
 is ever painted on them. That was wrong, and it let dark `ink-3` ship at 4.08:1: the Android text
 primitives pass `theme.colors["ink-3"]` as `placeholderTextColor` on an input whose background is
-`theme.colors.field` (`TextField.tsx:34`, `TextArea.tsx:28`, `SearchField.tsx:25`,
-`CommandSearch.tsx:66`, `PromptBar.tsx:49`). The matrix now covers every role against every
+`theme.colors.field` (`TextField.tsx`, `TextArea.tsx`, `SearchField.tsx`,
+`CommandSearch.tsx`, `PromptBar.tsx`, all via their `placeholderTextColor` prop). The matrix now covers every role against every
 backdrop it can be painted on. `hover-2` is the sole exclusion, because nothing is painted on it
 at all — `grep -rn "hover-2" apps/web/src apps/android/src` returns nothing.
 

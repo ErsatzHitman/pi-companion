@@ -784,7 +784,8 @@ export interface AgentSession {
   getQueueModes?(): Promise<{ steeringMode: QueueMode | null; followUpMode: QueueMode | null }>;
   /**
    * T131: mirrors Pi's `set_auto_compaction` RPC command
-   * (`PiRuntimeSession.setAutoCompaction`, `cli-runtime.ts:142-144`) and its
+   * (`PiRuntimeSession.setAutoCompaction`, `cli-runtime.ts`'s `setAutoCompaction`
+   * method) and its
    * `autoCompactionEnabled` state field. Only the Pi provider implements
    * these; other providers leave them undefined, the same convention as
    * `setSteeringMode`/`getQueueModes` above.

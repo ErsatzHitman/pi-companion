@@ -20,7 +20,8 @@ import type { StatusTone } from "../../ui/primitives/index.js";
  *
  *  - the daemon's retry signal is `AgentStreamEvent`'s `{ type:
  *    "pi_retry", phase, attempt, maxAttempts, delayMs?, error? }`
- *    variant (`packages/protocol/src/agent-types.ts:419`), which is a
+ *    variant (the `AgentStreamEvent` union's `"pi_retry"` member in
+ *    `packages/protocol/src/agent-types.ts`), which is a
  *    **top-level stream event**, not an `AgentTimelineItem` — unlike
  *    `CompactionTimelineItem` above, there has never been a wire shape
  *    for "a retry, as a row in the conversation";
@@ -28,8 +29,8 @@ import type { StatusTone } from "../../ui/primitives/index.js";
  *    `AgentStreamEvent` into transcript state, is explicit that "every
  *    other `AgentStreamEvent` variant (turn lifecycle, permissions, Pi UI
  *    state, ...) belongs to a different frontend-core domain
- *    (sessions/permissions/extensions) and is a no-op here"
- *    (`packages/frontend-core/src/timeline/reducer.ts:281-284`) — a live
+ *    (sessions/permissions/extensions) and is a no-op here", in
+ *    `packages/frontend-core/src/timeline/reducer.ts` — a live
  *    `pi_retry` event reaching the reducer today is silently dropped
  *    before it ever becomes a `TimelineRow`, so it can never reach
  *    `buildTranscriptEntries`/`buildTranscriptView` either;
@@ -37,8 +38,8 @@ import type { StatusTone } from "../../ui/primitives/index.js";
  *    projection side: "auto-retry, summarization retry, extension
  *    errors, and model/thinking changes are `AgentStreamEvent` variants
  *    outside `type: "timeline"` ... those belong to other, not-yet-built
- *    frontend-core domains (sessions/turn state, extensions)"
- *    (`packages/frontend-core/src/timeline/transcript-view.ts:26-34`).
+ *    frontend-core domains (sessions/turn state, extensions)", in
+ *    `packages/frontend-core/src/timeline/transcript-view.ts`.
  *
  * `TranscriptEntry`'s union (same file, `TranscriptEntry` type) therefore
  * has no `"retry"` member for this file to render — inventing one here,

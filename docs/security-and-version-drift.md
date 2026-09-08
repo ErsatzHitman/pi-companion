@@ -36,7 +36,7 @@ backup copy — never `git checkout --` — and confirmed
 | Protocol/relay relay-wire-version literal                                                            | `packages/protocol/src/daemon-endpoints.ts`'s exported `CURRENT_RELAY_PROTOCOL_VERSION = "2"` vs. `packages/relay/src/cloudflare-adapter.ts`'s own, independently-declared `CURRENT_RELAY_VERSION = "2"` | Clean — both are `"2"` | Changed the relay's literal to `"3"` → guard exited 1: `protocol's CURRENT_RELAY_PROTOCOL_VERSION="2" but relay's own CURRENT_RELAY_VERSION="3"`                                                              |
 
 **Why the second and third axes exist at all, not just the first.** The
-task's own brief pointed at `packages/protocol/src/daemon-endpoints.ts:18`'s
+task's own brief pointed at `packages/protocol/src/daemon-endpoints.ts`'s exported
 `CURRENT_RELAY_PROTOCOL_VERSION` and asked "find who else names a version
 and whether anything checks they agree." Two answers were found by reading
 the tree, not assumed:

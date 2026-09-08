@@ -16,7 +16,8 @@ import { ThemeProvider } from "../ui/theme/theme-context";
  * ("providers, bootstrap, error boundaries"), mirroring web's
  * `routes/`/`app/` split. That split does not survive contact with the
  * actual tool: Expo Router selects whichever of `src/app` or `app` exists
- * as its router root, preferring `src/app` (`@expo/cli` `router.js:125-133`),
+ * as its router root, preferring `src/app` (`@expo/cli`'s `router.js`,
+ * its router-root resolution logic),
  * so once `src/app` existed (T32S1) every file that used to live in
  * `apps/android/app/` was never bundled and silently did nothing —
  * surfaced by T58C's measurement probe. T32S1C folds the two directories

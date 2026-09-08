@@ -88,7 +88,8 @@ type PermissionHandler<TType extends "agent_permission_request" | "agent_permiss
  * it never appears in a URL — `authorize` takes it as a plain in-memory
  * argument, mirroring how a real `DaemonClient` takes
  * `DaemonClientConfig.password` as a constructor field, never a query
- * parameter (`packages/client/src/daemon-client.ts:307`).
+ * parameter (declared on `DaemonClientConfig` in
+ * `packages/client/src/daemon-client.ts`).
  */
 class FakeIsolatedDaemon implements DaemonTurnTransport, DaemonPermissionsSource {
   private authorized = false;

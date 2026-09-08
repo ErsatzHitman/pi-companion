@@ -682,3 +682,74 @@ wrong": only the capability count was — eight against twelve — while `~1200`
 tilde-qualified approximation of a real 1219. And it attributed a hand-found-versus-
 matcher-found distinction to T217, which never draws one; that distinction is this gate's
 judgement, stated here as such.)
+
+## Cite shipped source by symbol name, never by line number (T269)
+
+**Rule:** shipped prose (a doc comment, a module header, a file anywhere under `docs/`,
+`plan.md`) cites a file by name plus symbol — a function, interface, constant, or field —
+never by a line number. Writing it as `path.ts` line NNN, or a bare line NNN, is exactly
+what this rule forbids. A line number is correct only until the next edit lands above it,
+and nothing in this repository notices when it rots: the reader who follows one lands in
+unrelated code with no signal anything is wrong, which is worse than no citation at all.
+T264 proved the mechanism directly — adding 42 explanatory lines to
+`provider-snapshot-manager.ts` moved an unguarded overlay from line 280 to line 317, and a
+guarded one from line 452 to line 494, breaking five already-committed citations across
+three other files, **one of them written by that same commit, already stale on arrival.**
+
+T239 (P9-W21) hit the identical shape one file earlier and made the same call for that one
+site: "Decide once, for the repository... **Prefer** [symbol names]. A guard here is a
+check whose cost is paid every wave to protect prose that reads fine without numbers, and
+this repository has twice built a curated guard whose scope could not see the case it was
+built for." T269 (P9-W50) is that repository-wide decision, made by measuring first, per
+this file's own T217 precedent for "measure before building."
+
+**The measurement.** Grepping committed prose for `` `<path>:NNN` ``/`` `:NNN-NNN` ``
+shapes across exactly `packages/*/src`, `apps/*/src`, `scripts/ci`, `docs/**` and
+`plan.md` found **229 raw hits** (165 full-path + 64 bare-`:NNN`), of which **124 sit
+inside `docs/issues-from-plan.md`** — the task ledger, already excluded from this class of
+scan by `guard-capability-prose.mjs`'s own `DOCS_LEDGER_DENIAL_EXCLUSIONS` for the
+identical reason (it narrates dated, already-fixed history, not a live claim). Outside the
+ledger: **105 citations across 27 files.** A resolved sample of 18 full-path citations
+against `packages/server`/`packages/protocol`/`packages/client`/`apps/web` source found
+**12 already wrong** (67%) — pointing at real, in-bounds lines that had drifted onto
+unrelated code (a `set_steering_mode` schema citation landing on
+`SetAgentThinkingRequestMessageSchema`; an `auto_retry_start`/`auto_retry_end` citation
+landing on `compaction_end` handling; `agent-sdk-types.ts`'s `setFeature` member cited 26
+lines from where it is actually declared) — and every wrong citation still resolved to a
+valid, in-bounds line in its target file, meaning a mechanical "does this line exist"
+guard would not have caught any of them. **That is why the decision is a rule, not a
+guard**: the population was large and already more than half rotten, exactly the
+"disable within two waves" shape this file's T217 section describes, and the only check
+that could actually catch drift here is semantic (does the cited line still say what the
+prose claims), which a script cannot judge the way `guard-capability-prose.mjs` judges a
+capability's presence.
+
+**What was fixed and what was deliberately left.** All 105 non-ledger citations outside
+one frozen file were converted to symbol-name citations in the same commit that added
+this rule, correcting the underlying claim wherever the resolved content had actually
+drifted (most of the 12 wrong ones above). Left un-converted, each for a stated reason:
+`docs/issues-from-plan.md`'s citations (dated ledger narration, per the exclusion above);
+`docs/pi-extension-compatibility.md`'s five citations (this file is on the frozen,
+reference-only list two sections above — T242 forbids editing it even to fix a citation
+format); `docs/legacy-retirement.md` §2.3's `Dockerfile:8`/`flake.nix:7`/
+`build-daemon-web-ui.mjs:7` citations (a dated `rg -n` audit's own classified output, the
+same "gate report" exemption this section's own rule states below); and the handful of
+citations sitting inside prose explicitly marked as a preserved, verbatim historical
+quotation (`settings-client.ts`'s pre-T131 grep evidence block, `agent-stream-coalescer.ts`'s
+own T239 correction narrating its old citations) — converting those would edit a frozen
+quotation's substance, the same thing the "reference-only documents" section above
+forbids for a different class of file.
+
+**A line number in a commit message or a gate report is fine** — those are dated
+snapshots of a tree at one moment, the same way `docs/legacy-retirement.md`'s audit
+output is. It is committed **source** prose — the kind a reader trusts as still true
+today — that must never carry one.
+
+No guard was built. `isAppSourcePath` cannot see `plan.md` (verified: it returns `false`
+for it, same as `isShippedSourcePath`), so any guard built on the `guard-capability-prose`
+family could never police the two `plan.md` citations this task also fixed — a guard here
+would need its own, wider scope, for a check whose value this measurement showed is lower
+than its cost. If a future wave finds new line-number citations creeping back in, the fix
+is the same grep this section ran, not a standing check: ``grep -rnoE
+'`[A-Za-z0-9_./-]+\.(ts|tsx|js|jsx|mjs|md)(:[0-9]+(-[0-9]+)?)`' packages/*/src apps/*/src
+scripts/ci docs plan.md``, plus ``grep -rnoE '`:[0-9]+(-[0-9]+)?`'`` for the bare form.

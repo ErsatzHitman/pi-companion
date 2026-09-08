@@ -932,7 +932,8 @@ describe("createDaemonAgentTurnClient (sendAgentMessage streamingBehavior, T38B1
     const sentRequest = findSentRequest(socket, "send_agent_message_request");
     // The whole point of T38B1b: a real caller asked for "steer", and the
     // real, shipped `DaemonClient` put that exact value on the frame the
-    // daemon reads (`session.ts:6872` lifts it into `runOptions`).
+    // daemon reads (`session.ts`'s `handleSendAgentMessageRequest` lifts it
+    // into `runOptions`).
     expect(sentRequest.streamingBehavior).toBe("steer");
 
     socket.receiveJson({

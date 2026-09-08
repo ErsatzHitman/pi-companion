@@ -105,8 +105,8 @@ export interface AgentStreamTurnMessage {
 /**
  * The narrowest slice of `@picompanion/client`'s `DaemonClient` this
  * module needs: `on("agent_stream", handler)` is already public there
- * (`packages/client/src/daemon-client.ts:1527`), so a real
- * `DaemonClient` satisfies this as-is — same narrow-adapter convention
+ * (declared on `DaemonClient` in `packages/client/src/daemon-client.ts`),
+ * so a real `DaemonClient` satisfies this as-is — same narrow-adapter convention
  * `turn-service.ts`'s `DaemonTurnTransport` and `daemon-permissions-
  * client.ts`'s `DaemonPermissionsSource` already established.
  */
@@ -118,7 +118,8 @@ export interface DaemonTurnStreamSource {
  * The narrowest slice of connection-status reporting this module can
  * use to reset `running` across a reconnect. Matches
  * `DaemonClient.subscribeConnectionStatus`
- * (`packages/client/src/daemon-client.ts:1490`) structurally — a real
+ * (declared on `DaemonClient` in `packages/client/src/daemon-client.ts`)
+ * structurally — a real
  * `DaemonClient` (or `AppCore.connection`, which re-exposes the same
  * shape — see `app-shell/core.ts`) satisfies this as-is. Optional: a
  * caller that only ever creates one `TurnRunningSignal` per

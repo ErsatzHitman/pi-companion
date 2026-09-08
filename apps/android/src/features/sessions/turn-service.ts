@@ -1,5 +1,6 @@
 /**
- * A real `TurnService` (T63; `composer-model.ts:115` — that file is
+ * A real `TurnService` (T63; the `TurnService` interface declared in
+ * `composer-model.ts` — that file is
  * unowned this wave, read but not edited) over the narrowest possible
  * slice of `@picompanion/client`'s `DaemonClient`, following the exact
  * narrow-adapter convention `features/approvals/daemon-permissions-
@@ -52,8 +53,8 @@ import type { QueueDispatchMode, TurnService } from "../composer/index.js";
 
 /**
  * The narrowest slice of `@picompanion/client`'s `DaemonClient` a real
- * turn needs. `DaemonClient.sendMessage` (`packages/client/src/
- * daemon-client.ts:3099`) and `DaemonClient.cancelAgent` (`:3159`) are
+ * turn needs. `DaemonClient.sendMessage` and `DaemonClient.cancelAgent`
+ * (both in `packages/client/src/daemon-client.ts`) are
  * both already public instance methods there, so a real `DaemonClient`
  * satisfies this interface structurally with no wrapper.
  */

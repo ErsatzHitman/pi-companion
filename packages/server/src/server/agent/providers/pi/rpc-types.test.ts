@@ -100,7 +100,7 @@ const WEB_PARITY_FILE_PATH = path.join(
 );
 
 // Vendored, pinned snapshot of JUST the `RpcCommand` arm names declared by
-// the installed Pi's own `dist/modes/rpc/rpc-types.d.ts` (`:14-133`) —
+// the installed Pi's own `dist/modes/rpc/rpc-types.d.ts` —
 // captured verbatim, in declaration order, from
 // `@earendil-works/pi-coding-agent@0.84.1` on 2026-09-05, the same install
 // and date T99's vendored fragment was read from. This is deliberately just

@@ -51,55 +51,63 @@
  *
  * - **Auto-compaction** has a real, already-implemented daemon-internal
  *   path: `PiRuntimeSession.setAutoCompaction(enabled)` exists today
- *   (`packages/server/src/server/agent/providers/pi/runtime.ts:54`,
- *   backed by `cli-runtime.ts:142-144`'s `{ type: "set_auto_compaction",
- *   enabled }` Pi RPC call) and is already reachable from a `/autocompact`
- *   slash command inside a running turn
+ *   (declared on the `PiRuntimeSession` interface in
+ *   `packages/server/src/server/agent/providers/pi/runtime.ts`, backed by
+ *   `cli-runtime.ts`'s `setAutoCompaction` method, which sends
+ *   `{ type: "set_auto_compaction", enabled }`) and is already reachable
+ *   from a `/autocompact` slash command inside a running turn
  *   (`packages/server/src/server/agent/providers/pi/agent.ts`'s
- *   `executeAutoCompactCommand`, `agent.ts:1929-1982`). What is missing is
- *   purely the outer layer: a `set_auto_compaction_request`/`_response`
- *   wire message (there is no protocol schema for it at all) plus a
+ *   `executeAutoCompactCommand`). What is missing is purely the outer
+ *   layer: a `set_auto_compaction_request`/`_response` wire message
+ *   (there is no protocol schema for it at all) plus a
  *   `packages/server/src/server/session.ts` handler turning it into that
  *   existing `runtimeSession.setAutoCompaction` call, plus a
  *   `DaemonClient.setAutoCompaction` method — the exact three-layer shape
  *   `set_steering_mode_request`/session handler/`DaemonClient.setSteeringMode`
  *   already have (T38B0a/T38B0c/T110). A `GetAutoCompaction`-shaped read
  *   would mirror `get_queue_modes_request` similarly, sourced from
- *   `PiSessionState.autoCompactionEnabled`
- *   (`packages/server/src/server/agent/providers/pi/rpc-types.ts:127`).
+ *   `PiSessionState.autoCompactionEnabled` (declared on `PiSessionState` in
+ *   `packages/server/src/server/agent/providers/pi/rpc-types.ts`).
  *
  * - **Auto-retry has no daemon-internal path at all**, not even a slash
  *   command: `grep -n "retry" packages/server/src/server/agent/providers/pi/runtime.ts
  *   packages/server/src/server/agent/providers/pi/cli-runtime.ts` returns
- *   zero. Retries run unconditionally — `agent.ts`'s `auto_retry_start`/
- *   `auto_retry_end` handling (`agent.ts:2460-2483`) has no enablement
- *   check of any kind, it always forwards Pi's own retry lifecycle as
- *   `pi_retry` events. `rpc-types.ts:191` declares a `set_auto_retry`
- *   Pi-RPC-command *type* (`{ id?: string; type: "set_auto_retry"; enabled: boolean }`,
+ *   zero. Retries run unconditionally — `agent.ts`'s `handleSessionEvent`
+ *   method, in its `auto_retry_start`/`auto_retry_end` cases, has no
+ *   enablement check of any kind, it always forwards Pi's own retry
+ *   lifecycle as `pi_retry` events. `rpc-types.ts`'s `PiRpcCommand` union
+ *   declares a `set_auto_retry` Pi-RPC-command *arm*
+ *   (`{ id?: string; type: "set_auto_retry"; enabled: boolean }`,
  *   added by T38A0 as a type-level mirror of Pi's own RPC surface) but
  *   `grep -rn "setAutoRetry" packages/server/src` is zero — nothing ever
  *   constructs or sends that command. Closing this gap needs a NEW
  *   `PiRuntimeSession.setAutoRetry` method (there is no Pi CLI runtime
  *   call to wrap it around yet, unlike auto-compaction's
- *   `cli-runtime.ts:142-144`) in addition to the same three protocol/
- *   session/client layers auto-compaction needs. This is a strictly
- *   bigger gap than auto-compaction's.
+ *   `cli-runtime.ts`'s `setAutoCompaction` method) in addition to the
+ *   same three protocol/session/client layers auto-compaction needs.
+ *   This is a strictly bigger gap than auto-compaction's.
  *
  * There is also a pre-existing GENERIC wire mechanism —
- * `set_agent_feature_request`/`_response` (`packages/protocol/src/messages.ts:1691-1701`),
+ * `set_agent_feature_request`/`_response` (`SetAgentFeatureRequestMessageSchema`/
+ * `SetAgentFeatureResponseMessageSchema` in `packages/protocol/src/messages.ts`),
  * real and wired: `DaemonClient.setAgentFeature(agentId, featureId, value)`
- * exists (`packages/client/src/daemon-client.ts:3286`) and the daemon
- * session handles it (`packages/server/src/server/session.ts:2151-2152`,
- * `agent-manager.ts:1666-1676`). It is NOT a usable closing seam for
- * either setting today: `AgentManager.setAgentFeature` requires
- * `agent.session.setFeature` (`agent-manager.ts:1669`), an OPTIONAL member
- * of `AgentSession` (`agent-sdk-types.ts:741`) that the real Pi provider
- * class, `PiRpcAgentSession`, never implements — `grep -n "setFeature"
+ * exists (`packages/client/src/daemon-client.ts`) and the daemon session
+ * handles it (`packages/server/src/server/session.ts` dispatches
+ * `set_agent_feature_request` to
+ * `AgentConfigSession.handleSetAgentFeatureRequest` in
+ * `packages/server/src/server/session/agent-config/agent-config-session.ts`,
+ * which calls `AgentManager.setAgentFeature`). It is NOT a usable closing
+ * seam for either setting today: `AgentManager.setAgentFeature` requires
+ * `agent.session.setFeature`, an OPTIONAL member of `AgentSession`
+ * (declared on the `AgentSession` interface in
+ * `packages/server/src/server/agent/agent-sdk-types.ts`) that the real Pi
+ * provider class, `PiRpcAgentSession`, never implements — `grep -n "setFeature"
  * packages/server/src/server/agent/providers/pi/agent.ts` is zero, so
  * every `setAgentFeature` call against a live Pi agent rejects with
  * "Agent session does not support setting features" regardless of
- * `featureId`. `rpc-command-web-parity.ts:239` records this exact
- * precedent for a different capability ("A prior attempt via the generic
+ * `featureId`. `rpc-command-web-parity.ts`'s `set_steering_mode_request`
+ * gap entry records this exact precedent for a different capability
+ * ("A prior attempt via the generic
  * set_agent_feature_request was tried and reverted because every provider
  * session rejects it"). Wiring this feature's controls through
  * `setAgentFeature` would therefore look supported (the method exists on
@@ -145,11 +153,11 @@ export interface SettingsClient {
  * Pi's real default for a fresh session, before any `/autocompact` command
  * or (future) `set_auto_compaction_request` runs — cited from the fake Pi
  * runtime double that stands in for a live Pi process in every server-side
- * test of this behaviour: `PiSessionState`'s constructor sets
+ * test of this behaviour: `FakePiSession`'s constructor sets
  * `autoCompactionEnabled: true` unconditionally
- * (`packages/server/src/server/agent/providers/pi/test-utils/fake-pi.ts:166`),
- * matching how that same file's neighbouring `steeringMode`/`followUpMode`
- * defaults are documented (`fake-pi.ts:172-177`) as "matched here so a test
+ * (`packages/server/src/server/agent/providers/pi/test-utils/fake-pi.ts`),
+ * matching how that same constructor's neighbouring `steeringMode`/
+ * `followUpMode` defaults are documented there as "matched here so a test
  * that never calls setSteeringMode/setFollowUpMode still sees a real Pi
  * session's actual default, not an untouched... absence" — the identical
  * convention applies to `autoCompactionEnabled`.
@@ -159,9 +167,9 @@ export const DAEMON_DEFAULT_AUTO_COMPACTION_ENABLED = true;
 /**
  * Auto-retry's real daemon behaviour today: always on, with no
  * configuration point anywhere server-side — see this file's header
- * comment (`agent.ts:2460-2483` forwards every retry lifecycle
- * unconditionally; no `PiRuntimeSession` method or Pi CLI runtime call
- * exists to disable it). This is not "defaults to true and can be turned
+ * comment (`agent.ts`'s `handleSessionEvent` forwards every retry
+ * lifecycle unconditionally; no `PiRuntimeSession` method or Pi CLI
+ * runtime call exists to disable it). This is not "defaults to true and can be turned
  * off later" the way auto-compaction is — there is currently no daemon
  * concept of auto-retry being off at all.
  */

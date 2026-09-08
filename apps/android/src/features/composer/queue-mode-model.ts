@@ -32,12 +32,12 @@
  * `DaemonClient` methods (`packages/client/src/daemon-client.ts`)
  *
  *  - `getQueueModes(agentId): Promise<{ steeringMode: QueueMode | null;
- *    followUpMode: QueueMode | null }>` (`:3416`) — reads both modes
+ *    followUpMode: QueueMode | null }>` — reads both modes
  *    fresh off the live provider session; no `accepted` envelope field,
  *    only `error`.
  *  - `setSteeringMode(agentId, mode): Promise<AgentProviderNotice |
- *    null>` (`:3352`) and `setFollowUpMode(agentId, mode): Promise<AgentProviderNotice |
- *    null>` (`:3381`) — both T110, both landed with `AgentActionResponsePayloadSchema`'s
+ *    null>` and `setFollowUpMode(agentId, mode): Promise<AgentProviderNotice |
+ *    null>` — both T110, both landed with `AgentActionResponsePayloadSchema`'s
  *    `accepted`/`error`/`notice` envelope, so the real client's return
  *    type carries a provider notice, never bare `Promise<void>`. (Web's
  *    own `AgentTurnClient` typed these `Promise<void>` at T38B1a and had
