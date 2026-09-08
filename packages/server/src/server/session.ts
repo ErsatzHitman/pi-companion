@@ -275,11 +275,6 @@ type ProviderSubagentManagerEvent = Extract<
   { type: "provider_subagent" }
 >["event"];
 
-// TODO: Remove once all app store clients are on >=0.1.45 and understand arbitrary provider strings.
-// Clients before 0.1.45 validate providers with z.enum(["claude", "codex", "opencode"]) and reject
-// the entire session message if they encounter an unknown provider.
-const LEGACY_PROVIDER_IDS = new Set(["claude", "codex", "opencode"]);
-const MIN_VERSION_ALL_PROVIDERS = "0.1.45";
 const MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY = "0.1.105";
 function errorToFriendlyMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -311,10 +306,6 @@ function isAppVersionAtLeast(appVersion: string | null, minVersion: string): boo
     if (a < b) return false;
   }
   return true;
-}
-
-function clientSupportsAllProviders(appVersion: string | null): boolean {
-  return isAppVersionAtLeast(appVersion, MIN_VERSION_ALL_PROVIDERS);
 }
 
 function clientUsesLegacyWorkspaceRestore(appVersion: string | null): boolean {
@@ -1780,11 +1771,66 @@ export class Session {
     return buildStoredAgentPayload(record, registeredProviderIds);
   }
 
-  private isProviderVisibleToClient(provider: string): boolean {
-    if (clientSupportsAllProviders(this.appVersion)) {
-      return true;
-    }
-    return LEGACY_PROVIDER_IDS.has(provider);
+  // RETIRED (T262). This used to be a real gate: `LEGACY_PROVIDER_IDS =
+  // new Set(["claude", "codex", "opencode"])` and `MIN_VERSION_ALL_PROVIDERS =
+  // "0.1.45"` hid any provider outside that set from a connection whose
+  // declared `appVersion` fell below the threshold. The original comment
+  // (ported verbatim from Paseo at T04, since deleted) read:
+  //
+  //   "TODO: Remove once all app store clients are on >=0.1.45 and
+  //   understand arbitrary provider strings. Clients before 0.1.45 validate
+  //   providers with z.enum(["claude", "codex", "opencode"]) and reject the
+  //   entire session message if they encounter an unknown provider."
+  //
+  // That protected real, already-deployed Paseo app-store clients whose
+  // bundled wire schema hardcoded that enum and would drop the whole
+  // session message on an unrecognized provider id. Pi Companion has no
+  // such installed base to protect: this product's own wire schema never
+  // restricted providers that way in the first place --
+  // `AgentProviderSchema` (`packages/protocol/src/provider-manifest.ts`) is
+  // an open `z.string()`, not an enum -- and its own manifest
+  // (`AGENT_PROVIDER_DEFINITIONS`) has always had exactly one entry,
+  // `id: "pi"`. Non-Pi providers are a stated non-goal (plan.md §2.3), so
+  // the set this gate filtered can never again contain anything this
+  // product's own client would choke on. Left in place, the gate produced
+  // the opposite of its intended effect: it hid the one real provider this
+  // product has from the one real client this product ships, because that
+  // client's own declared version ("0.1.0",
+  // apps/android/src/app-shell/core.ts) sits below "0.1.45" by construction
+  // and would keep doing so regardless of how long the app has been out,
+  // since nothing in this product's roadmap ever needs to cross that
+  // threshold on its own merits (see plan.md's decision record for T262).
+  //
+  // Two cheaper fixes were considered and rejected, argued in full in
+  // plan.md:
+  //  - Adding "pi" to `LEGACY_PROVIDER_IDS` would make the set's own name
+  //    false -- "pi" is not legacy, it is the only provider -- while
+  //    leaving the whole apparatus (two version constants, a "legacy
+  //    client" concept this product's own client was never actually an
+  //    instance of) standing, ready to be misapplied again the next time
+  //    someone reads `MIN_VERSION_ALL_PROVIDERS` and assumes it still means
+  //    something for a client that ships today.
+  //  - Bumping `ANDROID_DAEMON_APP_VERSION` past "0.1.45" would satisfy
+  //    this one gate, but that constant is a genuine wire-compatibility
+  //    signal read for an unrelated purpose two lines below
+  //    (`clientUsesLegacyWorkspaceRestore` against
+  //    `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY`, "0.1.105") -- inflating
+  //    it to dodge this gate risks silently also crossing (or, chosen
+  //    carelessly, coming close to) that second, unrelated threshold for a
+  //    client that has not actually implemented explicit workspace
+  //    recovery. A version number should describe what the code at the
+  //    other end actually does, not be moved until an unrelated check
+  //    passes.
+  //
+  // The method (and its `provider` parameter) is kept, not deleted:
+  // `ProviderCatalogSession`, `createAgentUpdatesService`, and
+  // `WorkspaceDirectory` each still depend on a
+  // `host.isProviderVisibleToClient(provider)` callback of this shape, and
+  // changing those three modules' host interfaces is outside this task's
+  // `Owns:` grant (`session.ts`, `apps/android/src/app-shell/core.ts`,
+  // `plan.md`).
+  private isProviderVisibleToClient(_provider: string): boolean {
+    return true;
   }
 
   private async buildProjectPlacementForWorkspace(

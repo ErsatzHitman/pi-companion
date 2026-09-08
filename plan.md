@@ -1398,6 +1398,35 @@ Because the ported backend preserves data formats and no daemon-data migration i
 10. **The laptop daemon remains the sole v1 host.** Offline clients show stale data and outbox state; they cannot run agents or receive daemon push while the laptop is down.
 11. **`PASEO_*`, `$PASEO_HOME`, protocol compatibility, and daemon identity remain stable.**
 12. **The repository is greenfield.** Fresh `git init`, clean root `package.json`, no upstream remote, no fork history; the legacy stack lives only outside this repository and is retired at cutover, not migrated.
+13. **T262: the legacy-provider visibility gate in `session.ts` is retired, not patched.**
+    `isProviderVisibleToClient` used to hide any provider outside
+    `LEGACY_PROVIDER_IDS = new Set(["claude", "codex", "opencode"])` from a client whose
+    declared `appVersion` fell below `MIN_VERSION_ALL_PROVIDERS` (`"0.1.45"`). Its original
+    reason, quoted from the TODO it carried since T04's port of Paseo's daemon: "Remove once
+    all app store clients are on >=0.1.45 and understand arbitrary provider strings. Clients
+    before 0.1.45 validate providers with `z.enum(["claude", "codex", "opencode"])` and reject
+    the entire session message if they encounter an unknown provider." That protected real,
+    already-deployed Paseo app-store clients whose bundled wire schema hardcoded that enum.
+    Pi Companion has no such installed base: `AgentProviderSchema`
+    (`packages/protocol/src/provider-manifest.ts`) has always been an open `z.string()`, never
+    an enum, and `AGENT_PROVIDER_DEFINITIONS` has always had exactly one entry, `id: "pi"`. With
+    non-Pi providers a stated non-goal (§2.3), the set this gate filtered can never again contain
+    anything this product's own client would reject — so the gate, left in place, did the
+    opposite of its job: it hid the one real provider from the one real client this product
+    ships, because `ANDROID_DAEMON_APP_VERSION` (`apps/android/src/app-shell/core.ts`,
+    `"0.1.0"`) sits below `"0.1.45"` by construction and has no roadmap reason to ever cross it.
+    Two cheaper fixes were considered and rejected: adding `"pi"` to `LEGACY_PROVIDER_IDS` would
+    make the set's own name false (`"pi"` is not legacy, it is the only provider) while leaving
+    the whole now-pointless apparatus in place to be misapplied again; bumping
+    `ANDROID_DAEMON_APP_VERSION` past `"0.1.45"` would pass this one gate but risks silently
+    crossing (or coming close to) the unrelated `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY`
+    threshold (`"0.1.105"`) for a client that has not implemented explicit workspace recovery —
+    a version number should describe what a client actually does, not be inflated to defeat one
+    check. `isProviderVisibleToClient` itself is kept (now an unconditional `true`) rather than
+    deleted, because `ProviderCatalogSession`, `createAgentUpdatesService`, and
+    `WorkspaceDirectory` each still depend on a `host.isProviderVisibleToClient` callback of that
+    shape; removing the parameter from those three modules is unscoped follow-up, not part of
+    this decision.
 
 ---
 

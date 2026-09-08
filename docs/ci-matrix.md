@@ -306,15 +306,19 @@ run test:unit --workspace=@picompanion/server` — **not** the package's own
   and thinking-option shapes, and every Claude-specific model id) are gone, enumerated
   file by file in T258's entry in `docs/issues-from-plan.md`, not merely asserted away.
   T258 also found and filed, but did not fix (outside its `Owns:` line), a second,
-  independent gate: `session.ts`'s `isProviderVisibleToClient` treats a client whose
-  `appVersion` is null or below `"0.1.45"` as legacy and only shows it
-  `LEGACY_PROVIDER_IDS` (`"claude"/"codex"/"opencode"`) — a set that no longer contains
-  "pi". The rescoped `live-preferences.e2e.test.ts` works around this in its own test
-  connection only, by declaring `appVersion: "0.1.45"`; the real Android app declares
-  `ANDROID_DAEMON_APP_VERSION = "0.1.0"` (`apps/android/src/app-shell/core.ts`) and
-  would be gated the same way in production, never receiving an `agent_update` push for
-  its own Pi agents. `test:integration` is still not wired into this job — that remains
-  T250's original, still-open subject.
+  independent gate: `session.ts`'s `isProviderVisibleToClient` used to treat a client
+  whose `appVersion` was null or below `"0.1.45"` as legacy and only show it
+  `LEGACY_PROVIDER_IDS` (`"claude"/"codex"/"opencode"`) — a set that never contained
+  "pi". CORRECTED (T262): that gate is now retired — `isProviderVisibleToClient` is an
+  unconditional `true` regardless of `appVersion` (`plan.md` §18 item 13) — because
+  this product's provider registry has always been pi-only and its own wire schema was
+  never the restrictive `z.enum` the gate existed to protect against. The rescoped
+  `live-preferences.e2e.test.ts`'s `appVersion: "0.1.45"` workaround is consequently no
+  longer necessary for provider visibility (T258 does not own that file; unchanged
+  here). The real Android app still declares `ANDROID_DAEMON_APP_VERSION = "0.1.0"`
+  (`apps/android/src/app-shell/core.ts`), which now sees every "pi" agent correctly.
+  `test:integration` is still not wired into this job — that remains T250's original,
+  still-open subject.
 - `protocol-client-tests` (ubuntu-latest only): `@picompanion/client` and
   `@picompanion/highlight`, alongside protocol.
 - **`relay-tests` (T44A4, new).** `@picompanion/relay` had a real `"test":

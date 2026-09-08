@@ -24,11 +24,16 @@ import type { SessionOutboundMessage } from "../messages.js";
 import { WSOutboundMessageSchema, type WSOutboundMessage } from "../messages.js";
 
 const TEST_TIMEOUT_MS = 20_000;
-// The pi provider is only visible to a WS client whose declared appVersion
-// clears clientSupportsAllProviders's MIN_VERSION_ALL_PROVIDERS gate
-// (session.ts) — below that, only the legacy claude/codex/opencode
-// providers broadcast agent_update at all. Every connection in this file
-// (the typed DaemonClient AND the raw hello handshake) must declare one.
+// CORRECTED (T262): this used to say the pi provider was only visible to a
+// WS client whose declared appVersion cleared a MIN_VERSION_ALL_PROVIDERS
+// gate in session.ts, below which only the legacy claude/codex/opencode
+// providers broadcast agent_update at all. T262 retired that gate entirely
+// (session.ts's isProviderVisibleToClient is now an unconditional `true`;
+// see plan.md §18 item 13) because this product's own provider registry has
+// always been pi-only and its own wire schema never restricted providers the
+// way the gate assumed. Declaring an appVersion here is no longer load-bearing
+// for provider visibility, but every connection in this file still declares
+// one, matching a real client's hello.
 const APP_VERSION = "1.0.0";
 
 type AgentUpdateMessage = Extract<SessionOutboundMessage, { type: "agent_update" }>;

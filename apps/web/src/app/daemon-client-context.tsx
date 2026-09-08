@@ -104,18 +104,24 @@ export const WEB_DAEMON_CLIENT_ID = "picompanion-web";
  * provider opens (T31B1/T31B3 -- both tasks diagnosed this same gap
  * independently against the isolated E2E daemon).
  *
- * `session.ts`'s `isProviderVisibleToClient` hides every agent whose
- * provider is not one of Paseo's legacy `claude`/`codex`/`opencode` ids
- * (`LEGACY_PROVIDER_IDS`) unless the connecting client states an
- * `appVersion` of at least `MIN_VERSION_ALL_PROVIDERS` (`"0.1.45"`), and
- * gates explicit workspace recovery behind
- * `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY` (`"0.1.105"`) the same way.
- * Both are Paseo-era client-compatibility checks -- `session.ts`'s own
- * comment: "Clients before 0.1.45 validate providers with
- * z.enum(["claude", "codex", "opencode"]) and reject the entire session
- * message if they encounter an unknown provider" -- and both treat a
- * connection with **no** `appVersion` at all as if it predated every such
- * gate: `isAppVersionAtLeast` returns `false` for a `null` version.
+ * CORRECTED (T262): this used to say `session.ts`'s
+ * `isProviderVisibleToClient` hid every agent whose provider was not one
+ * of Paseo's legacy `claude`/`codex`/`opencode` ids (`LEGACY_PROVIDER_IDS`)
+ * unless the connecting client stated an `appVersion` of at least
+ * `MIN_VERSION_ALL_PROVIDERS` (`"0.1.45"`). T262 retired that gate
+ * entirely -- `isProviderVisibleToClient` is now an unconditional `true`
+ * regardless of `appVersion` (see `plan.md` §18 item 13) -- because this
+ * product's own provider registry has always been pi-only and its own
+ * wire schema (`AgentProviderSchema` in
+ * `packages/protocol/src/provider-manifest.ts`) was never the restrictive
+ * `z.enum` Paseo's real app-store clients carried, the thing the gate
+ * existed to protect against. `session.ts` still separately gates explicit
+ * workspace recovery behind `MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY`
+ * (`"0.1.105"`, `clientUsesLegacyWorkspaceRestore`) -- unaffected by T262
+ * and still real -- which treats a connection with **no** `appVersion` at
+ * all as legacy: `isAppVersionAtLeast` returns `false` for a `null`
+ * version. Declaring an `appVersion` below is no longer load-bearing for
+ * provider visibility, only for that workspace-recovery gate.
  *
  * This product's only provider, `"pi"`, is exactly such a non-legacy
  * provider. Before this constant existed, nothing in `apps/web` ever set

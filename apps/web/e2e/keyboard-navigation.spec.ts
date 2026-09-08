@@ -15,14 +15,18 @@
  *    the daemon hid every `pi`-provider session from it -- not just
  *    its live timeline push, its very existence.**
  *    `packages/server/src/server/session.ts`'s
- *    `isProviderVisibleToClient` (ported verbatim from Paseo, T04) only
- *    returns `true` for a non-legacy provider id when
- *    `clientSupportsAllProviders(this.appVersion)` does, i.e. when the
+ *    `isProviderVisibleToClient` (ported verbatim from Paseo, T04) used to
+ *    return `true` for a non-legacy provider id only when
+ *    `clientSupportsAllProviders(this.appVersion)` did, i.e. when the
  *    connection's hello declared `appVersion >= MIN_VERSION_ALL_PROVIDERS`
- *    (`"0.1.45"`); `pi` is this product's only provider and is not one of
+ *    (`"0.1.45"`); `pi` is this product's only provider and was not one of
  *    the grandfathered `LEGACY_PROVIDER_IDS`, so both `fetch_agent_request`
  *    (`getAgentPayloadById`) and the session-list RPC the rail's
  *    `use-session-list-sync.ts` depends on filtered it out entirely --
+ *    (CORRECTED, T262: that gate is now retired -- `isProviderVisibleToClient`
+ *    is an unconditional `true` -- but declaring `appVersion` below is still
+ *    required for `session.ts`'s separate, still-real
+ *    `clientUsesLegacyWorkspaceRestore` gate; see `plan.md` §18 item 13.)
  *    "This session doesn't exist" and an empty rail for a session
  *    `seedSession` had just created over the same public `createAgent`
  *    RPC. Fixed by `apps/web/src/app/daemon-client-context.tsx`'s

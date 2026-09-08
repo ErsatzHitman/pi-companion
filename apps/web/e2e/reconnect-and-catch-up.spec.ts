@@ -16,12 +16,12 @@
  * underneath it: `apps/web`'s one app-wide `DaemonClient`
  * (`apps/web/src/app/daemon-client-context.tsx`) never set `appVersion`,
  * so every hello omitted it. The ported daemon
- * (`packages/server/src/server/session.ts`) gates every agent
+ * (`packages/server/src/server/session.ts`) used to gate every agent
  * listing/lookup path (`listAgentPayloads`'s `isProviderVisibleToClient`
  * filter, and `getAgentPayloadById`) on
  * `clientSupportsAllProviders(this.appVersion)`, i.e.
  * `isAppVersionAtLeast(appVersion, "0.1.45")` -- `false` for a `null`
- * `appVersion`. `"pi"` is not one of the grandfathered
+ * `appVersion`. `"pi"` was not one of the grandfathered
  * `LEGACY_PROVIDER_IDS`, so every `"pi"` agent -- the only provider this
  * product has -- was invisible to `fetch_agents`/single-agent lookup for
  * every real browser connection. Session *creation* was unaffected (no
@@ -30,6 +30,13 @@
  * `daemon-client-context.tsx`'s `DAEMON_APP_VERSION` (T31B1/T31B3); the
  * same root cause also blocked `deep-link-restore.spec.ts` and
  * `keyboard-navigation.spec.ts`.
+ *
+ * CORRECTED (T262): the `isProviderVisibleToClient`/`LEGACY_PROVIDER_IDS`
+ * gate described above is now retired entirely (`isProviderVisibleToClient`
+ * is an unconditional `true`) because this product's provider registry has
+ * always been pi-only. `DAEMON_APP_VERSION` remains declared for
+ * `session.ts`'s separate, still-real `clientUsesLegacyWorkspaceRestore`
+ * gate; see `plan.md` §18 item 13.
  */
 import { expect, test } from "./fixtures/test.js";
 import { connectViaUi } from "./fixtures/connect-ui.js";

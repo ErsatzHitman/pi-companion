@@ -9426,10 +9426,40 @@ the two payload filters at `:4432`/`:4440` behave differently.
 Owns: `packages/server/src/server/session.ts`, `apps/android/src/app-shell/core.ts`, and
 whichever of `plan.md` records the decision.
 
-- [ ] The chosen shape is argued against the other two, in the source, not only a report
-- [ ] A daemon built from the real manifest returns a non-empty agent list to `ANDROID_DAEMON_APP_VERSION`
-- [ ] Every caller of `isProviderVisibleToClient` is checked, and the two payload filters are stated to behave as intended
-- [ ] The workaround `live-preferences.e2e.test.ts` carries in its own test context is removed or justified
+- [x] The chosen shape is argued against the other two, in the source, not only a report
+- [x] A daemon built from the real manifest returns a non-empty agent list to `ANDROID_DAEMON_APP_VERSION`
+- [x] Every caller of `isProviderVisibleToClient` is checked, and the two payload filters are stated to behave as intended
+- [x] The workaround `live-preferences.e2e.test.ts` carries in its own test context is removed or justified
+
+**STATUS: DONE.** Shape 3 (retire the gate) was chosen; `isProviderVisibleToClient` in
+`session.ts` is now an unconditional `true`, with the full argument against shapes 1 and 2
+in its own doc comment and mirrored in `plan.md` §18 item 13. `ANDROID_DAEMON_APP_VERSION`
+in `apps/android/src/app-shell/core.ts` was **not** touched — bumping it was one of the two
+rejected shapes, argued in the source. End-to-end proof:
+`packages/server/src/server/daemon-e2e/provider-visibility.e2e.test.ts` (new file, run via
+`test:e2e`) spins up `createTestPaseoDaemon({})` — the real manifest, no provider override —
+connects a `DaemonClient` declaring `appVersion: "0.1.0"` (the real
+`ANDROID_DAEMON_APP_VERSION` value), creates a `"pi"` agent, and asserts
+`fetch_agents` returns it. `cd packages/server && npx vitest run
+src/server/daemon-e2e/provider-visibility.e2e.test.ts --bail=1` passed 1/1; reverting
+`isProviderVisibleToClient` to the pre-fix gate (`LEGACY_PROVIDER_IDS.has(provider)` below
+`"0.1.45"`) and re-running reproduced the original defect — `expect(list.entries.length)
+.toBeGreaterThan(0)` failed with "expected 0 to be greater than 0" — then the fix was
+restored byte-identically and the test re-passed. All six callers of
+`isProviderVisibleToClient` were checked (`:853`, `:934`, `:997`, `:4406`, `:4478`, `:4486`
+in the post-fix file) — each now always receives `true`, so the list build (`:4406`) stops
+dropping "pi" agents and both payload filters (`:4478`/`:4486`) stop nulling single-agent
+lookups; none needed different treatment because the gate they shared was uniform. The
+`live-preferences.e2e.test.ts` workaround (`createPiVisibleDaemonTestContext`, declaring
+`appVersion: "0.1.45"`) is now unnecessary for provider visibility — any `appVersion`,
+including none, would see the same result post-fix — but that file is outside this task's
+`Owns:` line (T258's) and was left untouched, per this task's own instructions; reported to
+T258/the merge gate rather than edited. `docs/ci-matrix.md`'s T258 paragraph describing this
+gate, and five present-tense mentions of the retired mechanism in
+`apps/web/src/app/daemon-client-context.tsx` and two `apps/web/e2e/*.spec.ts` files, and one
+in `packages/server/src/server/daemon-e2e/queue-mode-routing.e2e.test.ts`, were corrected
+in the same commit (T124) — all outside this task's `Owns:` line, disclosed here rather than
+silently absorbed into it.
 
 #### T263 — Teach canPrecedeRegex about the JSX closing-tag case, or scope it
 
