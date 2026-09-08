@@ -537,6 +537,13 @@ that recomputation has to be domain-specific:
 | T278   | Image thumbnails and capture in the mobile prompt bar                           | phase-9   | android          | P9-W57 | none                                                                  |
 | T279   | Drag-and-drop, paste, and inline previews in the web composer                   | phase-9   | web              | P9-W58 | none                                                                  |
 | T280   | Make create-agent's post-return dispatch awaitable by its own tests             | phase-9   | server           | P9-W59 | none                                                                  |
+| T281   | Register wave P9-O's four capabilities in guard-capability-prose                | phase-9   | tooling          | P9-W60 | none                                                                  |
+| T282   | Wire transcribeClient, attachmentSource and cameraCapture at the mount          | phase-9   | android          | P9-W61 | T276, T277, T278                                                      |
+| T283   | Serve attachment bytes to a remote client, capability-scoped                    | phase-9   | server           | P9-W62 | none                                                                  |
+| T284   | Wire both transcript renderers to the attachment-serving capability             | phase-9   | web              | P9-W63 | T283                                                                  |
+| T285   | Cover the fifth PermissionKind in permission-recovery's own battery             | phase-9   | android          | P9-W64 | T278                                                                  |
+| T286   | Reconcile cleanTranscript's leading-filler doc with its regex                   | phase-9   | server           | P9-W65 | T277                                                                  |
+| T287   | Correct resolveGroqSttCredentials's model-always-Groq-valid claim               | phase-9   | server           | P9-W66 | T277                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -924,6 +931,20 @@ the task details always agree.
 |        | or dragover handler at all).                                             |       |
 | P9-W59 | T280 (filed by the P9-M gate after CI went RED; a test                   | 1     |
 |        | racing its own asynchronous continuation).                               |       |
+| P9-W60 | T281 (filed by the P9-O gate; the guard is green only because            | 1     |
+|        | nothing this wave shipped is registered).                                |       |
+| P9-W61 | T282 (filed by the P9-O gate; the mic asks for a permission it           | 1     |
+|        | cannot repay, and the pickers are inert).                                |       |
+| P9-W62 | T283 (owner request; an attachment sent from one surface cannot          | 1     |
+|        | be fetched by the other -- no RPC serves the path).                      |       |
+| P9-W63 | T284 (owner request; both renderers already carry the unwired            | 1     |
+|        | seam this fills).                                                        |       |
+| P9-W64 | T285 (filed by the P9-O gate; a subset array a Record would              | 1     |
+|        | have caught).                                                            |       |
+| P9-W65 | T286 (filed by the P9-O gate; 'Um... hello' survives the                 | 1     |
+|        | filter the doc says it does not).                                        |       |
+| P9-W66 | T287 (filed by the P9-O gate; GROQ_STT_MODEL produces exactly            | 1     |
+|        | the value the sentence promises cannot happen).                          |       |
 
 ---
 
@@ -10371,6 +10392,268 @@ option 2 is taken.
 - [ ] The same reproduction passes with the fix in place
 - [ ] No retry, no raised timeout, and no move into `test:unit:serial`
 - [ ] The P9-M gate's `await storage.flush()` comment is updated to say what finally closed it
+
+#### T281 — Register wave P9-O's four capabilities in `guard-capability-prose`
+
+`labels: phase-9, area: tooling` · `wave: P9-W60` · `depends-on: none`
+
+`run-guard-capability-prose.mjs` exited 0 across the whole of P9-O — **not because the tree was
+clean, but because no `CAPABILITIES` entry exists for anything that wave shipped.** The P9-O merge
+gate found **seven** prose sites the wave falsified and fixed all seven by hand; four of them sit
+inside a scope `isAppSourcePath` already returns `true` for, so a registered entry would have caught
+them. This is the "add an entry the moment you ship one" instruction in `CLAUDE.md`'s T124 section,
+missed four times in one wave.
+
+Register, each proven able to FIRE before it is trusted (append a denying sentence **in that entry's
+own wording** to a real tracked file, confirm exit 1 naming the right capability, restore from a
+scratchpad copy — never `git checkout --` — and confirm exit 0 with `git status --porcelain` empty):
+
+- `createExpoAudioVoiceCapturePort` (`apps/android/src/features/voice/`)
+- `transcribeVoiceClip` (`packages/client`, `packages/server`'s speech provider)
+- `runCapturePress` (`apps/android/src/features/composer/`)
+- the web trio `addFiles` / `useComposerPaste` / `useDragAndDrop` — a T168 AND-group is the right
+  shape only if all three must be declared in ONE file; measure that before choosing, rather than
+  assuming.
+
+**Do not word any phrase by lifting a sentence from the file whose capability it protects.** T215
+records exactly this collision and resolved it by rephrasing rather than by adding an exclusion. The
+gate's own corrections now carry `CORRECTED at the P9-O merge gate` markers, so a phrase that
+happens to match one of them will not fire — check that, do not assume it.
+
+**Second half, and it needs a decision, not a sweep.** Two of the seven sites live in
+`apps/android/maestro/composer-inputs.yaml`, and `isAppSourcePath` admits only
+`apps/android/maestro/*.md`. Those two were structurally invisible — the "check that cannot fail"
+shape. Either widen to `*.yaml` (measure how many files that admits, the way T246 measured
+`APP_ROOT_CONFIG_PATTERN` against `git ls-files` before trusting it) or record a will-not-widen with
+the reason, in `CLAUDE.md` beside the existing widenings. Do not leave it undecided.
+
+Owns: `scripts/ci/guard-capability-prose.mjs`, its test, and the `CLAUDE.md` paragraph recording the
+scope decision.
+
+- [ ] All four capabilities registered, each watched firing before being trusted
+- [ ] No phrase is lifted from the source file it protects
+- [ ] The `*.yaml` scope question is decided either way, with the reason recorded
+- [ ] `isAppSourcePath` is called on each path rather than inferred from a list
+- [ ] `run-guard-capability-prose.mjs` exits 0 on the real tree afterward
+
+#### T282 — Wire `transcribeClient`, `attachmentSource` and `cameraCapture` at the session mount
+
+`labels: phase-9, area: android` · `wave: P9-W61` · `depends-on: T276, T277, T278`
+
+**Wave P9-O shipped three owner-requested features that the app cannot reach.** The only
+`<Composer>` mount in the product,
+`apps/android/src/app/h/[serverId]/session/[agentId]/index.tsx`, passes `sessionId`, `onSubmit`,
+`onMicPress`, `onAttachPress`, `turnRunning`, `turnService`, `queueModeClient`, `turnStatusClient`
+and `outbox` — and none of `transcribeClient`, `attachmentSource`, `cameraCapture`.
+
+**The mic is the urgent half, because T276 made it worse than it was.** `Composer.tsx` now resolves
+`voiceCapture ?? createExpoAudioVoiceCapturePort()`, so on a real device pressing the mic prompts
+the OS microphone dialog and genuinely records — and stop then resolves
+`"transcription-unavailable"`, shows the neutral banner, and discards the clip. Before this wave the
+mic resolved `"unavailable"` and asked for nothing. **A user grants a permission and gets nothing
+back.** Each half was disclosed by its own task; the combined outcome was disclosed by nobody, which
+is why it is filed here rather than left to the next reader to assemble.
+
+T278's thumbnails and camera action are inert for the same reason:
+`createUnavailableAttachmentSourcePort` and `createUnavailableCameraCapturePort` remain the only
+implementations, so `previewUri` can never be set in production.
+
+`transcribeClient` is one line (`client.transcribeVoiceClip.bind(client)` off the session's live
+`DaemonClient`). The other two need real ports, and `apps/android/package.json` declares neither
+`expo-image-picker` nor `expo-document-picker` — **this task may not run `npm install`.** If the
+dependency is the blocker, wire `transcribeClient`, say plainly that the pickers remain blocked on
+an owner-run install, and name the exact command; do not ship a fake port to make a checkbox pass.
+
+Owns: the session route file, and any real `AttachmentSourcePort`/`CameraCapturePort` this adds. Do
+not edit `Composer.tsx`'s renderer body — the props already exist.
+
+- [ ] `transcribeClient` is wired at the mount and a real recording reaches Groq
+- [ ] The mic no longer requests a permission it cannot repay
+- [ ] Whatever remains blocked on an owner-run install is stated with the exact command
+- [ ] No port is stubbed to look real
+- [ ] The maestro flow's own "not end to end" correction is updated to match what now ships
+
+#### T283 — Serve attachment bytes to a remote client, capability-scoped
+
+`labels: phase-9, area: server` · `wave: P9-W62` · `depends-on: none`
+
+**Owner request.** A file or image attached from the phone must be visible in the web UI, and one
+attached from the web must be visible on the phone. Today neither renders, on either surface.
+
+**This is a proven backend gap, not a client omission.**
+`apps/web/src/features/transcript/message-attachments.tsx`'s own header establishes it, and the P9-O
+investigation re-confirmed every step:
+
+- `AgentTimelineImageRef` carries `mimeType`, `path` and an optional `bytes` — **never inline
+  bytes** ("large binary content is referenced rather than inlined wholesale", T52A1 acceptance), so
+  both clients must fetch by path.
+- Every RPC that could serve a path resolves it **relative to a workspace `cwd`**:
+  `readFile`/`file_explorer_request` and `requestDownloadToken`/`file_download_token_request` both go
+  through `file-explorer/service.ts`'s `resolveScopedPath`, which throws
+  `ACCESS_OUTSIDE_WORKSPACE_MESSAGE` for anything outside `root`.
+- The paths an attachment carries are **outside every workspace root by construction**:
+  `materializeProviderImage` writes inbound provider images to `os.tmpdir()/paseo-attachments-*`,
+  and client uploads land in `$PASEO_HOME/uploads/<id>/`.
+- **There is no third RPC that serves an unscoped path**, so both clients fall back to a text
+  reference card rather than shipping a broken `<img>`.
+
+**Ship the missing capability. The security shape is the whole task, not a footnote.** The existing
+RPCs refuse these paths _for a reason_: an RPC that serves any absolute path the caller names is an
+arbitrary-host-file-read hole — `$PASEO_HOME` secrets, `~/.ssh`, anything on the machine. **Do not
+build that, and do not widen `resolveScopedPath` to accept absolute paths.**
+
+Two defensible designs; pick one and argue against the other by measurement:
+
+1. **Serve by opaque id, never by path.** The client sends an attachment id (or `messageId` + index)
+   and the daemon looks the path up from its own record of that timeline item. The client never
+   names a filesystem path, so traversal is not expressible. Requires retaining the mapping.
+2. **Serve by path, but only paths under a closed allowlist of roots** — the attachment temp dir and
+   the uploads dir — resolved with the same realpath-then-containment discipline `resolveScopedPath`
+   already uses. Cheaper; the containment check is then the only thing between a bug and an
+   arbitrary read.
+
+Whichever is chosen, each of these is pinned by its own test:
+
+- **A path outside the permitted roots is refused, via `..` AND via a symlink that points out —
+  tested separately.** A check that catches one and not the other is the classic half-fix.
+- The caller must already have access to the session the attachment belongs to; serving another
+  session's attachment is a cross-tenant read even when the path is legitimate.
+- Nothing under `$PASEO_HOME` outside `uploads/` is reachable. That directory is the owner's live
+  data.
+- Served bytes equal uploaded bytes, checked by digest, not by eyeballing a rendered image.
+
+Reuse `file_download_token_request`'s short-lived-token-plus-GET shape if it fits — both clients
+already know that dance. Say so if it does not fit, rather than bending it.
+
+Owns: `packages/server/src/server/file-upload/**`, the new serving path, and the protocol schema.
+**Do not change either client in this task.**
+
+- [ ] The design is chosen and argued against the other by measurement
+- [ ] Traversal via `..` and via symlink are each refused, pinned as separate tests
+- [ ] An attachment belonging to another session is refused
+- [ ] Nothing under `$PASEO_HOME` outside `uploads/` is reachable, pinned by a test
+- [ ] Served bytes match uploaded bytes by digest
+- [ ] No client file is touched
+
+#### T284 — Wire both transcript renderers to the attachment-serving capability
+
+`labels: phase-9, area: web` · `wave: P9-W63` · `depends-on: T283`
+
+**Owner request, second half:** a phone attachment shows in the web UI and vice versa. T283 ships
+the daemon capability; this makes both surfaces render.
+
+**Almost all of it is already done, deliberately.** Both renderers were built with an optional seam
+so this is a wiring change, not a rewrite:
+
+| Surface | File                                                           | Seam              |
+| ------- | -------------------------------------------------------------- | ----------------- |
+| Web     | `apps/web/src/features/transcript/message-attachments.tsx`     | `ResolveImageSrc` |
+| Android | `apps/android/src/features/transcript/message-attachments.tsx` | `ResolveImageUri` |
+
+Web's own header states the contract: any caller that can turn a path into a fetchable URL supplies
+one, "and every image in this transcript will render it immediately with no change to this file."
+Supply it at the route level. **If you find yourself editing the renderer bodies, stop and ask why**
+— that is the signal the seam was the wrong shape, and it is a finding worth reporting rather than
+working around.
+
+**The cross-surface case is the acceptance criterion, and it must be exercised in both directions
+separately.** Not "images render" — attach on **web** and see it on **Android**, then attach on
+**Android** and see it on **web**. One direction passing tells you nothing about the other:
+Android's `Image` takes a `uri`, web's `img` takes a `src`, and the bug being fixed is precisely a
+client assuming a path it could reach locally.
+
+**Do not fake it.** No data-URI shortcut that works for a locally-staged file and silently fails for
+a remote one. If the capability cannot be exercised in this environment, say exactly what was and
+was not run — the existing fallback reference card is a legitimate outcome for an unreachable file
+and must not regress into a blank space or a broken `<img>`.
+
+Also decide and argue **non-image attachments**: a PDF or `.zip` has no thumbnail, and the
+established answer elsewhere in this product is a compact chip. Confirm that holds and record it
+where the next reader will look.
+
+Owns: `apps/web/src/features/transcript/**`, `apps/android/src/features/transcript/**`, and the
+route-level wiring in each app. Do not touch the daemon.
+
+- [ ] Web renders an attachment sent from Android
+- [ ] Android renders an attachment sent from web
+- [ ] Neither renderer body needed editing; only the seam was supplied
+- [ ] An unreachable file still shows the reference card — no blank space, no broken image
+- [ ] Non-image attachments render as a chip, and that decision is recorded
+- [ ] What could not be exercised in this environment is stated plainly
+
+#### T285 — Cover the fifth `PermissionKind` in `permission-recovery`'s own battery
+
+`labels: phase-9, area: android` · `wave: P9-W64` · `depends-on: T278`
+
+T278 added `"photo-capture"` to the `PermissionKind` union and to `KIND_LABEL`/`KIND_PURPOSE`, but
+`permission-recovery.test.ts`'s exhaustive battery drives four loops off
+`const KINDS: readonly PermissionKind[] = ["photos", "microphone", "camera", "notifications"]` — a
+**subset**, which is type-legal because the array is typed `readonly PermissionKind[]` rather than
+keyed off a `Record<PermissionKind, ...>`, so `tsc` cannot catch it. `permission-recovery.test.ts`
+was outside T278's `Owns`, which explains how it happened.
+
+**This is a check that cannot fail, not a live defect.** The P9-O gate executed
+`describePermissionRecovery("photo-capture", s)` across all five states and all four invariants hold
+today. The fix is one array element **plus** the shape change that stops a sixth kind slipping past
+— derive the array from the union so omission is a type error, not a silent subset.
+
+Owns: `apps/android/src/features/composer/permission-recovery.test.ts`, and
+`permission-recovery.ts` only if the union must be exported differently to make the array derivable.
+
+- [ ] `"photo-capture"` is covered by all four loops
+- [ ] The array is derivable from the union, so a sixth kind cannot be omitted silently
+- [ ] Deleting a kind from the source union is shown to fail the test, not just pass with it
+
+#### T286 — Reconcile `cleanTranscript`'s leading-filler doc with its regex
+
+`labels: phase-9, area: server` · `wave: P9-W65` · `depends-on: T277`
+
+The module header and the function's own comment say `cleanTranscript` drops "ONE leading filler
+token ... if the transcript starts with one". Executed at the P9-O gate:
+
+| input                 | output          |
+| --------------------- | --------------- |
+| `"Um, hello there"`   | `"hello there"` |
+| `"Uh hello"`          | `"hello"`       |
+| `"Um... hello there"` | **unchanged**   |
+| `"Um—hello"`          | **unchanged**   |
+
+`^([A-Za-z]+)[,.:;!?]?(?:\s+(.*))?$` admits exactly one trailing punctuation character, and
+Whisper-family models emit ellipses after fillers routinely. Low severity — a leading "Um..."
+survives into the draft, which the user can delete — but the prose overstates the coverage.
+
+**Either fix is acceptable; the mismatch is not.** Widen the match to the ellipsis and dash forms,
+or narrow the doc to what the regex actually does. If widening, pin each new form as its own case
+rather than one combined assertion, so a partial regression is visible.
+
+Owns: `packages/server/src/server/speech/**`'s transcript cleanup and its test.
+
+- [ ] The doc and the behaviour agree, whichever way it is closed
+- [ ] Each admitted and each rejected form is pinned as its own case
+- [ ] No previously-cleaned form regresses
+
+#### T287 — Correct `resolveGroqSttCredentials`'s model-always-Groq-valid claim
+
+`labels: phase-9, area: server` · `wave: P9-W66` · `depends-on: T277`
+
+`config.ts` says `baseUrl` "is always Groq's real endpoint (never overridable) ... and `model`
+**always** resolves to a Groq-valid whisper id". The first half is true — `GROQ_STT_BASE_URL` is
+hardcoded and no env or persisted override reaches it. The second is false: `model` resolves as the
+first defined of `env.GROQ_STT_MODEL` and the persisted `groq.stt.model`, falling back to
+`DEFAULT_GROQ_STT_MODEL` — so `GROQ_STT_MODEL=whisper-1` produces exactly the value the sentence
+promises can never happen. What _is_ true is the narrower clause immediately after it ("never
+`OpenAISTT`'s own `"whisper-1"` **default**"). Same two-cases-one-cause shape as the P9-O headline,
+one clause weaker.
+
+Correct the sentence to the true, narrower claim — **or** make the strong claim true by validating
+the resolved id against a known set and failing loudly on a non-Groq value. If the second is chosen,
+argue why rejecting an operator's explicit override is the right behaviour, and pin the rejection.
+
+Owns: `packages/server/src/server/speech/providers/openai/config.ts` and its test.
+
+- [ ] The doc states only what the code guarantees, or the code guarantees what the doc states
+- [ ] The `GROQ_STT_MODEL` override path is pinned either way
+- [ ] The true narrower clause about `OpenAISTT`'s own default is preserved
 
 #### T32A1 — Build the Android connect form
 

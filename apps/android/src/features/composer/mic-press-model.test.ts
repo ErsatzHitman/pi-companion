@@ -106,7 +106,7 @@ describe("runMicPress resolves microphone permission exactly once per press (T83
     expect(result.voiceState.status).toBe("idle");
   });
 
-  it("an unavailable port (this build's only production VoiceCapturePort) still renders through micPermissionState — the honest 'unavailable' path", async () => {
+  it("an unavailable port (no longer this build's default — T276 made createExpoAudioVoiceCapturePort the default; this port stays a supported injection) still renders through micPermissionState — the honest 'unavailable' path", async () => {
     const port = createCountingPort({ permission: "unavailable" });
     const controller = makeController(port);
 

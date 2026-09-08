@@ -14,10 +14,15 @@
  * `apps/android/package.json` carries neither `expo-notifications` nor
  * `expo-device` today, and this task may not run `npm install`.
  * `createUnavailablePushRegistrationPort` below is therefore this
- * module's only production implementation — see
- * `../voice/voice-capture-port.ts`'s identically-shaped
- * `createUnavailableVoiceCapturePort` for the precedent (this once
- * cited `../composer/mic-permission-port.ts`, deleted by T94). A push token
+ * module's only production implementation — the same shape
+ * `../voice/voice-capture-port.ts`'s `createUnavailableVoiceCapturePort`
+ * has (this once cited `../composer/mic-permission-port.ts`, deleted by
+ * T94). CORRECTED at the P9-O merge gate: that function was cited here
+ * as the PRECEDENT for "only production implementation", and T276 ended
+ * that — `Composer.tsx` now defaults `voiceCapture` to a real
+ * `createExpoAudioVoiceCapturePort()`, so voice has a production
+ * implementation and push does not. The two stubs are still identically
+ * shaped; it is the precedent, not the shape, that no longer holds. A push token
  * cannot be obtained without a real device and a real Expo/EAS project
  * id in any case, so nothing here claims to fetch one.
  *

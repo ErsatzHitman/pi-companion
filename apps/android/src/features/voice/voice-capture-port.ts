@@ -55,9 +55,14 @@ import type { PermissionPort } from "../composer/permission-recovery.js";
 
 /**
  * What one finished recording produced. A port MAY resolve either kind
- * — `voice-model.ts`'s controller only ever forwards a `"transcript"`
- * into the outbox (see that module's header for why a `"audio"`
- * outcome is deliberately *not* persisted anywhere this wave).
+ * — `voice-model.ts`'s controller turns either into composer DRAFT
+ * text and never sends: a `"transcript"` goes straight to
+ * `applyTranscriptToDraft`, and an `"audio"` outcome is transcribed
+ * through `VoiceTranscriptionClient` first (T277). CORRECTED at the
+ * P9-O merge gate: this said the controller "only ever forwards a
+ * `"transcript"` into the outbox" and that an `"audio"` outcome "is
+ * deliberately *not* persisted anywhere this wave" — T277 removed the
+ * outbox from this feature entirely and gave `"audio"` a real path.
  */
 export type VoiceCaptureOutcome =
   | { kind: "transcript"; text: string }

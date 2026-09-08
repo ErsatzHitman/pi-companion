@@ -17,7 +17,10 @@ tags:
 # TWO OF FOUR INPUT MODES STILL CANNOT BE EXERCISED HERE — T276 changed
 # WHY for voice, so the reasons below are restated rather than repeated.
 # T70 wired a real `VoiceCaptureController` into `Composer.tsx`'s mic
-# button (over the same outbox/sessionId/onSubmit a text send uses), and
+# button (CORRECTED at the P9-O merge gate: this said "over the same
+# outbox/sessionId/onSubmit a text send uses" — T277 removed the outbox
+# from voice entirely; a finished transcript is now a composer DRAFT),
+# and
 # T69 mounted the share receiver at `apps/android/src/app/share.tsx`
 # over `AppCore.shareIntentPort`. **T276 (plan.md §9.2) then made the
 # capture itself real**: `Composer.tsx` now defaults `voiceCapture` to
@@ -63,8 +66,14 @@ tags:
 #      delivered turn. Asserting "Sent" here would now be asserting a
 #      state this app cannot reach without a daemon. A paired run that
 #      reaches "Sent" is T59's (real device) to add.
-#      `handleAttachPress` remains a local no-op; `handleMicPress` is
-#      real end to end since T276 (see above). The mic and attach
+#      `handleAttachPress` remains a local no-op. `handleMicPress` is
+#      real as far as CAPTURE goes since T276, but NOT end to end:
+#      CORRECTED at the P9-O merge gate, which said "real end to end
+#      since T276". The only `<Composer>` mount in the app
+#      (`../src/app/h/[serverId]/session/[agentId]/index.tsx`) passes no
+#      `transcribeClient`, so a recording made on a real device today
+#      resolves `"transcription-unavailable"` and the audio is
+#      discarded. Wiring that prop is filed as T283. The mic and attach
 #      buttons are both live (real, tappable, real testIds), but they no
 #      longer share one outcome: attach still resolves the honest
 #      "unavailable" fallback, real, shipped behavior

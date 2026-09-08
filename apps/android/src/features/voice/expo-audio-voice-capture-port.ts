@@ -68,8 +68,15 @@
  *
  * `ANDROID_RECORDING_OPTIONS` below requests `sampleRate: 16000,
  * numberOfChannels: 1` explicitly (neither shipped `RecordingPresets`
- * is 16 kHz mono — both are 44100 Hz; `HIGH_QUALITY` is stereo,
- * `LOW_QUALITY` mono at 44100). **This task's brief requires reading
+ * is 16 kHz mono — both are 44100 Hz AND both are stereo,
+ * `numberOfChannels: 2`; they differ only in `bitRate` and in
+ * `LOW_QUALITY`'s AMR-NB/`.3gp` Android override. CORRECTED at the
+ * P9-O merge gate: this said "`HIGH_QUALITY` is stereo, `LOW_QUALITY`
+ * mono at 44100", which is false for `LOW_QUALITY` — read back from
+ * `node_modules/expo-audio/build/RecordingConstants.js`, where
+ * `LOW_QUALITY.numberOfChannels` is `2`. The conclusion the clause
+ * supports never depended on it — neither preset is 16 kHz — which is
+ * why a sentence half-wrong about the package survived.) **This task's brief requires reading
  * the produced recording's ACTUAL sample rate/channel count back and
  * stating the MEASURED values here, never the requested ones — that
  * could not be done in this environment.** There is no Android

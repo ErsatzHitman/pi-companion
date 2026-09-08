@@ -1,7 +1,7 @@
 /**
  * `features/voice` barrel (T36D, plan.md §9.2; mounted by T70).
  *
- * Voice entry through the core outbox: a permission-gated capture
+ * Voice entry as a composer draft: a permission-gated capture
  * lifecycle (`voice-model.ts`) over an injected `VoiceCapturePort`
  * (`voice-capture-port.ts`). No screen here — same "a model that takes
  * its dependencies as data" shape `../notifications/index.ts` (T36A)
@@ -10,10 +10,14 @@
  * `../composer/Composer.tsx` now imports `createVoiceCaptureController`/
  * `createExpoAudioVoiceCapturePort` (T276; was
  * `createUnavailableVoiceCapturePort` before that) directly and drives
- * them from the mic action, over the SAME `outbox`/`sessionId`/
- * `onSubmit` a text send already uses — see that file's `voiceCapture`
- * prop doc comment and `../composer/composer-voice-wiring.test.ts` for
- * the proof.**
+ * them from the mic action — see that file's `voiceCapture` prop doc
+ * comment and `../composer/composer-voice-wiring.test.ts`.
+ * CORRECTED at the P9-O merge gate: this said the mic action runs
+ * "over the SAME `outbox`/`sessionId`/`onSubmit` a text send already
+ * uses — see ... `composer-voice-wiring.test.ts` for the proof", which
+ * T277 falsified five lines below in this same file. The cited test
+ * now proves the opposite: its first case asserts
+ * `expect(call).not.toMatch(/outbox/)`.**
  *
  * `createExpoAudioVoiceCapturePort` (T276) is exported from its own
  * file, `expo-audio-voice-capture-port.ts`, not from `voice-capture-
