@@ -3638,6 +3638,46 @@ export class DaemonClient {
     this.sendSessionMessage({ type: "voice_audio_chunk", audio, format, isLast });
   }
 
+  /**
+   * T277 (plan.md §9.4 "Groq transcription and draft insertion"): transcribes one already-
+   * complete, already-recorded audio clip in a single request/response
+   * round trip — no session, no chunking. Distinct from
+   * `sendVoiceAudioChunk`/`startDictationStream` above, which are both
+   * streaming PCM pipelines; a captured clip (e.g. AAC/m4a from a mobile
+   * recorder) is a complete file, not a PCM stream.
+   *
+   * Enforces the same 25 MB ceiling the daemon's `OpenAISTT.transcribeClip`
+   * enforces, BEFORE sending a single byte — matching `uploadFile`'s own
+   * pre-flight size check above, so an oversize clip fails with a clear
+   * message instead of a failed upload discovered only after the round
+   * trip. `text`/`error` are a nullable pair (never a thrown rejection for
+   * a provider-side failure), the same `FileUploadResult` shape
+   * `uploadFile` returns — a caller decides what an unavailable
+   * transcription provider means for its own UI, exactly as an upload
+   * failure already works.
+   */
+  async transcribeVoiceClip(input: {
+    audioBase64: string;
+    format: string;
+    language?: string;
+  }): Promise<{ text: string | null; error: string | null }> {
+    const MAX_CLIP_BYTES = 25 * 1024 * 1024;
+    const approxBytes = Math.floor((input.audioBase64.length * 3) / 4);
+    if (approxBytes > MAX_CLIP_BYTES) {
+      throw new Error("Recording is too long to transcribe — over the 25 MB limit.");
+    }
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "transcribe_voice_clip.request",
+        audioBase64: input.audioBase64,
+        format: input.format,
+        ...(input.language ? { language: input.language } : {}),
+      },
+      responseType: "transcribe_voice_clip.response",
+    });
+    return { text: payload.text, error: payload.error };
+  }
+
   async startDictationStream(dictationId: string, format: string): Promise<void> {
     const ack = this.waitForWithCancel(
       (msg) => {

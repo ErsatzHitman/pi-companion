@@ -1,12 +1,13 @@
-import { composer as coreComposer } from "@picompanion/frontend-core";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  createInMemoryStructuredStorage,
-  createSystemClock,
-} from "../composer/in-memory-outbox-runtime";
 import { describePermissionRecovery, type PermissionState } from "../composer/permission-recovery";
-import { createVoiceCaptureController, IDLE_VOICE_STATE } from "./voice-model";
+import {
+  applyTranscriptToDraft,
+  cleanTranscript,
+  createVoiceCaptureController,
+  IDLE_VOICE_STATE,
+  type VoiceTranscriptionClient,
+} from "./voice-model";
 import type { VoiceCaptureOutcome, VoiceCapturePort } from "./voice-capture-port";
 
 /**
@@ -62,121 +63,118 @@ function createFakePort(options?: {
   };
 }
 
-function makeOutbox() {
-  const storage = createInMemoryStructuredStorage();
-  const clock = createSystemClock();
-  return new coreComposer.OutboxController(storage, clock);
-}
-
 function makeController(opts?: {
   port?: ReturnType<typeof createFakePort>;
-  submitPrompt?: (text: string) => Promise<void>;
-  outbox?: coreComposer.OutboxController;
-  sessionId?: string;
+  transcribe?: VoiceTranscriptionClient;
+  language?: string;
 }) {
   const port = opts?.port ?? createFakePort();
-  const outbox = opts?.outbox ?? makeOutbox();
-  const submitPrompt = opts?.submitPrompt ?? vi.fn(async () => undefined);
   const controller = createVoiceCaptureController({
     port,
-    outbox,
-    sessionId: opts?.sessionId ?? "agent-1",
-    submitPrompt,
+    ...(opts?.transcribe ? { transcribe: opts.transcribe } : {}),
+    ...(opts?.language ? { language: opts.language } : {}),
   });
-  return { controller, port, outbox, submitPrompt };
+  return { controller, port };
 }
 
-describe("voice entry produces a prompt through the outbox", () => {
-  it("enqueues kind:'prompt' with the transcribed text, then marks it sending -> sent around submitPrompt", async () => {
-    const submitPrompt = vi.fn(async () => undefined);
-    const { controller, outbox } = makeController({ submitPrompt });
+describe("cleanTranscript (T277 — deterministic cleanup)", () => {
+  it("trims and collapses doubled/irregular whitespace", () => {
+    expect(cleanTranscript("  add   a   comment  \n\n to the login handler  ")).toBe(
+      "add a comment to the login handler",
+    );
+  });
+
+  it("drops a single leading filler token", () => {
+    expect(cleanTranscript("um, add a comment to the login handler")).toBe(
+      "add a comment to the login handler",
+    );
+    expect(cleanTranscript("uh add tests")).toBe("add tests");
+  });
+
+  it("never drops a filler word that appears mid-sentence, only a leading one", () => {
+    expect(cleanTranscript("please um add a comment")).toBe("please um add a comment");
+  });
+
+  it("a transcript that is ONLY a filler word collapses to empty", () => {
+    expect(cleanTranscript("um")).toBe("");
+    expect(cleanTranscript("  um  ")).toBe("");
+  });
+
+  it("whitespace-only input collapses to empty", () => {
+    expect(cleanTranscript("   \n\t  ")).toBe("");
+  });
+
+  it("leaves ordinary text with no leading filler untouched (besides whitespace collapse)", () => {
+    expect(cleanTranscript("commit the fix")).toBe("commit the fix");
+  });
+});
+
+describe("applyTranscriptToDraft (T277 — the append decision)", () => {
+  it("an empty current draft becomes exactly the transcript", () => {
+    expect(applyTranscriptToDraft("", "add a comment")).toBe("add a comment");
+  });
+
+  it("appends with a separating space when the draft does not already end in whitespace", () => {
+    expect(applyTranscriptToDraft("fix the bug", "and add a test")).toBe(
+      "fix the bug and add a test",
+    );
+  });
+
+  it("does not double a space when the draft already ends in whitespace", () => {
+    expect(applyTranscriptToDraft("fix the bug ", "and add a test")).toBe(
+      "fix the bug and add a test",
+    );
+  });
+
+  it("an empty transcript never touches the existing draft — the decision most likely to be made by accident", () => {
+    expect(applyTranscriptToDraft("do not lose this", "")).toBe("do not lose this");
+  });
+});
+
+describe("voice entry lands as an editable draft, never a send (T277)", () => {
+  it("requestStop resolves 'drafted' with the cleaned transcript — no outbox, no submit", async () => {
+    const { controller } = makeController();
 
     expect(await controller.requestStart()).toEqual({ outcome: "started" });
     const stop = await controller.requestStop();
 
-    expect(stop.outcome).toBe("queued");
-    if (stop.outcome !== "queued") throw new Error("unreachable");
-    expect(stop.text).toBe("add a comment to the login handler");
-    expect(submitPrompt).toHaveBeenCalledWith("add a comment to the login handler");
-
-    // The real OutboxController: `markSent` deletes the entry once
-    // acknowledged (its own documented terminal behaviour), so a
-    // "sent" entry is gone from `loadAll` by design — proving the
-    // sent-and-cleared lifecycle actually ran, not a mock recording a
-    // call that did nothing.
-    const remaining = await outbox.loadAll("agent-1");
-    expect(remaining).toHaveLength(0);
-  });
-
-  it("enqueues before calling submitPrompt — the entry exists durably even if the send is still in flight", async () => {
-    const outbox = makeOutbox();
-    let sawEntryDuringSend = false;
-    const submitPrompt = vi.fn(async () => {
-      const entries = await outbox.loadAll("agent-1");
-      sawEntryDuringSend = entries.length === 1 && entries[0].status === "sending";
+    expect(stop).toEqual({
+      outcome: "drafted",
+      text: "add a comment to the login handler",
+      looksSecretShaped: false,
     });
-    const { controller } = makeController({ outbox, submitPrompt });
-
-    await controller.requestStart();
-    await controller.requestStop();
-
-    expect(sawEntryDuringSend).toBe(true);
   });
 
-  it("scopes the entry to the given sessionId, not a shared/global key", async () => {
-    const { controller, outbox } = makeController({ sessionId: "agent-42" });
-    await controller.requestStart();
-    const stop = await controller.requestStop();
-    expect(stop.outcome).toBe("queued");
-
-    // Already deleted (sent) under the right session; a *different*
-    // session's queue was never touched.
-    const otherSession = await outbox.loadAll("some-other-agent");
-    expect(otherSession).toHaveLength(0);
-  });
-
-  it("a failed submitPrompt (e.g. connection dropped while sending) moves the entry to awaiting-confirmation, not deleted", async () => {
-    const outbox = makeOutbox();
-    const submitPrompt = vi.fn(async () => {
-      throw new Error("connection reset");
+  it("cleanup runs on the transcript before it is offered as a draft", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "transcript", text: "  um,  add   tests  " },
     });
-    const { controller } = makeController({ outbox, submitPrompt });
+    const { controller } = makeController({ port });
 
     await controller.requestStart();
     const stop = await controller.requestStop();
 
-    expect(stop.outcome).toBe("send-failed");
-    if (stop.outcome !== "send-failed") throw new Error("unreachable");
-    expect(stop.text).toBe("add a comment to the login handler");
-
-    const entries = await outbox.loadAll("agent-1");
-    expect(entries).toHaveLength(1);
-    expect(entries[0].status).toBe("awaiting-confirmation");
-    expect(entries[0].payload).toMatchObject({ source: "voice", text: stop.text });
+    expect(stop).toEqual({ outcome: "drafted", text: "add tests", looksSecretShaped: false });
   });
 
-  it("an empty (silent) transcript is a no-op — never enqueued", async () => {
+  it("an empty (silent) transcript is a no-op — never offered as a draft", async () => {
     const port = createFakePort({ stopResult: { kind: "transcript", text: "   " } });
-    const { controller, outbox } = makeController({ port });
+    const { controller } = makeController({ port });
 
     await controller.requestStart();
     const stop = await controller.requestStop();
 
     expect(stop).toEqual({ outcome: "empty-transcript" });
-    expect(await outbox.loadAll("agent-1")).toHaveLength(0);
   });
 
-  it("a raw-audio port outcome is never persisted (no live daemon socket, and raw audio must never sit in plain storage)", async () => {
-    const port = createFakePort({
-      stopResult: { kind: "audio", audioBase64: "AAAA", format: "audio/pcm;rate=16000" },
-    });
-    const { controller, outbox } = makeController({ port });
+  it("a transcript that is only a filler word also resolves empty-transcript", async () => {
+    const port = createFakePort({ stopResult: { kind: "transcript", text: "um" } });
+    const { controller } = makeController({ port });
 
     await controller.requestStart();
     const stop = await controller.requestStop();
 
-    expect(stop).toEqual({ outcome: "raw-audio-unsupported" });
-    expect(await outbox.loadAll("agent-1")).toHaveLength(0);
+    expect(stop).toEqual({ outcome: "empty-transcript" });
   });
 
   it("annotates (never blocks) a secret-shaped transcript, matching share-intent-model's looksSecretShaped precedent", async () => {
@@ -188,10 +186,10 @@ describe("voice entry produces a prompt through the outbox", () => {
     await controller.requestStart();
     const stop = await controller.requestStop();
 
-    expect(stop.outcome).toBe("queued");
-    if (stop.outcome !== "queued") throw new Error("unreachable");
+    expect(stop.outcome).toBe("drafted");
+    if (stop.outcome !== "drafted") throw new Error("unreachable");
     expect(stop.looksSecretShaped).toBe(true);
-    // Never blocked: the user's own voice content is still sent.
+    // Never blocked: the user's own voice content is still offered as a draft.
   });
 
   it("logs nothing, even for a secret-shaped transcript", async () => {
@@ -216,16 +214,114 @@ describe("voice entry produces a prompt through the outbox", () => {
   });
 });
 
+describe("a raw-audio port outcome (T277: transcribed, not discarded, when a client is wired)", () => {
+  it("with no transcribe client injected (today's default mount): resolves 'transcription-unavailable', never a fake transcript", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "audio", audioBase64: "AAAA", format: "audio/m4a" },
+    });
+    const { controller } = makeController({ port });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({ outcome: "transcription-unavailable" });
+  });
+
+  it("with a transcribe client injected: sends the captured clip's exact bytes/format and drafts the returned text", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "audio", audioBase64: "ZmFrZS1jbGlw", format: "audio/m4a" },
+    });
+    const transcribeVoiceClip = vi.fn(async () => ({ text: "commit the fix", error: null }));
+    const { controller } = makeController({
+      port,
+      transcribe: { transcribeVoiceClip },
+      language: "en",
+    });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(transcribeVoiceClip).toHaveBeenCalledWith({
+      audioBase64: "ZmFrZS1jbGlw",
+      format: "audio/m4a",
+      language: "en",
+    });
+    expect(stop).toEqual({ outcome: "drafted", text: "commit the fix", looksSecretShaped: false });
+  });
+
+  it("omits language entirely when none was configured", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "audio", audioBase64: "AAAA", format: "audio/m4a" },
+    });
+    const transcribeVoiceClip = vi.fn(async () => ({ text: "ok", error: null }));
+    const { controller } = makeController({ port, transcribe: { transcribeVoiceClip } });
+
+    await controller.requestStart();
+    await controller.requestStop();
+
+    expect(transcribeVoiceClip).toHaveBeenCalledWith({ audioBase64: "AAAA", format: "audio/m4a" });
+  });
+
+  it("a provider-reported error resolves 'transcription-failed' with its message", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "audio", audioBase64: "AAAA", format: "audio/m4a" },
+    });
+    const transcribeVoiceClip = vi.fn(async () => ({
+      text: null,
+      error: "Dictation STT not configured",
+    }));
+    const { controller } = makeController({ port, transcribe: { transcribeVoiceClip } });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({
+      outcome: "transcription-failed",
+      message: "Dictation STT not configured",
+    });
+  });
+
+  it("a rejected transcribeVoiceClip call (e.g. the daemon call itself throws) resolves 'transcription-failed', never an uncaught rejection", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "audio", audioBase64: "AAAA", format: "audio/m4a" },
+    });
+    const transcribeVoiceClip = vi.fn(async () => {
+      throw new Error("Recording is too long to transcribe — over the 25 MB limit.");
+    });
+    const { controller } = makeController({ port, transcribe: { transcribeVoiceClip } });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({
+      outcome: "transcription-failed",
+      message: "Recording is too long to transcribe — over the 25 MB limit.",
+    });
+  });
+
+  it("a hallucination-guarded empty result (server already cleared it) resolves empty-transcript, not a draft of nothing", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "audio", audioBase64: "AAAA", format: "audio/m4a" },
+    });
+    const transcribeVoiceClip = vi.fn(async () => ({ text: "", error: null }));
+    const { controller } = makeController({ port, transcribe: { transcribeVoiceClip } });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({ outcome: "empty-transcript" });
+  });
+});
+
 describe("a denied microphone permission explains recovery via T33B7's own affordance", () => {
   it("requestStart short-circuits to permission-denied without ever starting the port", async () => {
     const port = createFakePort({ permission: "denied" });
-    const { controller, outbox } = makeController({ port });
+    const { controller } = makeController({ port });
 
     const start = await controller.requestStart();
     expect(start).toEqual({ outcome: "permission-denied", state: "denied" });
     expect(port.calls.start).toBe(0);
     expect(controller.getState()).toEqual(IDLE_VOICE_STATE);
-    expect(await outbox.loadAll("agent-1")).toHaveLength(0);
   });
 
   it("the returned PermissionState round-trips into composer's describePermissionRecovery('microphone', state) unchanged — the exact affordance T33B7 built, not a second one", async () => {
@@ -274,9 +370,9 @@ describe("recording-in-progress scenarios", () => {
     expect(controller.getState().status).toBe("recording");
   });
 
-  it("the user cancelling discards the capture — port.cancel() runs and nothing is ever enqueued", async () => {
+  it("the user cancelling discards the capture — port.cancel() runs and no draft is ever produced", async () => {
     const port = createFakePort();
-    const { controller, outbox } = makeController({ port });
+    const { controller } = makeController({ port });
 
     await controller.requestStart();
     const cancelled = await controller.requestCancel();
@@ -285,7 +381,6 @@ describe("recording-in-progress scenarios", () => {
     expect(port.calls.cancel).toBe(1);
     expect(port.calls.stop).toBe(0);
     expect(controller.getState()).toEqual(IDLE_VOICE_STATE);
-    expect(await outbox.loadAll("agent-1")).toHaveLength(0);
 
     // A cancelled recording is not merely "unsent" — a subsequent stop
     // has nothing left to stop.
@@ -303,7 +398,7 @@ describe("recording-in-progress scenarios", () => {
 
   it("the app backgrounding mid-recording cancels and discards, same as an explicit user cancel", async () => {
     const port = createFakePort();
-    const { controller, outbox } = makeController({ port });
+    const { controller } = makeController({ port });
 
     await controller.requestStart();
     const result = await controller.handleAppBackgrounded();
@@ -311,7 +406,6 @@ describe("recording-in-progress scenarios", () => {
     expect(result).toEqual({ outcome: "cancelled", reason: "backgrounded" });
     expect(port.calls.cancel).toBe(1);
     expect(controller.getState()).toEqual(IDLE_VOICE_STATE);
-    expect(await outbox.loadAll("agent-1")).toHaveLength(0);
   });
 
   it("backgrounding while idle is a no-op, not a spurious cancel", async () => {
@@ -334,8 +428,8 @@ describe("recording-in-progress scenarios", () => {
     expect(port.calls.cancel).toBe(0);
     expect(port.calls.stop).toBe(0);
 
-    // The transcript can still be produced and durably queued afterward.
+    // The transcript can still be produced and drafted afterward.
     const stop = await controller.requestStop();
-    expect(stop.outcome).toBe("queued");
+    expect(stop.outcome).toBe("drafted");
   });
 });

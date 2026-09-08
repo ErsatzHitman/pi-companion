@@ -56,6 +56,24 @@ export interface SpeechToTextProvider {
     language?: string;
     prompt?: string;
   }): StreamingTranscriptionSession;
+  /**
+   * T277 (plan.md §9.4 "Groq transcription and draft insertion"): a one-shot transcription of an
+   * already-complete audio clip (no session, no PCM conversion) — the
+   * primitive a captured-but-not-streamed recording needs. Optional and
+   * disclosed, not implemented by every provider: `OpenAISTT`
+   * (`providers/openai/stt.ts`) implements it, since the OpenAI-compatible
+   * REST endpoint it already wraps accepts a complete file directly; the
+   * local sherpa-onnx provider does not, because its whole design is
+   * incremental PCM streaming into an on-device recognizer with no
+   * "hand me one complete compressed file" entry point. A caller that needs
+   * this and gets a provider without it must say so, not synthesize a fake
+   * transcription.
+   */
+  transcribeClip?(
+    audioBuffer: Buffer,
+    format: string,
+    options?: { language?: string },
+  ): Promise<TranscriptionResult>;
 }
 
 export interface SpeechStreamResult {

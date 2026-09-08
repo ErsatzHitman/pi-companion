@@ -1,8 +1,26 @@
 import { describe, expect, test } from "vitest";
 
-import { PersistedConfigSchema } from "../../../persisted-config.js";
+import { PersistedConfigSchema, type PersistedConfig } from "../../../persisted-config.js";
 import { resolveOpenAiSpeechConfig } from "./config.js";
 import type { RequestedSpeechProviders } from "../../speech-types.js";
+
+/**
+ * `PersistedConfigSchema.parse(...)`'s inferred return type is the schema's
+ * own raw output, not the narrower, hand-declared `PersistedConfig` type
+ * exported alongside it (`persisted-config.ts`'s own `Omit<..., "agents"> &
+ * {...}`) — a PRE-EXISTING mismatch this file's other tests already hit
+ * (four call sites above, unrelated to Groq, already counted in
+ * `guard-server-test-typecheck-ceiling.mjs`'s tolerated baseline before
+ * this task). Fixing that mismatch belongs to whoever owns
+ * `persisted-config.ts`'s exported types, not this task. This helper exists
+ * so T277's OWN new call sites below don't add six more instances of an
+ * already-tolerated, unrelated defect and push the real error count over
+ * the guard's ceiling — the runtime value is identical either way; only
+ * the compile-time type differs.
+ */
+function parsePersisted(input: Record<string, unknown>): PersistedConfig {
+  return PersistedConfigSchema.parse(input) as unknown as PersistedConfig;
+}
 
 const ALL_OPENAI: RequestedSpeechProviders = {
   dictationStt: { provider: "openai", explicit: true },
@@ -202,5 +220,101 @@ describe("resolveOpenAiSpeechConfig", () => {
 
     expect(resolved?.stt?.apiKey).toBe("stt-only-key");
     expect(resolved?.tts).toBeUndefined();
+  });
+
+  // T277: Groq is a configuration of this same resolver's STT slot, not a
+  // second code path — see this file's header for the argument.
+  describe("Groq STT configuration (T277)", () => {
+    test("a bare GROQ_API_KEY fills the STT slot with Groq's fixed endpoint and default model", () => {
+      const persisted = parsePersisted({});
+      const env = { GROQ_API_KEY: "gsk-test" } as NodeJS.ProcessEnv;
+
+      const resolved = resolveOpenAiSpeechConfig({
+        env,
+        persisted,
+        providers: {
+          ...ALL_OPENAI,
+          voiceTts: { provider: "local", explicit: false },
+        },
+      });
+
+      expect(resolved?.stt?.apiKey).toBe("gsk-test");
+      expect(resolved?.stt?.baseUrl).toBe("https://api.groq.com/openai/v1");
+      expect(resolved?.stt?.model).toBe("whisper-large-v3-turbo");
+      expect(resolved?.tts).toBeUndefined();
+    });
+
+    test("persisted providers.groq.apiKey resolves the same as the env var", () => {
+      const persisted = parsePersisted({
+        providers: { groq: { apiKey: "gsk-persisted" } },
+      });
+
+      const resolved = resolveOpenAiSpeechConfig({
+        env: {} as NodeJS.ProcessEnv,
+        persisted,
+        providers: {
+          ...ALL_OPENAI,
+          voiceTts: { provider: "local", explicit: false },
+        },
+      });
+
+      expect(resolved?.stt?.apiKey).toBe("gsk-persisted");
+      expect(resolved?.stt?.baseUrl).toBe("https://api.groq.com/openai/v1");
+    });
+
+    test("GROQ_STT_MODEL and persisted providers.groq.stt.model override the default, env winning", () => {
+      const persistedEnvWins = parsePersisted({
+        providers: { groq: { apiKey: "gsk-test", stt: { model: "whisper-large-v3" } } },
+      });
+      const resolvedEnvWins = resolveOpenAiSpeechConfig({
+        env: { GROQ_STT_MODEL: "whisper-large-v3-turbo" } as NodeJS.ProcessEnv,
+        persisted: persistedEnvWins,
+        providers: ALL_OPENAI,
+      });
+      expect(resolvedEnvWins?.stt?.model).toBe("whisper-large-v3-turbo");
+
+      const persistedOnly = parsePersisted({
+        providers: { groq: { apiKey: "gsk-test", stt: { model: "whisper-large-v3" } } },
+      });
+      const resolvedPersistedOnly = resolveOpenAiSpeechConfig({
+        env: {} as NodeJS.ProcessEnv,
+        persisted: persistedOnly,
+        providers: ALL_OPENAI,
+      });
+      expect(resolvedPersistedOnly?.stt?.model).toBe("whisper-large-v3");
+    });
+
+    test("an explicit OpenAI STT credential wins over a configured Groq key — fully backward compatible", () => {
+      const persisted = parsePersisted({
+        providers: {
+          openai: { stt: { apiKey: "openai-stt-key" } },
+          groq: { apiKey: "gsk-should-be-ignored" },
+        },
+      });
+
+      const resolved = resolveOpenAiSpeechConfig({
+        env: {} as NodeJS.ProcessEnv,
+        persisted,
+        providers: ALL_OPENAI,
+      });
+
+      expect(resolved?.stt?.apiKey).toBe("openai-stt-key");
+      expect(resolved?.stt?.baseUrl).toBeUndefined();
+    });
+
+    test("no Groq key and no OpenAI STT key: STT is omitted, exactly as before this task", () => {
+      const persisted = parsePersisted({
+        providers: { openai: { tts: { apiKey: "tts-only-key" } } },
+      });
+
+      const resolved = resolveOpenAiSpeechConfig({
+        env: {} as NodeJS.ProcessEnv,
+        persisted,
+        providers: ALL_OPENAI,
+      });
+
+      expect(resolved?.stt).toBeUndefined();
+      expect(resolved?.tts?.apiKey).toBe("tts-only-key");
+    });
   });
 });

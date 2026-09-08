@@ -2122,6 +2122,8 @@ export class Session {
       case "dictation_stream_cancel":
         this.voiceSession.handleDictationCancel(msg.dictationId);
         return undefined;
+      case "transcribe_voice_clip.request":
+        return this.voiceSession.handleTranscribeClip(msg);
       case "restart_server_request":
         return this.handleRestartServerRequest(msg.requestId, msg.reason);
       case "shutdown_server_request":

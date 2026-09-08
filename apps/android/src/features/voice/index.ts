@@ -23,19 +23,34 @@
  * `VoiceCaptureIndicator` (T276, `voice-capture-indicator.tsx`) is the
  * mic control's waveform/processing glyph, mounted by `Composer.tsx`
  * while `VoiceState.status` is `"recording"`/`"processing"`.
+ *
+ * **T277: a finished transcript is a DRAFT, not a send.** `voice-model.ts`
+ * no longer touches an outbox — `VoiceOutboxLike`/`VoicePromptPayload` are
+ * gone, and `VoiceStopOutcome`'s `"queued"`/`"send-failed"` cases are now
+ * `"drafted"` (the text to insert into the composer draft) and
+ * `"transcription-failed"`. `raw-audio-unsupported` is gone too:
+ * `{ kind: "audio" }` now genuinely transcribes through
+ * `VoiceTranscriptionClient`/`Composer.tsx`'s `transcribeClient` prop when
+ * one is wired, and resolves the honest `"transcription-unavailable"` when
+ * it is not (see `voice-model.ts`'s own header for why nothing wires that
+ * prop in this task).
  */
-export { createVoiceCaptureController, IDLE_VOICE_STATE } from "./voice-model";
+export {
+  applyTranscriptToDraft,
+  cleanTranscript,
+  createVoiceCaptureController,
+  IDLE_VOICE_STATE,
+} from "./voice-model";
 export type {
   VoiceCancelOutcome,
   VoiceCancelReason,
   VoiceCaptureController,
   VoiceCaptureControllerDeps,
-  VoiceOutboxLike,
-  VoicePromptPayload,
   VoiceRecordingStatus,
   VoiceStartOutcome,
   VoiceState,
   VoiceStopOutcome,
+  VoiceTranscriptionClient,
 } from "./voice-model";
 
 export { createUnavailableVoiceCapturePort } from "./voice-capture-port";

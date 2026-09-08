@@ -22,8 +22,78 @@ export interface STTConfig {
   confidenceThreshold?: number; // Default: -3.0
 }
 
+/**
+ * T277 (plan.md §9.4 "Groq transcription and draft insertion"): the free-tier ceiling Groq
+ * documents for `/audio/transcriptions` (~13 minutes of 16 kHz mono 16-bit
+ * WAV) — re-verified against Groq's own docs, not copied from a research
+ * note — and, separately, OpenAI's own Whisper endpoint enforces the
+ * identical 25 MB limit. One constant covers both, since `transcribeClip`
+ * below is the same code path for either vendor (see this file's sibling
+ * `config.ts` for why). Checked BEFORE the upload, so an oversize clip
+ * fails with a clear message instead of a 413 from the far end.
+ */
+export const MAX_TRANSCRIPTION_CLIP_BYTES = 25 * 1024 * 1024;
+
+/**
+ * A known Whisper failure mode: a clip that is silence or non-speech noise
+ * can still come back with confident-looking invented text ("hallucination").
+ * Groq's (and OpenAI's) `verbose_json` response exposes `no_speech_prob` per
+ * segment for exactly this; `0.6` is the commonly-used threshold in Whisper
+ * tooling for "probably no speech here" (docs/openai/whisper's own
+ * `VoiceActivityDetector` in openai's `whisper.cpp`-adjacent tooling uses
+ * the same figure) — a real decision, not an arbitrary one, but not proven
+ * against a labelled dataset in this repository. `transcribeClip` below
+ * clears the guessed text to `""` rather than passing along a hallucinated
+ * sentence, so it lands on `voice-model.ts`'s existing `"empty-transcript"`
+ * path rather than putting invented words in the composer draft.
+ */
+const HALLUCINATION_NO_SPEECH_PROB_THRESHOLD = 0.6;
+
 function isObject(value: unknown): value is { [key: string]: unknown } {
   return typeof value === "object" && value !== null;
+}
+
+interface ClipTranscriptionSegment {
+  start: number;
+  end: number;
+  no_speech_prob?: number;
+  avg_logprob?: number;
+}
+
+function isClipTranscriptionSegment(value: unknown): value is ClipTranscriptionSegment {
+  if (!isObject(value)) {
+    return false;
+  }
+  return typeof value.start === "number" && typeof value.end === "number";
+}
+
+function isClipTranscriptionSegmentArray(value: unknown): value is ClipTranscriptionSegment[] {
+  return Array.isArray(value) && value.every((entry) => isClipTranscriptionSegment(entry));
+}
+
+/**
+ * Duration-weighted average `no_speech_prob` across every segment — a
+ * single short segment of confident noise shouldn't out-vote a long span of
+ * genuine silence, or vice versa. Returns `null` when there is nothing to
+ * weight (no segments, or every segment reports zero duration), in which
+ * case the caller does not apply the hallucination guard at all: an
+ * `undefined` verdict is not evidence of silence.
+ */
+function weightedAverageNoSpeechProb(segments: ClipTranscriptionSegment[]): number | null {
+  let totalDuration = 0;
+  let weightedSum = 0;
+  for (const segment of segments) {
+    const duration = Math.max(0, segment.end - segment.start);
+    if (duration === 0 || segment.no_speech_prob === undefined) {
+      continue;
+    }
+    totalDuration += duration;
+    weightedSum += duration * segment.no_speech_prob;
+  }
+  if (totalDuration === 0) {
+    return null;
+  }
+  return weightedSum / totalDuration;
 }
 
 function isLogprobToken(value: unknown): value is LogprobToken {
@@ -188,6 +258,10 @@ export class OpenAISTT implements SpeechToTextProvider {
     logger: pino.Logger,
     prompt?: string,
   ): Promise<TranscriptionResult> {
+    if (audioBuffer.length > MAX_TRANSCRIPTION_CLIP_BYTES) {
+      throw new Error(describeOversizeClip(audioBuffer.length));
+    }
+
     const startTime = Date.now();
     let tempFilePath: string | null = null;
 
@@ -267,4 +341,83 @@ export class OpenAISTT implements SpeechToTextProvider {
       }
     }
   }
+
+  /**
+   * T277 (plan.md §9.4 "Groq transcription and draft insertion"): a ONE-SHOT transcription of an
+   * already-complete audio clip — no streaming session, no PCM conversion.
+   * `format` is passed straight through to `inferAudioExtension` (already
+   * format-agnostic: wav, m4a/aac, mp3, webm, ogg, flac, mp4 all resolve to
+   * a real extension), and the raw bytes go to the OpenAI-compatible
+   * endpoint exactly as captured — this is what makes Groq reachable via
+   * this SAME class: neither this method nor `OpenAISTT` cares whether the
+   * container is a browser's raw PCM/WAV or a mobile client's AAC/m4a clip.
+   * `createSession`/`transcribeAudioInternal` above are unchanged and still
+   * serve the streaming dictation/voice-mode paths, which are themselves
+   * PCM-only further up their own call chain — this method exists
+   * specifically because that PCM-only assumption does not hold for a
+   * complete, already-encoded clip like the one `expo-audio-voice-capture-
+   * port.ts` produces.
+   */
+  public async transcribeClip(
+    audioBuffer: Buffer,
+    format: string,
+    options?: { language?: string },
+  ): Promise<TranscriptionResult> {
+    if (audioBuffer.length > MAX_TRANSCRIPTION_CLIP_BYTES) {
+      throw new Error(describeOversizeClip(audioBuffer.length));
+    }
+
+    let tempFilePath: string | null = null;
+    try {
+      const ext = inferAudioExtension(format);
+      tempFilePath = join(tmpdir(), `voice-clip-${v4()}.${ext}`);
+      await writeFile(tempFilePath, audioBuffer);
+
+      const modelToUse = this.config.model ?? "whisper-1";
+      const response = await this.openaiClient.audio.transcriptions.create({
+        file: await import("fs").then((fs) => fs.createReadStream(tempFilePath!)),
+        model: modelToUse,
+        ...(options?.language ? { language: options.language } : {}),
+        // `verbose_json` (not `"json"`, unlike `transcribeAudioInternal`
+        // above): only this response shape carries per-segment
+        // `no_speech_prob`, which the hallucination guard below needs.
+        response_format: "verbose_json",
+      });
+
+      const rawText = isObject(response) && typeof response.text === "string" ? response.text : "";
+      const segments =
+        isObject(response) && isClipTranscriptionSegmentArray(response.segments)
+          ? response.segments
+          : [];
+      const noSpeechProb = weightedAverageNoSpeechProb(segments);
+      const isLikelyHallucination =
+        noSpeechProb !== null && noSpeechProb >= HALLUCINATION_NO_SPEECH_PROB_THRESHOLD;
+
+      return {
+        text: isLikelyHallucination ? "" : rawText,
+        language:
+          isObject(response) && typeof response.language === "string"
+            ? response.language
+            : undefined,
+        ...(noSpeechProb !== null ? { isLowConfidence: isLikelyHallucination } : {}),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Transcription failed: ${message}`, { cause: error });
+    } finally {
+      if (tempFilePath) {
+        try {
+          await unlink(tempFilePath);
+        } catch {
+          // Best-effort cleanup only — matches transcribeAudioInternal above.
+        }
+      }
+    }
+  }
+}
+
+function describeOversizeClip(bytes: number): string {
+  const mb = (bytes / (1024 * 1024)).toFixed(1);
+  const limitMb = (MAX_TRANSCRIPTION_CLIP_BYTES / (1024 * 1024)).toFixed(0);
+  return `Recording is ${mb} MB, over the ${limitMb} MB transcription limit. Trim it and try again.`;
 }

@@ -175,6 +175,16 @@ export class VoiceSession {
   private speechInProgress = false;
 
   private readonly dictationStreamManager: DictationStreamManager;
+  /**
+   * T277: the SAME dictation STT resolvable `dictationStreamManager` above
+   * is built with — stored here as well because `handleTranscribeClip`
+   * needs to reach the resolved `SpeechToTextProvider` directly (for its
+   * one-shot `transcribeClip`), not through `DictationStreamManager`'s own
+   * streaming-session API, which is PCM-only further down its call chain
+   * and cannot accept an already-encoded complete clip.
+   */
+  private readonly resolveDictationStt: () => SpeechToTextProvider | null;
+  private readonly dictationSttLanguage: string;
   private readonly resolveVoiceTurnDetection: () => TurnDetectionProvider | null;
   private voiceTurnController: VoiceTurnController | null = null;
   private voiceInputChunkCount = 0;
@@ -235,6 +245,8 @@ export class VoiceSession {
       language: dictation?.sttLanguage,
       finalTimeoutMs: dictation?.finalTimeoutMs,
     });
+    this.resolveDictationStt = toResolver(dictation?.stt ?? null);
+    this.dictationSttLanguage = dictation?.sttLanguage ?? this.sttLanguage;
   }
 
   isActiveForAgent(agentId: string): boolean {
@@ -276,6 +288,66 @@ export class VoiceSession {
       return;
     }
     await this.dictationStreamManager.handleStart(msg.dictationId, msg.format);
+  }
+
+  /**
+   * T277 (plan.md §9.4 "Groq transcription and draft insertion"): one-shot transcription of an
+   * already-complete, already-recorded clip. Gated on the SAME "dictation"
+   * feature readiness `handleDictationStreamStart` above checks — this is
+   * conceptually a dictation (speech becomes editable text a human reviews
+   * before it goes anywhere), not the full-duplex "voice mode" agent
+   * conversation, so it is gated and resolved the same way, over the same
+   * provider slot, rather than inventing a third readiness check.
+   */
+  async handleTranscribeClip(
+    msg: Extract<SessionInboundMessage, { type: "transcribe_voice_clip.request" }>,
+  ): Promise<void> {
+    const unavailable = this.resolveVoiceFeatureUnavailableContext("dictation");
+    if (unavailable) {
+      this.emit({
+        type: "transcribe_voice_clip.response",
+        payload: { requestId: msg.requestId, text: null, error: unavailable.message },
+      });
+      return;
+    }
+
+    const provider = this.resolveDictationStt();
+    if (!provider) {
+      this.emit({
+        type: "transcribe_voice_clip.response",
+        payload: { requestId: msg.requestId, text: null, error: "Dictation STT not configured" },
+      });
+      return;
+    }
+    if (!provider.transcribeClip) {
+      this.emit({
+        type: "transcribe_voice_clip.response",
+        payload: {
+          requestId: msg.requestId,
+          text: null,
+          error: `The configured speech provider ("${provider.id}") does not support transcribing a complete recorded clip.`,
+        },
+      });
+      return;
+    }
+
+    try {
+      const audioBuffer = Buffer.from(msg.audioBase64, "base64");
+      const result = await provider.transcribeClip(audioBuffer, msg.format, {
+        language: msg.language ?? this.dictationSttLanguage,
+      });
+      this.emit({
+        type: "transcribe_voice_clip.response",
+        payload: { requestId: msg.requestId, text: result.text, error: null },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.sessionLogger.warn({ err: error }, "transcribe_voice_clip.request failed");
+      this.emit({
+        type: "transcribe_voice_clip.response",
+        payload: { requestId: msg.requestId, text: null, error: message },
+      });
+    }
   }
 
   private toVoiceFeatureUnavailableContext(

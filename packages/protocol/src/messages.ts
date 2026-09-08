@@ -2568,6 +2568,23 @@ export const FileUploadCancelRequestSchema = z.object({
   requestId: z.string(),
 });
 
+// T277 (plan.md §9.4 "Groq transcription and draft insertion"): a ONE-SHOT request/response
+// pair — not a streaming session like `dictation_stream_*`/`voice_audio_
+// chunk` above, which are both PCM16-only further down their own call
+// chain (`STTManager`'s `preparePcmForModel`, `DictationStreamManager`'s
+// resampler). A captured, already-encoded clip (e.g. the AAC/m4a
+// `expo-audio-voice-capture-port.ts` produces) is a complete file, not a
+// PCM stream, so it gets its own minimal request/response mirroring
+// `file.upload.request`/`.response`'s shape rather than being forced
+// through either PCM pipeline.
+export const TranscribeVoiceClipRequestSchema = z.object({
+  type: z.literal("transcribe_voice_clip.request"),
+  audioBase64: z.string().min(1),
+  format: z.string().min(1),
+  language: z.string().optional(),
+  requestId: z.string(),
+});
+
 export const ClearAgentAttentionMessageSchema = z.object({
   type: z.literal("clear_agent_attention"),
   agentId: z.union([z.string(), z.array(z.string())]),
@@ -2977,6 +2994,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FileDownloadTokenRequestSchema,
   FileUploadRequestSchema,
   FileUploadCancelRequestSchema,
+  TranscribeVoiceClipRequestSchema,
   ClearAgentAttentionMessageSchema,
   ClientHeartbeatMessageSchema,
   PingMessageSchema,
@@ -5302,6 +5320,18 @@ export const FileUploadCancelResponseSchema = z.object({
   }),
 });
 
+// T277: `text: null` + a non-null `error` on failure (unavailable provider,
+// oversize clip, transport failure) — the same "nullable pair, not a
+// discriminated union" shape `FileUploadResponseSchema` above uses.
+export const TranscribeVoiceClipResponseSchema = z.object({
+  type: z.literal("transcribe_voice_clip.response"),
+  payload: z.object({
+    requestId: z.string(),
+    text: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const ListProviderModelsResponseMessageSchema = z.object({
   type: z.literal("list_provider_models_response"),
   payload: z.object({
@@ -5880,6 +5910,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FileDownloadTokenResponseSchema,
   FileUploadResponseSchema,
   FileUploadCancelResponseSchema,
+  TranscribeVoiceClipResponseSchema,
   ListProviderModelsResponseMessageSchema,
   ListProviderModesResponseMessageSchema,
   ListProviderFeaturesResponseMessageSchema,
@@ -6339,6 +6370,8 @@ export type FileUploadRequest = z.infer<typeof FileUploadRequestSchema>;
 export type FileUploadResponse = z.infer<typeof FileUploadResponseSchema>;
 export type FileUploadCancelRequest = z.infer<typeof FileUploadCancelRequestSchema>;
 export type FileUploadCancelResponse = z.infer<typeof FileUploadCancelResponseSchema>;
+export type TranscribeVoiceClipRequest = z.infer<typeof TranscribeVoiceClipRequestSchema>;
+export type TranscribeVoiceClipResponse = z.infer<typeof TranscribeVoiceClipResponseSchema>;
 export type RestartServerRequestMessage = z.infer<typeof RestartServerRequestMessageSchema>;
 export type ShutdownServerRequestMessage = z.infer<typeof ShutdownServerRequestMessageSchema>;
 export type ClearAgentAttentionMessage = z.infer<typeof ClearAgentAttentionMessageSchema>;

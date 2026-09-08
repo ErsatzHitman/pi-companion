@@ -715,6 +715,103 @@ Focused extension panels open as bottom sheets or full screens. Subagent fleet s
 - Share intents can create a draft or send to a chosen session.
 - The app must remain useful after process death because agents continue in the daemon.
 
+### 9.4 Voice entry: Groq transcription and draft insertion (T277)
+
+The microphone action (§9.2/§9.3) captures a complete audio clip on-device
+(T276) and turns it into text the user reviews before sending — never a
+direct send. This section records that decision plus where the
+transcription itself happens, so a future change to either has something
+authoritative to cite instead of a reference-only document or a stale code
+comment.
+
+**A finished transcript is a draft, not a send.** `apps/android/src/
+features/voice/voice-model.ts`'s `createVoiceCaptureController` resolves a
+completed recording to `{ outcome: "drafted", text, looksSecretShaped }`;
+the host (`Composer.tsx`) applies `text` to the composer's existing draft
+via `applyTranscriptToDraft` (append, with a separating space when needed)
+rather than enqueuing and sending it. An empty or whitespace-only result
+(including one the server's hallucination guard below has already cleared
+to empty) resolves `"empty-transcript"` instead and never touches the
+existing draft. This supersedes an earlier version of the same module that
+enqueued a transcript into the composer's outbox and sent it immediately —
+that design is retired, not merely extended.
+
+**Groq is a configuration of the existing `OpenAISTT` provider, not a new
+provider implementation.** `packages/server/src/server/speech/providers/
+openai/stt.ts`'s `OpenAISTT` already wraps the `openai` npm SDK against a
+configurable `baseUrl`; Groq's `/audio/transcriptions` endpoint
+(`https://api.groq.com/openai/v1/audio/transcriptions`) is
+OpenAI-compatible (multipart file + model + language in, `{ text }` json
+out), so pointing that same class at Groq's endpoint with a Groq API key
+and a Groq model id (`whisper-large-v3-turbo` by default) transcribes
+through Groq with no new engine code. `providers/openai/config.ts`
+resolves a dedicated `GROQ_API_KEY` env var / `persisted.providers.groq.
+apiKey` into that same `stt` slot — Groq's base URL and default model are
+fixed in code, never user-configurable, and an explicit OpenAI STT
+credential always takes priority when one is also configured (fully
+backward compatible with every deployment that predates this section).
+`whisper-large-v3-turbo` cannot translate to English; this product exposes
+no translate-to-English affordance today, so the "force the non-turbo
+model or hide the affordance" rule that would otherwise apply has nothing
+to bind to yet — record that decision here if a translate affordance is
+ever added, rather than leaving the interaction undecided.
+
+**Transcription is a one-shot round trip, not the existing streaming
+pipelines.** `packages/protocol/src/messages.ts`'s `voice_audio_chunk`/
+`transcription_result` pair (the full-duplex "voice mode" agent
+conversation) and `dictation_stream_*` pair (the desktop dictation
+feature) are both PCM16-only two layers down their own call chains
+(`STTManager`'s `preparePcmForModel`, `DictationStreamManager`'s
+resampler) — neither can carry the AAC/m4a clip
+`expo-audio-voice-capture-port.ts` actually produces without an
+out-of-scope resample step. `transcribe_voice_clip.request`/`.response`
+(T277) is a plain, minimal request/response pair instead, mirroring
+`file.upload.request`/`.response`'s shape: the complete clip's bytes and
+format go in, `{ text, error }` comes back once. Server-side, it resolves
+through the SAME dictation STT provider slot the existing dictation
+feature uses (conceptually the same thing: speech becomes editable text a
+human reviews, not a live conversational turn), calling
+`SpeechToTextProvider.transcribeClip` — an optional one-shot method
+`OpenAISTT` implements and the local sherpa-onnx provider does not (its
+design is incremental PCM streaming with no "hand me one complete file"
+entry point; a caller against that provider gets an honest "does not
+support" error, never a synthesized transcript).
+
+**Size ceiling and the hallucination guard are enforced before/at the
+transcription call, not discovered as a failure afterward.**
+`packages/client/src/daemon-client.ts`'s `transcribeVoiceClip` rejects a
+clip over 25 MB before sending a byte (matching `uploadFile`'s own
+pre-flight check); `OpenAISTT.transcribeClip` enforces the identical
+ceiling server-side as defense in depth (`MAX_TRANSCRIPTION_CLIP_BYTES`),
+since Groq's free tier and OpenAI's own Whisper endpoint both cap a
+request at 25 MB. A known Whisper failure mode — confident invented text
+over a silent or non-speech clip — is guarded using Groq/OpenAI's
+`verbose_json` per-segment `no_speech_prob`: `transcribeClip` requests
+`verbose_json`, computes a duration-weighted average `no_speech_prob`
+across segments, and clears `text` to `""` when it crosses `0.6` (the
+commonly-used Whisper-tooling threshold for "probably no speech here").
+That empty text flows through the client's ordinary `"empty-transcript"`
+path — a hallucination-guarded silent clip and a genuinely silent clip are
+indistinguishable to the user, which is the point.
+
+**Cleanup is deterministic, not clever, and does not use an LLM.**
+`voice-model.ts`'s `cleanTranscript` collapses doubled/irregular
+whitespace, trims, and drops exactly one leading filler token ("um",
+"uh", etc.) — nothing else. It does not do phonetic/fuzzy custom-word
+repair (this product has no per-user vocabulary list to repair against
+yet) and does not route text through an LLM (the added network round trip
+is not worth it for fixes this simple).
+
+**Disclosed gap, left for a future task to close by name.** T277 does not
+wire a live `DaemonClient` into `Composer.tsx`'s `transcribeClient` prop —
+that prop's default is `undefined` today, the same as `uploadClient`'s.
+The call that would close it: `client.transcribeVoiceClip.bind(client)`,
+using the same `AppCore.connection`-derived `DaemonClient` the route layer
+already threads through for `queueModeClient`/`turnStatusClient`. Until
+that wiring lands, a captured `{ kind: "audio" }` clip resolves the honest
+`"transcription-unavailable"` outcome rather than a fake transcript or a
+silent no-op.
+
 ---
 
 ## 10. Design system and Beautiful UI

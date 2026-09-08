@@ -1,7 +1,5 @@
-import { composer as coreComposer } from "@picompanion/frontend-core";
 import { describe, expect, it } from "vitest";
 
-import { createInMemoryStructuredStorage, createSystemClock } from "./in-memory-outbox-runtime";
 import type { PermissionState } from "./permission-recovery";
 import { runMicPress } from "./mic-press-model";
 import { createVoiceCaptureController } from "../voice/voice-model";
@@ -66,16 +64,7 @@ function createCountingPort(options?: {
 }
 
 function makeController(port: ReturnType<typeof createCountingPort>) {
-  const outbox = new coreComposer.OutboxController(
-    createInMemoryStructuredStorage(),
-    createSystemClock(),
-  );
-  return createVoiceCaptureController({
-    port,
-    outbox,
-    sessionId: "agent-1",
-    submitPrompt: async () => undefined,
-  });
+  return createVoiceCaptureController({ port });
 }
 
 describe("runMicPress resolves microphone permission exactly once per press (T83)", () => {
@@ -138,7 +127,9 @@ describe("runMicPress resolves microphone permission exactly once per press (T83
     const result = await runMicPress(controller); // stop
     expect(port.calls.getPermissionStatus).toBe(1); // unchanged by the stop press
     expect(port.calls.stop).toBe(1);
-    expect(result.voiceOutcome?.outcome).toBe("queued");
+    // T277: a finished transcript is a draft now, not a send — see
+    // voice-model.ts's own header for the behaviour change.
+    expect(result.voiceOutcome?.outcome).toBe("drafted");
     expect(result.micPermissionState).toBeNull();
   });
 });

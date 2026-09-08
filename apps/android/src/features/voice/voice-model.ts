@@ -1,82 +1,109 @@
 /**
- * Voice-entry model (T36D, plan.md §9.2 "prominent microphone action",
- * §7.1/§12.5 "flows through the core outbox").
+ * Voice-entry model (T36D, plan.md §9.2 "prominent microphone action" and
+ * §9.4 "Groq transcription and draft insertion"; §7.1/§12.5 "flows through the core outbox" —
+ * SUPERSEDED for this module by the decision below).
  *
  * RN-free, like every other `-model.ts`/`-port.ts` in this workspace
  * (`../composer/composer-model.ts`, `../notifications/push-registration-
  * model.ts`), so the recording lifecycle is unit-testable without a
  * device/emulator or a socket.
  *
- * ## Transcription: daemon-side, not on-device — and why that is a
- * decision this task can state but not finish
+ * ## T277: a finished transcript is now a DRAFT, not a send (behaviour
+ * change to a shipped decision — recorded in `plan.md` §9.4)
  *
- * `packages/protocol/src/messages.ts` already defines a full
- * client-drives-the-daemon voice pipeline: `VoiceAudioChunkMessageSchema`
- * (`type: "voice_audio_chunk"`, base64 `audio` + `format`, an `isLast`
- * flag) is a session-inbound message, and the daemon answers with
- * `TranscriptionResultMessageSchema` (`type: "transcription_result"`,
- * `payload.text`). `packages/client/src/daemon-client.ts` already wraps
- * both directions (`sendVoiceAudioChunk`, `setVoiceMode`). Nothing in
- * this task invents that shape — it already exists, ported with the
- * rest of `packages/client`/`packages/protocol`. So the intended
- * architecture is: capture raw audio on-device, stream it to the
- * daemon, receive text back.
+ * Before this task, `requestStop` enqueued the transcript into
+ * `frontend-core`'s outbox and called `submitPrompt` on it immediately —
+ * the same durable-send pipeline a typed message uses. That was a
+ * deliberate design at the time (see this module's git history), but it is
+ * the opposite of what was asked for: a voice entry should land in the
+ * composer as editable text the user reviews and can correct BEFORE
+ * deciding to send, the same way speech-to-text works in every dictation
+ * keyboard. This module no longer touches an outbox at all — `VoiceOutboxLike`
+ * and `VoicePromptPayload` are gone, and `requestStop` now resolves an
+ * outcome that hands the caller plain text to insert into the draft
+ * (`"drafted"`), never a queued/sent/failed send state. `Composer.tsx`
+ * applies that text to `state.draft` via `applyTranscriptToDraft` below —
+ * see that function's doc comment for the append rule, and this module's
+ * own header for why an empty result must never overwrite what the user
+ * already typed.
  *
- * This task could not finish that path, for one blocker named in this
- * task's own brief: Android has no live `DaemonClient` wired in
- * anywhere yet (`Composer.tsx`'s own "no client yet" seam, already true
- * for `turnService`), so `sendVoiceAudioChunk` cannot be called from
- * here even as a manual wiring exercise. **T276 (plan.md §9.2) closed
- * the OTHER blocker this paragraph used to name**: a real, on-device
- * audio-capture module now exists
- * (`./expo-audio-voice-capture-port.ts`'s `createExpoAudioVoiceCapturePort`,
- * `Composer.tsx`'s own default `voiceCapture` as of that task), so
- * `port.stop()` really can resolve `{ kind: "audio", audioBase64,
- * format }` today, not merely in shape.
+ * ## T277: closing the `"audio"` dead end
  *
- * So this module is built to the *shape* the daemon-transcription path
- * implies (`VoiceCapturePort.stop()` may resolve `{ kind: "audio", ... }`
- * for a future caller that owns a live `DaemonClient` to stream it
- * through), but the only outcome this module actually *acts on* is
- * `{ kind: "transcript", text }` — see `requestStop` below for what
- * happens to a `"audio"` outcome instead: it is discarded, not
- * persisted, because "never write raw audio to plain storage" (this
- * task's own rule) rules out putting it in the outbox's
- * `StructuredStorage`-backed payload, and there is no live socket to
- * hand it to instead. T276's brief is explicit that closing this dead
- * end (transcribing the real audio T276 now captures) is the NEXT
- * task's job, not this module's — `requestStop`'s `"raw-audio-
- * unsupported"` outcome is deliberately left exactly as it was;
- * `voice-model.test.ts` proves the *pipeline* (permission gate ->
- * capture -> outbox -> submit, and every cancel/background/race rule
- * below) against a scripted fake, not against a real microphone —
- * unchanged by T276, which proves the real port separately, in
- * `expo-audio-voice-capture-port.test.ts`.
+ * `packages/protocol/src/messages.ts` now also defines a one-shot
+ * `transcribe_voice_clip.request`/`.response` pair (T277) alongside the
+ * PCM-streaming voice pipeline this header used to describe as the only
+ * option: `VoiceAudioChunkMessageSchema`/`TranscriptionResultMessageSchema`
+ * (still real, still ported, still PCM-only two layers down) and
+ * `DictationStreamManager`'s own `dictation_stream_*` messages (also
+ * PCM-only). Neither of those can carry the AAC/m4a clip
+ * `expo-audio-voice-capture-port.ts` actually produces without a resample
+ * step this task does not own. The one-shot pair exists specifically
+ * because it needs none of that: `packages/client/src/daemon-client.ts`'s
+ * new `transcribeVoiceClip` sends the complete clip's bytes once and gets
+ * `{ text, error }` back once, and the daemon side
+ * (`VoiceSession.handleTranscribeClip`) resolves the SAME dictation STT
+ * provider slot as the existing dictation feature, calling its (also new)
+ * one-shot `SpeechToTextProvider.transcribeClip`.
  *
- * ## The core-outbox criterion
+ * This module reaches that capability through `VoiceCaptureControllerDeps.
+ * transcribe` — an OPTIONAL, narrow, structurally-typed dependency
+ * (`VoiceTranscriptionClient`, matching `AttachmentUploadClient`'s own
+ * "duck-typed, never imports `@picompanion/client` directly" shape in
+ * `../composer/attachment-model.ts`), exactly the same optionality pattern
+ * `Composer.tsx`'s `uploadClient` already uses. **This task does not wire a
+ * live `DaemonClient` into `Composer.tsx`'s new `transcribeClient` prop —
+ * that prop's default is `undefined`, same as `uploadClient`'s today** (see
+ * `Composer.tsx`'s own doc comment on the prop for the exact call that
+ * would close this: `client.transcribeVoiceClip.bind(client)`, where
+ * `client` is the same `AppCore.connection`-derived `DaemonClient` the
+ * route layer already threads through for `queueModeClient`/
+ * `turnStatusClient`). Left undone deliberately: doing that wiring blind,
+ * with no device or live daemon connection available to prove it end to
+ * end in this environment, is a worse outcome than a disclosed, honestly
+ * un-wired optional prop. When `transcribe` is absent, a `"audio"` port
+ * outcome resolves `{ outcome: "transcription-unavailable" }` — a truthful
+ * "this screen has no transcription client connected" state, not the old
+ * `"raw-audio-unsupported"` (which read as "audio can never be
+ * transcribed", no longer true once a caller wires the prop).
  *
- * `requestStop` enqueues through `frontend-core`'s
- * `composer/outbox.ts` `OutboxController` — the *same* controller
- * `Composer.tsx`'s `sendWithOutbox` already constructs (`kind:
- * "prompt"`), not a second queue. This module takes an already-built
- * outbox (typed via `Pick<InstanceType<typeof coreComposer.
- * OutboxController>, ...>`, exactly `../share/share-draft-
- * controller.ts`'s pattern) rather than constructing its own, so a
- * caller that mounts both `Composer` and this feature can share one
- * outbox instance and one `StructuredStorage` — **T70 (P5-W21) is that
- * caller**: `Composer.tsx` now builds its `voiceController` with the
- * exact same `outbox`/`resolvedSessionId` its own `sendWithOutbox`
- * uses, so a voice-produced entry and a typed one share one queue.
+ * ## Cleanup: deterministic before clever (T277)
  *
- * The enqueue always happens *before* any send attempt (mirroring
- * `Composer.tsx`'s `sendWithOutbox` exactly), so a transcript is
- * durably recorded the moment capture finishes — "a captured transcript
- * must never be silently discarded" holds structurally: even if
- * `submitPrompt` throws, the entry is not deleted, only moved to
- * `"awaiting-confirmation"` via `outbox.markFailed` (see
- * `OutboxStopOutcome`'s `"send-failed"` case) — recoverable, not lost.
+ * `cleanTranscript` below does exactly three things, all decided and
+ * argued in this task, none of them a rewrite: collapse the doubled/
+ * irregular whitespace Whisper-family models emit, trim the ends, and drop
+ * ONE leading filler token ("um", "uh", etc.) if the transcript starts with
+ * one. It does NOT do `D:\Handy`'s `audio_toolkit/text.rs` custom-word
+ * repair (Levenshtein distance + Soundex phonetics): that repair needs a
+ * user-maintained vocabulary list this product has no UI for yet, and
+ * applying fuzzy phonetic matching with nothing to match against would
+ * only introduce new errors. It does NOT route text through an LLM: the
+ * latency cost (a second network round trip after the transcription round
+ * trip already paid) is not worth it for the fixes actually being made
+ * here, which are all pure string operations with no ambiguity to
+ * resolve. The hallucination guard for a silent/non-speech clip (a known
+ * Whisper failure mode) is NOT done here — it is done server-side, in
+ * `packages/server/src/server/speech/providers/openai/stt.ts`'s
+ * `transcribeClip`, using Groq/OpenAI's `verbose_json` `no_speech_prob`,
+ * because that signal only exists on the transcription response, not on
+ * the plain string this module receives afterward; a hallucinated clip
+ * arrives here as an already-emptied `text: ""`, which flows through the
+ * SAME `"empty-transcript"` path as a genuinely silent clip.
  *
- * ## Permission recovery
+ * ## The core-outbox criterion this module NO LONGER satisfies, on purpose
+ *
+ * Every other paragraph in this section up to T277 described
+ * `requestStop` enqueuing through `frontend-core`'s `composer/outbox.ts`
+ * `OutboxController`. That is gone. A voice-produced draft is not
+ * durable the way a submitted prompt is — if the app is killed before the
+ * user presses send, the draft is lost, exactly like it would be if the
+ * user had typed the same text by hand and closed the app. That is a
+ * deliberate, disclosed trade against durability, not an oversight: this
+ * task's brief is explicit that a transcript "lands in the prompt bar as
+ * an editable draft, and the user decides whether to send" — a value the
+ * user has not yet decided to send is not a value this module's job to
+ * make durable.
+ *
+ * ## Permission recovery (unchanged by T277)
  *
  * `requestStart` calls `resolvePermission` from
  * `../composer/permission-recovery.js` unchanged — the same function,
@@ -89,11 +116,6 @@
  * `describePermissionRecovery("microphone", state)` — the exact
  * affordance T33B7 built, reused, not a divergent one.
  *
- * **T60D is unifying `../composer/permission-recovery.ts` with
- * `../connect/qr-scanner-port.ts`'s narrower vocabulary this same
- * wave and may move that module — this import breaks if so; see this
- * task's report.**
- *
  * ## The four "recording in progress" scenarios this proves
  * (`voice-model.test.ts`)
  *
@@ -103,8 +125,7 @@
  *  - **The user cancels** (`requestCancel()`, default reason
  *    `"user"`): calls `port.cancel()` (whatever was captured must be
  *    discarded — `VoiceCapturePort.cancel()`'s own contract), returns
- *    to `idle`, and — the thing under test — never calls
- *    `outbox.enqueue`.
+ *    to `idle`, and never produces a draft.
  *  - **The app backgrounds mid-recording** (`handleAppBackgrounded()`):
  *    treated as a cancel (`reason: "backgrounded"`), for the same
  *    reason a background app should not go on holding an open
@@ -114,28 +135,82 @@
  *    a deliberate no-op that leaves `recording` untouched and returns
  *    the unchanged state — recording is local audio capture with no
  *    socket of its own this wave (see above), so a connection event
- *    has nothing to interrupt. The connection only matters once
- *    `requestStop` tries to actually send the transcript, and that is
- *    already covered by the outbox's existing failed/
- *    awaiting-confirmation path (`"send-failed"`), not by this
- *    function.
+ *    has nothing to interrupt.
  */
-import type { composer as coreComposer } from "@picompanion/frontend-core";
 import { security } from "@picompanion/frontend-core";
 
 import { resolvePermission, type PermissionState } from "../composer/permission-recovery.js";
 import type { VoiceCapturePort } from "./voice-capture-port.js";
 
-/** The narrow outbox surface this module needs — same pattern as `../share/share-draft-controller.ts`'s `OutboxLike`. */
-export type VoiceOutboxLike = Pick<
-  InstanceType<typeof coreComposer.OutboxController>,
-  "enqueue" | "markSending" | "markSent" | "markFailed"
->;
+/**
+ * The narrow speech-transcription surface a voice draft needs — same
+ * "duck-typed, never import `@picompanion/client` directly" pattern
+ * `../composer/attachment-model.ts`'s `AttachmentUploadClient` uses for
+ * `DaemonClient.uploadFile`. Optional method, same reason: a client that
+ * omits it (or the whole dependency being `undefined`) leaves a captured
+ * `{ kind: "audio" }` clip in an explained `"transcription-unavailable"`
+ * state rather than throwing.
+ */
+export interface VoiceTranscriptionClient {
+  transcribeVoiceClip?(input: {
+    audioBase64: string;
+    format: string;
+    language?: string;
+  }): Promise<{ text: string | null; error: string | null }>;
+}
 
-/** One outbox entry's payload shape for a voice-produced prompt — round-trips through `OutboxEntry<VoicePromptPayload>.payload`. */
-export interface VoicePromptPayload {
-  source: "voice";
-  text: string;
+const LEADING_FILLER_WORDS = new Set(["um", "umm", "ummm", "uh", "uhh", "erm", "hmm", "mm"]);
+
+/**
+ * Deterministic transcript cleanup — see this module's header for the
+ * scope argument (no phonetic repair, no LLM pass). Three steps, in
+ * order: collapse any run of whitespace (Whisper-family models sometimes
+ * emit doubled spaces or a stray newline) to a single space; trim the
+ * ends; then, if the FIRST word is a bare filler token, drop that one
+ * word (and any punctuation immediately after it) — only the leading
+ * one, never a filler appearing mid-sentence, since removing those would
+ * change the speaker's actual words rather than clean up capture noise.
+ */
+export function cleanTranscript(raw: string): string {
+  const collapsed = raw.replace(/\s+/g, " ").trim();
+  if (collapsed.length === 0) {
+    return collapsed;
+  }
+
+  const match = /^([A-Za-z]+)[,.:;!?]?(?:\s+(.*))?$/s.exec(collapsed);
+  if (!match) {
+    return collapsed;
+  }
+  const [, firstWord, rest] = match;
+  if (!LEADING_FILLER_WORDS.has(firstWord.toLowerCase())) {
+    return collapsed;
+  }
+  return (rest ?? "").trim();
+}
+
+/**
+ * How a voice-produced transcript joins whatever the user already typed —
+ * the decision this task's own brief calls "the decision most likely to
+ * be made by accident". Chosen: APPEND, never replace or insert at a
+ * cursor position — this model layer has no cursor/selection state to
+ * insert at (that lives in the native `TextInput`, not here), and append
+ * is the one option that can never silently discard text the user already
+ * wrote. An empty `transcript` returns `currentDraft` completely
+ * unchanged — belt-and-braces alongside `requestStop` below already never
+ * calling this for an empty result at all, so a caller that reuses this
+ * function directly gets the same guarantee.
+ */
+export function applyTranscriptToDraft(currentDraft: string, transcript: string): string {
+  if (transcript.length === 0) {
+    return currentDraft;
+  }
+  if (currentDraft.length === 0) {
+    return transcript;
+  }
+  if (/\s$/.test(currentDraft)) {
+    return currentDraft + transcript;
+  }
+  return `${currentDraft} ${transcript}`;
 }
 
 export type VoiceRecordingStatus = "idle" | "recording" | "processing";
@@ -155,20 +230,14 @@ export type VoiceStartOutcome =
 
 export type VoiceStopOutcome =
   | {
-      outcome: "queued";
-      outboxEntryId: string;
+      outcome: "drafted";
       text: string;
-      /** `security.isSecretShaped(text)` — annotated, never blocked; see this module's header and `../share/share-intent-model.ts`'s identical `looksSecretShaped` field for the precedent this follows. */
+      /** `security.isSecretShaped(text)` — annotated, never blocked; see `../share/share-intent-model.ts`'s identical `looksSecretShaped` field for the precedent this follows. */
       looksSecretShaped: boolean;
     }
-  | {
-      outcome: "send-failed";
-      outboxEntryId: string;
-      text: string;
-      message: string;
-    }
   | { outcome: "empty-transcript" }
-  | { outcome: "raw-audio-unsupported" }
+  | { outcome: "transcription-unavailable" }
+  | { outcome: "transcription-failed"; message: string }
   | { outcome: "not-recording" };
 
 export type VoiceCancelReason = "user" | "backgrounded";
@@ -179,16 +248,15 @@ export type VoiceCancelOutcome =
 
 export interface VoiceCaptureControllerDeps {
   port: VoiceCapturePort;
-  outbox: VoiceOutboxLike;
-  /** Session/agent id voice-produced outbox entries are scoped to — same role as `ComposerProps.sessionId`. */
-  sessionId: string;
   /**
-   * Hands the transcribed text to the host, exactly
-   * `ComposerProps.onSubmit`'s contract: resolving marks the entry
-   * sent; throwing/rejecting marks it failed (`"send-failed"`) without
-   * losing the text.
+   * Optional — see this module's header. Absent (the default, today, in
+   * every real mount) means a `{ kind: "audio" }` port outcome resolves
+   * `"transcription-unavailable"` rather than throwing or silently
+   * dropping the recording.
    */
-  submitPrompt: (text: string) => void | Promise<void>;
+  transcribe?: VoiceTranscriptionClient;
+  /** BCP-47-ish language hint passed to `transcribe.transcribeVoiceClip`, e.g. `"en"`. Omitted entirely when unset — the daemon falls back to its own configured dictation language. */
+  language?: string;
   now?: () => number;
 }
 
@@ -196,7 +264,7 @@ export interface VoiceCaptureController {
   getState(): VoiceState;
   /** Begins recording, gated on the microphone permission (see this module's header). */
   requestStart(): Promise<VoiceStartOutcome>;
-  /** Stops recording and, for a non-empty transcript, enqueues + submits it. */
+  /** Stops recording and resolves the transcript as a draft — see this module's header for why this no longer sends anything. */
   requestStop(): Promise<VoiceStopOutcome>;
   /** Cancels a running recording, discarding it. `reason` defaults to `"user"`. */
   requestCancel(reason?: VoiceCancelReason): Promise<VoiceCancelOutcome>;
@@ -215,7 +283,7 @@ export interface VoiceCaptureController {
 export function createVoiceCaptureController(
   deps: VoiceCaptureControllerDeps,
 ): VoiceCaptureController {
-  const { port, outbox, sessionId, submitPrompt } = deps;
+  const { port, transcribe, language } = deps;
   const now = deps.now ?? (() => Date.now());
 
   let state: VoiceState = IDLE_VOICE_STATE;
@@ -244,37 +312,43 @@ export function createVoiceCaptureController(
     const result = await port.stop();
     state = IDLE_VOICE_STATE;
 
+    let rawText: string;
     if (result.kind === "audio") {
-      // See this module's header: no live DaemonClient to stream this
-      // to, and raw audio must never be written to plain storage — so
-      // it is discarded here, not silently persisted anywhere, and
-      // this outcome says so explicitly rather than pretending success.
-      return { outcome: "raw-audio-unsupported" };
+      if (!transcribe?.transcribeVoiceClip) {
+        return { outcome: "transcription-unavailable" };
+      }
+      let response: { text: string | null; error: string | null };
+      try {
+        response = await transcribe.transcribeVoiceClip({
+          audioBase64: result.audioBase64,
+          format: result.format,
+          ...(language ? { language } : {}),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { outcome: "transcription-failed", message };
+      }
+      if (response.error !== null || response.text === null) {
+        return {
+          outcome: "transcription-failed",
+          message: response.error ?? "Transcription failed.",
+        };
+      }
+      rawText = response.text;
+    } else {
+      rawText = result.text;
     }
 
-    const text = result.text.trim();
-    if (text.length === 0) {
+    const cleaned = cleanTranscript(rawText);
+    if (cleaned.length === 0) {
       return { outcome: "empty-transcript" };
     }
 
-    const looksSecretShaped = security.isSecretShaped(text);
-    const payload: VoicePromptPayload = { source: "voice", text };
-    const entry = await outbox.enqueue<VoicePromptPayload>({
-      sessionId,
-      kind: "prompt",
-      payload,
-    });
-
-    try {
-      await outbox.markSending(entry.id);
-      await submitPrompt(text);
-      await outbox.markSent(entry.id);
-      return { outcome: "queued", outboxEntryId: entry.id, text, looksSecretShaped };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await outbox.markFailed(entry.id, message).catch(() => undefined);
-      return { outcome: "send-failed", outboxEntryId: entry.id, text, message };
-    }
+    return {
+      outcome: "drafted",
+      text: cleaned,
+      looksSecretShaped: security.isSecretShaped(cleaned),
+    };
   }
 
   async function requestCancel(reason: VoiceCancelReason = "user"): Promise<VoiceCancelOutcome> {

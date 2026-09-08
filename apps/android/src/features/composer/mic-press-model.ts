@@ -65,7 +65,7 @@
 import type { PermissionState } from "./permission-recovery.js";
 import type { VoiceCaptureController, VoiceState, VoiceStopOutcome } from "../voice/voice-model.js";
 
-/** The narrow slice of `VoiceCaptureController` a mic press needs — same "narrow surface" pattern as `voice-model.ts`'s own `VoiceOutboxLike`. */
+/** The narrow slice of `VoiceCaptureController` a mic press needs — same "narrow surface" pattern used across this feature (e.g. `voice-model.ts`'s own `VoiceTranscriptionClient`). */
 export type MicPressVoiceController = Pick<
   VoiceCaptureController,
   "getState" | "requestStart" | "requestStop"

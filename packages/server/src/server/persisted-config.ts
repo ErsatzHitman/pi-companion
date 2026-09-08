@@ -68,9 +68,31 @@ const LocalSpeechProviderSchema = z
   })
   .strict();
 
+// T277 (plan.md §9.4 "Groq transcription and draft insertion"): Groq is a *configuration* of the
+// existing `OpenAISTT` class (its transcription endpoint is OpenAI-compatible),
+// not a new provider implementation — see `providers/openai/config.ts`'s
+// header for the full argument. This slot exists only so a Groq API key has
+// its own discoverable name (`providers.groq.apiKey`) instead of requiring a
+// user to know they can point the generic `providers.openai.stt` fields at
+// Groq's endpoint by hand. There is deliberately no `baseUrl` field here: it
+// is fixed to Groq's real transcription endpoint in code, never configurable,
+// so a typo can't silently send audio (and a key) somewhere else.
+const GroqProviderSchema = z
+  .object({
+    apiKey: z.string().min(1).optional(),
+    stt: z
+      .object({
+        model: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 const ProvidersSchema = z
   .object({
     openai: OpenAiProviderSchema.optional(),
+    groq: GroqProviderSchema.optional(),
     local: LocalSpeechProviderSchema.optional(),
   })
   .strict();

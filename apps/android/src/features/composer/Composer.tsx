@@ -74,6 +74,7 @@ import {
 } from "./turn-status-model";
 import { TurnStatusBanner } from "./TurnStatusBanner";
 import {
+  applyTranscriptToDraft,
   createExpoAudioVoiceCapturePort,
   createVoiceCaptureController,
   IDLE_VOICE_STATE,
@@ -83,6 +84,7 @@ import {
   type VoiceCapturePort,
   type VoiceState,
   type VoiceStopOutcome,
+  type VoiceTranscriptionClient,
 } from "../voice";
 import {
   ABORT_ACTION_LABEL,
@@ -229,18 +231,20 @@ export interface ComposerProps {
    * T70: the actual recorder behind the mic action — T33B7 deliberately
    * left "recording itself" for a later task; T276 is the task that
    * shipped it. When granted, pressing the mic toggles a real
-   * `VoiceCaptureController` (`../voice/voice-model.ts`) built over the
-   * SAME `outbox`/`sessionId`/`onSubmit` a text send already uses
-   * (below), so a voice transcript reaches the identical durable outbox
-   * entry, not a second queue — see `../voice/voice-model.ts`'s header
-   * on why that mattered. Optional, defaults to
-   * `createExpoAudioVoiceCapturePort()` (T276) — a real, `expo-audio`-
-   * backed recorder; see that module's own header for the dependency
-   * decision, the REQUESTED-vs-MEASURED recording-format disclosure,
-   * and the one gap it discloses (a cancelled recording's file is not
-   * deleted). `createUnavailableVoiceCapturePort` (`../voice/voice-
-   * capture-port.ts`) remains available for a caller that wants voice
-   * entry explicitly disabled; it is no longer this prop's default.
+   * `VoiceCaptureController` (`../voice/voice-model.ts`). **T277
+   * corrected this comment**: the controller no longer touches an
+   * outbox at all — a finished transcript is applied to `state.draft`
+   * (see `handleMicPress` below and `../voice/voice-model.ts`'s header
+   * for the full behaviour-change writeup) so the user can edit and
+   * decide whether to send it, exactly like text they typed themselves.
+   * Optional, defaults to `createExpoAudioVoiceCapturePort()` (T276) —
+   * a real, `expo-audio`-backed recorder; see that module's own header
+   * for the dependency decision, the REQUESTED-vs-MEASURED
+   * recording-format disclosure, and the one gap it discloses (a
+   * cancelled recording's file is not deleted). `createUnavailableVoice
+   * CapturePort` (`../voice/voice-capture-port.ts`) remains available
+   * for a caller that wants voice entry explicitly disabled; it is no
+   * longer this prop's default.
    *
    * This is now the ONLY OS-permission port the mic action resolves
    * through (T83, `mic-press-model.ts`): `VoiceCapturePort` already
@@ -258,6 +262,25 @@ export interface ComposerProps {
    * did for the unavailable one.
    */
   voiceCapture?: VoiceCapturePort;
+  /**
+   * T277 (plan.md §9.4 "Groq transcription and draft insertion"): transport for turning a
+   * captured `{ kind: "audio" }` clip into text — mirrors `uploadClient`
+   * above exactly (same "duck-typed, optional method, no live client
+   * wired here" shape; `packages/client/src/daemon-client.ts`'s real
+   * `transcribeVoiceClip` implements it). **Left undone deliberately in
+   * this task**: the real call that would close this gap is
+   * `client.transcribeVoiceClip.bind(client)`, where `client` is the
+   * same `AppCore.connection`-derived `DaemonClient`
+   * `queueModeClient`/`turnStatusClient` below already receive from the
+   * route layer — but wiring it blind, with no device or live daemon
+   * connection available in this environment to prove the round trip
+   * end to end, was judged worse than a disclosed, honestly un-wired
+   * optional prop. Omitted (today, always): a captured `{ kind: "audio"
+   * }` clip resolves `VoiceStopOutcome`'s `"transcription-unavailable"`
+   * — a truthful "no transcription client connected" state, surfaced
+   * through `voiceOutcomeDisplay` below, never a silent no-op.
+   */
+  transcribeClient?: VoiceTranscriptionClient;
   /**
    * T33B7: the durable outbox every send is recorded through (plan.md
    * §7.1/§12.5). T75: this used to be reached only by an
@@ -367,13 +390,15 @@ function voiceOutcomeDisplay(
   outcome: VoiceStopOutcome | VoiceCancelOutcome,
 ): { text: string; tone: StatusTone } | null {
   switch (outcome.outcome) {
-    case "queued":
-      return { text: "Voice message sent", tone: "success" };
-    case "send-failed":
-      return { text: `Voice message failed: ${outcome.message}`, tone: "danger" };
+    // T277: a finished transcript is added to the draft, never sent —
+    // see ../voice/voice-model.ts's header for the behaviour change.
+    case "drafted":
+      return { text: "Voice message added to draft", tone: "success" };
+    case "transcription-failed":
+      return { text: `Voice transcription failed: ${outcome.message}`, tone: "danger" };
     case "empty-transcript":
       return { text: "No speech detected", tone: "neutral" };
-    case "raw-audio-unsupported":
+    case "transcription-unavailable":
       return { text: "Voice transcription isn't available yet", tone: "neutral" };
     case "cancelled":
       return { text: "Recording cancelled", tone: "neutral" };
@@ -470,6 +495,7 @@ export function Composer({
   attachmentLimits,
   cameraCapture,
   voiceCapture,
+  transcribeClient,
   outbox: outboxProp,
   structuredStorage: structuredStorageProp,
   clock: clockProp,
@@ -622,21 +648,21 @@ export function Composer({
   // `outbox.remove` — see that callback below.
   const outboxEntryIdRef = useRef<Map<string, string>>(new Map());
 
-  // --- T70: voice entry --------------------------------------------------
-  // One controller per (port, outbox, sessionId, onSubmit) identity — the
-  // same `outbox` a text send routes through above, not a second one (see
-  // `voiceCapture`'s doc comment). `submitPrompt` is `onSubmit` itself:
-  // resolving marks the voice-produced outbox entry sent, exactly
-  // `ComposerProps.onSubmit`'s own contract.
+  // --- T70/T277: voice entry -----------------------------------------------
+  // One controller per (port, transcribeClient) identity. T277: no longer
+  // built over `outbox`/`resolvedSessionId`/`onSubmit` — a finished
+  // transcript is applied to `state.draft` (`handleMicPress` below), never
+  // sent, so this controller needs none of the send machinery any more. See
+  // `voiceCapture`'s and `transcribeClient`'s doc comments above, and
+  // `../voice/voice-model.ts`'s header for the full behaviour-change
+  // writeup.
   const voiceController = useMemo<VoiceCaptureController>(
     () =>
       createVoiceCaptureController({
         port: resolvedVoiceCapture,
-        outbox,
-        sessionId: resolvedSessionId,
-        submitPrompt: onSubmit,
+        ...(transcribeClient ? { transcribe: transcribeClient } : {}),
       }),
-    [resolvedVoiceCapture, outbox, resolvedSessionId, onSubmit],
+    [resolvedVoiceCapture, transcribeClient],
   );
   const [voiceState, setVoiceState] = useState<VoiceState>(IDLE_VOICE_STATE);
   const [voiceOutcome, setVoiceOutcome] = useState<VoiceStopOutcome | VoiceCancelOutcome | null>(
@@ -834,14 +860,23 @@ export function Composer({
   // Fires `onMicPress` immediately (unchanged T33B1 contract — see
   // `ComposerProps.onMicPress`'s doc comment). Then delegates the whole
   // start/stop decision to `runMicPress` (`mic-press-model.ts`, T83): it
-  // starts a new recording when idle, or stops (transcribes + enqueues
-  // + submits) one already running, over the real `voiceController` —
-  // toggling on the controller's OWN state, never a flag tracked here.
-  // T83 closed the double-prompt bug this used to have: permission is
-  // now resolved EXACTLY ONCE per press, entirely inside
-  // `voiceController.requestStart()` (over `resolvedVoiceCapture` —
-  // see `mic-press-model.ts`'s header for the removed second call, and
-  // that file's test for the counting-fake proof).
+  // starts a new recording when idle, or stops (transcribes) one already
+  // running, over the real `voiceController` — toggling on the
+  // controller's OWN state, never a flag tracked here. T83 closed the
+  // double-prompt bug this used to have: permission is now resolved
+  // EXACTLY ONCE per press, entirely inside `voiceController.
+  // requestStart()` (over `resolvedVoiceCapture` — see
+  // `mic-press-model.ts`'s header for the removed second call, and that
+  // file's test for the counting-fake proof).
+  //
+  // T277: a `"drafted"` stop outcome is applied to `state.draft` here —
+  // via the functional `setState` updater, so it composes with whatever
+  // the user had already typed rather than racing a stale closure over
+  // `state`, exactly the way `applyTranscriptToDraft`'s own doc comment
+  // (`../voice/voice-model.ts`) argues an empty result must never
+  // overwrite existing text: `cleanTranscript`/`requestStop` already
+  // guarantee `text` is non-empty for a `"drafted"` outcome, so this call
+  // site does not need its own emptiness check to keep that rule.
   const handleMicPress = useCallback(() => {
     onMicPress();
     void (async () => {
@@ -849,6 +884,13 @@ export function Composer({
       setVoiceState(result.voiceState);
       if (result.voiceOutcome !== null) {
         setVoiceOutcome(result.voiceOutcome);
+        if (result.voiceOutcome.outcome === "drafted") {
+          const transcript = result.voiceOutcome.text;
+          setState((current) => ({
+            ...current,
+            draft: applyTranscriptToDraft(current.draft, transcript),
+          }));
+        }
       }
       if (result.micPermissionState !== null) {
         setMicPermissionState(result.micPermissionState);

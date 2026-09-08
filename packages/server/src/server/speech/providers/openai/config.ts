@@ -7,6 +7,28 @@ import type { TTSConfig } from "./tts.js";
 
 export const DEFAULT_OPENAI_TTS_MODEL = "tts-1";
 
+/**
+ * T277 (plan.md §9.4 "Groq transcription and draft insertion"): Groq's transcription API is
+ * served at this exact path and speaks the identical request/response shape
+ * `OpenAISTT` already sends to OpenAI's own `/audio/transcriptions` endpoint
+ * (multipart file + model + language in, `{ text }` json out — re-verified
+ * against Groq's own docs, not copied from a research note). Established by
+ * execution, not assumed: `OpenAISTT`'s constructor already accepts an
+ * arbitrary `baseUrl` and passes it straight to the `openai` SDK's
+ * `baseURL` option (see this file's `buildSttConfig`), and its model field
+ * is typed `(string & {})` specifically to allow a non-OpenAI model id. So
+ * pointing that SAME class at Groq's endpoint with a Groq model id and key
+ * transcribes through Groq with zero new engine code — Groq is a
+ * configuration in front of the existing OpenAI-compatible path, not a
+ * second provider implementation. (This is the same shape
+ * `D:\Handy\research\cloud-stt-groq\07-proposed-architecture.md` reached for
+ * a different codebase; cited here as a reference for the reasoning, not as
+ * authority for this repository's own decision, which is recorded in
+ * `plan.md` §9.4.)
+ */
+export const GROQ_STT_BASE_URL = "https://api.groq.com/openai/v1";
+export const DEFAULT_GROQ_STT_MODEL = "whisper-large-v3-turbo";
+
 export interface OpenAiSpeechProviderConfig {
   stt?: Partial<STTConfig> & { apiKey?: string };
   tts?: Partial<TTSConfig> & { apiKey?: string };
@@ -156,6 +178,30 @@ function buildOpenAiResolutionInput(params: {
   };
 }
 
+/**
+ * T277: resolves a Groq STT credential from its OWN dedicated slots
+ * (`GROQ_API_KEY` env, `persisted.providers.groq.apiKey`) — never from the
+ * generic `OPENAI_*` names, so a user configuring Groq never has to know the
+ * "point OpenAI's baseUrl at a different vendor" trick is even possible.
+ * `baseUrl` is always Groq's real endpoint (never overridable — see
+ * `persisted-config.ts`'s `GroqProviderSchema` header for why), and `model`
+ * always resolves to a Groq-valid whisper id (never `OpenAISTT`'s own
+ * `"whisper-1"` default, which Groq does not serve).
+ */
+function resolveGroqSttCredentials(params: {
+  env: NodeJS.ProcessEnv;
+  persisted: PersistedConfig;
+}): { apiKey: string; baseUrl: string; model: string } | undefined {
+  const groq = params.persisted.providers?.groq;
+  const apiKey = firstDefined<string>([groq?.apiKey, params.env.GROQ_API_KEY]);
+  if (!apiKey) {
+    return undefined;
+  }
+  const model =
+    firstDefined<string>([params.env.GROQ_STT_MODEL, groq?.stt?.model]) ?? DEFAULT_GROQ_STT_MODEL;
+  return { apiKey, baseUrl: GROQ_STT_BASE_URL, model };
+}
+
 export function resolveOpenAiSpeechConfig(params: {
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
@@ -164,12 +210,27 @@ export function resolveOpenAiSpeechConfig(params: {
   const input = buildOpenAiResolutionInput(params);
   const keys = OpenAiEndpointKeysSchema.parse(input);
 
-  if (!keys.sttApiKey && !keys.ttsApiKey) {
+  // An explicit OpenAI STT credential always wins — unchanged, fully
+  // backward-compatible behaviour. Only when NONE is configured does a
+  // configured Groq key step in to fill the same `stt` slot, reusing
+  // `OpenAISTT` unmodified (see this file's header for why that is the
+  // whole point).
+  const groqStt = keys.sttApiKey
+    ? undefined
+    : resolveGroqSttCredentials({ env: params.env, persisted: params.persisted });
+
+  if (!keys.sttApiKey && !groqStt && !keys.ttsApiKey) {
     return undefined;
   }
 
+  const sttConfig = keys.sttApiKey
+    ? buildSttConfig(keys.sttApiKey, keys.sttBaseUrl, input)
+    : groqStt
+      ? { apiKey: groqStt.apiKey, baseUrl: groqStt.baseUrl, model: groqStt.model }
+      : undefined;
+
   return {
-    ...(keys.sttApiKey ? { stt: buildSttConfig(keys.sttApiKey, keys.sttBaseUrl, input) } : {}),
+    ...(sttConfig ? { stt: sttConfig } : {}),
     ...(keys.ttsApiKey ? { tts: buildTtsConfig(keys.ttsApiKey, keys.ttsBaseUrl, input) } : {}),
   };
 }

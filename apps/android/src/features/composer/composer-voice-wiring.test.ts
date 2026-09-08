@@ -26,14 +26,20 @@ import { describe, expect, it } from "vitest";
  * byte-for-byte before this suite was left green — see this task's
  * report for the exact mutation and result recorded per case.
  *
- * What this file does NOT re-prove: that a transcript actually reaches
- * a real `OutboxController` once `requestStop()` resolves — that is
- * `../voice/voice-model.test.ts`'s job (T36D), proven against a real
- * `coreComposer.OutboxController` backed by in-memory storage, and
- * unchanged by this task. This file proves only that `Composer.tsx`'s
- * mic action is the thing that calls into that already-proven
- * controller, over the SAME `outbox`/`sessionId`/`onSubmit` a text send
- * uses — the "real entry point" this task's brief requires.
+ * What this file does NOT re-prove: that a `"drafted"` outcome's text is
+ * cleaned/produced correctly, or that `{ kind: "audio" }` is transcribed
+ * (or honestly reports `"transcription-unavailable"` without one) — that
+ * is `../voice/voice-model.test.ts`'s job (T36D/T277). This file proves
+ * only that `Composer.tsx`'s mic action is the thing that calls into that
+ * already-proven controller, and that a `"drafted"` outcome is actually
+ * applied to `state.draft` — the "real entry point" this task's brief
+ * requires.
+ *
+ * **T277 corrected this file**: `createVoiceCaptureController` is no
+ * longer built over `outbox`/`sessionId`/`onSubmit` — see
+ * `../voice/voice-model.ts`'s header for the full behaviour-change
+ * writeup (a finished transcript is now applied to the draft, never
+ * sent).
  *
  * T83: `handleMicPress`'s start/stop toggle moved out of `Composer.tsx`
  * into `mic-press-model.ts` (RN-free, so it can be behaviourally
@@ -62,9 +68,24 @@ function readMicPressModelCode(): string {
 describe("Composer.tsx really drives a real VoiceCaptureController from the mic action (T70)", () => {
   const code = readCode();
 
-  it("builds voiceController from createVoiceCaptureController over the SAME outbox/sessionId/onSubmit a text send uses — not a second queue", () => {
+  it("T277: builds voiceController from createVoiceCaptureController over resolvedVoiceCapture — no outbox/sessionId/onSubmit any more", () => {
+    expect(code).toMatch(/createVoiceCaptureController\(\{\s*port:\s*resolvedVoiceCapture,/);
+    // The pre-T277 send machinery must be GONE from this call, not just
+    // absent from the regex above (which would also pass if the whole
+    // call were deleted) — assert directly on the identifiers that used
+    // to appear inside it.
+    const callStart = code.indexOf("createVoiceCaptureController({");
+    expect(callStart).toBeGreaterThan(-1);
+    const callEnd = code.indexOf("}),", callStart);
+    const call = code.slice(callStart, callEnd);
+    expect(call).not.toMatch(/\boutbox\b/);
+    expect(call).not.toMatch(/\bsessionId:\s*resolvedSessionId\b/);
+    expect(call).not.toMatch(/\bsubmitPrompt\b/);
+  });
+
+  it("T277: a 'drafted' voice outcome is applied to state.draft via applyTranscriptToDraft — never sent", () => {
     expect(code).toMatch(
-      /createVoiceCaptureController\(\{\s*port:\s*resolvedVoiceCapture,\s*outbox,\s*sessionId:\s*resolvedSessionId,\s*submitPrompt:\s*onSubmit,?\s*\}\)/,
+      /result\.voiceOutcome\.outcome === "drafted"\)\s*\{\s*const transcript = result\.voiceOutcome\.text;\s*setState\(\(current\) => \(\{\s*\.\.\.current,\s*draft:\s*applyTranscriptToDraft\(current\.draft,\s*transcript\),/,
     );
   });
 
