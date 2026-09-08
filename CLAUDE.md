@@ -413,14 +413,20 @@ backstop for it:
   while a comment OR string literal (a test title counts — one of the ten P6-W6 sites
   was one) anywhere the DENIAL scan reaches uses one of that capability's denying
   phrases. That scan is wider than this list long claimed. The authoritative answer is
-  `isAppSourcePath` in `run-guard-capability-prose.mjs`, which aggregates six areas —
+  `isAppSourcePath` in `run-guard-capability-prose.mjs`, which today aggregates
   `apps/web/src` and `apps/android/src`, plus `scripts/ci` and `packaging/**` (T179),
-  `docs/**` (T197), and `.github/workflows/*.yml` with `apps/android/maestro/*.md`
-  (T207) — less this guard's own three files and the task ledger. **Read that function
-  before you rely on a scope, including the one in this sentence.** (CORRECTED at the
-  P8-W15 merge gate: this said the prose had to be in `apps/web/src` or
-  `apps/android/src`, which was three widenings out of date and contradicted the T215
-  subsection below it.)
+  `docs/**` (T197), `.github/workflows/*.yml` with `apps/android/maestro/*.md`
+  (T207), `apps/android/maestro/*.yaml` (T281), `apps/<name>/app.config.ts` (T246),
+  and **every `packages/*/src` file (T295)** — less this guard's own three files and
+  the task ledger. **Read that function before you rely on a scope, including the one
+  in this sentence.** (CORRECTED at the P8-W15 merge gate: this said the prose had to
+  be in `apps/web/src` or `apps/android/src`, which was three widenings out of date
+  and contradicted the T215 subsection below it. CORRECTED again at the P9-R merge
+  gate: it said "aggregates six areas" and its list omitted T246's, T281's and T295's
+  widenings — T295's landed in the same wave as this correction, so the sentence was
+  false the day it was next read. The count is dropped rather than re-pinned, for the
+  reason this file gives twice elsewhere: every widening invalidates it, and a stale
+  figure reads as a defect to the next reader.)
 - It deliberately does **not** fire on a quoted historical correction — prose reading
   "CORRECTED (P6-W6 merge gate): this said \`...\`" while explaining what used to be wrong.
   `dabe8c4`'s own fix left several files quoting the exact false sentence verbatim for this
@@ -785,13 +791,24 @@ already carries either a dated qualifier or the two explicit "do not restate thi
 instructions this file already added at the P8-W12 and P8-W15 gates — so an entry today would
 ship with nothing live to catch, the inert-entry shape this file already warns against
 elsewhere. **Not built.** Revisit only if a NEW count claim is found stale in a file this
-guard could actually see — `isAppSourcePath`'s own scope: `apps/web/src` and
-`apps/android/src`, `scripts/ci`, `packaging/**`, `docs/**`, `.github/workflows/*.yml`
-and `apps/android/maestro/*.md` — and the fifth gate is tempted to re-propose a generic
-version rather than fixing that one site by hand. Three caveats on that condition, all of
-which make it narrower than it looks. `packages/*/src` is NOT in it: that is
-`isShippedSourcePath`'s scope, and conflating the two is the exact error T147 and T216 each
-had to close. `docs/issues-from-plan.md` is excluded by
+guard could actually see — `isAppSourcePath`'s own scope, which is now most of the
+tracked tree: `apps/web/src` and `apps/android/src`, `packages/*/src`, `scripts/ci`,
+`packaging/**`, `docs/**`, `.github/workflows/*.yml`, `apps/android/maestro/*.md|*.yaml`
+and `apps/<name>/app.config.ts` — and the fifth gate is tempted to re-propose a generic
+version rather than fixing that one site by hand. Two caveats on that condition, both of
+which make it narrower than it looks. (CORRECTED at the P9-R merge gate. This count went
+from three back to two because one caveat was RETIRED, not because the P8-W22 gate's own
+correction — which raised it from two to three after finding the self-referential caveat
+missing — was undone; that third caveat is still below, and still live. The retired one
+read "`packages/*/src` is NOT in it: that is `isShippedSourcePath`'s scope,
+and conflating the two is the exact error T147 and T216 each had to close." T295 widened
+`isAppSourcePath` to admit every `packages/*/src` file in the same wave as this correction,
+so that caveat is now backwards — verified by calling the real exported predicate:
+`isAppSourcePath("packages/client/src/daemon-client.ts")` returns `true`. The two
+predicates are still DIFFERENT and conflating them is still an error — they disagree on
+`scripts/ci/guard-capability-prose.mjs` (`false`/`true`) and on every test file
+(`true`/`false`) — so call each one on the path you care about rather than assuming they
+now coincide.) `docs/issues-from-plan.md` is excluded by
 `DOCS_LEDGER_DENIAL_EXCLUSIONS`, so the running tallies flagged above as the likeliest
 drift site can never satisfy this condition — if one of them goes stale, fix it by hand;
 no guard was ever going to see it. And this guard's OWN three files —

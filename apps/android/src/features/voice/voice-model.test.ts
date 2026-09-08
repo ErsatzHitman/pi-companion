@@ -127,8 +127,26 @@ describe("cleanTranscript (T277 — deterministic cleanup)", () => {
       expect(cleanTranscript("Um—hello")).toBe("hello");
     });
 
-    it("a hyphen directly after the filler, with no separating space, is dropped with it", () => {
-      expect(cleanTranscript("Um-hello")).toBe("hello");
+    // CORRECTED at the P9-R merge gate. This case used to assert
+    // `cleanTranscript("Um-hello")` is `"hello"` — a bare ASCII hyphen in the
+    // trailing-punctuation class. It is removed, because the same class
+    // rewrote three real hyphenated interjections (below): the hyphen it was
+    // matching is a word-internal hyphen, not punctuation trailing a filler.
+    // The em dash and ellipsis forms the ledger actually measured are kept
+    // above; only the hyphen, added on top of that table, is withdrawn.
+    it("leaves a hyphenated interjection alone — the hyphen is part of the word, not trailing punctuation", () => {
+      expect(cleanTranscript("Uh-huh")).toBe("Uh-huh");
+      expect(cleanTranscript("Mm-hmm")).toBe("Mm-hmm");
+      expect(cleanTranscript("Uh-oh")).toBe("Uh-oh");
+    });
+
+    it("leaves a hyphenated interjection alone even when a real sentence follows it", () => {
+      expect(cleanTranscript("Uh-huh, add a comment")).toBe("Uh-huh, add a comment");
+      expect(cleanTranscript("Mm-hmm that is right")).toBe("Mm-hmm that is right");
+    });
+
+    it("still drops a filler followed by a SPACED hyphen, which is real trailing punctuation", () => {
+      expect(cleanTranscript("Um - hello there")).toBe("- hello there");
     });
 
     it("still drops a single trailing comma (the form that already worked)", () => {

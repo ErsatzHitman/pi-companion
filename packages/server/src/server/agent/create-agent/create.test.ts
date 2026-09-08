@@ -265,6 +265,19 @@ test("session create stamps the requested workspaceId when no worktree setup run
     // one of this file's real-storage tests below calls it in place of the
     // bare `storage.flush()` this comment used to describe.
     //
+    // What that sentence does NOT mean, disclosed at the P9-R merge gate so
+    // a future reader does not over-read it: `createAgentCommand` only
+    // returns a REAL handle when it actually dispatched an initial prompt
+    // (`create.ts` assigns it under `if (initialPromptStarted)`, leaving the
+    // `() => Promise.resolve()` default otherwise). Two of this file's
+    // real-storage cases create without a prompt, so for those the thing
+    // being awaited is that no-op default and closes nothing. Measured at
+    // the same gate, `AgentStorage.pendingWrites.size` is 0 at that point in
+    // both of them, so there is no live window there to close — but the
+    // protection is narrower than "every real-storage test", and a future
+    // prompt-less case that DOES queue a write would not be covered. T297
+    // owns landing the deterministic reproduction and a prompt-bearing case.
+    //
     // This is the T240 measure-the-source rule rather than a timeout bump:
     // it removes the write from the race instead of widening the window the
     // race has to lose in.

@@ -196,13 +196,41 @@ const LEADING_FILLER_WORDS = new Set(["um", "umm", "ummm", "uh", "uhh", "erm", "
  * than clean up capture noise — together with any RUN of trailing
  * punctuation/dash/ellipsis characters immediately after it (comma,
  * period, colon, semicolon, `!`, `?`, the unicode ellipsis `…`, a
- * repeated run of periods such as `...`, a hyphen, an en dash `–`, or an
- * em dash `—`, in any combination). T286 widened this from "exactly one
- * trailing punctuation character" — that narrower rule left "Um... hello
- * there" and "Um—hello" unchanged, which is the two forms Whisper-family
- * models emit after a filler most often; see `voice-model.test.ts`'s
- * "T286" cases for both, pinned individually alongside the two forms
- * that already worked (a single comma, and no punctuation at all).
+ * repeated run of periods such as `...`, an en dash `–`, or an em dash
+ * `—`, in any combination). T286 widened this from "exactly one trailing
+ * punctuation character" — that narrower rule left "Um... hello there"
+ * and "Um—hello" unchanged, which is the two forms Whisper-family models
+ * emit after a filler most often; see `voice-model.test.ts`'s "T286" cases
+ * for both, pinned individually alongside the two forms that already
+ * worked (a single comma, and no punctuation at all).
+ *
+ * CORRECTED at the P9-R merge gate: the character class above also
+ * contained a bare ASCII HYPHEN, and the doc described it as "trailing
+ * punctuation ... immediately after" the filler. It is not, in the one
+ * shape that matters: because the separator after the run is `\s*`
+ * (zero-or-more, chosen deliberately so a glued dash still splits), a
+ * hyphen GLUED to the filler made the filler-drop fire on the internal
+ * hyphen of a single hyphenated word. Executed against the real regex:
+ * `"Uh-huh"` became `"huh"`, `"Mm-hmm"` became `"hmm"`, `"Uh-oh"` became
+ * `"oh"` — `uh`, `mm` and `hmm` are all in `LEADING_FILLER_WORDS`. Those
+ * are not capture noise; `Uh-huh` means *yes* and `huh` means *what*, so
+ * the cleanup inverted the speaker's meaning in a dictation feature. `…`,
+ * `–` and `—` do not have this problem: English does not use them
+ * word-internally, so nothing legitimate is glued across them.
+ *
+ * Two changes were needed, and removing the hyphen from the class was only
+ * the first — measured, not assumed: with the hyphen gone but the separator
+ * still `\s*`, `"Uh-huh"` became `"-huh"`, because `(.*)` simply swallowed
+ * the rest of the word once the class matched nothing. So the split is now
+ * ANCHORED with a lookahead — the character immediately after the filler
+ * word must be one of the punctuation/dash/ellipsis characters, whitespace,
+ * or end-of-string — which is what makes a glued hyphen fail to match the
+ * pattern at all and return the transcript untouched. A SPACED hyphen
+ * ("Um - hello") is still real trailing punctuation and still splits, which
+ * `voice-model.test.ts` pins alongside all three hyphenated interjections,
+ * so this cannot be re-widened by someone reading only the ledger's
+ * four-row table (which measured the EM DASH form, not the hyphen — the
+ * hyphen case was added on top of it).
  */
 export function cleanTranscript(raw: string): string {
   const collapsed = raw.replace(/\s+/g, " ").trim();
@@ -210,7 +238,7 @@ export function cleanTranscript(raw: string): string {
     return collapsed;
   }
 
-  const match = /^([A-Za-z]+)[,.:;!?…\-–—]*(?:\s*(.*))?$/s.exec(collapsed);
+  const match = /^([A-Za-z]+)(?=[,.:;!?…–—]|\s|$)[,.:;!?…–—]*\s*(.*)$/s.exec(collapsed);
   if (!match) {
     return collapsed;
   }

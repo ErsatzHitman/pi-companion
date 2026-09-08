@@ -552,6 +552,9 @@ that recomputation has to be domain-specific:
 | T293   | Serve the composer's current text to an extension (getEditorText)               | phase-9   | server           | P9-W72 | none                                                                  |
 | T294   | Decide the two legacy storage permissions expo-image-picker merges in           | phase-9   | android          | P9-W73 | T290                                                                  |
 | T295   | Settle whether the capability-prose denial scan reaches package source          | phase-9   | tooling          | P9-W74 | none                                                                  |
+| T296   | wrapSessionProvider drops six optional AgentSession methods                     | phase-9   | server           | P9-W75 | T293                                                                  |
+| T297   | Land T280's deterministic ENOTEMPTY reproduction as a real test                 | phase-9   | server           | P9-W76 | T280                                                                  |
+| T298   | Pin app.config.ts's permission decision as a registered capability              | phase-9   | tooling          | P9-W77 | T294                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14137,3 +14140,132 @@ What the review explicitly did **not** change, and why:
   `file-explorer`'s service resolves with `O_NOFOLLOW`, `realpath`s, and fstats the open
   handle rather than the path. T41A1a exists to stop the _web app_ opening a second door
   around that, not to build the daemon-side check.
+
+#### T296 — `wrapSessionProvider` drops six optional `AgentSession` methods
+
+`labels: phase-9, area: server` · `wave: P9-W75` · `depends-on: T293`
+
+T293 shipped `respondToEditorTextRequest` and disclosed, correctly, that
+`wrapSessionProvider` does not proxy it. The P9-R merge gate traced the escape and it is
+narrower than "always broken" but wider than "never hit":
+`createResolvedProviderClient` returns `inner` **unwrapped** when
+`inner.provider === provider && !hasModelOverrides`, so the plain builtin `pi` provider keeps
+every method. **A provider profile carrying model overrides, or an aliased provider, goes
+through the wrapper and silently loses the method.**
+
+This is not a T293 defect — the shape predates it and is shared with five sibling optional
+methods (`setSteeringMode`, `getQueueModes`, `setFollowUpMode`, `setFeature` and the
+transfer-cancellation member). T293 is simply the sixth, and the first whose loss the owner
+would notice: `prompt-arbitrage` would work on the default provider and be inert on a profile,
+with no error anywhere.
+
+**The fix must be structural, not another hand-added passthrough.** Six additions in a row
+made by hand is the evidence that a seventh will be forgotten. Options, and the choice must be
+argued:
+
+1. Proxy the whole object (`Proxy`, or a generated forwarder) so an optional method added
+   later is carried without an edit here.
+2. Keep the explicit list but add a test that enumerates `AgentSession`'s optional members
+   from the type and fails when one is not forwarded.
+3. Decide the wrap should not exist for these members at all and say why.
+
+Whichever is chosen, the acceptance bar is a test that would FAIL if a seventh optional
+method were added and not forwarded — prove it by adding a throwaway seventh member, watching
+the failure, and removing it.
+
+Owns: `packages/server/src/server/agent/provider-registry.ts` and its test.
+
+- [ ] Every optional `AgentSession` method survives the wrap, proven per member
+- [ ] The proof fails when a new optional member is not forwarded, demonstrated
+- [ ] The unwrapped fast path (`inner.provider === provider && !hasModelOverrides`) is stated
+      accurately wherever it is described
+- [ ] `getEditorText` is exercised through a model-override profile specifically
+
+#### T297 — Land T280's deterministic `ENOTEMPTY` reproduction as a real test
+
+`labels: phase-9, area: server` · `wave: P9-W76` · `depends-on: T280`
+
+T280's fix is sound and its limit was disclosed honestly. The limit is that **nothing in the
+committed tree can fail if the fix is removed.** Measured twice independently at the P9-R
+gate: reverting `waitForBackgroundDispatchToSettle` to the pre-T280 `storage.flush()`-only
+body leaves `create.test.ts` at `10 passed (10)`, five runs out of five. A future task can
+undo the fix and every gate stays green — the exact "a fix that no test can fail is not a fix"
+shape `CLAUDE.md` names.
+
+The gate measured why, and the reason matters for how this is closed:
+
+- **`createAgentCommand` returns a real handle only when it dispatched an initial prompt**
+  (`create.ts` assigns it under `if (initialPromptStarted)`). Two of the file's six
+  real-storage cases create without a prompt, so what they await is the
+  `() => Promise.resolve()` default and closes nothing. `AgentStorage.pendingWrites.size` is
+  0 at that point in both, so there is no live window there — but the coverage is narrower
+  than the file's own comment reads.
+- For the four prompt-bearing cases, `backgroundTasks` and `pendingWrites` were both **0** at
+  the pre-fix point and after the full settle, in all four invocations. The fix is strictly
+  stronger than what it replaced and provably inert at today's timings.
+
+So the reproduction must **force** the late write, not wait for it: stub or monkey-patch
+`writeFileAtomic` (or `AgentStorage.writeRecord`) to land after the `rmSync` enumeration, show
+`ENOTEMPTY` without the fix, and show it gone with the fix. A prompt-bearing case must be part
+of it so the handle under test is never the no-op default.
+
+**Do not close this by raising a timeout, retrying the `rmSync`, or moving the file into
+`test:unit:serial`** — T240 rules that out for this repository, and the race here is between
+one test and its own asynchronous continuation, not between sibling files.
+
+Owns: `packages/server/src/server/agent/create-agent/create.test.ts` and any test-only helper
+it needs.
+
+- [ ] Removing the fix makes a committed test FAIL, demonstrated both ways
+- [ ] The forced-ordering mechanism is explicit, not a sleep or a timing assumption
+- [ ] At least one prompt-bearing case is covered, so the handle is a real one
+- [ ] No retry, no raised `testTimeout`, no new `test:unit:serial` member
+- [ ] `create.test.ts`'s own comment about coverage matches what the tests actually cover
+
+#### T298 — Pin `app.config.ts`'s permission decision as a registered capability
+
+`labels: phase-9, area: tooling` · `wave: P9-W77` · `depends-on: T294`
+
+T294 shipped `android.blockedPermissions` in `apps/android/app.config.ts` and falsified, in
+the same commit, a paragraph in that same file asserting the field was absent ("declares no
+`permissions` and no `blockedPermissions`"). **Nothing flagged it**, even though the file is
+inside the guard's scope on both sides — measured by calling the real predicates:
+`isAppSourcePath("apps/android/app.config.ts")` is `true` (T246 widened
+`APP_ROOT_CONFIG_PATTERN` for exactly this) and `isShippedSourcePath` is `true`. The P9-R
+merge gate corrected the prose by hand; this task closes the reason it had to.
+
+**No `CAPABILITIES` entry exists for anything `app.config.ts` declares.** That is the
+"add an entry the moment you ship one" instruction missed again, and it is the second time a
+capability shipping in this specific file went unregistered (T246 registered
+`computeVersionCodeFromSemver` only after the same omission).
+
+The honest difficulty, which must be argued rather than skipped: `blockedPermissions` is a
+**config value, not a declared function**, so it has no `methodNames` token the way every
+existing entry does. T215 already hit the mirror of this and rejected a bare string-literal
+member because `stripCommentsAndStrings` erases literal values before any check runs — a
+`"android.permission.READ_EXTERNAL_STORAGE"` token would make the entry permanently unable to
+ship. So either:
+
+1. Use a shape-anchored `RegExp` against the real `blockedPermissions: [` declaration, T211's
+   pattern; or
+2. Extract the decision into a named exported function in `app.config.ts` and register that,
+   which also gives the test something to call; or
+3. Record a will-not-register with the measurement, if neither shape can be made to fire.
+
+Whichever is chosen, **watch the entry fire before trusting it**: append a denying sentence in
+this entry's own wording — never lifted from `app.config.ts`'s own decision record, which
+narrates the pre-fix state at length and carries `CORRECTED at the P9-R merge gate` markers —
+to a real tracked in-scope file, confirm exit 1 naming this capability, restore from a
+scratchpad copy (**never `git checkout --`**), and confirm exit 0 with
+`git status --porcelain` empty.
+
+Owns: `scripts/ci/guard-capability-prose.mjs`, its test, and — only if option 2 is chosen —
+the named export in `apps/android/app.config.ts`.
+
+- [ ] The chosen shape is argued against the other two, with the literal-erasure trap addressed
+- [ ] The entry is watched firing and restoring, or a will-not-register is recorded with its
+      measurement
+- [ ] `isAppSourcePath` and `isShippedSourcePath` are each called on the real path
+- [ ] The full-tree scan still exits 0
+- [ ] Neither forbidden count (`scripts/ci` tests, `CAPABILITIES` entries) is restated in
+      `CLAUDE.md`
