@@ -329,6 +329,18 @@ restated here as their citable home (T253):
   the same wave by mirroring the field exactly, proven field-for-field by
   `rpc-types.pi-mirror.contract.test.ts`. `since` is not yet read or sent by any caller, so
   closing the type drift did not by itself add incremental-fetch behavior.
+- **`get_commands` was mirrored explicitly rather than deferred, because it was already
+  shipped and relied on (T267).** `PiCliRuntime.getCommands()` already sends this command in
+  production today via a configurable `commandsRpcName: string` field (default
+  `"get_commands"`, `cli-runtime.ts`); before this arm existed, `get_commands` was reachable
+  only through `PiRpcCommand`'s trailing `{ id?: string; type: string }` catch-all, because
+  `commandsRpcName`'s type is a plain `string`, not the literal `"get_commands"`. Of the
+  twelve request types the Phase 0 re-audit found previously unmirrored, this is the one T51A
+  chose to add as its own explicit, field-checked arm — matching Pi's real
+  `{ id?: string; type: "get_commands" }` exactly and proven against it field-for-field by
+  `rpc-types.pi-mirror.contract.test.ts` — rather than leave a shipped, production-relied-on
+  command (T28B4's slash-command completion already depends on it) with no drift detection
+  of its own, the way the other eleven, uncalled request types were left.
 
 #### Session watcher and live tail
 

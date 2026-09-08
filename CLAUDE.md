@@ -126,13 +126,18 @@ adding, removing, or repointing any of these; do not sweep them on the assumptio
 - `packages/frontend-core/src/testing/fixtures/extensions/scenarios/switchboard.ts`
 - `packages/frontend-core/src/testing/fixtures/extensions/scenarios/todo.ts`
 - `packages/frontend-core/src/testing/fixtures/extensions/scenarios/workflows.ts`
-- `packages/server/src/server/agent/providers/pi/rpc-types.ts` — only its `get_commands`
-  mirror-selection rationale; the same file's three decision-record citations are the
-  repointed example above, not part of this kept list
 
-See `docs/issues-from-plan.md`'s T253 and T261 sections for the full history of this sort,
-including the two citations (in the extension `log` renderer and its model) that the P9-D
-merge gate had already repointed before T253 ran.
+`packages/server/src/server/agent/providers/pi/rpc-types.ts` no longer appears above (T267):
+its `get_commands` mirror-selection rationale was T253's one classification defect — it
+justified a shipped scoping decision by naming the frozen audit as the record, which is
+authority, not provenance, under the test above. T267 restated the rationale in `plan.md`
+§4.2 ("Pi RPC command mirror drift disclosure") alongside the three decision-record
+citations T253 had already repointed there, then repointed this fourth one the same way, so
+the file now carries no reference-only citation at all.
+
+See `docs/issues-from-plan.md`'s T253, T261 and T267 sections for the full history of this
+sort, including the two citations (in the extension `log` renderer and its model) that the
+P9-D merge gate had already repointed before T253 ran.
 
 ## Repository invariants
 

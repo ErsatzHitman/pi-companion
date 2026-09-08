@@ -332,10 +332,10 @@ export type PiRpcCommand =
   // `rpc-types.pi-mirror.contract.test.ts`, the same way as the six
   // commands T38A0/T38B0b added) rather than leaving a shipped,
   // production-relied-on command with no drift detection of its own. See
-  // `docs/pi-extension-compatibility.md`'s T51A findings
-  // section for why this one (of 12 previously-unmirrored request types)
-  // was mirrored rather than deferred: T28B4's slash-command completion
-  // already depends on it, shipped, in production.
+  // plan.md §4.2 "Pi RPC command mirror drift disclosure" for why this one
+  // (of 12 previously-unmirrored request types) was mirrored rather than
+  // deferred: T28B4's slash-command completion already depends on it,
+  // shipped, in production (T267).
   | { id?: string; type: "get_commands" }
   | { id?: string; type: string };
 

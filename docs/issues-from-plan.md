@@ -9045,9 +9045,9 @@ git ls-files 'apps/*/src/**' 'packages/*/src/**' | grep -E '\.(ts|tsx|js|jsx|mjs
 ```
 
 - [x] Every remaining citation is classified as provenance (kept) or authority (repointed), with the classification recorded (T261: the test and the kept-citation list live in `CLAUDE.md`'s reference-only section)
-- [ ] `rpc-types.ts`'s three "decision record" citations point at `plan.md`, and `plan.md` states those decisions before the repoint lands
+- [x] `rpc-types.ts`'s three "decision record" citations point at `plan.md`, and `plan.md` states those decisions before the repoint lands (verified at T267: lines 208, 266 and 293 cite `plan.md` §4.2 "Pi RPC command mirror drift disclosure", and `plan.md:308` carries that heading)
 - [ ] No reference-only document is edited (T242's frozen rule still binds)
-- [ ] Any test asserting a repointed comment string is updated in the same commit
+- [x] Any test asserting a repointed comment string is updated in the same commit (verified at T267: `grep -rn` across `packages/server/src` and `apps` for the old `get_tree`/decision-record phrasing found no test pinning it; `rpc-types.test.ts` and `rpc-types.pi-mirror.contract.test.ts` assert `PiRpcCommand`'s shape, never the disclosure comments' text)
 
 #### T254 — Decide whether isAppSourcePath should admit apps/\*/app.config.ts
 
@@ -9775,10 +9775,10 @@ Owns: `packages/server/src/server/agent/providers/pi/rpc-types.ts`, `CLAUDE.md`'
 list, `docs/issues-from-plan.md`'s T253 section, and `plan.md` §4.2 only to add the restated
 fact.
 
-- [ ] The `get_commands` rationale has a `plan.md` home before the comment is repointed
-- [ ] `CLAUDE.md`'s kept list drops that file, or explains why it stays
-- [ ] T253's second and fourth checkboxes are ticked, or the reason they are not is written down
-- [ ] The commit says this is a T253 classification call, not a T261 error, and no reference-only document is edited
+- [x] The `get_commands` rationale has a `plan.md` home before the comment is repointed (`plan.md` §4.2's new bullet landed first; the `rpc-types.ts` repoint is a later edit in this same commit)
+- [x] `CLAUDE.md`'s kept list drops that file, or explains why it stays (dropped: `rpc-types.ts` no longer appears in the kept list, replaced with a note explaining the T267 reclassification)
+- [x] T253's second and fourth checkboxes are ticked, or the reason they are not is written down (both ticked above, each with the evidence that satisfies it)
+- [x] The commit says this is a T253 classification call, not a T261 error, and no reference-only document is edited
 
 #### T268 — Restore pronoun coverage to T265's anchored phrases
 
