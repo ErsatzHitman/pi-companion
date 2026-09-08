@@ -97,14 +97,17 @@
 //    `.github/workflows/ci.yml`'s `server-tests` jobs run whenever the
 //    `backend` (or `full`) path filter matches.
 //
-//    What is genuinely missing is a RATIONALE, not an assertion: nothing
-//    at that assertion connects 60 ms to §14.5's 20 msg/s, and it sits
-//    inside a test titled about something else (that same file, line 127:
-//    "uses constructor windowMs instead of a hard-coded value"), so a
-//    future reader may relax the pin without knowing a
-//    published budget depends on it. Owner: whoever next touches that
-//    file (out of this task's `CI workflow files` + `scripts/ci` scope);
-//    the seam is a comment plus a test title, not a new assertion.
+//    The rationale connecting 60 ms to §14.5's 20 msg/s is not missing: it
+//    is the pin test's own title, which states the connection directly.
+//    Nothing further is needed from this guard for that gap.
+//    (CORRECTED at T274: this paragraph used to say the rationale was
+//    "genuinely missing" and that the pin sat "inside a test titled about
+//    something else," citing a line number for both claims. Neither holds
+//    today — `agent-stream-coalescer.test.ts`'s
+//    `AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS` pin test is titled "pins
+//    AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS at 60, which plan.md §14.5's
+//    20 msg/s per-agent bridge budget depends on" — the exact rationale
+//    this paragraph once called absent, now stated in the pin's own name.)
 //    (CORRECTED at the P9-W1 merge gate: this said the budget was "NOT
 //    DIRECTLY GATED by any dedicated assertion today", that a change
 //    "could silently raise the real rate above budget with nothing
