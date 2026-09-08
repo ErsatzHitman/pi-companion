@@ -184,9 +184,20 @@ function buildOpenAiResolutionInput(params: {
  * generic `OPENAI_*` names, so a user configuring Groq never has to know the
  * "point OpenAI's baseUrl at a different vendor" trick is even possible.
  * `baseUrl` is always Groq's real endpoint (never overridable — see
- * `persisted-config.ts`'s `GroqProviderSchema` header for why), and `model`
- * always resolves to a Groq-valid whisper id (never `OpenAISTT`'s own
- * `"whisper-1"` default, which Groq does not serve).
+ * `persisted-config.ts`'s `GroqProviderSchema` header for why).
+ *
+ * `model`, by contrast, is NOT validated against Groq's model lineup (T287,
+ * correcting an earlier "always resolves to a Groq-valid whisper id" claim
+ * here that `GROQ_STT_MODEL=whisper-1` — or any other string — disproves by
+ * execution: an explicit `GROQ_STT_MODEL` env value or a persisted
+ * `groq.stt.model` passes straight through unchanged, exactly like every
+ * other operator override this file resolves). Only the *default*, used
+ * when neither is set, is guaranteed Groq-valid: `DEFAULT_GROQ_STT_MODEL`,
+ * never `OpenAISTT`'s own `"whisper-1"` default, which Groq does not serve.
+ * Rejecting an operator's explicit override instead would mean hardcoding
+ * Groq's model lineup here and re-failing every request the moment Groq
+ * ships a model this file doesn't yet know about — worse than trusting the
+ * value the same way every other credential in this resolver already is.
  */
 function resolveGroqSttCredentials(params: {
   env: NodeJS.ProcessEnv;

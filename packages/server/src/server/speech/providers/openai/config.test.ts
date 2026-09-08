@@ -284,6 +284,41 @@ describe("resolveOpenAiSpeechConfig", () => {
       expect(resolvedPersistedOnly?.stt?.model).toBe("whisper-large-v3");
     });
 
+    test("T287: GROQ_STT_MODEL is trusted verbatim, even for a non-Groq id — it is not validated", () => {
+      const persisted = parsePersisted({
+        providers: { groq: { apiKey: "gsk-test" } },
+      });
+
+      const resolved = resolveOpenAiSpeechConfig({
+        env: { GROQ_STT_MODEL: "whisper-1" } as NodeJS.ProcessEnv,
+        persisted,
+        providers: ALL_OPENAI,
+      });
+
+      // The operator's explicit override passes straight through — the doc
+      // comment above `resolveGroqSttCredentials` deliberately does not
+      // claim otherwise (T287). Only the DEFAULT below is Groq-valid.
+      expect(resolved?.stt?.model).toBe("whisper-1");
+    });
+
+    test("T287: with no override, the default is Groq-valid and baseUrl cannot be moved by any override", () => {
+      const persisted = parsePersisted({
+        providers: { groq: { apiKey: "gsk-test" } },
+      });
+
+      const resolved = resolveOpenAiSpeechConfig({
+        env: {
+          OPENAI_STT_BASE_URL: "https://not-groq.example.com/v1",
+          OPENAI_BASE_URL: "https://also-not-groq.example.com/v1",
+        } as NodeJS.ProcessEnv,
+        persisted,
+        providers: ALL_OPENAI,
+      });
+
+      expect(resolved?.stt?.model).toBe("whisper-large-v3-turbo");
+      expect(resolved?.stt?.baseUrl).toBe("https://api.groq.com/openai/v1");
+    });
+
     test("an explicit OpenAI STT credential wins over a configured Groq key — fully backward compatible", () => {
       const persisted = parsePersisted({
         providers: {
