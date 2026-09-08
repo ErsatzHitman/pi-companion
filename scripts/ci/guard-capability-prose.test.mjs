@@ -4133,3 +4133,119 @@ test("P9-F gate: on the real committed tree, T248 capability resolves as shipped
       " isShippedSourcePath scope",
   );
 });
+
+// P9-H merge gate, registering T257's capability. A FORWARD guard: no live
+// denial existed anywhere in scope when it was written, because T257 wrote its
+// own former limitation in the past tense from the start. These pin both
+// directions, and the fourth case pins the deliberate omission of
+// `isGitIgnoredPath` from `methodNames` -- that name is also declared in
+// `packages/server/src/utils/directory-suggestions.ts`, so a bare-name member
+// for it would resolve as shipped even with T257 reverted (the T172 trap).
+test("P9-H gate: a live does-not-consult-gitignore claim is flagged once T257 is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-dockerignore-depth.mjs",
+      content: "function gitIgnoredEntries(root) { return new Set(); }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "The disk walk in guard-dockerignore-depth.mjs does not consult the\n" +
+        "`.gitignore` file at all.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "guard-dockerignore-depth skips .gitignore'd paths when walking the disk (gitIgnoredEntries)",
+  );
+});
+
+test("P9-H gate: the red-locally-green-in-CI framing also fires", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-dockerignore-depth.mjs",
+      content: "function gitIgnoredEntries(root) { return new Set(); }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content:
+        "run-guard-dockerignore-depth.mjs is red locally but green in CI, so\n" +
+        "every gate has to re-derive that the failure is noise.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "guard-dockerignore-depth skips .gitignore'd paths when walking the disk (gitIgnoredEntries)",
+  );
+});
+
+test("P9-H gate: T257 own past-tense narration of the former limitation does not fire", () => {
+  const shippedFiles = [
+    {
+      path: "scripts/ci/run-guard-dockerignore-depth.mjs",
+      content: "function gitIgnoredEntries(root) { return new Set(); }\n",
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "scripts/ci/run-guard-dockerignore-depth.mjs",
+      content:
+        "// Before T257 this disk walk did not exclude .gitignore'd paths, so\n" +
+        "// the same commit was red here and green in CI.\n",
+    },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+test("P9-H gate: an unrelated isGitIgnoredPath declaration does not ship T257 capability", () => {
+  const shipped = findShippedCapabilities([
+    {
+      path: "packages/server/src/utils/directory-suggestions.ts",
+      content: "function isGitIgnoredPath(absolutePath, input) { return false; }\n",
+    },
+  ]);
+
+  assert.ok(
+    !shipped.some(
+      (capability) =>
+        capability.name ===
+        "guard-dockerignore-depth skips .gitignore'd paths when walking the disk (gitIgnoredEntries)",
+    ),
+    "an unrelated isGitIgnoredPath declaration must not satisfy T257 capability:" +
+      " if this fails, methodNames has regained the colliding bare name",
+  );
+});
+
+test("P9-H gate: on the real committed tree, T257 capability resolves as shipped", () => {
+  const real = readCommittedFile("scripts/ci/run-guard-dockerignore-depth.mjs");
+  const shipped = findShippedCapabilities([
+    { path: "scripts/ci/run-guard-dockerignore-depth.mjs", content: real },
+  ]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name ===
+        "guard-dockerignore-depth skips .gitignore'd paths when walking the disk (gitIgnoredEntries)",
+    ),
+    "T257 capability is no longer declared in run-guard-dockerignore-depth.mjs:" +
+      " either gitIgnoredEntries was renamed, or scripts/ci left" +
+      " isShippedSourcePath scope",
+  );
+});

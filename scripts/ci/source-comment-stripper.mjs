@@ -169,11 +169,27 @@
 // That whole-tree diff is not the same claim as "the heuristic is always
 // right", and the gap was found, not assumed away: comparing the
 // heuristic's own regex-start decisions (not just final output) against
-// the same ground truth found 334 of the 2,247 files where a JSX closing
-// or self-closing tag's `/` (`</Foo>`, `<Bar />`) makes `canPrecedeRegex`
-// return true — the character immediately before it (`<`) is one of the
-// real preceding tokens a genuine regex literal can follow, and this
-// heuristic has no notion of JSX at all. None of those 334 happened to
+// the same ground truth found 334 of the 2,247 files where a JSX CLOSING
+// tag's `/` (`</Foo>`) makes `canPrecedeRegex` return true — the character
+// immediately before it (`<`) is one of the real preceding tokens a genuine
+// regex literal can follow, and this heuristic has no notion of JSX at all.
+//
+// (CORRECTED at the P9-H merge gate. This said "a JSX closing OR
+// SELF-CLOSING tag's `/` (`</Foo>`, `<Bar />`)" triggers it. The
+// self-closing half is false, twice over, and both halves were disproved by
+// calling the real exported function rather than by reasoning about it:
+//
+//   "</Foo> // real comment"   -> comment LEAKED
+//   "<Bar /> // real comment"  -> comment stripped correctly
+//   "<Bar/> // real comment"   -> comment stripped correctly
+//
+// `canPrecedeRegex` returns FALSE at a self-closing tag's slash, and the
+// character immediately before that slash is a space (or the tag name's
+// last letter), never `<`. Only the closing-tag shape triggers. This matters
+// because this paragraph is the standing instruction for the next caller: a
+// reader auditing a `.tsx` file would look for self-closing tags, which are
+// safe, and could reasonably stop there. The count above is left as measured
+// — what was wrong was its stated composition, not the measurement.) None of those 334 happened to
 // swallow a real comment or string today (hence the byte-for-byte diff
 // staying at zero), but the underlying trigger is real, not merely
 // theoretical: a source line reading `</Foo> // real comment`, run through

@@ -1381,6 +1381,44 @@ export const CAPABILITIES = [
       /an undeclared import (?:here|in packages\/relay|under packages\/relay) (?:would|could|is) (?:not (?:be )?caught|never (?:be )?(?:caught|detected|flagged))/i,
     ],
   },
+  {
+    // Registered at the P9-H merge gate, for T257, which shipped in the same
+    // wave. T257 taught `guard-dockerignore-depth` to skip `.gitignore`d
+    // paths when walking the real disk, closing a divergence where the same
+    // commit was red in a working tree and green in a clean checkout. Its
+    // `Owns:` line did not cover this file, so nothing was registered — the
+    // T215/T228 shape for the third time in this phase.
+    //
+    // A FORWARD guard in T162's shape: no live denial of this capability
+    // exists anywhere in scope today, which is expected, because T257 wrote
+    // its own former limitation in the past tense from the start
+    // (`run-guard-dockerignore-depth.mjs`: "before T257 it was also...").
+    // The RED/GREEN proof therefore uses a sentence in this entry's own
+    // wording appended to a real tracked in-scope file, restored from a
+    // scratchpad copy — never `git checkout --`.
+    //
+    // `methodNames`: `gitIgnoredEntries` ALONE, and the omission of
+    // `isGitIgnoredPath` is deliberate and measured, not an oversight.
+    // `isGitIgnoredPath` is ALSO declared in
+    // `packages/server/src/utils/directory-suggestions.ts:327`, an entirely
+    // unrelated function answering a different question about a different
+    // input — so a bare-name member for it would resolve as "shipped" from
+    // that file even if T257 were reverted outright, the exact
+    // "token that outlives the capability" trap T172 recorded.
+    // T168's AND-group cannot rescue it either: an AND-group requires every
+    // name in the SAME file, and these two live in
+    // `guard-dockerignore-depth.mjs` and `run-guard-dockerignore-depth.mjs`
+    // respectively. `gitIgnoredEntries` is declared only in those two files
+    // plus their test — measured by grep across `scripts/ci`, `packages` and
+    // `apps` — so one bare name is both sufficient and safe.
+    name: "guard-dockerignore-depth skips .gitignore'd paths when walking the disk (gitIgnoredEntries)",
+    methodNames: ["gitIgnoredEntries"],
+    denyingPhrases: [
+      /guard-dockerignore-depth(?:\.mjs)?[^.]{0,140}?(?:does not|never|cannot) (?:consult|respect|read|honou?r) (?:the )?`?\.gitignore`?/i,
+      /(?:its|the) disk walk[^.]{0,120}?(?:does not|never) (?:exclude|skip|filter)[^.]{0,60}?`?\.gitignore`?d/i,
+      /guard-dockerignore-depth(?:\.mjs)?[^.]{0,160}?(?:red|fails) locally (?:but|while|and) (?:green|passes) (?:in|on) CI/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

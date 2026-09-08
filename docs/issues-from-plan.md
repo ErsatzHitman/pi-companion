@@ -520,6 +520,8 @@ that recomputation has to be domain-specific:
 | T259   | Widen T251's capability entry to the apps-only framing it misses                | phase-9   | tooling          | P9-W40 | T251                                                                  |
 | T260   | Repoint the two scripts/ci legacy-schema citations at plan.md 5.3               | phase-9   | tooling          | P9-W41 | T253                                                                  |
 | T261   | Record T253's provenance/authority classification durably                       | phase-9   | docs             | P9-W42 | T253                                                                  |
+| T262   | LEGACY_PROVIDER_IDS excludes pi, so the shipped Android app sees no agents      | phase-9   | server           | P9-W43 | none                                                                  |
+| T263   | Teach canPrecedeRegex about the JSX closing-tag case, or scope it               | phase-9   | tooling          | P9-W44 | T256                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -873,6 +875,10 @@ the task details always agree.
 |        | own grep scope could not reach).                                         |       |
 | P9-W42 | T261 (filed by the P9-G gate; T253's own third criterion,                | 1     |
 |        | whose answer lives only in a session report).                            |       |
+| P9-W43 | T262 (filed by the P9-H gate; a shipped product defect T258              | 1     |
+|        | surfaced and correctly refused to fix in its own scope).                 |       |
+| P9-W44 | T263 (filed by the P9-H gate; the one shape that really does             | 1     |
+|        | trigger the regex heuristic, inert today).                               |       |
 
 ---
 
@@ -9224,10 +9230,40 @@ Owns: the three `*.e2e.test.ts` files `test:integration` runs,
 `packages/server/src/server/test-utils/fake-agent-client.ts`, and — only under option 1 —
 `packages/protocol/src/provider-manifest.ts` and the `plan.md` section that would have to change.
 
-- [ ] The decision names which option and why the other lost
-- [ ] Under option 2, the coverage given up is enumerated before it is given up
+- [x] The decision names which option and why the other lost
+- [x] Under option 2, the coverage given up is enumerated before it is given up
 - [ ] Under option 1, `plan.md` is amended first, in the same commit or before it
-- [ ] The three files pass locally, run one at a time in the foreground, with the command and exit code recorded
+- [x] The three files pass locally, run one at a time in the foreground, with the command and exit code recorded
+
+**Coverage the rescoping to `"pi"` gives up, file by file (recorded at the P9-H merge gate;
+T258's `Owns:` line did not include this file, and two committed files were already citing
+this entry for it).** Re-derived from `git diff a6ce90f..70581ca` over each file, case by
+case, not summarised from a report:
+
+| File                                                 | Cases removed                                                                                                                                                                                                                                   | Rescoped, not lost                                                                                                 |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `src/server/daemon-e2e/models.e2e.test.ts`           | `test.runIf(hasCodex)` — asserts a Codex model list is non-empty and every entry carries `provider === "codex"`, a truthy `id` and a truthy `label`. `test.runIf(hasOpenCode)` — the same three assertions for `provider === "opencode"`.       | `test("returns model list for Claude provider")` → the same shape against `"pi"`, unconditional (no `runIf` gate). |
+| `src/server/daemon-e2e/live-preferences.e2e.test.ts` | The `describe.each(["claude", "codex", "opencode"])` matrix collapses to one provider, so the Codex and OpenCode legs of live model switching are gone. `test.runIf(hasCodex)` and `test.runIf(hasOpenCode)` thinking-option switches are gone. | The Claude leg and `test("live thinking switching works for Claude (off -> on)")` → `"pi"`.                        |
+| `src/server/agent/model-catalog.e2e.test.ts`         | `test.runIf(hasCodex)` and `test.runIf(hasOpenCode)` catalog-shape cases.                                                                                                                                                                       | `test("Claude catalog exposes Sonnet and Haiku variants")` → the Pi fake's own variants.                           |
+
+**What that costs, stated plainly:** the multi-provider dimension itself. No test now asserts
+that the catalog and live-switching paths behave correctly for more than one provider id at a
+time, so a regression that hardcodes `"pi"` somewhere in those paths would not be caught here.
+Every per-provider assertion shape (non-empty list, `provider` field matching the request,
+truthy `id`/`label`, thinking-option on/off) survives against `"pi"`.
+
+**Two qualifications a future reader needs, both measured rather than assumed.**
+
+First, the removed cases were **already failing wherever they ran**, which strengthens option
+(b) rather than weakening it: under a Pi-only `AGENT_PROVIDER_DEFINITIONS` every one of them
+ends in `Unknown provider: <id>`. The P9-H gate reproduced this by restoring the pre-change
+`models.e2e.test.ts` from `git show a6ce90f:` and running it on a machine where `which codex`
+and `which opencode` both succeed: the `runIf` gates did **not** skip, and all three legs ran
+and failed. So the coverage given up was already zero in practice on any machine that had the
+binaries installed, and self-skipped on any machine that did not.
+
+Second, `test:integration` remains unwired into CI. That was T250's subject and is still open;
+nothing in T258 or this note decides it.
 
 #### T259 — Widen T251's capability entry to the apps-only framing it misses
 
@@ -9332,6 +9368,119 @@ Owns: whichever of `plan.md` §5 or `CLAUDE.md`'s reference-only section gains t
 - [ ] At least one worked example on each side is named
 - [ ] T253's third checkbox is ticked, and the 14 kept citations are enumerated somewhere durable
 - [ ] No reference-only document is edited
+
+#### T262 — LEGACY_PROVIDER_IDS excludes "pi", so the shipped Android app sees no agents
+
+`labels: phase-9, area: server` · `wave: P9-W43` · `depends-on: none`
+
+**This is a shipped product defect, not a test-scope question, and it is the most severe item
+open in Phase 9.** It is pre-existing — neither file was touched by wave P9-H — and it surfaced
+only because T258 rescoped the e2e suite to `"pi"` and had to work around it in test code.
+
+Re-derived at the P9-H merge gate by reading the real path, not by running the app:
+
+- `packages/server/src/server/session.ts:281` —
+  `const LEGACY_PROVIDER_IDS = new Set(["claude", "codex", "opencode"]);`. **No `"pi"`.**
+- `:282` — `const MIN_VERSION_ALL_PROVIDERS = "0.1.45";`
+- `:1783` — `isProviderVisibleToClient(provider)` returns `true` when
+  `clientSupportsAllProviders(this.appVersion)`, else `LEGACY_PROVIDER_IDS.has(provider)`.
+- `:316` — `clientSupportsAllProviders` is `isAppVersionAtLeast(appVersion, "0.1.45")`.
+- `apps/android/src/app-shell/core.ts:124` —
+  `export const ANDROID_DAEMON_APP_VERSION = "0.1.0";`, sent at `:953` and `:1284`.
+
+`isAppVersionAtLeast("0.1.0", "0.1.45")` compares `[0,1,0]` against `[0,1,45]` and returns
+**false** at the third component, so the shipped Android client is treated as legacy and
+`isProviderVisibleToClient("pi")` returns **false**.
+
+**The consequence is wider than a missing push.** `session.ts:4360` is
+
+```ts
+agents = agents.filter((agent) => this.isProviderVisibleToClient(agent.provider));
+```
+
+— inside the agent **list** build, not only the update path. Under a Pi-only
+`AGENT_PROVIDER_DEFINITIONS` (`packages/protocol/src/provider-manifest.ts:38`, one entry,
+`id: "pi"`), every agent is a `"pi"` agent, so the real Android app receives an **empty agent
+list**. T258 disclosed this honestly but scoped it as "would never receive an `agent_update`
+push", which understates it.
+
+**Do not fix this by guessing which end is wrong.** Three candidate shapes, and the choice is a
+product decision that must be argued:
+
+1. Add `"pi"` to `LEGACY_PROVIDER_IDS`. Cheapest, but the set's name then lies — `"pi"` is not
+   legacy, it is the only provider.
+2. Bump `ANDROID_DAEMON_APP_VERSION` past `0.1.45`. Makes the gate pass, but that constant is a
+   wire-compatibility signal, not a version to move for convenience; check what else reads it
+   (`clientUsesLegacyWorkspaceRestore` at least) before touching it.
+3. Retire the gate. It exists to hide providers from clients too old to render them. With one
+   provider and no non-Pi providers planned (`plan.md` §2.3), the gate may have outlived its
+   reason — but that is exactly the kind of removal that needs the original reason found first,
+   not assumed absent.
+
+Whichever ships, prove it end to end rather than by unit test alone: a daemon built from the
+real manifest must return a non-empty agent list to a client announcing
+`ANDROID_DAEMON_APP_VERSION`. Check every caller of `isProviderVisibleToClient` (`:862`,
+`:943`, `:1006`, `:4360`, `:4432`, `:4440`) — the list build is the one that matters most, and
+the two payload filters at `:4432`/`:4440` behave differently.
+
+Owns: `packages/server/src/server/session.ts`, `apps/android/src/app-shell/core.ts`, and
+whichever of `plan.md` records the decision.
+
+- [ ] The chosen shape is argued against the other two, in the source, not only a report
+- [ ] A daemon built from the real manifest returns a non-empty agent list to `ANDROID_DAEMON_APP_VERSION`
+- [ ] Every caller of `isProviderVisibleToClient` is checked, and the two payload filters are stated to behave as intended
+- [ ] The workaround `live-preferences.e2e.test.ts` carries in its own test context is removed or justified
+
+#### T263 — Teach canPrecedeRegex about the JSX closing-tag case, or scope it
+
+`labels: phase-9, area: tooling` · `wave: P9-W44` · `depends-on: T256`
+
+`source-comment-stripper.mjs`'s `canPrecedeRegex` heuristic treats the `/` in a JSX **closing**
+tag (`</Foo>`) as a regex-literal start, because the character before it is `<` — a token a
+genuine regex can follow. The false "regex" scan then consumes past a following comment's own
+`//`, so the comment survives into the output:
+
+```
+"</Foo> // real comment"   -> comment LEAKED
+"<Bar /> // real comment"  -> stripped correctly
+"<Bar/> // real comment"   -> stripped correctly
+```
+
+Only the closing-tag shape triggers; the self-closing shapes are safe, `canPrecedeRegex`
+returning `false` at their slash. (T256's paragraph originally claimed both shapes triggered;
+corrected at the P9-H merge gate by executing the real exported function.)
+
+**Currently inert, and this task must not claim otherwise.** T256 measured the whole tree —
+2,247 files, zero byte-for-byte differences against a parser-derived ground truth, re-derived
+at the gate under a second, independently-constructed oracle that also found zero. No file any
+current caller scans has a comment positioned where this fires. The regression test T256 added
+pins the limitation as known.
+
+What makes it worth closing rather than leaving pinned is the caller trend: the module went
+from four callers to eight in three waves, and `orphan-modules.mjs` now walks every tracked
+module file. A `.tsx` file with a comment shortly after a closing tag turns this live, and the
+failure is silent — a comment that should have been stripped stays in, so a guard reading the
+"code" sees prose.
+
+Two shapes, both legitimate:
+
+1. **Teach the heuristic the case** — a `/` immediately following `<` cannot start a regex,
+   because `<` as a _binary_ operator cannot be followed by an empty regex and `<` as JSX is
+   not an expression position at all. Measure the false-negative cost against the same
+   parser-derived oracle T256 built: the fix must not start swallowing real regexes.
+2. **Scope it** — state in the header that the module is not safe for `.tsx` and make a caller
+   that scans `.tsx` opt in explicitly. Cheaper, but pushes the problem to eight callers.
+
+Whichever ships, re-run T256's whole-tree oracle comparison and report the byte-difference
+count, and add the leaking case above as a test that goes from expected-leak to expected-strip
+in the same commit.
+
+Owns: `scripts/ci/source-comment-stripper.mjs` and its test.
+
+- [ ] `"</Foo> // real comment"` strips correctly, pinned by a test that fails on the old behaviour
+- [ ] The whole-tree oracle comparison is re-run and its byte-difference count reported
+- [ ] No real regex literal starts being swallowed — measured, not asserted
+- [ ] The known-limitation regression test T256 added is updated rather than deleted
 
 #### T32A1 — Build the Android connect form
 
