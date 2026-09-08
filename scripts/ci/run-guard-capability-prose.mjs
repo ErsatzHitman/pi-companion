@@ -453,15 +453,58 @@ function isMaestroProsePath(path) {
   return dot !== -1 && MAESTRO_EXTENSIONS.has(basename.slice(dot));
 }
 
+// T254: DECISION — WIDEN. `isShippedSourcePath` above admits an app-root
+// config file (`APP_ROOT_CONFIG_PATTERN`, T246) but `isAppSourcePath` did
+// not, so `apps/android/app.config.ts` could DECLARE a capability but could
+// never be caught DENYING one — including a denial of the capability it is
+// itself about. The P9-E merge gate found a live instance: T247 shipped
+// `checkAndroidReleaseTagVersion`, and `app.config.ts`'s own decision record
+// carried a "GAP FILED ... nothing enforces that a human actually bumps
+// `version` before pushing a new release tag" block describing exactly the
+// step T247 had just shipped, invisible to this scan while its two sibling
+// runbooks (both under `docs/**`, already in scope) were not.
+//
+// The risk this task's brief named before widening: `app.config.ts` is a
+// long, deliberately narrative decision record, and one registered entry's
+// own comment (`checkAndroidReleaseTagVersion`'s, in
+// `guard-capability-prose.mjs`) reasons about avoiding a phrase collision
+// with that file's prose — a collision impossible today only because this
+// function returned `false` for it. Widening makes that reasoning
+// load-bearing rather than hypothetical, so it had to be measured, not
+// assumed, before landing.
+//
+// MEASURED (T254): every one of the 23 `CAPABILITIES` entries' phrases run
+// against the real, current `apps/android/app.config.ts` content (via
+// `findCapabilityDenialViolations` with that file as the sole `appFiles`
+// entry and the real repository as `shippedFiles`, so every entry resolved
+// "shipped" exactly as it would in production) — zero violations. The one
+// entry that explicitly worried about this (`checkAndroidReleaseTagVersion`)
+// is safe for a stated reason: its target sentences in `app.config.ts` are
+// the "GAP CLOSED by T247 (P9-E)" block's OWN quotation of the pre-fix text,
+// which sits after "This block previously said", one of
+// `HISTORICAL_QUOTE_MARKERS`' exact triggers — the same exemption that
+// already protects every other historical quotation this guard scans.
+// `computeVersionCodeFromSemver`'s entry does not mention `app.config.ts`'s
+// prose at all (its `denyingPhrases` were deliberately worded away from that
+// file's own wording, per its own comment) and was unaffected either way.
+// See this task's own report for the executed script and its full output.
+//
+// So: widened. `apps/android/app.config.ts` now joins the denial scan the
+// same way it already joined the shipped-source scan under T246 — using the
+// identical `APP_ROOT_CONFIG_PATTERN`, so a second app's future
+// `app.config.ts` is picked up by both sides symmetrically, never only one.
+//
 /**
  * Whether `path` is in scope for the denial-prose scan itself — T179:
  * `apps/web/src`, `apps/android/src`, `scripts/ci`, and `packaging/**`;
  * T197 added `docs/**`; T207 added `.github/workflows/*.yml` and
- * `apps/android/maestro/*.md` — except this guard's own three files (see
- * `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`) and the task ledger,
- * `docs/issues-from-plan.md` (see `DOCS_LEDGER_DENIAL_EXCLUSIONS`).
- * Comments AND test files both included throughout (one of the ten P6-W6
- * sites this guard exists to catch was a test title, not a doc comment).
+ * `apps/android/maestro/*.md`; T254 added `apps/<name>/app.config.ts` (the
+ * same `APP_ROOT_CONFIG_PATTERN` `isShippedSourcePath` already used) — except
+ * this guard's own three files (see `SELF_REFERENTIAL_DENIAL_EXCLUSIONS`)
+ * and the task ledger, `docs/issues-from-plan.md` (see
+ * `DOCS_LEDGER_DENIAL_EXCLUSIONS`). Comments AND test files both included
+ * throughout (one of the ten P6-W6 sites this guard exists to catch was a
+ * test title, not a doc comment).
  */
 export function isAppSourcePath(path) {
   if (SELF_REFERENTIAL_DENIAL_EXCLUSIONS.has(path)) return false;
@@ -471,6 +514,7 @@ export function isAppSourcePath(path) {
   if (path.startsWith(SCRIPTS_CI_DENIAL_PREFIX)) {
     return hasSourceExtension(path);
   }
+  if (APP_ROOT_CONFIG_PATTERN.test(path)) return true;
   if (isPackagingProsePath(path)) return true;
   if (isWorkflowsProsePath(path)) return true;
   if (isMaestroProsePath(path)) return true;
@@ -497,7 +541,7 @@ export function main() {
       `guard-capability-prose: OK — ${CAPABILITIES.length} capability group(s) checked against ` +
         `${shippedPaths.length} packages/*/src|apps/*/src|scripts/ci file(s) and ${appPaths.length} ` +
         `apps/web|android src + scripts/ci + packaging/** + docs/** + .github/workflows/*.yml + ` +
-        `apps/android/maestro/*.md file(s); no live denial found ` +
+        `apps/android/maestro/*.md + apps/*/app.config.ts file(s); no live denial found ` +
         `for a shipped capability.`,
     );
     return;

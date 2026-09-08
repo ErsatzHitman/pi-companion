@@ -3706,15 +3706,75 @@ test("T244: the real, committed tree's full denial scan is unchanged by the shar
 // change reverted afterward, never via `git checkout --`) and recorded in
 // this task's own report.
 
-test("T246: apps/android/app.config.ts is shipped source; the two runbooks that once denied its capability stay app-source-only", () => {
+// CORRECTED (T254): this test was titled "T246: apps/android/app.config.ts
+// is shipped source; the two runbooks that once denied its capability stay
+// app-source-only" and asserted `isAppSourcePath("apps/android/app.config.ts")
+// === false` — true when T246 wrote it (T246 widened `isShippedSourcePath`
+// only) and measured again, unchanged, at the P9-E gate that filed T254. It
+// is false since T254 widened `isAppSourcePath` too, with the identical
+// `APP_ROOT_CONFIG_PATTERN`: `apps/android/app.config.ts` can now be caught
+// denying a capability, not only declaring one. Retitled to say exactly
+// that; see "T254: ..." below for the RED/GREEN proof that this is not a
+// registration-only change.
+test("T254: apps/android/app.config.ts is both shipped source and denial-scan source; the two runbooks keep their own coverage too", () => {
   assert.equal(isShippedSourcePath("apps/android/app.config.ts"), true);
-  assert.equal(isAppSourcePath("apps/android/app.config.ts"), false);
+  assert.equal(isAppSourcePath("apps/android/app.config.ts"), true);
 
   assert.equal(isShippedSourcePath("docs/android-apk-release.md"), false);
   assert.equal(isAppSourcePath("docs/android-apk-release.md"), true);
 
   assert.equal(isShippedSourcePath("docs/clean-install-and-rollback.md"), false);
   assert.equal(isAppSourcePath("docs/clean-install-and-rollback.md"), true);
+});
+
+// T254: every registered `CAPABILITIES` entry's phrases, re-run against the
+// REAL, current `apps/android/app.config.ts` content before the widening
+// landed — the check this task's brief required before treating the
+// widening as safe. Zero violations: proves the widening does not turn that
+// file's own narrative decision record into a false-positive source, using
+// the real file rather than a synthetic approximation of it.
+test("T254: the real, committed apps/android/app.config.ts trips no registered CAPABILITIES entry", () => {
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+  const shippedFiles = tracked
+    .filter(isShippedSourcePath)
+    .map((p) => ({ path: p, content: readRepoFile(p) }));
+  const appFiles = [
+    { path: "apps/android/app.config.ts", content: readRepoFile("apps/android/app.config.ts") },
+  ];
+
+  assert.deepEqual(findCapabilityDenialViolations({ shippedFiles, appFiles }), []);
+});
+
+// T254: proves the widening is not a no-op registration — a live denying
+// sentence actually gets caught once app.config.ts is in the denial scan,
+// the "half a mount" check CLAUDE.md's mounting section requires. Uses a
+// synthetic appFiles entry (never the real tracked file) so this proof
+// needs no scratchpad-restore dance; the real-file firing is instead
+// watched by hand against a scratchpad-restored copy per this task's own
+// report, exactly as its brief requires.
+test("T254: a live denial inside an app.config.ts-shaped file is now caught", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/app.config.ts",
+      content: "export function computeVersionCodeFromSemver() {}\n",
+    },
+  ];
+  const appFiles = [
+    {
+      path: "apps/android/app.config.ts",
+      content:
+        "// apps/android/app.config.ts does not derive its versionCode from its own semver version.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "Android versionCode derived from app.config.ts's own semver (computeVersionCodeFromSemver)",
+  );
 });
 
 test("T246: the widened pattern is curated to app.config.ts, not every apps/*-root file", () => {

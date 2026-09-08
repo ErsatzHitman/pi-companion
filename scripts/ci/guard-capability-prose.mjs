@@ -1173,12 +1173,24 @@ export const CAPABILITIES = [
     // §B.6 said the same thing in almost the same words and was missed, and
     // `apps/android/app.config.ts`'s decision record carried a "GAP FILED ...
     // nothing enforces that a human actually bumps `version` before pushing a
-    // new release tag" block describing the very step T247 shipped. Only the
-    // first two are reachable by the denial scan: `isAppSourcePath` admits
-    // `docs/**` but returns FALSE for `apps/android/app.config.ts` even after
-    // T246's widening, which touched `isShippedSourcePath` only. That
-    // asymmetry is real and is filed as T254 — this entry cannot catch a
-    // denial in the one file the capability is ABOUT.
+    // new release tag" block describing the very step T247 shipped. At the
+    // time this entry was written, only the first two were reachable by the
+    // denial scan: `isAppSourcePath` admitted `docs/**` but returned FALSE
+    // for `apps/android/app.config.ts` even after T246's widening, which
+    // touched `isShippedSourcePath` only — filed as T254.
+    //
+    // CORRECTED (T254): that asymmetry is closed. `isAppSourcePath` now also
+    // admits `apps/*/app.config.ts` (T254 widened it with the same
+    // `APP_ROOT_CONFIG_PATTERN` T246 gave `isShippedSourcePath`), so this
+    // entry's `denyingPhrases` were re-run directly against the real,
+    // current `apps/android/app.config.ts` before the widening landed: zero
+    // matches. The file is safe by construction, not by luck — its own "GAP
+    // FILED ..." quotation now sits inside the "GAP CLOSED by T247 (P9-E)"
+    // block, immediately after "This block previously said", one of
+    // `HISTORICAL_QUOTE_MARKERS`' own triggers, so the historical-quotation
+    // exemption (the same one that protects every other corrected site this
+    // guard scans) applies to it too. This entry now CAN catch a denial in
+    // the one file the capability is about, same as the other two sites.
     //
     // `methodNames`: both names measured directly against the real tree — each
     // is declared in exactly one file, `guard-android-release-tag-version.mjs`,
