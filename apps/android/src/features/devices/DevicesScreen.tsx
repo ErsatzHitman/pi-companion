@@ -44,13 +44,40 @@
  * `refreshDevices()` so the device disappears without a manual reload; a
  * failure surfaces as a named `Banner`, and the row stays present.
  *
- * **One disclosed gap this screen cannot close** — "a revoked device
- * cannot silently re-register" (T300) is NOT true end-to-end today; it
- * is a `packages/server` gap, named by file and function in
- * `revoke-device-model.ts`'s header "One disclosed gap" section (which
- * this task's `Owns` grant forbids fixing here). The confirmation
- * dialog's own description states the re-registration limit honestly
- * rather than implying a guarantee this app can't back up.
+ * CORRECTED (T300): this section used to say "a revoked device cannot
+ * silently re-register" was NOT true end-to-end, naming it as a
+ * `packages/server` gap this task's `Owns` grant forbade fixing here. T300
+ * closed that gap in `packages/server` (a persisted `RevokedDeviceStore`
+ * consulted by `handleHello`) — see `revoke-device-model.ts`'s header for
+ * the full correction. The confirmation dialog's description was updated
+ * in the same commit to say so, rather than left claiming a reconnect
+ * "doesn't block that."
+ *
+ * **One disclosed gap this screen still cannot close** — un-revoking a
+ * device has no wire message or UI control. T300's `RevokedDeviceStore`
+ * supports removal at the storage layer (tested directly there), but
+ * nothing in this app calls it. See `revoke-device-model.ts`'s header for
+ * why: it needs a protocol addition and a "list of revoked devices"
+ * surface, neither of which exists today, both outside T300's `Owns`
+ * grant.
+ *
+ * **A second risk T300 makes sharper, disclosed rather than papered over
+ * by the dialog copy above:** `app-shell/core.ts`'s `ANDROID_DAEMON_CLIENT_ID`
+ * is a single hardcoded string (`"picompanion-android"`, T32A1B), not a
+ * per-install id — every Android install of this app presents the SAME
+ * `clientId`. Revoking a row whose `clientId` equals that constant (only
+ * possible from a device OTHER than the one being revoked — the "isThisDevice"
+ * guard above prevents an Android client from ever revoking itself) now
+ * durably denylists it (T300), and because the id is shared, that denylist
+ * entry blocks every future Android install, including the owner's own
+ * replacement phone re-pairing after a loss — there is no "pair again to
+ * get back in" recovery today, and (per the gap immediately above) no
+ * in-app un-revoke either. This is a pre-existing platform limitation
+ * (T32A1B), not something T300 introduces, but T300 raises its stakes from
+ * "revoke doesn't really stick" to "revoke may need a manual
+ * `RevokedDeviceStore.unrevoke()` on the daemon to undo" — filed for
+ * whoever next replaces the fixed Android `clientId` with a real
+ * per-install one, or wires un-revoke.
  *
  * CORRECTED (T299): this section used to also name "revoking stops
  * notifications" as a live gap. `packages/server/src/server/push/
@@ -313,7 +340,7 @@ export function DevicesScreen({
         title="Revoke this device?"
         description={
           revokeState.target
-            ? `"${revokeState.target.clientId}" will be disconnected immediately. If it can still authenticate to this daemon, it can reconnect and appear as a trusted device again — revoking here doesn't block that. Push notifications to it stop too, unless it registered for them before this update — those may keep arriving until it registers again.`
+            ? `"${revokeState.target.clientId}" will be disconnected immediately and can no longer reconnect, even if it can still authenticate to this daemon. Push notifications to it stop too, unless it registered for them before this update — those may keep arriving until it registers again. This can't be undone from the app yet, so only revoke a device you're sure you want permanently blocked.`
             : ""
         }
         confirmLabel="Revoke"

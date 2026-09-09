@@ -47,6 +47,7 @@ import { snapshotGitCommandRuntimeMetrics } from "../utils/run-git-command.js";
 import type { WorkspaceAutoName } from "./workspace-auto-name.js";
 import { deriveProjectSlug } from "./workspace-git-metadata.js";
 import { PushTokenStore } from "./push/token-store.js";
+import { RevokedDeviceStore } from "./devices/revoked-device-store.js";
 import { createPushNotificationSender, type PushNotificationSender } from "./push/notifications.js";
 import type { ScriptHealthState } from "./script-health-monitor.js";
 import type { ServiceProxySubsystem } from "./service-proxy.js";
@@ -453,6 +454,12 @@ const HELLO_TIMEOUT_MS = 15_000;
 const WS_CLOSE_HELLO_TIMEOUT = 4001;
 const WS_CLOSE_INVALID_HELLO = 4002;
 const WS_CLOSE_INCOMPATIBLE_PROTOCOL = 4003;
+// T300: a hello from a clientId this daemon's RevokedDeviceStore has on its
+// denylist is rejected with this code, not silently dropped — see
+// `handleHello`'s revocation check and `devices/revoked-device-store.ts`'s
+// class doc comment for why a named rejection (over a silent drop) is the
+// right call here.
+const WS_CLOSE_DEVICE_REVOKED = 4004;
 const WS_CLOSE_SERVER_SHUTDOWN = 1001;
 const WS_PROTOCOL_VERSION = 1;
 const WS_RUNTIME_METRICS_FLUSH_MS = 30_000;
@@ -523,6 +530,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly daemonConfigStore: DaemonConfigStore;
   private readonly pushTokenStore: PushTokenStore;
   private readonly pushNotificationSender: PushNotificationSender;
+  private readonly revokedDeviceStore: RevokedDeviceStore;
   private readonly mcpBaseUrl: string | null;
   private speech!: SpeechService | null;
   private terminalManager!: TerminalManager | null;
@@ -676,6 +684,10 @@ export class VoiceAssistantWebSocketServer {
     this.pushTokenStore = new PushTokenStore(pushLogger, join(paseoHome, "push-tokens.json"));
     this.pushNotificationSender =
       pushNotificationSender ?? createPushNotificationSender(pushLogger, this.pushTokenStore);
+    this.revokedDeviceStore = new RevokedDeviceStore(
+      this.logger.child({ module: "devices" }),
+      join(paseoHome, "revoked-devices.json"),
+    );
 
     this.agentManager.setAgentAttentionCallback((params) => {
       void this.broadcastAgentAttention(params).catch((err) => {
@@ -1437,6 +1449,24 @@ export class VoiceAssistantWebSocketServer {
       return;
     }
 
+    // T300: a revoked clientId is rejected here, before either branch below
+    // — a brand-new connection (`externalSessionsByKey.set`) or a resumed
+    // one (the `existing` branch) — can admit it. The shared bearer
+    // password alone is not enough trust to reconnect a device the owner
+    // has explicitly revoked; see `devices/revoked-device-store.ts`'s class
+    // doc comment for why this check lives here and not only at
+    // `trusted_device.revoke` time.
+    if (this.revokedDeviceStore.isRevoked(clientId)) {
+      this.clearPendingConnection(ws);
+      pending.connectionLogger.warn({ clientId }, "Rejected hello from revoked clientId");
+      try {
+        ws.close(WS_CLOSE_DEVICE_REVOKED, "Device revoked");
+      } catch {
+        // ignore close errors
+      }
+      return;
+    }
+
     this.clearPendingConnection(ws);
     pending.identity.clientId = clientId;
     if (message.appVersion) {
@@ -2174,6 +2204,12 @@ export class VoiceAssistantWebSocketServer {
     // (T299)" section for why this is safe to call unconditionally: a
     // `clientId` with no registered tokens is a no-op.
     this.pushTokenStore.removeTokensForClient(trimmed);
+    // T300: persist the revocation so `handleHello` refuses this clientId
+    // on any future connection attempt, not only for the duration of this
+    // process's in-memory `externalSessionsByKey` entry — closing the
+    // sockets above stops today's session, this stops tomorrow's
+    // reconnect. See `devices/revoked-device-store.ts`'s class doc comment.
+    this.revokedDeviceStore.revoke(trimmed);
     this.sendToClient(
       ws,
       wrapSessionMessage({

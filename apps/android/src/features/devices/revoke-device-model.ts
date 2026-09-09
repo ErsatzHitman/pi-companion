@@ -90,27 +90,40 @@
  * behaviour is no longer the true one, so it is corrected rather than
  * left standing.
  *
- * **"A revoked device cannot silently re-register" — not true today.**
- * Trust here is a single shared daemon password
- * (`packages/server/src/server/websocket-server.ts`'s
- * `isBearerTokenValid` check, run once per socket before any `hello` is
- * read), never a per-device secret. `handleHello` accepts a `hello` from
- * ANY `clientId` once that shared password has checked out and simply
- * calls `this.externalSessionsByKey.set(clientId, connection)` — there
- * is no persisted denylist of revoked `clientId`s consulted anywhere in
- * that path. Revoking a device you're still holding the daemon password
- * for and letting it reconnect (even under the same `clientId`) makes it
- * reappear in `trusted_device.list.response` as if nothing happened,
- * because nothing durable recorded that it had been revoked. The seam
- * that would close this: a persisted revoked-`clientId` store (the same
- * disk-persisted-`Set` shape `PushTokenStore` above already
- * establishes), written to by `handleTrustedDeviceRevokeRequest` on a
- * successful revoke, and consulted by `handleHello` before it creates or
- * resumes a `TrustedSessionConnection` for that `clientId` — rejecting
- * (or requiring an explicit fresh pairing to clear) a `hello` from a
- * revoked `clientId`. Nothing in this client package can enforce that;
- * it is a `packages/server` change, filed here by name rather than
- * pretended away.
+ * CORRECTED (T300): this section used to also carry a box for **"A revoked
+ * device cannot silently re-register" — not true today**, describing
+ * `handleHello` (`packages/server/src/server/websocket-server.ts`) as
+ * accepting a `hello` from ANY `clientId` once the shared daemon password
+ * checked out, with no persisted denylist consulted anywhere in that path.
+ * T300 closed that: a new `RevokedDeviceStore`
+ * (`packages/server/src/server/devices/revoked-device-store.ts`) persists
+ * revoked `clientId`s to `$PASEO_HOME/revoked-devices.json`,
+ * `handleTrustedDeviceRevokeRequest` calls its `revoke(clientId)` alongside
+ * the existing socket-close/push-token cleanup, and `handleHello` now
+ * consults `isRevoked(clientId)` before it creates OR resumes a
+ * `TrustedSessionConnection` for that `clientId` — rejecting the `hello`
+ * with WebSocket close code `4004` ("Device revoked") rather than silently
+ * dropping it, so a legitimately re-provisioned device gets a
+ * distinguishable reason rather than something indistinguishable from a
+ * network failure. Proven at the daemon layer by
+ * `websocket-server.revoked-device-hello.test.ts` and
+ * `revoked-device-store.test.ts` (both `packages/server`), including that
+ * the denylist survives a daemon restart (a fresh store instance against
+ * the same file still reports the `clientId` revoked). This client module
+ * still cannot prove any of this itself, for the same reason the T299
+ * correction above gives — no fake in this workspace can honestly simulate
+ * a real daemon's `hello` rejection.
+ *
+ * **What T300 did not build, disclosed rather than omitted: un-revoking has
+ * no wire message or UI control.** `RevokedDeviceStore.unrevoke(clientId)`
+ * exists and is tested directly, so the on-disk schema is never a dead end,
+ * but nothing calls it — that needs a new `trusted_device.unrevoke`
+ * wire-message pair (a protocol addition T300's `Owns` grant did not cover)
+ * and a place in the UI to list *revoked* devices and act on one, which
+ * does not exist (`DevicesScreen.tsx` only ever lists currently-trusted
+ * devices). If the owner revokes a device by mistake today, there is no
+ * in-app path back — filed for whoever next touches `trusted_device`
+ * messages or `DevicesScreen.tsx`.
  */
 import type { TrustedDeviceRowSummary, TrustedDevicesClient } from "./trusted-devices-model.js";
 
