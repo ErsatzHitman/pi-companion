@@ -565,6 +565,7 @@ that recomputation has to be domain-specific:
 | T306   | Re-pin `expo-secure-store` to the version this app's own `expo` bundles         | phase-9   | android          | P9-U   | T291                                                                  |
 | T307   | Explain, or remove, the hoisted root `expo@57` no workspace asks for            | phase-9   | android          | P9-U   | T291, T306                                                            |
 | T308   | Show the local wall-clock time on every transcript message                      | phase-9   | core             | P9-U   | T28A1, T28A2, T33A2                                                   |
+| T309   | The observation test's self-heal tick is both required and harmful              | phase-9   | server           | P9-U   | T240                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14734,3 +14735,85 @@ test pins the single return path directly.
       `<time>` whose class has no rule is invisible to every DOM assertion
 - [ ] Confirm on a real device and a real browser that the two look consistent, or state
       plainly which check was not run
+
+#### T309 — The observation test's self-heal tick is both required and harmful, depending on when it lands
+
+`labels: phase-9, area: server` · `depends-on: T240`
+
+`server-tests (windows-latest)` failed at `285124d` on
+`src/server/workspace-git-service.observation.integration.test.ts` with
+`AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1
+times` at that file's first `expect(runGitCommand).not.toHaveBeenCalled()`. The commit
+under test touched no `packages/server` file, and `packages/server` does not depend on
+`@picompanion/frontend-core` at all — there is no path by which that commit could reach
+this suite. This is pre-existing, and it is the second distinct defect found in this one
+file (the first, a timeout, was closed by moving the file into `test:unit:serial`; that
+change is unrelated to this one and did not address it).
+
+**The mechanism, reproduced rather than reasoned about.** The test injects
+`getWorkspaceGitSelfHealPhaseMs: () => 7_000`. That schedules
+`startWorkspaceSubscriptionTimers`' `runSelfHealTick`, which calls
+`refreshWorkingTreeIgnoredDirectories` — one `git ls-files` through the injected
+`runGitCommand` — and then `refreshWorkspaceTarget`. The test has two phases that write 100
+files into an ignored directory, wait a hard 750ms, and assert that nothing refreshed. A
+tick landing inside one of those windows produces exactly the observed failure.
+
+Where the windows sit is decided by native-watcher latency, which the test does not control.
+Measured on this machine by instrumenting the file: the first window opens at **+1121ms**
+and the second at **+9141ms**, so a 7s tick falls between them and every local run passes —
+three consecutive runs of the file, and three of the whole `test:unit` lane, all green. On
+the CI Windows runner the earlier `vi.waitFor` phases are slow enough to shift the first
+window onto the tick.
+
+Proven by construction: setting the phase to `1_300` — inside the measured first window —
+reproduces the CI failure locally and exactly, same assertion, same `232:29`, same "called 1
+times".
+
+**Why the obvious fix is wrong, which is the part worth not re-deriving.** Raising the phase
+so the tick cannot fire during the test (`10 * 60_000`) makes the storm assertions pass and
+then fails the file at `expect(editedDuringWatcherHandoff).toBe(true)` inside the later
+`vi.waitFor`. That phase flips `buildIgnored = false` and waits for the working-tree watcher
+to be torn down and restarted — a handoff driven by the ignore-list refresh that only
+`runSelfHealTick` performs. So the tick is **load-bearing for one phase and fatal to
+another**, and the file's correctness currently depends on it landing in the gap between
+them. Measured, not assumed: this was attempted, and the failure moved rather than
+disappeared.
+
+Raising `testTimeout` is also not the answer and should not be proposed: this is not the
+contention shape `CLAUDE.md`'s T240 section describes (the file is already in
+`test:unit:serial`, so it runs alone), and a longer budget does not move a 7-second timer
+relative to a 750ms window.
+
+Two directions, neither yet chosen — the task is to pick one and justify it:
+
+1. **Make the storm assertions specific instead of absolute.** Their intent is "an
+   ignored-file storm triggers no checkout refresh", not "no git command may run". Asserting
+   against the calls that actually express that — and tolerating the self-heal's own
+   `ls-files` — keeps the intent and removes the coupling. Note before starting that
+   `runSelfHealTick` also calls `refreshWorkspaceTarget`, so the other five mocks in those
+   blocks may need the same treatment; the CI log shows only the first failure because
+   vitest stops there.
+2. **Drive the ignore-list refresh deterministically** so the handoff phase does not wait on
+   a timer at all, and the self-heal can then be pushed out of the test entirely.
+
+- [ ] The chosen direction is stated with its trade-off, not just committed
+- [ ] The file passes with the self-heal phase set anywhere in `[1_000, 10 * 60_000]` — the
+      property that actually makes it timing-independent, and the one this task exists to
+      establish
+- [ ] `1_300` specifically no longer reproduces the failure
+- [ ] Three consecutive local runs of `npm run test:unit --workspace=@picompanion/server`,
+      all three exit codes read (T240)
+- [ ] `server-tests (windows-latest)` green on a real CI run, with the run id recorded
+- [ ] The test still fails if the pruning behaviour it exists to check actually regresses —
+      show the mutation, do not assume the relaxed assertion still bites
+
+**A second, separate observation from the same investigation, filed here so it is not lost
+rather than because it is the same defect.** The first CI attempt at `285124d` (run
+`34352088001`) failed differently: `src/utils/checkout-git.test.ts` >
+"refreshes the tracked ref after pushing through a configured push remote", `Error: Test
+timed out in 30000ms`, at **32476ms**. That test runs in **1478ms** locally, alone — 20×
+headroom against its budget — and the file is already in `test:unit:serial`. It passed on
+the very next run of the identical commit. That is a runner stall rather than a code defect
+on the evidence available, and it is deliberately NOT being fixed by raising `testTimeout`
+here; if it recurs, file it separately with the recurrence recorded, and do not fold it into
+this task.
