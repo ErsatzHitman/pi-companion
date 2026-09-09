@@ -1950,6 +1950,109 @@ export const CAPABILITIES = [
       /\b(?:web|android)\b[^.]{0,60}?(?:has no|lacks)[^.]{0,40}?way to (?:answer|read)[^.]{0,40}?(?:the )?composer'?s? (?:current |live )?(?:text|draft)/i,
     ],
   },
+  {
+    // T298: `apps/android/app.config.ts`'s `android.blockedPermissions`
+    // (T294) had no `CAPABILITIES` entry, even though the P9-R merge gate
+    // measured that both predicates already see the file:
+    // `isAppSourcePath("apps/android/app.config.ts")` and
+    // `isShippedSourcePath("apps/android/app.config.ts")` are each `true`
+    // (`node scripts/ci/_t298_probe1.mjs`-shaped one-off script, run and
+    // deleted at authorship; both booleans printed `true`). T294 shipped
+    // `blockedPermissions` and falsified, in the SAME commit, a paragraph in
+    // the same file asserting the field was absent — the identical "ship a
+    // capability, leave a stale denial of it standing" shape T124 exists to
+    // catch, uncaught here only because nothing had registered this
+    // capability at all. The P9-R gate corrected the prose by hand; this
+    // entry closes the reason it had to.
+    //
+    // THE HONEST DIFFICULTY, argued rather than skipped, per this task's own
+    // brief: `blockedPermissions` is a config VALUE, not a declared
+    // function, so it has no `methodNames` token the way most entries above
+    // do. Three shapes were weighed:
+    //
+    // 1. A shape-anchored `RegExp` against the literal `blockedPermissions: [`
+    //    declaration (T211's pattern, `STALE_RUN_GUARD_ALLOWLIST_WALK_MEMBER`
+    //    above). Works, but is strictly more machinery than needed here —
+    //    that pattern exists for a violation `kind` whose only textual
+    //    trace is a STRING LITERAL (erased by `stripCommentsAndStrings`
+    //    before any check runs), which is not this case (see option 3).
+    // 2. Extract the decision into a named exported function in
+    //    `app.config.ts` and register that. Rejected: `blockedPermissions`
+    //    is an `ExpoConfig["android"]` field Expo's own config loader reads
+    //    by NAME — wrapping it in a function this task invents would add
+    //    indirection with no behavioural purpose, purely to give a guard
+    //    something to grep for, which is backwards (the guard should follow
+    //    what the code already does, not reshape the code for the guard).
+    // 3. A bare-string `methodNames: ["blockedPermissions"]`. CHOSEN. T215's
+    //    literal-erasure trap does NOT apply here, and that had to be
+    //    checked, not assumed: T215's trap is about a token that is itself a
+    //    STRING LITERAL's contents (`"android.permission.
+    //    READ_EXTERNAL_STORAGE"` — the PERMISSION NAME, quoted, which
+    //    `stripStringLiterals` erases to `""` before any check runs, making
+    //    that token permanently unmatchable). `"blockedPermissions"` is the
+    //    unquoted OBJECT-LITERAL KEY immediately to its left
+    //    (`blockedPermissions: ["android.permission...`) — plain source
+    //    code, not string content, so it survives comment-and-string
+    //    stripping intact. Confirmed directly against
+    //    `isCapabilityMemberDeclared`'s real four shapes (never assumed):
+    //    the declaration `blockedPermissions: [...]`, preceded by a comma
+    //    from the previous property, matches the existing "interface/type
+    //    property" shape (`[{;,]\s*(?:readonly\s+)?blockedPermissions\??\s*:
+    //    \s*\S`) — that shape is generic over any `key: value` member
+    //    boundary, not interface declarations specifically, which is why it
+    //    also already backs T143's plain-object compaction fields above.
+    //    `isCapabilityMemberDeclared(readFileSync("apps/android/
+    //    app.config.ts", "utf8"), "blockedPermissions")` returns `true`.
+    //    Uniqueness measured with `git grep -n blockedPermissions` across
+    //    the whole tracked tree: exactly two hits, `apps/android/
+    //    app.config.ts` (the real declaration, a shipped file) and
+    //    `apps/android/app.config.test.ts` (five uses, all property READS
+    //    or a local `const blockedPermissions = config.android?.
+    //    blockedPermissions ?? []` destructure — a test file, excluded from
+    //    `isShippedSourcePath` regardless of what it matches). One
+    //    declaring file, no unrelated same-named member anywhere else in
+    //    scope, so — unlike T172's `summary` (33 files) or T168's original
+    //    `cancel` — no AND-group is needed here; a plain bare string is
+    //    exactly as sufficient as `computeVersionCodeFromSemver`'s own bare
+    //    name two entries above, for the identical reason.
+    //
+    // `denyingPhrases`: worded in this entry's own phrasing, never lifted
+    // from `app.config.ts`'s own decision record — which narrates the
+    // pre-T294 state at length ("this file declared no `permissions` and no
+    // `blockedPermissions`") behind a `CORRECTED at the P9-R merge gate`
+    // marker, per this task's own explicit instruction not to reuse that
+    // text. Also scoped away from the unrelated, pre-existing
+    // `blockedByPermissionRequestId` concept (`packages/frontend-core/src/
+    // tools/`'s tool-call permission-gate state, measured with `git grep -i
+    // "block.*permission\|permission.*block"` across every in-scope tree
+    // before wording these phrases — the only real hits were that unrelated
+    // field and two Maestro/test uses of the bare word "blocked", none of
+    // which any phrase below can match) by requiring "android" and either
+    // "app.config.ts" or "manifest" in the same clause.
+    //
+    // FORWARD guard (T162/T257's shape): no live denying sentence existed
+    // anywhere in scope when this was added (the one sentence that used to
+    // deny this exact capability, in `app.config.ts` itself, was already
+    // corrected by the P9-R gate before this entry was written — confirmed
+    // directly: the full-tree scan stays at exit 0 with this entry
+    // registered and the real, committed `app.config.ts` in the tree). So it
+    // was proven able to FIRE by appending a sentence in this entry's own
+    // wording to a real, unrelated, in-scope tracked file (never
+    // `app.config.ts` itself — T183's "a guard cannot police the file its
+    // own capability ships in" caution — and never a file carrying a
+    // `CORRECTED`-style historical marker), confirming
+    // `run-guard-capability-prose.mjs` exited 1 naming this capability, then
+    // restoring the file from a scratchpad copy — never `git checkout --` —
+    // and confirming exit 0 with `git status --porcelain` empty. See this
+    // task's own report for the exact file, sentence, and both exit codes.
+    name: "Android manifest permission blocking (android.blockedPermissions)",
+    methodNames: ["blockedPermissions"],
+    denyingPhrases: [
+      /apps\/android\/app\.config\.ts (?:has|declares|ships with) no android permission[- ]blocking (?:configuration|mechanism)\b/i,
+      /android\.blockedPermissions (?:is|remains) (?:unset|undeclared|absent) in app\.config\.ts/i,
+      /(?:the )?android manifest merger (?:is left|remains) unfiltered[^.]{0,60}?no (?:legacy )?permissions? (?:are )?(?:ever )?blocked/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

@@ -5179,3 +5179,96 @@ test("T293: the real committed tree carries no live denial of the composer-text-
     );
   }
 });
+
+// T298: `isAppSourcePath` and `isShippedSourcePath` are each called
+// DIRECTLY against the real path, per this task's own instruction not to
+// infer either scope from a list of areas. Both were widened for exactly
+// this file (T246 for `isShippedSourcePath`, T254 for `isAppSourcePath`),
+// so this pins that the widening still holds rather than re-deriving it
+// from a comment.
+test("T298: apps/android/app.config.ts is in scope on both the shipped side and the denial side", () => {
+  assert.equal(isShippedSourcePath("apps/android/app.config.ts"), true);
+  assert.equal(isAppSourcePath("apps/android/app.config.ts"), true);
+});
+
+// T298's own reasoning for why a bare `"blockedPermissions"` string is safe:
+// it is the unquoted OBJECT-LITERAL KEY, not the quoted permission-name
+// string T215's literal-erasure trap is about, so it survives
+// `stripCommentsAndStrings` and matches the existing generic
+// "member boundary" declaration shape. Pinned directly against the real,
+// committed file rather than a fixture, so a future rewrite of that
+// declaration (e.g. switching to a helper function) is caught here first.
+test("T298: blockedPermissions is recognized as declared in the real committed app.config.ts", () => {
+  const content = readCommittedFile("apps/android/app.config.ts");
+  assert.equal(isCapabilityMemberDeclared(content, "blockedPermissions"), true);
+});
+
+test("T298: on the real committed tree, blockedPermissions resolves as shipped from app.config.ts alone", () => {
+  const path = "apps/android/app.config.ts";
+  const real = readCommittedFile(path);
+  const shipped = findShippedCapabilities([{ path, content: real }]);
+
+  assert.ok(
+    shipped.some(
+      (capability) =>
+        capability.name === "Android manifest permission blocking (android.blockedPermissions)",
+    ),
+    "blockedPermissions capability is no longer declared in apps/android/app.config.ts: either it " +
+      "was renamed, or the file moved out of isShippedSourcePath scope",
+  );
+});
+
+test("T298: a live denial of android permission-blocking is flagged once blockedPermissions is shipped", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/app.config.ts",
+      content: 'const config = { android: { blockedPermissions: ["x"] } };\n',
+    },
+  ];
+
+  const appFiles = [
+    {
+      path: "docs/some-other-doc.md",
+      content: "Apps/android/app.config.ts has no android permission-blocking mechanism today.\n",
+    },
+  ];
+
+  const violations = findCapabilityDenialViolations({ shippedFiles, appFiles });
+
+  assert.equal(violations.length, 1);
+  assert.equal(
+    violations[0].capability,
+    "Android manifest permission blocking (android.blockedPermissions)",
+  );
+});
+
+// T298: the real, committed `app.config.ts` corrected its own stale denial
+// at the P9-R merge gate, behind a `CORRECTED` marker — this pins that the
+// historical-quotation exemption (not a phrase-coverage gap) is why this
+// entry stays quiet on that file, by checking the surrounding files this
+// capability's decision record touches for any live (unmarked) denial.
+test("T298: the real committed tree carries no live denial of android permission blocking", () => {
+  const shippedFiles = [
+    {
+      path: "apps/android/app.config.ts",
+      content: readCommittedFile("apps/android/app.config.ts"),
+    },
+  ];
+
+  for (const path of [
+    "apps/android/app.config.ts",
+    "docs/android-apk-release.md",
+    "docs/clean-install-and-rollback.md",
+  ]) {
+    const content = readCommittedFile(path);
+    const violations = findCapabilityDenialViolations({
+      shippedFiles,
+      appFiles: [{ path, content }],
+    });
+    assert.equal(
+      violations.filter((v) => v.path === path).length,
+      0,
+      `${path}'s real committed content must not trip the blockedPermissions entry`,
+    );
+  }
+});
