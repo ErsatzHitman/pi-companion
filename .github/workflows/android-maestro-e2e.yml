@@ -370,25 +370,14 @@ jobs:
           # to 20 minutes so a slow boot costs waiting rather than a lost
           # 30-minute cycle (23m of Gradle assembly sits in front of it).
           emulator-boot-timeout: 1200
-          script: |
-            # T319: POSIX `sh`, not bash. This action runs `script:` through
-            # `/usr/bin/sh -c`, which on Ubuntu is dash, and `set -o pipefail`
-            # is a bashism dash rejects outright -- `set: Illegal option -o
-            # pipefail`, exit 2, after a 6-minute emulator boot. Nothing here
-            # pipes, so `set -eu` loses nothing.
-            set -eu
-            adb install -r "$RUNNER_TEMP/picompanion-debug.apk"
-            flows="$(node -e "
-              const cfg = require('./apps/android/maestro/shards.json');
-              const shard = cfg.shards.find((s) => s.name === '${{ matrix.shard }}');
-              if (!shard) { console.error('unknown shard: ${{ matrix.shard }}'); process.exit(1); }
-              console.log(shard.flows.join(' '));
-            ")"
-            for flow in $flows; do
-              echo "::group::flow: $flow"
-              npx tsx apps/android/e2e/run-flow.ts "$flow"
-              echo "::endgroup::"
-            done
+          # T320: ONE line, and it must stay one line. This action runs
+          # each line of `script:` as its own `sh -c`, so no shell state
+          # crosses lines and no construct may span them -- the previous
+          # version's `for` loop and multi-line command substitution died
+          # with `Syntax error: Unterminated quoted string` on run
+          # 34407860092, after `adb install` had already succeeded. The loop
+          # lives in apps/android/e2e/run-shard.ts instead.
+          script: npx tsx apps/android/e2e/run-shard.ts ${{ matrix.shard }} "$RUNNER_TEMP/picompanion-debug.apk"
 
   # T43B2b -- see this file's header comment ("T43B2b: the phase-8
   # packaging exit gate's Android half") for why this is a separate job
@@ -569,10 +558,11 @@ jobs:
           # to 20 minutes so a slow boot costs waiting rather than a lost
           # 30-minute cycle (23m of Gradle assembly sits in front of it).
           emulator-boot-timeout: 1200
+          # T320 -- see the note on `maestro-e2e`'s script above. Each line
+          # here is independently executable on purpose: they are two whole
+          # commands, not one construct split across two lines, and no
+          # variable or `set` option is expected to survive between them.
           script: |
-            # T319 -- see the identical note on `maestro-e2e`'s script above:
-            # this action's `script:` runs under dash, which has no `pipefail`.
-            set -eu
             adb install -r "${{ steps.artifact.outputs.apk_path }}"
             APP_ID=sh.picompanion npx tsx apps/android/e2e/run-flow.ts smoke
 

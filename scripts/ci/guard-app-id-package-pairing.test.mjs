@@ -641,6 +641,41 @@ jobs:
   assert.equal(jobs.find((job) => job.name === "b").buildTarget, null);
 });
 
+test("T320: a job that invokes run-shard.ts runs the whole shard set", () => {
+  // T320 moved the shard loop out of the workflow into run-shard.ts, and
+  // the job text stopped naming `shards.json`. Matching only that string
+  // collapsed this guard from 11 pairings to 1 while still printing OK —
+  // the THIRD time a workflow edit reached the "check that cannot fail"
+  // shape here, after T312 and T315. Both spellings are recognised so
+  // either shape keeps the guard honest.
+  const workflow = [
+    "jobs:",
+    "  maestro-e2e:",
+    "    needs: [build-development-apk]",
+    "    steps:",
+    "      - uses: reactivecircus/android-emulator-runner@abc",
+    "        with:",
+    "          script: npx tsx apps/android/e2e/run-shard.ts shard-1 app.apk",
+  ].join("\n");
+
+  const jobs = extractWorkflowJobs(workflow);
+  const job = jobs.find((candidate) => candidate.name === "maestro-e2e");
+  assert.ok(job, "the job must be extracted");
+  assert.equal(job.runsAllShardFlows, true);
+  assert.equal(job.explicitFlow, null, "a shard runner names no single flow");
+});
+
+test("T320: the real maestro-e2e job no longer names shards.json, and is still recognised", () => {
+  // Pins the exact regression: if someone reverts run-shard.ts to an
+  // inline loop, or renames it, this fails rather than the pairing count
+  // quietly dropping to 1.
+  const workflow = readFileSync(".github/workflows/android-maestro-e2e.yml", "utf8");
+  const job = extractWorkflowJobs(workflow).find((candidate) => candidate.name === "maestro-e2e");
+
+  assert.ok(job, "maestro-e2e must exist");
+  assert.equal(job.runsAllShardFlows, true, "the shard job must run the whole shard set");
+});
+
 test("T312: the real tree pairs EVERY shard flow against the maestro-e2e job", () => {
   // The anti-silent-skip assertion, and the reason this test exists at
   // all. `P8-W11 F2` above only requires the real tree to yield MORE THAN

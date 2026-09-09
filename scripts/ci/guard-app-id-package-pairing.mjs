@@ -235,7 +235,17 @@ const APP_ID_ENV_BLOCK_PATTERN = /\bAPP_ID:\s*["']?([^\s"'\n]+)["']?/;
 const APP_VARIANT_SHELL_PATTERN = /\bAPP_VARIANT=["']?([^\s"']+)["']?/;
 const APP_VARIANT_ENV_BLOCK_PATTERN = /\bAPP_VARIANT:\s*["']?([^\s"'\n]+)["']?/;
 const EXPLICIT_FLOW_PATTERN = /run-flow\.ts\s+["']?([a-zA-Z][a-zA-Z0-9-]*)["']?/;
-const SHARDS_JSON_MENTION_PATTERN = /shards\.json/;
+// A job runs the WHOLE shard set when it either reads `shards.json`
+// directly or invokes the shard runner that reads it. Both spellings are
+// recognised, and that is deliberate rather than redundant: T320 moved the
+// shard loop out of the workflow and into `run-shard.ts` (the emulator
+// action executes each `script:` line as its own `sh -c`, so a `for` loop in
+// YAML cannot work), and matching only `shards.json` collapsed this guard
+// from 11 pairings to 1 while still printing OK — the third time a
+// WORKFLOW edit, not a guard edit, reached the "check that cannot fail"
+// shape here, after T312 and T315. T312's own
+// "the real tree pairs EVERY shard flow" test is what caught it.
+const SHARDS_JSON_MENTION_PATTERN = /shards\.json|run-shard\.ts/;
 
 /**
  * @typedef {{

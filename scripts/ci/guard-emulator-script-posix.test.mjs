@@ -7,6 +7,7 @@ import {
   BASHISMS,
   extractEmulatorScriptBlocks,
   findEmulatorScriptViolations,
+  isSelfContainedLine,
   selectWorkflowFiles,
   stripShellComments,
 } from "./guard-emulator-script-posix.mjs";
@@ -23,7 +24,6 @@ const WORKFLOW = `jobs:
         with:
           api-level: 35
           script: |
-            set -eu
             adb install -r app.apk
       - name: Another ordinary step
         run: set -euo pipefail
@@ -32,19 +32,23 @@ const WORKFLOW = `jobs:
 test("only the emulator action's script is extracted, never a run: step", () => {
   // The distinction the whole guard rests on: `run:` defaults to bash on
   // Linux, so `set -euo pipefail` there is correct and must not be flagged.
-  assert.deepEqual(extractEmulatorScriptBlocks(WORKFLOW), [
-    "            set -eu\n            adb install -r app.apk",
-  ]);
+  assert.deepEqual(extractEmulatorScriptBlocks(WORKFLOW), ["            adb install -r app.apk"]);
   assert.deepEqual(findEmulatorScriptViolations([{ path: "w.yml", content: WORKFLOW }]), []);
 });
 
 test("a bashism inside the emulator script is reported", () => {
-  const content = WORKFLOW.replace("            set -eu\n", "            set -euo pipefail\n");
+  const content = WORKFLOW.replace(
+    "            adb install -r app.apk",
+    "            set -euo pipefail\n            adb install -r app.apk",
+  );
   const violations = findEmulatorScriptViolations([{ path: "w.yml", content }]);
 
-  assert.equal(violations.length, 1);
-  assert.equal(violations[0].bashism, "pipefail");
-  assert.equal(violations[0].path, "w.yml");
+  // Both rules fire on that one line: it is a bashism AND a no-op `set`.
+  assert.deepEqual(violations.map((violation) => violation.bashism).sort(), [
+    "pipefail",
+    "useless-set",
+  ]);
+  assert.ok(violations.every((violation) => violation.path === "w.yml"));
 });
 
 test("an inline (non-block) script is extracted too", () => {
@@ -114,7 +118,7 @@ test("a COMMENT naming pipefail does not count as using it", () => {
         with:
           script: |
             # Never \`set -o pipefail\` here: dash rejects it.
-            set -eu
+            adb install -r app.apk
 `;
   assert.deepEqual(findEmulatorScriptViolations([{ path: "w.yml", content }]), []);
   assert.ok(!stripShellComments("# set -o pipefail\nset -eu").includes("pipefail"));
@@ -147,13 +151,40 @@ test("the real tree: both emulator scripts exist and neither uses a bashism", ()
 test("MUTATION PROOF: restoring `set -euo pipefail` to the real workflow turns it red", () => {
   const path = ".github/workflows/android-maestro-e2e.yml";
   const real = readFileSync(path, "utf8");
-  const mutated = real.replace("set -eu\n", "set -euo pipefail\n");
+  const mutated = real.replace(
+    "            adb install -r",
+    "            set -euo pipefail\n            adb install -r",
+  );
   assert.notEqual(mutated, real, "the mutation must actually change the file");
 
   const violations = findEmulatorScriptViolations([{ path, content: mutated }]);
   assert.ok(
     violations.some((violation) => violation.bashism === "pipefail"),
     "the exact line that killed every shard of run 34401219271 must be reported",
+  );
+});
+
+test("MUTATION PROOF: restoring the inline shard loop to the real workflow turns it red", () => {
+  // The T320 defect, not the T319 one: a multi-line command substitution
+  // that `sh -c` sees as an unterminated quoted string on its own line.
+  const path = ".github/workflows/android-maestro-e2e.yml";
+  const real = readFileSync(path, "utf8");
+  const mutated = real.replace(
+    "          script: npx tsx apps/android/e2e/run-shard.ts",
+    [
+      "          script: |",
+      '            flows="$(node -e "',
+      "              console.log('x');",
+      '            ")"',
+      "          unused: npx tsx apps/android/e2e/run-shard.ts",
+    ].join("\n"),
+  );
+  assert.notEqual(mutated, real, "the mutation must actually change the file");
+
+  const violations = findEmulatorScriptViolations([{ path, content: mutated }]);
+  assert.ok(
+    violations.some((violation) => violation.bashism === "not-self-contained"),
+    "the line that killed every shard of run 34407860092 must be reported",
   );
 });
 
@@ -168,3 +199,73 @@ function realTree() {
     })),
   };
 }
+
+test("T320: isSelfContainedLine accepts lines sh -c can run alone", () => {
+  const ok = [
+    'adb install -r "$RUNNER_TEMP/picompanion-debug.apk"',
+    'npx tsx apps/android/e2e/run-shard.ts shard-1 "$RUNNER_TEMP/x.apk"',
+    "APP_ID=sh.picompanion npx tsx apps/android/e2e/run-flow.ts smoke",
+    'echo "it\'s fine"',
+    'echo "a\\"b"',
+    "x=$(echo hi)",
+    "for f in a b; do echo $f; done",
+  ];
+  for (const line of ok) {
+    assert.equal(isSelfContainedLine(line), true, `should be self-contained: ${line}`);
+  }
+});
+
+test("T320: isSelfContainedLine rejects the exact line that failed run 34407860092", () => {
+  // `flows="$(node -e "` opened a double quote, a command substitution, and
+  // a second double quote, and closed none of them on its line.
+  assert.equal(isSelfContainedLine('flows="$(node -e "'), false);
+  assert.equal(isSelfContainedLine("x=$(echo hi"), false);
+  assert.equal(isSelfContainedLine("cmd \\"), false, "a trailing continuation continues nowhere");
+});
+
+test("T320: `set -eu` in an emulator script is reported as the no-op it is", () => {
+  const content = `jobs:
+  a:
+    steps:
+      - uses: reactivecircus/android-emulator-runner@abc123
+        with:
+          script: |
+            set -eu
+            adb install -r app.apk
+`;
+  const violations = findEmulatorScriptViolations([{ path: "w.yml", content }]);
+  assert.deepEqual(
+    violations.map((violation) => violation.bashism),
+    ["useless-set"],
+  );
+});
+
+test("T320: a multi-line construct is reported, not silently accepted", () => {
+  const content = `jobs:
+  a:
+    steps:
+      - uses: reactivecircus/android-emulator-runner@abc123
+        with:
+          script: |
+            flows="$(node -e "
+              console.log('x');
+            ")"
+`;
+  const violations = findEmulatorScriptViolations([{ path: "w.yml", content }]);
+  assert.ok(
+    violations.some((violation) => violation.bashism === "not-self-contained"),
+    "the unterminated line must be reported",
+  );
+});
+
+test("T320: the real tree's emulator scripts are all line-independent", () => {
+  const { workflows } = realTree();
+  for (const workflow of workflows) {
+    for (const script of extractEmulatorScriptBlocks(workflow.content)) {
+      for (const line of stripShellComments(script).split("\n")) {
+        if (line.trim() === "") continue;
+        assert.equal(isSelfContainedLine(line), true, `not self-contained: ${line}`);
+      }
+    }
+  }
+});

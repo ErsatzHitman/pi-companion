@@ -28,6 +28,34 @@
 // `extractEmulatorScriptBlocks` below keys off the `uses:` line rather than
 // scanning the file for `pipefail`.
 //
+// ## T320: the rule is stronger than "no bashisms"
+//
+// The next dispatch (run 34407860092) showed WHY dash was seeing `set -euo
+// pipefail` alone on line 1. The action does not hand the script to one
+// shell at all — it runs **each line separately**, as its own `sh -c`:
+//
+//   [command]/usr/bin/sh -c set -eu
+//   [command]/usr/bin/sh -c adb install -r "$RUNNER_TEMP/picompanion-debug.apk"
+//   [command]/usr/bin/sh -c flows="$(node -e "
+//   /usr/bin/sh: 1: Syntax error: Unterminated quoted string
+//
+// `adb install` had already succeeded; the script died on the third line.
+// So three further things are checked, none of which is a "bashism":
+//
+//   - a line with unbalanced quotes or an unclosed `$(` cannot run alone;
+//   - a line ending in a backslash continuation cannot continue anywhere;
+//   - `set -e`/`set -eu` is a no-op, because it configures a shell that
+//     exits at the end of that one line. Failure still propagates — the
+//     action checks each line's exit status, which is how the syntax error
+//     above failed the step — so the fix is to delete it, not to keep it
+//     for reassurance.
+//
+// Multi-line CONSTRUCTS (a `for` loop, an `if`) are caught by the same
+// balance check in practice, because every such construct in this
+// repository's history opened a quote or a substitution it could not close
+// on the same line. The check is deliberately structural rather than an
+// attempt to parse shell grammar.
+//
 // ## What counts as a bashism
 //
 // A curated list, not an attempt at a shell parser — the same call
@@ -156,6 +184,11 @@ export function extractEmulatorScriptBlocks(workflowContent) {
  * @param {string} script
  * @returns {string}
  */
+/** @param {string} text @returns {string[]} */
+function splitLines(text) {
+  return text.split(/\r?\n/);
+}
+
 export function stripShellComments(script) {
   return script
     .split("\n")
@@ -165,6 +198,67 @@ export function stripShellComments(script) {
     })
     .join("\n");
 }
+
+/**
+ * Whether a single line could be executed on its own by `sh -c`, which is
+ * exactly how this action runs it. Structural, not a shell parser: it
+ * checks that quotes balance and that every `$(` is closed on the same
+ * line. Escaped quotes and quoted characters are consumed so `echo "a\"b"`
+ * and `echo "it's"` are not misread as unbalanced.
+ *
+ * @param {string} line one physical line of an emulator script, comments
+ *   already stripped
+ * @returns {boolean}
+ */
+export function isSelfContainedLine(line) {
+  // A small context stack rather than a quote flag: inside a double quote,
+  // `$(` still opens a command substitution (which is exactly what
+  // `flows="$(node -e "` did), while inside a single quote nothing is
+  // special. Getting that wrong reads the failing line as balanced.
+  const stack = [];
+  const top = () => stack[stack.length - 1];
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (top() === "'") {
+      if (ch === "'") stack.pop();
+      continue;
+    }
+
+    if (ch === "\\") {
+      i++;
+      continue;
+    }
+
+    if (top() === '"') {
+      if (ch === '"') stack.pop();
+      else if (ch === "$" && line[i + 1] === "(") {
+        stack.push("$(");
+        i++;
+      }
+      continue;
+    }
+
+    if (ch === "'" || ch === '"') {
+      stack.push(ch);
+      continue;
+    }
+    if (ch === "$" && line[i + 1] === "(") {
+      stack.push("$(");
+      i++;
+      continue;
+    }
+    if (ch === ")" && top() === "$(") stack.pop();
+  }
+
+  return stack.length === 0 && !line.trimEnd().endsWith("\\");
+}
+
+/** `set -e`, `set -eu`, `set -o ...` — configures a shell that exits at the
+ * end of the line it is on, so it protects nothing and misleads the reader
+ * into thinking the script is guarded. */
+const USELESS_SET_PATTERN = /^\s*set\s+-/;
 
 /**
  * @typedef {{ path: string, bashism: string, reason: string }} EmulatorScriptViolation
@@ -182,6 +276,27 @@ export function findEmulatorScriptViolations(workflows) {
       for (const bashism of BASHISMS) {
         if (bashism.pattern.test(code)) {
           violations.push({ path: workflow.path, bashism: bashism.id, reason: bashism.reason });
+        }
+      }
+      for (const line of splitLines(code)) {
+        if (line.trim() === "") continue;
+        if (USELESS_SET_PATTERN.test(line)) {
+          violations.push({
+            path: workflow.path,
+            bashism: "useless-set",
+            reason:
+              `\`${line.trim()}\` configures a shell that exits at the end of this one line. ` +
+              "Delete it: the action already fails the step on any line's non-zero exit.",
+          });
+        }
+        if (!isSelfContainedLine(line)) {
+          violations.push({
+            path: workflow.path,
+            bashism: "not-self-contained",
+            reason:
+              `\`${line.trim()}\` cannot run on its own (unbalanced quote, unclosed \`$(\`, or ` +
+              "a trailing backslash). Each line is executed as its own `sh -c`.",
+          });
         }
       }
     }
