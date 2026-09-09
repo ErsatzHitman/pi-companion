@@ -15139,10 +15139,20 @@ be guessed at; the next dispatch is what will say.
       `publish-android-apk`) have a failure-path step that prints the build's own status and
       error into the CI log
 - [x] The diagnostic cannot itself fail the job
-- [ ] A real failing dispatch shows the reason in the CI log without anyone opening expo.dev
-- [ ] The underlying `production-apk` build failure (build `4610d322-4cc8-435b-9efb-60b327c78011`)
+- [ ] A real failing dispatch shows the reason in the CI log without anyone opening expo.dev.
+      Still open, and now harder to close on purpose: on run `34392173679` the
+      `Explain the EAS build failure` step reported `skipped`, because its `if: failure()` guard
+      did what it should — the EAS build succeeded (T314's fix landed in between). This entry
+      cannot be closed by a green run, only by the next EAS build that genuinely fails. Left
+      open rather than marked done on the strength of the step merely existing: a step guarded
+      by `if: failure()` that has never once run is exactly the untested-infrastructure shape
+      T310 was filed for
+- [x] The underlying `production-apk` build failure (build `4610d322-4cc8-435b-9efb-60b327c78011`)
       is diagnosed and filed as its own task — this entry is about the missing diagnosis, not
-      about that build
+      about that build. Diagnosed and fixed as **T314**: that build died in `Bundle JavaScript`
+      on the 207 Metro-unresolvable `.js` specifiers and the over-broad `*.web.*` blocklist, not
+      on anything specific to the `production-apk` profile. Confirmed rather than assumed — on
+      run `34392173679` the same profile's EAS build reported `✔ Build finished`
 
 #### T314 — Nothing in CI had ever bundled the Android app, and two defects had grown in the gap
 
@@ -15236,8 +15246,14 @@ work rather than smuggled into a bundling fix.
       silently
 - [x] `npm run test --workspace=@picompanion/android` all-pass (220 files, 2876 tests) and
       `tsc --noEmit` clean with the shim in place
-- [ ] A real EAS build gets past `Bundle JavaScript` — the local bundle is strong evidence, not
-      proof, because EAS runs `expo export:embed --eager --dev false` rather than `expo export`
+- [x] A real EAS build gets past `Bundle JavaScript` — the local bundle is strong evidence, not
+      proof, because EAS runs `expo export:embed --eager --dev false` rather than `expo export`.
+      **Proved on run `34392173679`** (on `6d8726e`): the EAS build step in
+      `packaged-app-smoke` reported `✔ Build finished` and the next step downloaded the APK.
+      The same profile (`production-apk`) and the same `export:embed --eager --dev false`
+      invocation that had failed at build `4610d322-4cc8-435b-9efb-60b327c78011` now completes,
+      so the local `expo export` reproduction really was measuring the same defect and not a
+      different one that happened to look alike
 - [ ] Decide whether `guard-capability-prose.mjs`'s `isShippedSourcePath` should admit
       `apps/<name>/metro.config.js`, so this capability can be registered rather than disclosed
 
