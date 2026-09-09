@@ -17,67 +17,33 @@ import {
 } from "./provider-registry.js";
 
 /**
- * T296: this mirrors `provider-registry.ts`'s own
- * `AgentSessionOptionalMethodKey` — kept as a second, independent
- * computation here rather than importing that type, because the point of
- * this file is to prove the wrap actually forwards, at runtime, not to
- * trust the production file's own bookkeeping.
- *
- * `{} extends Pick<AgentSession, K>` is the robust "is K optional" test.
- * This file previously used `undefined extends AgentSession[K]`, which
- * still resolved the full 14-member union correctly (proven at the P9-R
- * gate: the exhaustiveness assertion below already reported
- * `TS2322: Type 'true' is not assignable to type 'never'` at HEAD, with
- * the six methods this task adds correctly named as the excluded members)
- * — the formula was never the hole. The hole was that this file is a
- * `*.test.ts`, which `tsconfig.server.typecheck.json` excludes, so the only
- * thing that ever ran that check was
- * `guard-server-test-typecheck-ceiling.mjs`'s test-file typecheck, which
- * tolerates every pre-existing error up to `TYPECHECK_ERROR_CEILING` —
- * comfortably enough slack, at the ceiling in force when this file was
- * written, to swallow this one without the ceiling guard ever going red.
- * (CORRECTED at the P9-S merge gate: this named the ceiling as "1051, ~1048
- * already in use", which `19f1010` — two minutes later in the same wave —
- * made false by lowering it. The figures are dropped rather than re-pinned,
- * per `CLAUDE.md`'s own instruction not to restate a volatile count in
- * prose; the ceiling guard reports the live numbers.) `provider-registry.ts`'s new
- * `SESSION_OPTIONAL_METHOD_KEYS` is the fix: the same exhaustiveness shape,
- * moved to production source, where `npm run typecheck` has no ceiling to
- * hide behind.
+ * T304: this file used to carry its own second, independent copy of
+ * `provider-registry.ts`'s optional-method exhaustiveness check — a
+ * `type OptionalAgentSessionMethodName` computed from `AgentSession` plus a
+ * hand-maintained name list, asserted exhaustive via
+ * `_allOptionalAgentSessionMethodsAreCovered: MissingOptionalAgentSessionMethod
+ * extends never ? true : never = true`. T296 (see `provider-registry.ts`'s
+ * own `AgentSessionOptionalMethodKey`/`SESSION_OPTIONAL_METHOD_KEYS` doc
+ * comments) had already moved the real, load-bearing version of this check
+ * into production source, where `npm run typecheck` polices it with no
+ * ceiling to hide behind — proven at the P9-S gate in both directions (a
+ * 15th optional method added to `AgentSession` fails `TS2741`; making
+ * `setModel` required fails `TS2353`). The copy here was never read by
+ * anything at runtime (nothing in this file iterated
+ * `OPTIONAL_AGENT_SESSION_METHOD_NAMES`; the "forwards every optional
+ * AgentSession method" test below hardcodes its own call list), so once the
+ * production copy existed this one was a pure `TS6133` "declared but never
+ * read" — invisible to `npm run typecheck --workspace=@picompanion/server`
+ * (this file is a `*.test.ts`, excluded by `tsconfig.server.typecheck.json`)
+ * and tolerated only by `guard-server-test-typecheck-ceiling.mjs`'s
+ * `TYPECHECK_ERROR_CEILING`, at zero headroom. T304 deleted it outright
+ * rather than `void`-referencing it to silence the warning: keeping a
+ * second copy of an exhaustiveness check in a file the production typecheck
+ * cannot see buys nothing the production check does not already give, and
+ * removing it lowered the ceiling instead of spending it forever on an inert
+ * duplicate. `TYPECHECK_ERROR_CEILING` was lowered by the measured delta in
+ * the same commit.
  */
-type OptionalAgentSessionMethodName = {
-  [K in keyof AgentSession]-?: {} extends Pick<AgentSession, K>
-    ? NonNullable<AgentSession[K]> extends (...args: never[]) => unknown
-      ? K
-      : never
-    : never;
-}[keyof AgentSession];
-
-const OPTIONAL_AGENT_SESSION_METHOD_NAMES = [
-  "listCommands",
-  "setModel",
-  "setThinkingOption",
-  "setFeature",
-  "setSteeringMode",
-  "setFollowUpMode",
-  "getQueueModes",
-  "respondToEditorTextRequest",
-  "setAutoCompaction",
-  "getAutoCompaction",
-  "revertConversation",
-  "revertFiles",
-  "revertBoth",
-  "tryHandleOutOfBand",
-] as const satisfies readonly OptionalAgentSessionMethodName[];
-
-type MissingOptionalAgentSessionMethod = Exclude<
-  OptionalAgentSessionMethodName,
-  (typeof OPTIONAL_AGENT_SESSION_METHOD_NAMES)[number]
->;
-
-const _allOptionalAgentSessionMethodsAreCovered: MissingOptionalAgentSessionMethod extends never
-  ? true
-  : never = true;
 
 const CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,

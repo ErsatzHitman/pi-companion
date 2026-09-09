@@ -74,7 +74,17 @@
 // pre-existing `AgentRunResult` shape drift (needed so a new fixture in
 // the same file could satisfy `AgentSession`) resolved two more (`TS2416`
 // and one `TS2345`). Net drop: 3, well under `TYPECHECK_ERROR_MAX_DROP`.
-export const TYPECHECK_ERROR_CEILING = 1045;
+//
+// T304 lowered this from 1045 to 1044: T296's production fix
+// (`provider-registry.ts`'s `SESSION_OPTIONAL_METHOD_KEYS`) left a second,
+// now-inert copy of the same exhaustiveness check behind in
+// `provider-registry-wrap.test.ts` — a `TS6133` "declared but never read"
+// on `_allOptionalAgentSessionMethodsAreCovered`, tolerated by this ceiling
+// with zero headroom to spare. Deleting that duplicate (nothing else in the
+// file read it) resolved exactly that one error; the production check in
+// `provider-registry.ts` is unaffected and still proven able to fail in
+// both directions (see that file's own T296 doc comment).
+export const TYPECHECK_ERROR_CEILING = 1044;
 
 // T119: how far the measured error count is allowed to fall below the
 // ceiling in one run without an explicit ceiling update. A real fix lowers
