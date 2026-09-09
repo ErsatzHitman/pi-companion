@@ -271,6 +271,29 @@ locked, rmdir` failure mode directly (Windows holds a file handle open slightly 
   would have proven nothing about the next one. The timeout was again deliberately NOT raised,
   for the reason this paragraph already gives about the other four.
 
+  **A sixth member was added by T302, by the same rule:**
+  `src/server/websocket-server.browser-tools.test.ts`. The P9-S merge gate ran
+  `npm run test:unit --workspace=@picompanion/server` three times on one commit: exit 0, exit 0,
+  then exit 1 with `1 failed | 245 passed`, this file, `Error: Connection timed out`, and **zero
+  assertion failures** — this paragraph's signature exactly. `git log 0173304..HEAD --` on the
+  file was empty; it was last modified at `ac367b9` on 2026-09-06, so it was not a wave
+  regression. Its source carries the same real-loopback-transport shape already named above for
+  the two hub WebSocket files: it stands up a real `node:http` `createServer` plus a real
+  WebSocket upgrade (reading the bound `AddressInfo` for the port), not a fake transport. The
+  mechanism is specific, not just "it timed out": the harness's `connectBrowserHostClient` passes
+  `connectTimeoutMs: 500`, and `daemon-client.ts` sets `lastErrorValue = "Connection timed out"`
+  once that budget elapses — a 500ms real-loopback handshake budget racing ~245 sibling files for
+  CPU is the whole failure. Run **alone**, on this machine, the file passed in **31.39s** (of
+  which 29.79s was module import, per Vitest's own timing breakdown) — not a margin, the same
+  shape as every prior member's decisive measurement. `connectTimeoutMs` and `testTimeout` were
+  both deliberately left untouched, for the reason this paragraph already gives about the other
+  five: a higher budget would hide the contention rather than remove it. The fix moved this one
+  file from `test:unit:parallel` into `test:unit:serial` in `packages/server/package.json`. For
+  the current, authoritative lane membership, read the two scripts in
+  `packages/server/package.json` directly rather than trusting a count restated here — every one
+  of this paragraph's own prior corrections exists because a restated count went stale the moment
+  the next member landed.
+
 ## Wave-end and merge-gate verification MUST run against committed content (T93)
 
 An orphaned uncommitted fix has twice concealed the true state of `main`: at P5-W22 it
