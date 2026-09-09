@@ -56,7 +56,36 @@ const SCRIPTS_CI_SRC_PATTERN = /^scripts\/ci\//;
 // this task's narrow scope). If a second app ever grows an `app.config.ts`,
 // this pattern picks it up the same way `SHIPPED_SRC_PATTERN` above already
 // generalizes across every `<pkg-or-app>/src/` without hardcoding each one.
-const APP_ROOT_CONFIG_PATTERN = /^apps\/[^/]+\/app\.config\.ts$/;
+//
+// T314 (decided at the P9-U wave, and this is the criterion that task left
+// open): `apps/<name>/metro.config.js` is admitted too, for the same reason
+// and by the same test. T314 shipped two real capabilities in
+// `apps/android/metro.config.js` — `RELATIVE_JS_SPECIFIER` (Metro retries a
+// relative `./x.js` specifier as `./x`, which is what 207 unresolvable
+// specifiers needed) and `WEB_FILE_BLOCK_PATTERN` (the `*.web.*` blocklist
+// anchored to this app's OWN `src/`, so a dependency's `Bounce.web.ts` is no
+// longer blocked). Both are real, uniquely-declared names: measured with
+// `git grep -w` across `packages/*/src`, `apps/*/src`, `scripts/ci` and
+// every app-root config, each appears in exactly one file, this one. So the
+// T246 test above is satisfied — this config declares capabilities worth
+// protecting, not bare config values — and a will-not-widen note would have
+// had to argue that away.
+//
+// Measured before trusting it, per T246's own discipline: `git ls-files`
+// matches exactly one file today, `apps/android/metro.config.js`
+// (`apps/web` is a Vite app and has no Metro config), and NONE of the
+// existing `CAPABILITIES` entries' members appears anywhere in it — checked
+// by running every entry's `methodNames` against the real file's text — so
+// this widening cannot change the shipped verdict of any entry but the two
+// T314 registers.
+//
+// The DENIAL side is deliberately NOT widened to this file. Its header
+// narrates the pre-fix state at length ("Metro appends its `sourceExts` to
+// the specifier as given") without a `HISTORICAL_QUOTE_MARKERS` trigger, so
+// admitting it to the denial scan would risk the self-narration collision
+// T179 and T215 each had to resolve — and no denial site has ever been
+// found there, only in `docs/**`, which the denial scan already reaches.
+const APP_ROOT_CONFIG_PATTERN = /^apps\/[^/]+\/(?:app\.config\.ts|metro\.config\.js)$/;
 const APP_SRC_PREFIXES = ["apps/web/src/", "apps/android/src/"];
 // T156: `.mjs` added because `scripts/ci`'s guards are plain ESM `.mjs`
 // modules, not `.ts`/`.tsx`.
@@ -96,19 +125,26 @@ function isTestSourcePath(path) {
 /**
  * Whether `path` counts as "shipped" real source for deciding if a
  * capability is actually real today — any package or app's `src/`
- * directory, (T156) `scripts/ci`, or (T246) an app-root `app.config.ts` —
- * excluding test files (a fake/mock under a `.test.ts`/`.test.mjs` must
- * never be able to make the guard believe a capability is real; an
- * `app.config.ts` is never a test file, so `isTestSourcePath` is a no-op
- * for it, checked anyway for uniformity with the other two patterns).
+ * directory, (T156) `scripts/ci`, or (T246, widened by T314) an app-root
+ * `app.config.ts` or `metro.config.js` — excluding test files (a fake/mock
+ * under a `.test.ts`/`.test.mjs` must never be able to make the guard
+ * believe a capability is real). The app-root branch names whole filenames,
+ * so neither `app.config.ts` nor `metro.config.js` can BE a test file and
+ * that branch needs no test-file check of its own; `app.config.test.ts` and
+ * `metro.config.test.ts` both exist in this tree and neither matches.
  * Exported so `guard-capability-prose.test.mjs` can prove the widened scope
  * directly, not by re-deriving an equivalent regex.
  */
 export function isShippedSourcePath(path) {
+  // The app-root branch names each whole filename, extension included, so
+  // it carries its own extension check. Routing it through
+  // `hasSourceExtension` as well would silently exclude
+  // `metro.config.js`: `.js` is deliberately not in `SOURCE_EXTENSIONS`,
+  // and widening that set to admit one config file would newly admit every
+  // `.js` under every `src/` tree — far past what this decision measured.
+  if (APP_ROOT_CONFIG_PATTERN.test(path)) return true;
   return (
-    (SHIPPED_SRC_PATTERN.test(path) ||
-      SCRIPTS_CI_SRC_PATTERN.test(path) ||
-      APP_ROOT_CONFIG_PATTERN.test(path)) &&
+    (SHIPPED_SRC_PATTERN.test(path) || SCRIPTS_CI_SRC_PATTERN.test(path)) &&
     hasSourceExtension(path) &&
     !isTestSourcePath(path)
   );
@@ -632,7 +668,8 @@ export function main() {
   if (violations.length === 0) {
     console.log(
       `guard-capability-prose: OK — ${CAPABILITIES.length} capability group(s) checked against ` +
-        `${shippedPaths.length} packages/*/src|apps/*/src|scripts/ci file(s) and ${appPaths.length} ` +
+        `${shippedPaths.length} packages/*/src|apps/*/src|scripts/ci|app-root config file(s) ` +
+        `and ${appPaths.length} ` +
         `packages/*/src + apps/web|android src + scripts/ci + packaging/** + docs/** + ` +
         `.github/workflows/*.yml + apps/android/maestro/*.md|*.yaml + apps/*/app.config.ts ` +
         `file(s); no live denial found for a shipped capability.`,

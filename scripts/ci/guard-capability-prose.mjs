@@ -2088,6 +2088,57 @@ export const CAPABILITIES = [
     // this capability, then restoring that file from a scratchpad copy —
     // never `git checkout --` — and confirming exit 0 with `git status
     // --porcelain` empty.
+    // T314: Metro retries a relative `./x.js` specifier as `./x` when the
+    // literal path does not resolve. `tsconfig.json` sets
+    // `moduleResolution: "bundler"`, so `tsc` and Vitest rewrite `./x.js` to
+    // `x.ts` while Metro appends its own `sourceExts` to the specifier as
+    // given — which is why 207 specifiers typechecked and tested clean here
+    // and could not be bundled. Registered only now: this capability ships
+    // in `apps/android/metro.config.js`, which `isShippedSourcePath` could
+    // not see until the widening recorded in `run-guard-capability-prose.
+    // mjs` beside `APP_ROOT_CONFIG_PATTERN`, so an entry written at T314
+    // would have exited 0 forever — the "check that cannot fail" shape one
+    // directory further out than T246 closed it.
+    //
+    // Bare-string member, measured rather than assumed: `git grep -w
+    // RELATIVE_JS_SPECIFIER` across every shipped tree returns exactly one
+    // file. Kept SEPARATE from the blocklist entry below because T314 fixed
+    // two independent defects in one file, and a shared token would let
+    // either fix "ship" the other's phrase protection.
+    //
+    // FORWARD guard, T162's shape: no live denying sentence exists in
+    // scope. Phrases are worded away from `metro.config.js`'s own header,
+    // which narrates the pre-fix behaviour at length and which the denial
+    // scan deliberately does not read.
+    name: "Metro resolves relative .js specifiers to their .ts source (RELATIVE_JS_SPECIFIER)",
+    methodNames: ["RELATIVE_JS_SPECIFIER"],
+    denyingPhrases: [
+      /metro (?:cannot|can'?t|is unable to) resolve (?:this app'?s|the app'?s|our) relative `?\.js`? (?:specifiers|imports)/i,
+      /(?:no|nothing in the) metro config (?:retries|falls back|maps) a `?\.js`? specifier (?:to|onto) (?:its|the) `?\.ts`? source/i,
+      /the (?:207|two hundred) `?\.js`? specifiers? (?:remain|are still|stay) unresolvable (?:under|to) metro/i,
+    ],
+  },
+  {
+    // T314's second defect, in the same file: the `*.web.*` blocklist was
+    // not anchored to this app's own `src/`, so it also blocked a
+    // DEPENDENCY's web-suffixed files — `react-native-reanimated`'s
+    // `Bounce.web.ts` among them — which is a different failure from the
+    // repository invariant it was written to enforce ("apps/android must
+    // contain no `.web.*` files"). `APP_SRC_ANCHOR` anchors both blocklist
+    // patterns to `apps/android/src`, so the invariant still bites on this
+    // app's own files and stops reaching into `node_modules`.
+    //
+    // `WEB_FILE_BLOCK_PATTERN` is declared in exactly one shipped file,
+    // measured the same way as the entry above; a bare string is enough.
+    name: "the *.web.* Metro blocklist is anchored to this app's own src (WEB_FILE_BLOCK_PATTERN)",
+    methodNames: ["WEB_FILE_BLOCK_PATTERN"],
+    denyingPhrases: [
+      /the (?:metro )?blocklist (?:also |still )?(?:blocks|rejects|excludes) a dependency'?s (?:own )?`?\.?web\.?`?[^.]{0,30}files/i,
+      /`?\.web\.`? files (?:inside|under) `?node_modules`? (?:are|remain) (?:blocked|rejected) by (?:the )?metro/i,
+      /(?:no|nothing) anchors the (?:metro )?web[- ]file blocklist to (?:this )?app'?s own `?src`?/i,
+    ],
+  },
+  {
     name: "static npx target resolvability (findNpxBinaryPackageViolations)",
     methodNames: ["findNpxBinaryPackageViolations"],
     denyingPhrases: [

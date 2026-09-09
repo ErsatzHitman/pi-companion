@@ -505,6 +505,37 @@ test("T156: isShippedSourcePath now covers scripts/ci/*.mjs", () => {
   assert.equal(isShippedSourcePath("scripts/ci/orphan-modules.mjs"), true);
 });
 
+test("T314: isShippedSourcePath covers an app-root metro.config.js", () => {
+  // T246 admitted `app.config.ts`; T314 admitted `metro.config.js` for the
+  // same reason — it declares real, uniquely-named capabilities
+  // (RELATIVE_JS_SPECIFIER, WEB_FILE_BLOCK_PATTERN) that live outside any
+  // `src/` tree, so an entry for them would have exited 0 forever.
+  assert.equal(isShippedSourcePath("apps/android/metro.config.js"), true);
+  assert.equal(isShippedSourcePath("apps/android/app.config.ts"), true);
+});
+
+test("T314: the app-root branch admits whole filenames only, never their test siblings", () => {
+  // Both of these really exist in this tree, so this is a live boundary and
+  // not a hypothetical: a fake under a `.test.` file must never be able to
+  // make the guard believe a capability is real.
+  assert.equal(isShippedSourcePath("apps/android/metro.config.test.ts"), false);
+  assert.equal(isShippedSourcePath("apps/android/app.config.test.ts"), false);
+});
+
+test("T314: no other app-root config is admitted by the widening", () => {
+  // Curated to the two demonstrated shapes, not `apps/*/*.config.*` at
+  // large: nothing has identified a capability worth protecting in a
+  // babel or Vite config, and admitting them would widen the shipped scan
+  // past what the decision measured.
+  assert.equal(isShippedSourcePath("apps/android/babel.config.js"), false);
+  assert.equal(isShippedSourcePath("apps/web/vite.config.ts"), false);
+  assert.equal(isShippedSourcePath("apps/web/vitest.config.ts"), false);
+  // `.js` is deliberately not a SOURCE_EXTENSION, so admitting one named
+  // config file must not admit `.js` anywhere else.
+  assert.equal(isShippedSourcePath("apps/android/src/some-module.js"), false);
+  assert.equal(isShippedSourcePath("packages/client/src/thing.js"), false);
+});
+
 test("T156: isShippedSourcePath excludes scripts/ci/*.test.mjs", () => {
   assert.equal(isShippedSourcePath("scripts/ci/guard-capability-prose.test.mjs"), false);
   assert.equal(isShippedSourcePath("scripts/ci/orphan-modules.test.mjs"), false);
@@ -3916,17 +3947,27 @@ test("T254: a live denial inside an app.config.ts-shaped file is now caught", ()
   );
 });
 
-test("T246: the widened pattern is curated to app.config.ts, not every apps/*-root file", () => {
+test("T246: the widened pattern is curated to named configs, not every apps/*-root file", () => {
   // apps/web has no app.config.ts of its own (it is a Vite app); its
   // nearest analogue, vite.config.ts, is deliberately NOT admitted — this
   // task's brief scopes the widening to the one demonstrated shape, and a
   // build-tool config with no identified capability worth protecting is
   // not that shape.
   assert.equal(isShippedSourcePath("apps/web/vite.config.ts"), false);
-  // Sibling app-root files that are not app.config.ts stay excluded too.
+  // Sibling app-root files that are not one of the named configs stay
+  // excluded too.
   assert.equal(isShippedSourcePath("apps/android/eas.json"), false);
   assert.equal(isShippedSourcePath("apps/android/babel.config.js"), false);
-  assert.equal(isShippedSourcePath("apps/android/metro.config.js"), false);
+  // CORRECTED (T314): this test also asserted
+  // `isShippedSourcePath("apps/android/metro.config.js")` was `false`, and
+  // its title said the pattern was curated to "app.config.ts". T314 decided
+  // the opposite for that one file, by T246's own test: metro.config.js
+  // declares real, uniquely-named capabilities (RELATIVE_JS_SPECIFIER,
+  // WEB_FILE_BLOCK_PATTERN), which is exactly the property T246 said
+  // separates a config worth admitting from a bare build-tool config. The
+  // curation claim itself is unchanged and still asserted above — the list
+  // of named configs grew by one, deliberately, not the shape of the rule.
+  assert.equal(isShippedSourcePath("apps/android/metro.config.js"), true);
 });
 
 test("T246: a live denying sentence about computeVersionCodeFromSemver is flagged once it is shipped", () => {

@@ -15255,8 +15255,46 @@ work rather than smuggled into a bundling fix.
       invocation that had failed at build `4610d322-4cc8-435b-9efb-60b327c78011` now completes,
       so the local `expo export` reproduction really was measuring the same defect and not a
       different one that happened to look alike
-- [ ] Decide whether `guard-capability-prose.mjs`'s `isShippedSourcePath` should admit
-      `apps/<name>/metro.config.js`, so this capability can be registered rather than disclosed
+- [x] Decide whether `guard-capability-prose.mjs`'s `isShippedSourcePath` should admit
+      `apps/<name>/metro.config.js`, so this capability can be registered rather than disclosed.
+      **Decided: WIDEN**, by T246's own test rather than by analogy to it — that test asks
+      whether the config declares a capability worth protecting or merely bare config values.
+      Here it plainly declares two, and both are uniquely named: `git grep -w` across every
+      shipped tree returns exactly one file for `RELATIVE_JS_SPECIFIER` and one for
+      `WEB_FILE_BLOCK_PATTERN`, so both are plain bare-string members with no need for T168's
+      AND-group or T169's shape anchor. Registered as two SEPARATE entries, because T314 fixed
+      two independent defects in one file and a shared token would let either fix "ship" the
+      other's phrase protection.
+
+      **Three measurements before touching anything**, in the order this repository's own
+      precedent requires. (1) Both predicates were called on the real path: `isShippedSourcePath`
+      and `isAppSourcePath` each returned `false`, so the file was invisible to both scans.
+      (2) Every existing entry's `methodNames` was run against the real file's text: zero
+      matches, so widening the shipped side cannot change the verdict of any entry but the two
+      being added. (3) `.js` is deliberately NOT in `SOURCE_EXTENSIONS`, so the app-root branch
+      was moved ahead of `hasSourceExtension` rather than that set being widened — adding
+      `.js` there would have newly admitted every `.js` file under every `src/` tree, far past
+      what this decision measured.
+
+      **The widening is load-bearing, proven directly rather than assumed.** With the same
+      denying sentence appended to a real tracked file, the guard exits 1 naming the capability
+      with the widened pattern and exits 0 without it — i.e. an entry written at T314 would
+      have been permanently unable to fail, which is the shape this guard exists to prevent one
+      directory further out than T246 closed it. Both new entries were separately watched
+      firing and the file restored from a scratchpad copy, never `git checkout --`.
+
+      **The DENIAL side is deliberately NOT widened to this file**, and that is recorded next to
+      the pattern rather than left implicit: `metro.config.js`'s own header narrates the pre-fix
+      behaviour at length without a historical-quotation marker, so admitting it to the denial
+      scan would risk the self-narration collision T179 and T215 each had to resolve, and no
+      denial site has ever been found there — only in `docs/**`, which that scan already reads.
+
+      One correction rides along, disclosed rather than quietly applied: T246's own test asserted
+      `isShippedSourcePath("apps/android/metro.config.js") === false` and titled itself "curated
+      to app.config.ts". That line now asserts `true`, with the reversal and its reasoning
+      recorded in the test itself. The curation CLAIM is unchanged — `vite.config.ts`,
+      `vitest.config.ts`, `babel.config.js` and `eas.json` all stay excluded, and so does every
+      `.js` outside the two named configs.
 
 #### T315 — The E2E APK is assembled by Gradle on the runner; EAS is kept only where release signing matters
 
