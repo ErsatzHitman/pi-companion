@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
@@ -8,6 +12,7 @@ import { ApprovalForm } from "./ApprovalForm.js";
 import { CommandSearch } from "./CommandSearch.js";
 import { DiffSummary } from "./DiffSummary.js";
 import { PromptBar } from "./PromptBar.js";
+import { StreamingMessage } from "./StreamingMessage.js";
 import { ThinkingSection } from "./ThinkingSection.js";
 import { ToolChips } from "./ToolChips.js";
 import { WorkflowSteps } from "./WorkflowSteps.js";
@@ -43,6 +48,68 @@ describe("ThinkingSection", () => {
     );
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
+});
+
+/**
+ * T305: assistant/user transcript text must keep the newlines the model
+ * emitted. `.pc-thinking__body p` had `white-space: pre-wrap` and
+ * `.pc-message__text` did not, so identical text rendered with its line
+ * breaks on Android (React Native `<Text>` preserves them by default) and
+ * collapsed to one run on web.
+ *
+ * Asserted against the STYLESHEET, not `getComputedStyle`, and that is
+ * deliberate: this suite runs in jsdom, which does not load
+ * `recipes.css`, so a computed-style assertion here would read the
+ * initial value `normal` and pass whether or not the declaration exists —
+ * a check that cannot fail. Same approach, and same reason, as
+ * `features/transcript/transcript.test.tsx`'s compact-layout CSS
+ * assertions. The DOM half below is what jsdom can prove: that the text
+ * reaches this element as a single text node with its newlines intact, so
+ * the CSS declaration is the only thing deciding how they render.
+ */
+describe("StreamingMessage newline preservation (T305)", () => {
+  const recipesCss = () =>
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "recipes.css"), "utf8");
+
+  // Comments are stripped BEFORE the rule is sliced out. Without that this
+  // helper truncates at the first `}` it finds, which a comment inside the
+  // rule can supply -- this rule's own decision-record comment contains the
+  // token `{text}`, and the first draft of this test failed on exactly that,
+  // reporting the declaration missing when it was present two lines below
+  // the brace the slice stopped at.
+  const ruleBodyFor = (selector: string) => {
+    const css = recipesCss().replace(/\/\*[\s\S]*?\*\//g, "");
+    const at = css.indexOf(`${selector} {`);
+    expect(at, `${selector} not found in recipes.css`).toBeGreaterThanOrEqual(0);
+    const close = css.indexOf("}", at);
+    expect(close, `${selector} has no closing brace`).toBeGreaterThan(at);
+    return css.slice(at, close);
+  };
+
+  it("declares white-space: pre-wrap on .pc-message__text", () => {
+    expect(ruleBodyFor(".pc-message__text")).toMatch(/white-space:\s*pre-wrap\s*;/);
+  });
+
+  it("declares it on the thinking body too, so the two are no longer asymmetric", () => {
+    expect(ruleBodyFor(".pc-thinking__body p")).toMatch(/white-space:\s*pre-wrap\s*;/);
+  });
+
+  it("uses pre-wrap rather than pre, so long lines still wrap to the container", () => {
+    expect(ruleBodyFor(".pc-message__text")).not.toMatch(/white-space:\s*pre\s*;/);
+  });
+
+  it("renders a multi-line message with its newlines intact in the DOM", () => {
+    render(
+      <StreamingMessage
+        speaker="assistant"
+        text={"first line\nsecond line"}
+        streaming={false}
+        testId="t305-message"
+      />,
+    );
+    const paragraph = screen.getByTestId("t305-message").querySelector(".pc-message__text");
+    expect(paragraph?.textContent).toBe("first line\nsecond line");
+  });
 });
 
 describe("ApprovalForm", () => {

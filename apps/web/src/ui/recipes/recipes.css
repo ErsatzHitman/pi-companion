@@ -136,6 +136,18 @@
   color: var(--color-ink);
   font-size: var(--font-size-base);
   line-height: var(--line-height-relaxed);
+  /* T305: assistant and user text arrives with the model's own newlines in
+     it, and this element renders that text directly (`StreamingMessage.tsx`
+     puts `{text}` inside this `<p>`; nothing between the wire and here
+     converts a newline to markup). Without `pre-wrap` every newline
+     collapses to a single space, so a numbered list or a code-adjacent
+     paragraph runs together on web while rendering correctly on Android,
+     where React Native `<Text>` preserves newlines by default and needs no
+     equivalent declaration. `.pc-thinking__body p` below has always had
+     this; assistant message text was the asymmetry, found at the P9-T merge
+     gate. `pre-wrap`, not `pre`: long lines must still wrap to the
+     container. */
+  white-space: pre-wrap;
 }
 /* Still-streaming text gets the shimmer-gradient live-state treatment
    (docs/beautiful-ui-reference.md, signature trait 3), matched via the

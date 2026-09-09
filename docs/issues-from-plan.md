@@ -468,7 +468,7 @@ that recomputation has to be domain-specific:
 | T205   | Type-check metro.config.js and babel.config.js, or say in writing why not       | phase-8   | android          | P8-W9  | T204                                                                  |
 | T206   | Enforce the "no legacy schema reader" prohibition with a check, not a grep      | phase-8   | ci               | P8-W9  | T42B2                                                                 |
 | T207   | Make the Android flows launchable on the packaged package id, and guard it      | phase-8   | android/tooling  | P8-W11 | T43B2b                                                                |
-| T208   | Owner-gated: configure EXPO_TOKEN and confirm the emulator action boots here    | phase-8   | ci               | owner  | T207                                                                  |
+| T208   | Owner-gated: configure EXPO_TOKEN and confirm the emulator action boots here    | phase-8   | ci               | P9-U   | T207                                                                  |
 | T209   | A guard-guard: every run-guard-\*.mjs is wired into a workflow, or allowlisted  | phase-8   | ci               | P8-W12 | T207                                                                  |
 | T210   | Fix legacy-retirement.md ordering: the undo must precede the cutover            | phase-8   | docs             | P8-W12 | —                                                                     |
 | T211   | guard-run-guard-wiring cannot report a stale allowlist entry                    | phase-8   | ci               | P8-W13 | T209                                                                  |
@@ -495,7 +495,7 @@ that recomputation has to be domain-specific:
 | T233   | Wire or allowlist cli's test:local and server's test:integration                | phase-9   | ci               | P9-W15 | T44A4                                                                 |
 | T234   | Decide whether protocol's and web's Linux-only CI coverage is intended          | phase-9   | ci               | P9-W16 | T44A4                                                                 |
 | T235   | Give apps/android a per-release versionCode so a second APK installs            | phase-9   | android          | P9-W17 | T44B1                                                                 |
-| T236   | Settle whether the EAS remote archive carries the locally-built dist/           | phase-9   | ci               | P9-W18 | T44B1                                                                 |
+| T236   | Settle whether the EAS remote archive carries the locally-built dist/           | phase-9   | ci               | P9-U   | T44B1                                                                 |
 | T237   | Close or document guard-signing-material's content-read skip list               | phase-9   | tooling          | P9-W19 | T44B1                                                                 |
 | T238   | Decide whether the published CLI binary keeps the name paseo                    | phase-9   | docs             | P9-W20 | T44B2                                                                 |
 | T239   | Replace the coalescer comment's four file:line citations with symbols           | phase-9   | daemon           | P9-W21 | T225                                                                  |
@@ -547,7 +547,7 @@ that recomputation has to be domain-specific:
 | T288   | Pin T283's $PASEO_HOME criterion and drop the layer-symmetry claim              | phase-9   | server           | P9-W67 | T283                                                                  |
 | T289   | Register resolveTranscribeClient in guard-capability-prose                      | phase-9   | tooling          | P9-W68 | T282                                                                  |
 | T290   | Ship real AttachmentSourcePort and CameraCapturePort at the mount               | phase-9   | android          | P9-W69 | T278, T282                                                            |
-| T291   | Re-pin expo-audio to the version this app's own expo bundles                    | phase-9   | android          | P9-W70 | T276                                                                  |
+| T291   | Re-pin expo-audio to the version this app's own expo bundles                    | phase-9   | android          | P9-U   | T276                                                                  |
 | T292   | Slash-command completion in the Android composer                                | phase-9   | android          | P9-W71 | none                                                                  |
 | T293   | Serve the composer's current text to an extension (getEditorText)               | phase-9   | server           | P9-W72 | none                                                                  |
 | T294   | Decide the two legacy storage permissions expo-image-picker merges in           | phase-9   | android          | P9-W73 | T290                                                                  |
@@ -561,7 +561,7 @@ that recomputation has to be domain-specific:
 | T302   | Move websocket-server.browser-tools.test.ts into test:unit:serial               | phase-9   | server           | P9-W81 | T240                                                                  |
 | T303   | Fix the format-check guard's bracketed-path parent-existence false positive     | phase-9   | tooling          | P9-W82 | none                                                                  |
 | T304   | Retire the duplicate exhaustiveness check that only the ceiling guard sees      | phase-9   | server           | P9-W83 | T296                                                                  |
-| T305   | Give `.pc-message__text` the same `white-space: pre-wrap` the thinking body has | phase-9   | web              |        | T28A3                                                                 |
+| T305   | Give `.pc-message__text` the same `white-space: pre-wrap` the thinking body has | phase-9   | web              | P9-U   | T28A3                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
