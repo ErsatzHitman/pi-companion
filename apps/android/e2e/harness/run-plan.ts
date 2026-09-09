@@ -60,6 +60,14 @@ export interface RunPlan {
   };
 }
 
+/**
+ * Milliseconds Maestro may spend waiting for its own Android driver to come
+ * up on the device, as a string because it reaches Maestro through the
+ * environment. Maestro's default is short enough that a cold CI emulator
+ * misses it every time — see the note beside its use below.
+ */
+const DEFAULT_DRIVER_STARTUP_TIMEOUT_MS = "240000";
+
 export function buildRunPlan(
   flowName: string,
   flowPath: string,
@@ -91,7 +99,16 @@ export function buildRunPlan(
         "--no-web-ui",
         "--no-mcp",
       ],
-      stopArgv: ["stop", "--home", endpoint.paseoHome, "--force"],
+      // T321: `daemon stop`, not `stop`. Bare `stop` is the AGENT stop
+      // command (packages/cli/src/commands/agent/stop.ts) and has no
+      // `--home`, so every flow ended with `error: unknown option '--home'
+      // (Did you mean --host?)` and left its daemon running. Two orphans per
+      // shard then logged every 30s and held the CI job open until its
+      // 45-minute timeout, long after the step itself had exited 1
+      // (Maestro run 34413092055). The daemon-scoped command
+      // (packages/cli/src/commands/daemon/index.ts) is the one that takes
+      // `--home` and `--force`.
+      stopArgv: ["daemon", "stop", "--home", endpoint.paseoHome, "--force"],
     },
     maestro: {
       argv: ["test", "-e", `APP_ID=${appId}`, flowPath],
@@ -99,6 +116,16 @@ export function buildRunPlan(
         DAEMON_HOST: emulatorHost ?? "",
         DAEMON_PORT: emulatorPort ?? "",
         DAEMON_ADDRESS: endpoint.emulatorAddress,
+        // T321: Maestro installs its own driver APK on the device and waits
+        // for it to answer on a local port. Its default budget is far too
+        // short for a cold CI emulator: every flow of Maestro run
+        // 34413092055 died with
+        // `Maestro Android driver did not start up in time on emulator
+        // [ emulator-5554 ] (driver port 34555)` after the emulator itself
+        // had taken 8 minutes to boot. Overridable, so a fast local device
+        // is not forced to wait and a slower CI runner can be given more.
+        MAESTRO_DRIVER_STARTUP_TIMEOUT:
+          process.env["MAESTRO_DRIVER_STARTUP_TIMEOUT"] ?? DEFAULT_DRIVER_STARTUP_TIMEOUT_MS,
       },
     },
   };

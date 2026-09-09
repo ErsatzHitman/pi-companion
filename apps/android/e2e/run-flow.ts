@@ -119,7 +119,27 @@ async function main(): Promise<void> {
     });
   } finally {
     daemon.kill();
-    await spawnAndWait("node", [PASEO_BIN, ...plan.daemon.stopArgv]).catch(() => 1);
+    // T321: the stop result is REPORTED, not swallowed. It used to be
+    // `.catch(() => 1)` with the exit code discarded, which hid a stop
+    // command that had never once worked: `stop --home ...` is the agent
+    // command and rejects `--home`, so every flow left its daemon running.
+    // Two orphans per shard then held the CI job open until its timeout,
+    // long after this process had exited. A failed stop is not fatal to the
+    // flow's own result — the flow has already finished by here — but it
+    // must be visible, because the next person debugging a hung job needs
+    // to see it in the log rather than infer it from an orphan pid.
+    const stopExit = await spawnAndWait("node", [PASEO_BIN, ...plan.daemon.stopArgv]).catch(
+      (error: unknown) => {
+        console.error("[run-flow] could not run the daemon stop command:", error);
+        return 1;
+      },
+    );
+    if (stopExit !== 0) {
+      console.error(
+        `[run-flow] daemon stop exited ${stopExit} for home ${plan.daemon.home} — a daemon may ` +
+          "still be running and can hold this job open until its timeout.",
+      );
+    }
   }
 
   process.exitCode = combineRunExitCode(exitCode, daemonExitCode);

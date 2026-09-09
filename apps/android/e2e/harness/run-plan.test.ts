@@ -25,7 +25,42 @@ describe("buildRunPlan", () => {
       "--no-web-ui",
       "--no-mcp",
     ]);
-    expect(plan.daemon.stopArgv).toEqual(["stop", "--home", SAFE_ENDPOINT.paseoHome, "--force"]);
+    expect(plan.daemon.stopArgv).toEqual([
+      "daemon",
+      "stop",
+      "--home",
+      SAFE_ENDPOINT.paseoHome,
+      "--force",
+    ]);
+  });
+
+  it("T321: the stop argv targets the DAEMON, not an agent — bare `stop` has no --home", () => {
+    // This assertion pinned the defect rather than the behaviour until
+    // T321: it expected `["stop", ...]`, which is
+    // packages/cli/src/commands/agent/stop.ts and rejects `--home` with
+    // `error: unknown option '--home' (Did you mean --host?)`. Every flow
+    // therefore left its isolated daemon running, and two orphans per shard
+    // held Maestro run 34413092055's jobs open until their 45-minute
+    // timeout. A green unit test could never have caught it, because the
+    // test asserted the wrong argv too — only a real run could.
+    const plan = buildRunPlan("smoke", "/repo/apps/android/maestro/smoke.yaml", SAFE_ENDPOINT);
+
+    expect(plan.daemon.stopArgv[0]).toBe("daemon");
+    expect(plan.daemon.stopArgv).toContain("--home");
+    expect(plan.daemon.stopArgv).toContain(SAFE_ENDPOINT.paseoHome);
+  });
+
+  it("T321: maestro is given a driver-startup budget a cold CI emulator can meet", () => {
+    // Maestro installs its own driver APK and waits for it to answer on a
+    // local port. Its default budget is short enough that every flow of run
+    // 34413092055 died with `Maestro Android driver did not start up in
+    // time on emulator [ emulator-5554 ]`, after the emulator itself had
+    // taken 8 minutes to boot.
+    const plan = buildRunPlan("smoke", "/repo/apps/android/maestro/smoke.yaml", SAFE_ENDPOINT);
+
+    const budget = Number(plan.maestro.env["MAESTRO_DRIVER_STARTUP_TIMEOUT"]);
+    expect(Number.isFinite(budget)).toBe(true);
+    expect(budget).toBeGreaterThanOrEqual(120_000);
   });
 
   it("builds a maestro argv naming the resolved flow path and the default appId override", () => {
@@ -61,11 +96,24 @@ describe("buildRunPlan", () => {
 
   it("passes the emulator-reachable address to the flow as env vars", () => {
     const plan = buildRunPlan("smoke", "/repo/apps/android/maestro/smoke.yaml", SAFE_ENDPOINT);
-    expect(plan.maestro.env).toEqual({
+    // The three address vars are asserted exactly; T321's driver-startup
+    // budget is asserted separately above, because it is a Maestro tuning
+    // knob rather than something a flow reads.
+    expect({
+      DAEMON_HOST: plan.maestro.env["DAEMON_HOST"],
+      DAEMON_PORT: plan.maestro.env["DAEMON_PORT"],
+      DAEMON_ADDRESS: plan.maestro.env["DAEMON_ADDRESS"],
+    }).toEqual({
       DAEMON_HOST: "10.0.2.2",
       DAEMON_PORT: "54321",
       DAEMON_ADDRESS: "10.0.2.2:54321",
     });
+    expect(Object.keys(plan.maestro.env).sort()).toEqual([
+      "DAEMON_ADDRESS",
+      "DAEMON_HOST",
+      "DAEMON_PORT",
+      "MAESTRO_DRIVER_STARTUP_TIMEOUT",
+    ]);
   });
 
   it("refuses to build a plan whose endpoint names the production port", () => {

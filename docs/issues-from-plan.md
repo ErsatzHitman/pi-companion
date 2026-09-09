@@ -577,6 +577,7 @@ that recomputation has to be domain-specific:
 | T318   | No emulator job had a timeout, so a hung flow would run for six hours                         | phase-9   | tooling          | P9-U   | T317, T315, T37F                                                      |
 | T319   | The emulator action runs its script under dash, and both scripts opened with a bashism        | phase-9   | tooling          | P9-U   | T317, T318, T37F                                                      |
 | T320   | The emulator action runs each script LINE as its own shell, so the shard loop could not exist | phase-9   | tooling          | P9-U   | T319, T312, T37F                                                      |
+| T321   | The daemon stop command never worked, and Maestro's driver never had time to start            | phase-9   | tooling          | P9-U   | T320, T37D, T37F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15649,3 +15650,65 @@ reported as the no-op it is with instructions to delete rather than fix it.
 - [x] `guard-app-id-package-pairing` still evaluates all 11 pairings, pinned by a test against
       the real committed workflow so the next workflow edit cannot silently reduce it
 - [ ] A real dispatch runs the flows themselves
+
+#### T321 — The daemon stop command never worked, and Maestro's driver never had time to start
+
+`labels: phase-9, area: tooling` · `depends-on: T320, T37D, T37F`
+
+Run `34413092055` is the first in this repository's history where a Maestro flow actually ran.
+The whole harness worked: `run-shard.ts` resolved the shard, installed the APK on a booted
+emulator, started an isolated daemon on `127.0.0.1:41813` (never 6767), handed the flow
+`10.0.2.2:41813`, ran both flows despite the first failing, and reported each one. Two separate
+defects surfaced at once, and neither could have been found any earlier than this.
+
+**Defect 1: `paseo stop --home` is not a command.** Every flow ended with
+
+```
+error: unknown option '--home'
+(Did you mean --host?)
+```
+
+`buildRunPlan`'s `stopArgv` was `["stop", "--home", <home>, "--force"]`. Bare `stop` is the
+AGENT stop command (`packages/cli/src/commands/agent/stop.ts`) and takes no `--home`; the
+daemon-scoped one (`packages/cli/src/commands/daemon/index.ts`) is `daemon stop`, and it takes
+exactly `--home`, `--force` and a timeout. One missing word.
+
+The consequence was not a failed flow — the flow had already finished — but a leaked daemon
+per flow. Two orphans per shard then logged every 30 seconds and held the CI job open until its
+45-minute timeout, **long after the step itself had correctly exited 1 at 23:15:47**. Four of
+five shards were killed by T318's `timeout-minutes` rather than finishing; that bound turned a
+six-hour hang into a 45-minute one, which is exactly what it was added for.
+
+**Why nothing caught it, and the part worth keeping.** `run-plan.test.ts` asserted
+`toEqual(["stop", "--home", ...])` — it pinned the defect, not the behaviour, so it was green
+against a command that had never once worked. And `run-flow.ts` called the stop with
+`.catch(() => 1)` and discarded the exit code, so the CLI's own error message went into the log
+with nothing reading it. Both are fixed: the assertion now pins `daemon stop` with the reason
+written beside it, and a failed stop is reported with the home directory named, because the
+next person debugging a hung job needs to see it rather than infer it from an orphan pid.
+
+**Defect 2: Maestro's own driver never started.**
+
+```
+Maestro Android driver did not start up in time on emulator [ emulator-5554 ] (driver port 34555)
+maestro.MaestroDriverStartupException$AndroidDriverTimeoutException
+```
+
+Maestro installs a driver APK on the device and waits for it to answer on a local port. On a
+runner where the emulator itself took eight minutes to boot, the default budget is not enough.
+`MAESTRO_DRIVER_STARTUP_TIMEOUT` is now set to 240000 ms through the run plan's Maestro
+environment, overridable from the environment so a fast local device is not made to wait and a
+slower runner can be given more.
+
+**A measurement T318 was waiting for.** Discounting the orphan hang, a shard that ran both its
+flows took about 21 minutes end to end — roughly 17 of setup, boot and install, and 6m 10s of
+flows. The 45-minute bound stays as it is: it now has real headroom behind it rather than being
+an estimate, and the raised driver budget can add up to eight minutes per shard in the worst
+case.
+
+- [x] `stopArgv` targets `daemon stop`, and a test pins the `daemon` prefix with the reason
+- [x] A failed daemon stop is reported with its home directory, not swallowed
+- [x] Maestro is given a driver-startup budget a cold CI emulator can meet, overridable
+- [x] `apps/android/e2e/harness` tests all pass, and the env assertion no longer forbids a new
+      tuning variable while still pinning the three address vars exactly
+- [ ] A dispatch where a flow gets past driver startup and reports a real assertion result
