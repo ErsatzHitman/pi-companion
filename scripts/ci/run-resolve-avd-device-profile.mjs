@@ -26,6 +26,12 @@ import { chooseAvdDeviceProfile, parseAvdDeviceIds } from "./avd-device-profile.
  * `avdmanager` is not on PATH on every runner image, so the SDK's own
  * `cmdline-tools` location is tried first and PATH is the fallback.
  *
+ * The PATH fallback is not speculative: run 34392173679's own failure log
+ * shows the emulator action reaching `avdmanager` by bare name on this
+ * image (`/usr/bin/sh -c \echo no | avdmanager create avd ...`), so a
+ * bare-name lookup does resolve there today. The explicit SDK paths are for
+ * images where it does not.
+ *
  * @returns {string}
  */
 function resolveAvdManager() {
