@@ -141,9 +141,165 @@ jobs:
           names="$(node -e "console.log(JSON.stringify(require('./apps/android/maestro/shards.json').shards.map(s => s.name)))")"
           echo "shards=$names" >> "$GITHUB_OUTPUT"
 
+  # T312: ONE EAS build, reused by every shard. This job used to live
+  # inside `maestro-e2e` below, which meant its five-shard matrix ran five
+  # separate `eas build --profile development` invocations of the SAME
+  # commit -- five identical APKs, five slots in the EAS build queue, and
+  # (measured on run 34369364166's `packaged-app-smoke`, the first real
+  # EAS build this repository ever ran) roughly 50 minutes each. Building
+  # once and fanning the artifact out costs one build and makes a build
+  # failure fail one job instead of five.
+  #
+  # `scripts/ci/guard-app-id-package-pairing.mjs` had to learn this shape
+  # in the same change: it resolves each job's EAS profile from a
+  # `--profile` flag in that job's own text, and after this split the job
+  # that RUNS the flows no longer has one. Its `resolveInheritedProfiles`
+  # now walks `needs:` so `maestro-e2e` still resolves to `development`,
+  # and its own test file pins that the real tree yields a pairing for
+  # every shard flow -- without that, this restructure would have silently
+  # reduced the guard to `packaged-app-smoke`'s single pairing while still
+  # reporting OK.
+  build-development-apk:
+    name: build-development-apk
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.eas-secrets.outputs.configured }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      # `eas build` evaluates `apps/android/app.config.ts` locally to
+      # resolve the package id and version before it uploads anything, so
+      # node_modules has to exist. It does NOT need the workspace packages
+      # built -- `app.config.ts` imports only `expo/config` types plus two
+      # local files -- which is why the `frontend-core`/daemon builds
+      # `maestro-e2e` performs are absent here. Those exist to run flows,
+      # not to build an APK, and EAS builds the workspace packages on its
+      # own side via `apps/android`'s `eas-build-post-install` script.
+      - run: npm ci
+
+      - name: Check EAS credentials are configured
+        id: eas-secrets
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Expo and EAS
+        if: steps.eas-secrets.outputs.configured == 'true'
+        uses: expo/expo-github-action@c7b66a9c327a43a8fa7c0158e7f30d6040d2481e # v8.2.1
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # Same shape as android-apk-release.yml's "Build Android APK on EAS"
+      # step, but the `development` profile (sh.picompanion.debug, the
+      # package apps/android/maestro/README.md's prerequisites require)
+      # rather than `production-apk`.
+      #
+      # T311: that profile must NOT set `developmentClient: true`. It did
+      # until that fix, and every shard of run 34369364166 died here in
+      # 18 seconds with "we detected that you don't have expo-dev-client
+      # installed for your project" -- `apps/android/package.json`
+      # declares no such dependency, so the build was refused before it
+      # started. Installing that dependency would be the wrong repair: a
+      # dev-client APK carries no embedded JS bundle and boots to the dev
+      # launcher waiting for a Metro dev server, and nothing in this
+      # workflow starts one. What `maestro-e2e` needs, and now gets, is a
+      # standalone APK of the development VARIANT -- `APP_VARIANT:
+      # development` still resolves `app.config.ts` to
+      # `sh.picompanion.debug`, which is the package `run-plan.ts`'s
+      # DEFAULT_APP_ID launches.
+      - name: Build development APK on EAS
+        id: eas_build
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          # T310: `npx eas-cli`, never `npx eas`. `eas` IS a real npm package
+          # (0.1.0) and it has NO `bin`, so npx downloads it and dies with
+          # `npm error could not determine executable to run` — which is
+          # exactly how all six jobs of Maestro run 34368430903 failed, before
+          # any EAS build started. The binary named `eas` is shipped BY
+          # `eas-cli` (`bin = { eas: 'bin/run' }`), so the package name is what
+          # npx needs.
+          #
+          # CORRECTED (T312): this said `expo/expo-github-action` "has
+          # already installed `eas-cli` into the workspace by this point,
+          # so this resolves locally rather than re-downloading". Run
+          # 34369364166's log says otherwise, in this exact step: `npm warn
+          # exec The following package was not found and will be installed:
+          # eas-cli@23.2.0`. The action installs its own copy somewhere npx
+          # does not resolve, and npx downloads a second one. Harmless (it
+          # cost about 12 seconds) but not what the comment claimed, and the
+          # claim would have misled anyone debugging a version mismatch
+          # between the two copies.
+          build_json="$(npx eas-cli build --platform android --profile development --non-interactive --wait --json)"
+          echo "$build_json" > "$RUNNER_TEMP/eas-build.json"
+
+          build_id="$(jq -r 'if type == "array" then .[0].id // empty else .id // empty end' "$RUNNER_TEMP/eas-build.json")"
+          if [ -z "$build_id" ]; then
+            echo "Failed to determine EAS build ID."
+            cat "$RUNNER_TEMP/eas-build.json"
+            exit 1
+          fi
+
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve and download the debug APK artifact
+        id: artifact
+        if: steps.eas-secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          build_view_json="$(npx eas-cli build:view '${{ steps.eas_build.outputs.build_id }}' --json)"
+          echo "$build_view_json" > "$RUNNER_TEMP/eas-build-view.json"
+
+          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/eas-build-view.json")"
+          if [ -z "$artifact_url" ]; then
+            echo "Failed to determine APK artifact URL."
+            cat "$RUNNER_TEMP/eas-build-view.json"
+            exit 1
+          fi
+
+          apk_path="$RUNNER_TEMP/picompanion-debug.apk"
+          curl --fail --location --output "$apk_path" "$artifact_url"
+          echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
+
+      # `if-no-files-found: error` rather than the default warning: a
+      # silently-empty artifact would let every shard below start, boot an
+      # emulator, and fail at `adb install` with a missing-file error that
+      # names neither this job nor the build it came from.
+      - name: Upload the debug APK for every shard to reuse
+        if: steps.eas-secrets.outputs.configured == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: picompanion-debug-apk
+          path: ${{ steps.artifact.outputs.apk_path }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Dry run (EXPO_TOKEN not configured)
+        if: steps.eas-secrets.outputs.configured == 'false'
+        run: |
+          echo "::notice::EXPO_TOKEN secret is not configured on this repository yet (see android-apk-release.yml)."
+          echo "::notice::No development APK was built; every maestro-e2e shard below is a dry run."
+
   maestro-e2e:
     name: maestro-e2e (${{ matrix.shard }})
-    needs: shard-matrix
+    needs:
+      - shard-matrix
+      - build-development-apk
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -179,93 +335,19 @@ jobs:
           npm run build --workspace=@picompanion/server
           npm run build --workspace=@picompanion/cli
 
-      - name: Check EAS credentials are configured
-        id: eas-secrets
-        shell: bash
-        run: |
-          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Setup Expo and EAS
-        if: steps.eas-secrets.outputs.configured == 'true'
-        uses: expo/expo-github-action@c7b66a9c327a43a8fa7c0158e7f30d6040d2481e # v8.2.1
+      # The APK build-development-apk above produced, not one of this
+      # shard's own. `path: ${{ runner.temp }}` restores it to the same
+      # `$RUNNER_TEMP/picompanion-debug.apk` the emulator step below
+      # installs, because the artifact was uploaded under that basename.
+      - name: Download the shared development APK
+        if: needs.build-development-apk.outputs.configured == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      # Same shape as android-apk-release.yml's "Build Android APK on EAS"
-      # step, but the `development` profile (sh.picompanion.debug, the
-      # package apps/android/maestro/README.md's prerequisites require)
-      # rather than `production-apk`.
-      #
-      # T311: that profile must NOT set `developmentClient: true`. It did
-      # until this fix, and every shard of run 34369364166 died here in
-      # 18 seconds with "we detected that you don't have expo-dev-client
-      # installed for your project" -- `apps/android/package.json`
-      # declares no such dependency, so the build was refused before it
-      # started. Installing that dependency would be the wrong repair: a
-      # dev-client APK carries no embedded JS bundle and boots to the dev
-      # launcher waiting for a Metro dev server, and nothing in this job
-      # starts one. What this job needs, and now gets, is a standalone
-      # APK of the development VARIANT -- `APP_VARIANT: development`
-      # still resolves `app.config.ts` to `sh.picompanion.debug`, which
-      # is the package `run-plan.ts`'s DEFAULT_APP_ID launches.
-      - name: Build development APK on EAS
-        id: eas_build
-        if: steps.eas-secrets.outputs.configured == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd apps/android
-
-          # T310: `npx eas-cli`, never `npx eas`. `eas` IS a real npm package
-          # (0.1.0) and it has NO `bin`, so npx downloads it and dies with
-          # `npm error could not determine executable to run` — which is
-          # exactly how all six jobs of Maestro run 34368430903 failed, before
-          # any EAS build started. The binary named `eas` is shipped BY
-          # `eas-cli` (`bin = { eas: 'bin/run' }`), so the package name is what
-          # npx needs. `expo/expo-github-action` has already installed
-          # `eas-cli` into the workspace by this point, so this resolves
-          # locally rather than re-downloading.
-          build_json="$(npx eas-cli build --platform android --profile development --non-interactive --wait --json)"
-          echo "$build_json" > "$RUNNER_TEMP/eas-build.json"
-
-          build_id="$(jq -r 'if type == "array" then .[0].id // empty else .id // empty end' "$RUNNER_TEMP/eas-build.json")"
-          if [ -z "$build_id" ]; then
-            echo "Failed to determine EAS build ID."
-            cat "$RUNNER_TEMP/eas-build.json"
-            exit 1
-          fi
-
-          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve and download the debug APK artifact
-        id: artifact
-        if: steps.eas-secrets.outputs.configured == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd apps/android
-
-          build_view_json="$(npx eas-cli build:view '${{ steps.eas_build.outputs.build_id }}' --json)"
-          echo "$build_view_json" > "$RUNNER_TEMP/eas-build-view.json"
-
-          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/eas-build-view.json")"
-          if [ -z "$artifact_url" ]; then
-            echo "Failed to determine APK artifact URL."
-            cat "$RUNNER_TEMP/eas-build-view.json"
-            exit 1
-          fi
-
-          apk_path="$RUNNER_TEMP/picompanion-debug.apk"
-          curl --fail --location --output "$apk_path" "$artifact_url"
-          echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
+          name: picompanion-debug-apk
+          path: ${{ runner.temp }}
 
       - name: Install Maestro CLI
-        if: steps.eas-secrets.outputs.configured == 'true'
+        if: needs.build-development-apk.outputs.configured == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -281,7 +363,7 @@ jobs:
       # starts with its own clearState: true launchApp), so this loop
       # could run its flows in any order and reach the same result.
       - name: Boot emulator, install the APK, and run this shard's flows
-        if: steps.eas-secrets.outputs.configured == 'true'
+        if: needs.build-development-apk.outputs.configured == 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -290,7 +372,7 @@ jobs:
           disable-animations: true
           script: |
             set -euo pipefail
-            adb install -r "${{ steps.artifact.outputs.apk_path }}"
+            adb install -r "$RUNNER_TEMP/picompanion-debug.apk"
             flows="$(node -e "
               const cfg = require('./apps/android/maestro/shards.json');
               const shard = cfg.shards.find((s) => s.name === '${{ matrix.shard }}');
@@ -304,7 +386,7 @@ jobs:
             done
 
       - name: Dry run (EXPO_TOKEN not configured)
-        if: steps.eas-secrets.outputs.configured == 'false'
+        if: needs.build-development-apk.outputs.configured == 'false'
         run: |
           echo "::notice::EXPO_TOKEN secret is not configured on this repository yet (see android-apk-release.yml)."
           echo "::notice::Skipping this shard's emulator run; matrix shard ${{ matrix.shard }} is a dry run."

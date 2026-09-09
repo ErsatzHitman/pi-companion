@@ -54,8 +54,14 @@
 // `extractWorkflowJobs` splits the workflow into per-job text blocks (top-
 // level `  <job-name>:` keys under `jobs:`) and, per job, looks for:
 //   - `--profile <name>` in an `eas build` command — the profile this job
-//     builds. A job with none (`shard-matrix`) is skipped entirely: it
-//     builds nothing, so there is no package to pair a flow against.
+//     builds. A job with none of its own inherits one through `needs:`
+//     when exactly one distinct profile is reachable that way (T312's
+//     build-once/fan-out shape: `build-development-apk` builds, the five
+//     `maestro-e2e` shards install what it produced). A job with neither
+//     — `shard-matrix`, which builds nothing and depends on nothing — is
+//     skipped entirely: there is no package to pair a flow against. See
+//     `resolveInheritedProfiles` for why ambiguity resolves to "skip"
+//     rather than to a guess.
 //   - An explicit `APP_ID=<value>` (shell-assignment form, what
 //     `packaged-app-smoke` uses) or `APP_ID: <value>` (a hypothetical
 //     `env:` block form) — the override this job supplies, if any.
@@ -216,6 +222,8 @@ function stripHashComments(content) {
 
 const JOB_HEADER_PATTERN = /^ {2}([a-zA-Z0-9_-]+):\s*$/gm;
 const PROFILE_PATTERN = /--profile\s+([^\s"']+)/;
+const NEEDS_PATTERN = /^ {4}needs:[ \t]*(.*)$/m;
+const NEEDS_SEQUENCE_ITEM_PATTERN = /^ {6}-\s*["']?([a-zA-Z0-9_-]+)["']?\s*$/;
 const APP_ID_SHELL_PATTERN = /\bAPP_ID=["']?([^\s"']+)["']?/;
 const APP_ID_ENV_BLOCK_PATTERN = /\bAPP_ID:\s*["']?([^\s"'\n]+)["']?/;
 const EXPLICIT_FLOW_PATTERN = /run-flow\.ts\s+["']?([a-zA-Z][a-zA-Z0-9-]*)["']?/;
@@ -225,11 +233,106 @@ const SHARDS_JSON_MENTION_PATTERN = /shards\.json/;
  * @typedef {{
  *   name: string,
  *   profile: string | null,
+ *   needs: string[],
  *   appIdOverride: string | null,
  *   explicitFlow: string | null,
  *   runsAllShardFlows: boolean,
  * }} WorkflowJob
  */
+
+/**
+ * T312: the job that BUILDS an APK and the job that INSTALLS it need not
+ * be the same job. When `maestro-e2e`'s five shards each ran their own
+ * `eas build`, every shard carried its own `--profile` and this guard
+ * could read it directly. Collapsing those five identical builds into one
+ * shared `build-development-apk` job (five EAS builds of one commit down
+ * to one) moves the `--profile` out of the job that runs the flows — and
+ * `collectAppIdPackagePairings`' `if (!job.profile) continue` would then
+ * skip every one of the ten dev-APK pairings without saying so, leaving
+ * only `packaged-app-smoke`'s single pairing behind. That is this
+ * repository's recurring "check that cannot fail" shape, arrived at by
+ * a workflow edit rather than by a guard edit, so the guard has to model
+ * the fan-out rather than be blind to it.
+ *
+ * A job with no `--profile` of its own inherits one through `needs`,
+ * transitively. Exactly one distinct profile among everything it depends
+ * on is an inheritance; zero (`shard-matrix`, which builds nothing) or
+ * two or more (a job consuming two different APKs, which this workflow
+ * does not do today) leaves the profile `null` so the caller skips the
+ * job — fails safe, the same call `resolvePackageIds` makes when
+ * `app.config.ts`'s ternary is spelled some way this file does not
+ * recognize.
+ *
+ * @param {string} jobContent one job's comment-stripped text block
+ * @returns {string[]} the job names this job declares in `needs:`, in
+ *   inline (`needs: a`), inline-sequence (`needs: [a, b]`) or block-
+ *   sequence form; `[]` when it declares none or uses a shape this does
+ *   not recognize
+ */
+export function extractJobNeeds(jobContent) {
+  const match = jobContent.match(NEEDS_PATTERN);
+  if (!match) return [];
+
+  const inline = match[1].trim();
+  if (inline) {
+    return inline
+      .replace(/^\[/, "")
+      .replace(/\]$/, "")
+      .split(",")
+      .map((name) => name.trim().replace(/^["']|["']$/g, ""))
+      .filter(Boolean);
+  }
+
+  const names = [];
+  for (const line of jobContent
+    .slice(match.index + match[0].length)
+    .split("\n")
+    .slice(1)) {
+    const item = line.match(NEEDS_SEQUENCE_ITEM_PATTERN);
+    if (item) {
+      names.push(item[1]);
+      continue;
+    }
+    if (line.trim() === "") continue;
+    break;
+  }
+  return names;
+}
+
+/**
+ * Fills in each job's inherited profile per `extractJobNeeds`' contract.
+ *
+ * @param {WorkflowJob[]} jobs
+ * @returns {(WorkflowJob & { profileSource: "own" | "inherited" | "none" | "ambiguous" })[]}
+ */
+export function resolveInheritedProfiles(jobs) {
+  const byName = new Map(jobs.map((job) => [job.name, job]));
+
+  return jobs.map((job) => {
+    if (job.profile) return { ...job, profileSource: "own" };
+
+    const seen = new Set();
+    const queue = [...job.needs];
+    const found = new Set();
+    while (queue.length > 0) {
+      const name = queue.shift();
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const dependency = byName.get(name);
+      if (!dependency) continue;
+      if (dependency.profile) {
+        found.add(dependency.profile);
+        continue;
+      }
+      queue.push(...dependency.needs);
+    }
+
+    if (found.size !== 1) {
+      return { ...job, profileSource: found.size === 0 ? "none" : "ambiguous" };
+    }
+    return { ...job, profile: [...found][0], profileSource: "inherited" };
+  });
+}
 
 /**
  * @param {string} workflowContent raw
@@ -255,6 +358,7 @@ export function extractWorkflowJobs(workflowContent) {
     return {
       name: header[1],
       profile: profileMatch ? profileMatch[1] : null,
+      needs: extractJobNeeds(content),
       appIdOverride: appIdShellMatch ? appIdShellMatch[1] : appIdEnvMatch ? appIdEnvMatch[1] : null,
       explicitFlow: !runsAllShardFlows && explicitFlowMatch ? explicitFlowMatch[1] : null,
       runsAllShardFlows,
@@ -293,7 +397,7 @@ export function collectAppIdPackagePairings({
 
   const pairings = [];
 
-  for (const job of extractWorkflowJobs(workflowContent)) {
+  for (const job of resolveInheritedProfiles(extractWorkflowJobs(workflowContent))) {
     if (!job.profile) continue;
     const resolvedPackage = resolvePackageForProfile(job.profile, easProfileVariants, packageIds);
     if (!resolvedPackage) continue;

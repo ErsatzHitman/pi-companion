@@ -568,6 +568,7 @@ that recomputation has to be domain-specific:
 | T309   | The observation test's self-heal tick is both required and harmful              | phase-9   | server           | P9-U   | T240                                                                  |
 | T310   | Both EAS workflows invoked `npx eas`, a package that cannot run                 | phase-9   | tooling          | P9-U   | T208, T17B, T37F                                                      |
 | T311   | The `development` EAS profile asked for a dev client the app never had          | phase-9   | tooling          | P9-U   | T310, T208, T37F                                                      |
+| T312   | Five identical EAS builds per Maestro run, and the guard that went quiet        | phase-9   | tooling          | P9-U   | T311, T310, T207, T37F                                                |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14985,3 +14986,75 @@ over half an hour — the first EAS build this repository has ever performed.
       open criterion too, and is the first honest test of everything downstream of it
       (the EAS build itself, then `reactivecircus/android-emulator-runner`'s KVM support,
       which this workflow's header has always disclosed as unverified)
+
+#### T312 — Five identical EAS builds per Maestro run, and the guard that would have gone quiet when they became one
+
+`labels: phase-9, area: tooling` · `depends-on: T311, T310, T207, T37F`
+
+`android-maestro-e2e.yml`'s `maestro-e2e` job ran `eas build --platform android --profile
+development` inside a five-shard matrix, so every dispatch queued **five separate EAS builds of
+the same commit** and produced five byte-identical APKs. Measured rather than estimated: in run
+`34369364166` the sibling `packaged-app-smoke` job's single `production-apk` build ran for about
+50 minutes. Five of those, serialised behind whatever build concurrency the account has, is the
+difference between one build and most of an afternoon — and a build failure failed five jobs
+instead of one, which is how T311 presented as five identical red shards rather than one.
+
+The build now happens once, in a new `build-development-apk` job, and the APK travels to the
+shards as a GitHub Actions artifact.
+
+**The part worth keeping is not the fan-out; it is what the fan-out did to the guard.**
+`scripts/ci/guard-app-id-package-pairing.mjs` resolves each workflow job's EAS profile by finding
+a `--profile` flag _in that job's own text_, and skips any job without one
+(`if (!job.profile) continue`). After this split the job that RUNS the flows has no `--profile`
+at all, and the job that HAS one runs no flows. Both would have been skipped. Measured on the
+real tree, with the restructured workflow and the unmodified guard: **eleven job × flow pairings
+become one** — only `packaged-app-smoke`'s `smoke` — and the guard still exits 0 with a
+success message. That is this repository's recurring "check that cannot fail" shape, reached this
+time by editing a workflow rather than by editing a guard, which is a route none of the previous
+instances (T147, T156, T211, T213, T246, T295) came in by.
+
+So the guard learned the shape in the same commit that created it. `extractJobNeeds` reads a
+job's `needs:` in all three YAML spellings (inline, inline sequence, block sequence), and
+`resolveInheritedProfiles` gives a profile-less job the single distinct profile reachable through
+`needs` transitively. Zero (`shard-matrix`, which builds nothing) or two or more (a job consuming
+two different APKs — not a shape this workflow has) leaves the profile `null` and the job skipped,
+the same fail-safe `resolvePackageIds` already takes when `app.config.ts`'s ternary is spelled
+unfamiliarly.
+
+**The fail-safe is not coverage, and the tests say so out loud.** A dropped `needs:` edge makes
+the runner job unpairable and its flows unchecked — silently. The pre-existing non-vacuity test
+(`P8-W11 F2`) cannot catch that: it asserts only that the real tree yields MORE THAN ZERO
+pairings, and `packaged-app-smoke`'s single pairing satisfies it alone. Proven by mutation, not
+argued: deleting the `- build-development-apk` line from the real workflow leaves that test
+passing while the pairing count drops from 11 to 1. The new test pins the ten shard flows BY NAME
+against the `maestro-e2e` job, and fails on exactly that mutation.
+
+Costs and limits, stated rather than buried. Each shard now spends about 20 seconds downloading
+the shared artifact instead of building its own; the artifact is uploaded with
+`if-no-files-found: error` and a 1-day retention, because a silently-empty artifact would let
+five shards boot emulators before failing at `adb install` with an error naming neither the
+build nor the job it came from. `build-development-apk` deliberately does NOT run the
+`frontend-core`/daemon builds `maestro-e2e` runs: `eas build` evaluates `app.config.ts` locally
+(so `npm ci` is required) but that file imports only `expo/config` types and two local files —
+checked by reading its imports, not assumed — and EAS builds the workspace packages on its own
+side via `eas-build-post-install`.
+
+One prose correction rides along, from the same run's log. The T310 comment claimed
+`expo/expo-github-action` "has already installed `eas-cli` into the workspace by this point, so
+this resolves locally rather than re-downloading". Run `34369364166` says otherwise in that exact
+step: `npm warn exec The following package was not found and will be installed: eas-cli@23.2.0`.
+Harmless — it cost about 12 seconds — but false, and it would have misled anyone chasing a
+version mismatch between the action's copy and npx's.
+
+- [x] One EAS build per run instead of five; the APK reaches every shard as an artifact
+- [x] A build failure now fails one job and skips the shards, instead of failing five
+- [x] `guard-app-id-package-pairing.mjs` resolves a profile through `needs:`, so the real tree
+      still evaluates all eleven pairings — verified by running the real runner, not inferred
+- [x] The silent-skip regression is pinned by name: a test asserts the `maestro-e2e` job pairs
+      EVERY flow `shards.json` lists, and mutation-proof shows the old `> 0` test does not catch
+      the dropped-`needs` mutation while this one does
+- [x] Ambiguous inheritance (two distinct profiles) and a `needs` cycle both resolve to "no
+      profile" rather than a guess or a hang
+- [ ] A real dispatch: `build-development-apk` succeeds once and all five shards install the
+      shared artifact, with the run id recorded — this also closes T310's and T311's last
+      open criteria

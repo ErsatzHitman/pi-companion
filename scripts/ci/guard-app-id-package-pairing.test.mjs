@@ -8,8 +8,10 @@ import {
   extractDefaultAppId,
   extractFlowAppId,
   collectAppIdPackagePairings,
+  extractJobNeeds,
   extractWorkflowJobs,
   findAppIdPackagePairingViolations,
+  resolveInheritedProfiles,
   flattenShardFlowNames,
   resolveEasProfileVariants,
   resolvePackageForProfile,
@@ -429,4 +431,251 @@ jobs:
 `;
 
   assert.equal(extractWorkflowJobs(workflow)[0].appIdOverride, "sh.picompanion");
+});
+
+// ---------------------------------------------------------------------------
+// T312: build-once/fan-out — the job that BUILDS the APK is no longer the
+// job that RUNS the flows, so the profile has to be inherited through
+// `needs:`. Without that, `collectAppIdPackagePairings`' `if (!job.profile)
+// continue` skips every dev-APK pairing and the guard still prints OK.
+// ---------------------------------------------------------------------------
+
+test("T312: extractJobNeeds reads the inline, inline-sequence and block-sequence forms", () => {
+  const inline = `
+jobs:
+  runner:
+    needs: builder
+    steps:
+      - run: echo hi
+`;
+  const inlineSequence = `
+jobs:
+  runner:
+    needs: [shard-matrix, builder]
+    steps:
+      - run: echo hi
+`;
+  const blockSequence = `
+jobs:
+  runner:
+    needs:
+      - shard-matrix
+      - builder
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi
+`;
+
+  assert.deepEqual(extractWorkflowJobs(inline)[0].needs, ["builder"]);
+  assert.deepEqual(extractWorkflowJobs(inlineSequence)[0].needs, ["shard-matrix", "builder"]);
+  assert.deepEqual(extractWorkflowJobs(blockSequence)[0].needs, ["shard-matrix", "builder"]);
+
+  // Directly too: `extractJobNeeds` takes ONE job's text block, and the
+  // block-sequence form is the one that has to stop at the next key
+  // rather than swallowing the rest of the job.
+  assert.deepEqual(
+    extractJobNeeds(`  runner:\n    needs:\n      - a\n      - b\n    runs-on: ubuntu-latest\n`),
+    ["a", "b"],
+  );
+  assert.deepEqual(extractJobNeeds(`  runner:\n    needs: [a]\n`), ["a"]);
+  assert.deepEqual(extractJobNeeds(`  runner:\n    runs-on: ubuntu-latest\n`), []);
+  // A job declaring no `needs:` at all reads as an empty list, never null,
+  // so the BFS in `resolveInheritedProfiles` never has to null-check.
+  assert.deepEqual(
+    extractWorkflowJobs(`\njobs:\n  solo:\n    steps:\n      - run: echo hi\n`)[0].needs,
+    [],
+  );
+});
+
+// A minimal fan-out workflow in the real shape: one job builds with an
+// explicit `--profile`, another runs a flow and declares no profile of its
+// own. Written as a literal rather than derived from the real workflow so
+// the assertions below stay true when the real file is next edited.
+const FAN_OUT_WORKFLOW = `
+jobs:
+  builder:
+    steps:
+      - run: npx eas-cli build --platform android --profile development --non-interactive
+  runner:
+    needs:
+      - builder
+    steps:
+      - run: |
+          adb install -r "$RUNNER_TEMP/picompanion-debug.apk"
+          npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+
+const FAN_OUT_INPUTS = {
+  easJsonContent: JSON.stringify({
+    build: {
+      development: { android: { env: { APP_VARIANT: "development" } } },
+      "production-apk": { android: {} },
+    },
+  }),
+  appConfigContent: `
+    const isDevelopmentClient = process.env["APP_VARIANT"] === "development";
+    package: isDevelopmentClient ? "sh.picompanion.debug" : "sh.picompanion",
+  `,
+  shardsJsonContent: JSON.stringify({ flows: ["smoke"] }),
+  runPlanContent: 'export const DEFAULT_APP_ID = "sh.picompanion.debug";',
+};
+
+test("T312: a job with no --profile inherits one through needs", () => {
+  const jobs = resolveInheritedProfiles(extractWorkflowJobs(FAN_OUT_WORKFLOW));
+  const runner = jobs.find((job) => job.name === "runner");
+
+  assert.equal(runner.profile, "development");
+  assert.equal(runner.profileSource, "inherited");
+  assert.equal(jobs.find((job) => job.name === "builder").profileSource, "own");
+});
+
+test("T312: MUTATION PROOF — the inherited profile is really what pairs the flow, and it can FIRE", () => {
+  // The runner installs the `development` APK (`sh.picompanion.debug`) but
+  // its flow declares the release package literally. That is the original
+  // T43B2b defect, arrived at through a fan-out job rather than a job with
+  // its own `--profile`, and it must be reported.
+  const violations = findAppIdPackagePairingViolations({
+    ...FAN_OUT_INPUTS,
+    workflowContent: FAN_OUT_WORKFLOW,
+    flowFiles: [{ name: "smoke", content: "appId: sh.picompanion\n" }],
+  });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].job, "runner");
+  assert.equal(violations[0].profile, "development");
+  assert.equal(violations[0].resolvedPackage, "sh.picompanion.debug");
+  assert.equal(violations[0].launchedAppId, "sh.picompanion");
+});
+
+test("T312: removing the needs edge makes the runner unpairable — the fail-safe, stated so it is not mistaken for coverage", () => {
+  // Deliberately documents the limit of the fail-safe rather than
+  // asserting it is protection: a runner that depends on nothing has no
+  // profile to inherit, so it is skipped and the same mismatched flow goes
+  // unreported. This is why the real-tree per-flow assertion below exists
+  // — the fail-safe alone would let a dropped `needs:` edge pass silently.
+  const detached = FAN_OUT_WORKFLOW.replace("    needs:\n      - builder\n", "");
+  assert.notEqual(detached, FAN_OUT_WORKFLOW, "the mutation must actually change the workflow");
+
+  const jobs = resolveInheritedProfiles(extractWorkflowJobs(detached));
+  assert.equal(jobs.find((job) => job.name === "runner").profile, null);
+  assert.equal(jobs.find((job) => job.name === "runner").profileSource, "none");
+
+  assert.deepEqual(
+    findAppIdPackagePairingViolations({
+      ...FAN_OUT_INPUTS,
+      workflowContent: detached,
+      flowFiles: [{ name: "smoke", content: "appId: sh.picompanion\n" }],
+    }),
+    [],
+  );
+});
+
+test("T312: two different inherited profiles are ambiguous, and resolve to none rather than a guess", () => {
+  const twoBuilders = `
+jobs:
+  dev-builder:
+    steps:
+      - run: npx eas-cli build --platform android --profile development --non-interactive
+  release-builder:
+    steps:
+      - run: npx eas-cli build --platform android --profile production-apk --non-interactive
+  runner:
+    needs: [dev-builder, release-builder]
+    steps:
+      - run: npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+
+  const runner = resolveInheritedProfiles(extractWorkflowJobs(twoBuilders)).find(
+    (job) => job.name === "runner",
+  );
+
+  assert.equal(runner.profile, null);
+  assert.equal(runner.profileSource, "ambiguous");
+});
+
+test("T312: a profile is inherited transitively, not only from a direct need", () => {
+  const chained = `
+jobs:
+  builder:
+    steps:
+      - run: npx eas-cli build --platform android --profile development --non-interactive
+  middle:
+    needs: builder
+    steps:
+      - run: echo passthrough
+  runner:
+    needs: middle
+    steps:
+      - run: npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+
+  const runner = resolveInheritedProfiles(extractWorkflowJobs(chained)).find(
+    (job) => job.name === "runner",
+  );
+
+  assert.equal(runner.profile, "development");
+  assert.equal(runner.profileSource, "inherited");
+});
+
+test("T312: a needs cycle terminates instead of hanging", () => {
+  // Not a shape GitHub Actions would accept, but the BFS must not depend
+  // on the input being a valid DAG — a guard that hangs is worse than one
+  // that reports nothing.
+  const cyclic = `
+jobs:
+  a:
+    needs: b
+    steps:
+      - run: echo a
+  b:
+    needs: a
+    steps:
+      - run: echo b
+`;
+
+  const jobs = resolveInheritedProfiles(extractWorkflowJobs(cyclic));
+  assert.equal(jobs.find((job) => job.name === "a").profile, null);
+  assert.equal(jobs.find((job) => job.name === "b").profile, null);
+});
+
+test("T312: the real tree pairs EVERY shard flow against the maestro-e2e job", () => {
+  // The anti-silent-skip assertion, and the reason this test exists at
+  // all. `P8-W11 F2` above only requires the real tree to yield MORE THAN
+  // ZERO pairings — and after the build/run split, `packaged-app-smoke`'s
+  // single `smoke` pairing satisfies that on its own. So a future edit
+  // that breaks profile inheritance (renaming the build job, dropping the
+  // `needs:` edge, moving to a shape `extractJobNeeds` cannot read) would
+  // silently reduce the guard from eleven pairings to one and still print
+  // a reassuring OK. This pins the ten by name.
+  const inputs = readRealInputs();
+  const pairings = collectAppIdPackagePairings(inputs);
+  const shardFlows = flattenShardFlowNames(inputs.shardsJsonContent);
+
+  const maestroFlows = pairings
+    .filter((pairing) => pairing.job === "maestro-e2e")
+    .map((pairing) => pairing.flow)
+    .sort();
+
+  assert.ok(shardFlows.length > 0, "shards.json must list at least one flow");
+  assert.deepEqual(maestroFlows, [...shardFlows].sort());
+  assert.ok(
+    pairings.some((pairing) => pairing.job === "packaged-app-smoke"),
+    "packaged-app-smoke must still be paired too",
+  );
+});
+
+test("T312: the real maestro-e2e job resolves its profile by inheritance, not by carrying its own", () => {
+  // If someone re-adds an `eas build --profile` to the shard job, this
+  // fails — not because that is forbidden, but because it would mean the
+  // five-builds-per-run cost T312 removed has come back, and the person
+  // re-adding it should say so deliberately rather than have the guard
+  // quietly keep passing either way.
+  const jobs = resolveInheritedProfiles(extractWorkflowJobs(readFileSync(WORKFLOW_PATH, "utf8")));
+  const maestro = jobs.find((job) => job.name === "maestro-e2e");
+  const builder = jobs.find((job) => job.name === "build-development-apk");
+
+  assert.equal(maestro.profileSource, "inherited");
+  assert.equal(maestro.profile, "development");
+  assert.equal(builder.profileSource, "own");
+  assert.equal(builder.profile, "development");
 });
