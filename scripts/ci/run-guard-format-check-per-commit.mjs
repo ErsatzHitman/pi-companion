@@ -90,7 +90,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   classifyFormatRedCommits,
   countDiffHunks,
@@ -192,21 +192,46 @@ function loadBlobAtCommit(sha, relPath) {
  * `relPath` does not exist at `sha` -- T148 needs this to tell "the parent
  * had this file and it was clean" apart from "this commit added the file",
  * both of which mean the same thing for classification (this commit is
- * responsible for the file being red) but are reached differently. Any
- * `git show` failure is treated as "path absent at this commit"; the only
- * realistic cause here is exactly that, since `sha` itself always comes
- * from `loadParentSha`, which only ever returns a real commit's sha. */
-function tryLoadBlobAtCommit(sha, relPath) {
+ * responsible for the file being red) but are reached differently.
+ *
+ * T303: a bare `git show "<sha>:<relPath>"` does NOT answer "does this path
+ * exist at this commit?" unambiguously -- CORRECTED, this used to claim "any
+ * `git show` failure is treated as 'path absent at this commit'; the only
+ * realistic cause here is exactly that", which is false for any path
+ * containing `[` or `]`, i.e. every Expo Router dynamic segment in both
+ * apps (`apps/android/src/app/h/[serverId]/...`,
+ * `apps/web/src/app/.../[agentId]/...`). Measured against the real
+ * repository at the P9-S gate: `git show "<sha>:<plain-absent-path>"` fails
+ * with `fatal: path '...' exists on disk, but not in '<sha>'` and throws, as
+ * expected -- but `git show "<sha>:apps/android/src/app/h/[serverId]/devices.tsx"`
+ * for that same file at a commit before it existed EXITS 0 and prints a
+ * commit log dump instead, because git falls back to interpreting the
+ * bracketed `<sha>:<path>` string as a revision-range pathspec rather than
+ * failing to resolve it as an object. A caller trusting that exit code would
+ * wrongly conclude the path exists. `git cat-file -e "<sha>:<path>"` does
+ * not have this failure mode -- verified directly against this same
+ * repository for all three shapes a caller here can hit: a plain absent
+ * path, a bracketed absent path, and a bracketed path that genuinely exists
+ * all exit with the correct code (128, 128, 0 respectively), so it is used
+ * here as a existence check performed BEFORE any content is requested;
+ * `git show` is then safe to call for the actual content, because at that
+ * point the path is already known to resolve to a real blob and the
+ * ambiguity this comment describes cannot arise (confirmed directly: `git
+ * show` on an EXISTING bracketed path returns the exact blob content, same
+ * as for a plain path -- the fallback-to-pathspec behavior only triggers
+ * when the object fails to resolve). */
+export function tryLoadBlobAtCommit(sha, relPath) {
   try {
     // A missing path is the EXPECTED, common case here (any file the
-    // commit added has no parent blob at all) -- `stdio`'s stderr slot is
-    // set to "ignore" so git's routine "fatal: path ... exists on disk,
-    // but not in '<sha>'" does not spam every caller of this guard for
-    // what is normal control flow, not a real error.
-    return git(["show", `${sha}:${relPath}`], { stdio: ["ignore", "pipe", "ignore"] });
+    // commit added has no parent blob at all) -- `stdio` is fully ignored
+    // so git's routine "fatal: path ... exists on disk, but not in '<sha>'"
+    // does not spam every caller of this guard for what is normal control
+    // flow, not a real error.
+    git(["cat-file", "-e", `${sha}:${relPath}`], { stdio: ["ignore", "ignore", "ignore"] });
   } catch {
     return null;
   }
+  return git(["show", `${sha}:${relPath}`], { stdio: ["ignore", "pipe", "ignore"] });
 }
 
 /** The commit's immediate first parent's sha, or `null` for a root commit
@@ -473,4 +498,7 @@ function main() {
   process.exitCode = 1;
 }
 
-main();
+const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMainModule) {
+  main();
+}

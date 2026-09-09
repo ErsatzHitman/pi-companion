@@ -8,8 +8,24 @@
 // reproducing the P6-W14 merge gate's table exactly -- green->red fails,
 // an unrelated edit to the already-red file is a NOTE, and a SECOND new
 // break added to that same already-red file now fails too).
+//
+// T303: one section below IS a real-`git`-invoking exception to the
+// paragraph above. The defect it covers (`tryLoadBlobAtCommit`'s bracketed-
+// path parent-existence false positive) lives in `run-guard-format-check-
+// per-commit.mjs` itself -- the CLI wrapper that shells out to `git` -- not
+// in this file's pure module, because the existence check inherently has to
+// ask a real `git` process a real question about a real, ambiguous path
+// string; a synthetic fixture cannot reproduce a quirk of git's own
+// argument-parsing fallback. That import is read-only (`git cat-file -e`,
+// `git show`, `git log -1 --format=%H --`) against this repository's own,
+// already-committed history -- never a write, never a mutation, and never
+// the whole-history default `run-guard-format-check-per-commit.mjs` warns
+// against elsewhere (see this task's report for why the `Owns:` line naming
+// only this file's own module was corrected to include that CLI wrapper).
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   classifyFormatRedCommits,
   countDiffHunks,
@@ -18,6 +34,7 @@ import {
   pathWasWorsened,
   relativizeOxfmtListDifferentOutput,
 } from "./guard-format-check-per-commit.mjs";
+import { tryLoadBlobAtCommit } from "./run-guard-format-check-per-commit.mjs";
 
 test("parseNumstatRecords parses NUL-terminated numstat records", () => {
   const raw =
@@ -452,4 +469,41 @@ test("classifyFormatRedCommits: real P6-W14 merge-gate four-commit chain (C1..C4
       parentSha: "C2",
     },
   ]);
+});
+
+// T303: real-git reproduction of the bracketed-path parent-existence false
+// positive, against this repository's own committed history. Resolved at
+// runtime (never a hardcoded sha for the ADD commit itself) via `git log`,
+// per CLAUDE.md's "never quote a stale sha" caution -- the path
+// `apps/android/src/app/h/[serverId]/devices.tsx` (T42A1) is the exact file
+// the P9-S gate's own reproduction used.
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+function realGit(args) {
+  return execFileSync("git", args, { cwd: repoRoot, encoding: "utf8" }).trim();
+}
+
+const BRACKETED_PATH = "apps/android/src/app/h/[serverId]/devices.tsx";
+const bracketedPathAddedAtSha = realGit(["log", "-1", "--format=%H", "--", BRACKETED_PATH]);
+const bracketedPathAbsentAtSha = realGit(["rev-parse", `${bracketedPathAddedAtSha}^`]);
+
+test("tryLoadBlobAtCommit: a bracketed Expo Router path absent at a commit is reported absent (null), not the git argument-parsing fallback's commit dump", () => {
+  const result = tryLoadBlobAtCommit(bracketedPathAbsentAtSha, BRACKETED_PATH);
+  assert.equal(result, null);
+});
+
+test("tryLoadBlobAtCommit: a plain (unbracketed) absent path is still reported absent (null) -- sanity check that the fix does not regress the ordinary case", () => {
+  const result = tryLoadBlobAtCommit(
+    bracketedPathAbsentAtSha,
+    "apps/android/src/app/h/nonexistent-plain-file-t303.tsx",
+  );
+  assert.equal(result, null);
+});
+
+test("tryLoadBlobAtCommit: a bracketed path that genuinely exists at a commit returns its real blob content, not null", () => {
+  const result = tryLoadBlobAtCommit(bracketedPathAddedAtSha, BRACKETED_PATH);
+  assert.equal(typeof result, "string");
+  assert.ok(
+    result.includes("DevicesScreen"),
+    "expected the real devices.tsx content, got: " + result.slice(0, 200),
+  );
 });
