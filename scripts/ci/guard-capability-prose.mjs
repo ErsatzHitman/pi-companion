@@ -2053,6 +2053,49 @@ export const CAPABILITIES = [
       /(?:the )?android manifest merger (?:is left|remains) unfiltered[^.]{0,60}?no (?:legacy )?permissions? (?:are )?(?:ever )?blocked/i,
     ],
   },
+  {
+    // T310: `scripts/ci/guard-npx-binary-package.mjs` shipped
+    // `findNpxBinaryPackageViolations`, which decides statically whether an
+    // `npx <name>` this repository actually executes can resolve — reading
+    // `package-lock.json`'s own per-package `bin` maps for the set of
+    // binaries `npm ci` will put on `node_modules/.bin`, and requiring
+    // anything outside that set to be registered in `EXTERNAL_NPX_PACKAGES`
+    // with a real reason. Registered here the moment it shipped, rather
+    // than by a later gate finding it missing, which is the omission
+    // T215 and T228 each had to clean up after (five guards across three
+    // waves, in T228's case).
+    //
+    // Bare-string member, measured rather than assumed:
+    // `findNpxBinaryPackageViolations` is declared in exactly one shipped
+    // file (its own guard; the `.test.mjs` sibling is excluded from
+    // `shippedFiles` by construction), so neither T168's AND-group nor
+    // T169's shape-anchored `RegExp` is needed — this name collides with
+    // nothing. `scripts/ci` is inside `isShippedSourcePath`, checked by
+    // calling the predicate on the real path rather than by reading a list
+    // of areas, per this file's own repeated caution about conflating it
+    // with `isAppSourcePath`.
+    //
+    // FORWARD guard, T162's shape: no live denying sentence existed
+    // anywhere in scope when this was added. The phrases below are
+    // deliberately worded away from the guard's own header and from
+    // `docs/issues-from-plan.md`'s T310 section, both of which narrate the
+    // pre-fix state at length ("`npx eas` was wrong from the day it was
+    // written", "the steps were therefore untested infrastructure") — the
+    // same collision T215 hit and resolved by rephrasing rather than by
+    // adding another exclusion. Proven able to FIRE by appending a sentence
+    // in this entry's own wording to a real, unrelated, in-scope tracked
+    // file, confirming `run-guard-capability-prose.mjs` exited 1 naming
+    // this capability, then restoring that file from a scratchpad copy —
+    // never `git checkout --` — and confirming exit 0 with `git status
+    // --porcelain` empty.
+    name: "static npx target resolvability (findNpxBinaryPackageViolations)",
+    methodNames: ["findNpxBinaryPackageViolations"],
+    denyingPhrases: [
+      /(?:nothing|no guard|no check) (?:in this repository )?(?:verifies|validates|checks) (?:that|whether) an `?npx`? target (?:actually )?resolves/i,
+      /an `?npx`? invocation naming a (?:binary|package) (?:that|which) (?:no|nothing) (?:declared )?dependency provides (?:is never|cannot be) (?:caught|detected|flagged)/i,
+      /package-lock\.json'?s? (?:own )?bin maps? (?:are|is) (?:not|never) (?:read|consulted) by any (?:guard|check)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

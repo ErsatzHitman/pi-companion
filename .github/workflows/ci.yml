@@ -103,6 +103,25 @@ jobs:
       - name: Fail on any apps/android/**/*.web.* file
         run: node scripts/ci/run-guard-no-android-web-files.mjs
 
+  # T310: `npx eas` named the BINARY, not the package. npx resolves package
+  # names, the npm package literally called `eas` is an unrelated squat with
+  # no bin, and all six jobs of Maestro run 34368430903 died on `npm error
+  # could not determine executable to run` before any EAS build started.
+  # This guard reads package-lock.json's own bin maps, so it can say
+  # statically which npx targets will actually resolve after `npm ci`.
+  guard-npx-binary-package:
+    name: guard / every npx target is a resolvable package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on an npx target no dependency or registration provides
+        run: node scripts/ci/run-guard-npx-binary-package.mjs
+
   # T316: apps/android/modules/share-intent shipped without an Android
   # compileSdk and was unbuildable from the day it was written. Nothing
   # noticed because nothing ran Gradle: `android-tests` runs `expo prebuild

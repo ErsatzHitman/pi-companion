@@ -176,7 +176,7 @@ export function isValidAllowlistReason(reason) {
  * (a `node scripts/ci/run-guard-*.mjs` invocation) ever legitimately
  * contains a literal `#`.
  */
-function stripHashComments(content) {
+export function stripHashComments(content) {
   return content
     .split("\n")
     .map((line) => {
