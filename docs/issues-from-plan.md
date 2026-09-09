@@ -14784,28 +14784,72 @@ contention shape `CLAUDE.md`'s T240 section describes (the file is already in
 `test:unit:serial`, so it runs alone), and a longer budget does not move a 7-second timer
 relative to a 750ms window.
 
-Two directions, neither yet chosen — the task is to pick one and justify it:
+**RESOLVED. Direction 1 was taken, and direction 2 was ruled out by measurement rather than
+by preference.** Direction 2 ("drive the ignore-list refresh deterministically") is not
+reachable from a test at all: after initial setup, `replaceWorkingTreeIgnoredDirectories`
+has exactly two callers — `promoteWorkingTreeWatchTarget`, which runs once when `repoRoot`
+is first learned, and `runSelfHealTick`. `scheduleWorkspaceObservationSetup` returns early
+forever once `observationSetupComplete` is true, and only the degraded fallback poll ever
+clears that flag. Making the refresh triggerable on demand would be a production change to
+`workspace-git-service.ts`, which this task does not justify.
 
-1. **Make the storm assertions specific instead of absolute.** Their intent is "an
-   ignored-file storm triggers no checkout refresh", not "no git command may run". Asserting
-   against the calls that actually express that — and tolerating the self-heal's own
-   `ls-files` — keeps the intent and removes the coupling. Note before starting that
-   `runSelfHealTick` also calls `refreshWorkspaceTarget`, so the other five mocks in those
-   blocks may need the same treatment; the CI log shows only the first failure because
-   vitest stops there.
-2. **Drive the ignore-list refresh deterministically** so the handoff phase does not wait on
-   a timer at all, and the self-heal can then be pushed out of the test entirely.
+**One correction to this entry's own earlier acceptance criteria, which were wrong.** They
+asked for the file to pass "with the self-heal phase set anywhere in `[1_000, 10 * 60_000]`"
+and for `1_300` specifically to stop reproducing the failure. Neither is achievable, and
+believing them would have led to a worse fix. `1_300` fires the single tick before
+`buildIgnored = false`, and a tick that runs while `build/` is still ignored finds the set
+unchanged (`haveSamePaths`) and returns without reconfiguring the watcher — so the handoff
+can never happen afterwards, no matter what the storm assertions do. The tick is not merely
+"allowed to be late"; it MUST be late. The real property to establish is narrower and is
+what the fix now delivers: **the file is insensitive to where the storm windows fall, and
+fails legibly rather than mysteriously if the phase is ever mis-calibrated again.**
 
-- [ ] The chosen direction is stated with its trade-off, not just committed
-- [ ] The file passes with the self-heal phase set anywhere in `[1_000, 10 * 60_000]` — the
-      property that actually makes it timing-independent, and the one this task exists to
-      establish
-- [ ] `1_300` specifically no longer reproduces the failure
-- [ ] Three consecutive local runs of `npm run test:unit --workspace=@picompanion/server`,
+What landed, in three parts:
+
+1. **The two storm windows assert their intent instead of an absolute.**
+   `expect(runGitCommand).not.toHaveBeenCalled()` became
+   `expect(gitCommandsOtherThanIgnoreReload()).toEqual([])` plus
+   `expect(selfHealIgnoreReloads()).toBeLessThanOrEqual(1)`. The five `getCheckout*`
+   assertions in those blocks stay ABSOLUTE and untouched — they are what actually detects
+   an unpruned storm, because a storm response reaches them through `refreshWorkspaceTarget`
+   and `notifyWorkingTreeConsumers`. Nothing on the storm path can reach `loadIgnoredDirs`,
+   so tolerating one ignore reload gives up no coverage, while the `<= 1` bound still fails
+   if a storm ever starts reloading the ignore list per event.
+2. **The injected phase moved `7_000` → `12_000`**, because the tick has to land after the
+   flip and 7s did not on the CI runner that failed: `buildIgnored` flips at about +1.9s on
+   the development machine and about +7.7s there, so the 7s tick was already spent. 12s is
+   that worst observed flip time plus about 4s of margin. This is calibration, not
+   derivation, and the entry says so where the value lives.
+3. **Two guards make a future mis-calibration diagnosable rather than flaky.** A cumulative
+   `totalIgnoreReloads` counter (immune to the `mockClear` every phase performs) is sampled
+   at the flip, the handoff's own assertion carries a message naming the cause and the
+   remedy, and a post-condition asserts a reload happened _after_ the flip so that phase can
+   never pass vacuously. Counting is relative to the flip, not from zero, because setup
+   itself performs one reload — a detail the first attempt at these guards got wrong and the
+   guard itself caught.
+
+Costs, stated rather than buried: the file's runtime rises from about 10.0s to about 15.3s,
+because the handoff now waits for a 12s tick instead of a 7s one. Its per-test budget was
+raised `15_000` → `30_000` and the handoff `vi.waitFor` `8_000` → `15_000` to accommodate
+that. This is the one place a budget was raised, and it is not the T240 "hide the
+contention" move that section warns against: the file already runs alone in
+`test:unit:serial`, and the budget is being fitted to a deliberately later tick, not used to
+outlast a race.
+
+- [x] The chosen direction is stated with its trade-off, and the rejected one is ruled out
+      by reading the callers rather than by preference
+- [x] The file is insensitive to where the storm windows fall — the property that actually
+      broke CI. (REPLACES this entry's own earlier, impossible criterion about any phase in
+      `[1_000, 10 * 60_000]`; see the correction above.)
+- [x] A mis-calibrated phase fails in one line naming the cause and the fix, demonstrated by
+      running at `1_300` and reading the message
+- [x] The test still fails if pruning regresses — proven by mutation, not assumed: forcing
+      `build/` to be un-ignored during the first storm fails at `getCheckoutDiff`, one of the
+      five assertions deliberately left absolute
+- [x] Three consecutive local runs of the file, all three exit codes read
+- [x] Three consecutive local runs of `npm run test:unit --workspace=@picompanion/server`,
       all three exit codes read (T240)
 - [ ] `server-tests (windows-latest)` green on a real CI run, with the run id recorded
-- [ ] The test still fails if the pruning behaviour it exists to check actually regresses —
-      show the mutation, do not assume the relaxed assertion still bites
 
 **A second, separate observation from the same investigation, filed here so it is not lost
 rather than because it is the same defect.** The first CI attempt at `285124d` (run
