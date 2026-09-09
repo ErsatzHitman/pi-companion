@@ -15702,9 +15702,17 @@ slower runner can be given more.
 
 **A measurement T318 was waiting for.** Discounting the orphan hang, a shard that ran both its
 flows took about 21 minutes end to end — roughly 17 of setup, boot and install, and 6m 10s of
-flows. The 45-minute bound stays as it is: it now has real headroom behind it rather than being
-an estimate, and the raised driver budget can add up to eight minutes per shard in the worst
-case.
+flows. The install alone took 4m 30s, which is the clearest signal of how saturated the
+emulator still is after it reports `sys.boot_completed`.
+
+The bound moves from 45 to **60**, and the driver budget from four minutes to **two**, both for
+the same reason: Maestro RETRIES driver startup, so `MAESTRO_DRIVER_STARTUP_TIMEOUT` is a
+per-ATTEMPT budget and a failing shard pays a multiple of it. Run `34413092055` spent 187s
+failing, which reads as three attempts on roughly a 60s default. At four minutes per attempt a
+shard whose flows both fail would have needed about 41 of its 45 minutes, and one slow boot
+would have pushed it over — losing the cycle AND the result to a timeout kill. Two minutes
+still doubles the budget while keeping a fully-failing shard near 29, and 60 minutes leaves
+room for a slow boot on top.
 
 - [x] `stopArgv` targets `daemon stop`, and a test pins the `daemon` prefix with the reason
 - [x] A failed daemon stop is reported with its home directory, not swallowed

@@ -65,8 +65,16 @@ export interface RunPlan {
  * up on the device, as a string because it reaches Maestro through the
  * environment. Maestro's default is short enough that a cold CI emulator
  * misses it every time — see the note beside its use below.
+ *
+ * Two minutes rather than four, deliberately. Maestro retries driver
+ * startup, so this is a per-ATTEMPT budget and the total is a multiple of
+ * it: run 34413092055 spent 187s failing, which reads as three attempts on
+ * roughly a 60s default. At four minutes a shard whose flows both fail
+ * would need about 41 of its 45 allotted minutes, and a slow boot would
+ * push it over — losing the whole cycle to a timeout kill AND the result.
+ * Two minutes doubles the budget while keeping a failing shard near 29.
  */
-const DEFAULT_DRIVER_STARTUP_TIMEOUT_MS = "240000";
+const DEFAULT_DRIVER_STARTUP_TIMEOUT_MS = "120000";
 
 export function buildRunPlan(
   flowName: string,

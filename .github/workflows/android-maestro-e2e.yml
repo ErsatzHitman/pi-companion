@@ -280,14 +280,16 @@ jobs:
       - shard-matrix
       - build-development-apk
     runs-on: ubuntu-latest
-    # T318: a Maestro flow that waits for an element that never appears does
-    # not fail, it hangs, and `run-flow.ts` sets no deadline of its own -- so
-    # without this the job would sit at GitHub's 360-minute default. No shard
-    # has ever completed its flows, so there is no measured duration to scale
-    # from: 45 minutes is the emulator's own 10-minute boot budget plus a
-    # generous allowance for at most four flows, and is deliberately a
-    # first-dispatch estimate to be replaced with a measurement.
-    timeout-minutes: 45
+    # T318, measured at T321: a Maestro flow that waits for an element that
+    # never appears does not fail, it hangs, and `run-flow.ts` sets no
+    # deadline of its own -- without this the job would sit at GitHub's
+    # 360-minute default. Run 34413092055 supplied the numbers this used to
+    # guess at: ~17 minutes of setup, boot and install, then 6m 10s of
+    # flows. 60 rather than the original 45 because Maestro RETRIES driver
+    # startup, so a shard whose flows both fail spends a multiple of the
+    # per-attempt budget; 45 left a fully-failing shard within a minute or
+    # two of the bound, which would have cost the cycle and the result.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
