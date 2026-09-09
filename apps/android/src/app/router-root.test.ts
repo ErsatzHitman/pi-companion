@@ -119,6 +119,10 @@ describe("Expo Router root contains only real routes (or a named exception)", ()
     // under `(tabs)/` because diagnostics is not a tab and there is no
     // `{ type: "diagnostics" }` navigation intent, on either platform.
     "./h/[serverId]/diagnostics.tsx",
+    // T42A1: mounts the real `DevicesScreen` at `/h/:serverId/devices` —
+    // the same "plain path route, not under `(tabs)/`" shape as
+    // diagnostics.tsx above (devices is not a tab either).
+    "./h/[serverId]/devices.tsx",
     "./h/[serverId]/session/[agentId]/index.tsx",
     "./h/[serverId]/session/[agentId]/files/[...path].tsx",
     "./h/[serverId]/session/[agentId]/terminal/[terminalId].tsx",
