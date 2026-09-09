@@ -86,7 +86,11 @@ type ProviderClientFactory = (
   options?: ProviderClientFactoryOptions,
 ) => AgentClient;
 
-interface ResolvedProvider {
+// T296: exported (only) so provider-registry-wrap.test.ts can build a
+// minimal fixture and exercise createResolvedProviderClient's real
+// unwrap-vs-wrap decision directly, rather than re-deriving that decision by
+// hand. Nothing in production code outside this file constructs one.
+export interface ResolvedProvider {
   definition: AgentProviderDefinition;
   runtimeSettings?: ProviderRuntimeSettings;
   profileModels: ProviderProfileModel[];
@@ -283,6 +287,76 @@ function mergeModelAdditions(
   );
 }
 
+/**
+ * Every key of `AgentSession` declared with `?` whose value (once `undefined`
+ * is stripped) is a function. `features` is optional but not a function, so
+ * it is excluded here and stays handled by its own getter above.
+ */
+type AgentSessionOptionalMethodKey = {
+  [K in keyof AgentSession]-?: {} extends Pick<AgentSession, K>
+    ? NonNullable<AgentSession[K]> extends (...args: never[]) => unknown
+      ? K
+      : never
+    : never;
+}[keyof AgentSession];
+
+/**
+ * T296: the exhaustiveness check for `forwardOptionalSessionMethods` below.
+ * This is a plain object literal typed as `Record<AgentSessionOptionalMethodKey, true>`,
+ * so TypeScript's excess-property check makes it a compile error in BOTH
+ * directions: an `AgentSession` optional method added but not listed here
+ * fails ("Property 'x' is missing"), and a listed key that stops being an
+ * `AgentSession` optional method also fails ("Object literal may only
+ * specify known properties"). Because `provider-registry.ts` is production
+ * source under `tsconfig.server.typecheck.json` (unlike this file's own
+ * `*.test.ts`, which that config excludes and which
+ * `guard-server-test-typecheck-ceiling.mjs`'s large tolerated-error ceiling
+ * can silently absorb a drift into — exactly what happened to the six
+ * methods T296 found missing), a violation here fails `npm run typecheck`
+ * outright, with no ceiling to hide behind.
+ */
+const SESSION_OPTIONAL_METHOD_KEYS: Record<AgentSessionOptionalMethodKey, true> = {
+  listCommands: true,
+  setModel: true,
+  setThinkingOption: true,
+  setFeature: true,
+  setSteeringMode: true,
+  setFollowUpMode: true,
+  getQueueModes: true,
+  respondToEditorTextRequest: true,
+  setAutoCompaction: true,
+  getAutoCompaction: true,
+  revertConversation: true,
+  revertFiles: true,
+  revertBoth: true,
+  tryHandleOutOfBand: true,
+};
+
+const SESSION_OPTIONAL_METHOD_KEY_LIST = Object.keys(
+  SESSION_OPTIONAL_METHOD_KEYS,
+) as AgentSessionOptionalMethodKey[];
+
+/**
+ * Binds every optional `AgentSession` method that `inner` actually
+ * implements to `inner`, driven by `SESSION_OPTIONAL_METHOD_KEY_LIST` rather
+ * than a hand-written line per method. None of these methods need the
+ * provider-tagging the required methods above get (they take no
+ * provider-shaped payload and return no provider-shaped result), so a plain
+ * bind is correct for all of them, present and future.
+ */
+function forwardOptionalSessionMethods(
+  inner: AgentSession,
+): Pick<AgentSession, AgentSessionOptionalMethodKey> {
+  const forwarded: Record<string, unknown> = {};
+  for (const key of SESSION_OPTIONAL_METHOD_KEY_LIST) {
+    const method = (inner as unknown as Record<string, unknown>)[key];
+    if (typeof method === "function") {
+      forwarded[key] = method.bind(inner);
+    }
+  }
+  return forwarded as Pick<AgentSession, AgentSessionOptionalMethodKey>;
+}
+
 export function wrapSessionProvider(provider: AgentProvider, inner: AgentSession): AgentSession {
   return {
     provider,
@@ -309,14 +383,7 @@ export function wrapSessionProvider(provider: AgentProvider, inner: AgentSession
     describePersistence: () => mapPersistenceHandle(provider, inner.describePersistence()),
     interrupt: () => inner.interrupt(),
     close: () => inner.close(),
-    listCommands: inner.listCommands?.bind(inner),
-    setModel: inner.setModel?.bind(inner),
-    setThinkingOption: inner.setThinkingOption?.bind(inner),
-    setFeature: inner.setFeature?.bind(inner),
-    revertConversation: inner.revertConversation?.bind(inner),
-    revertFiles: inner.revertFiles?.bind(inner),
-    revertBoth: inner.revertBoth?.bind(inner),
-    tryHandleOutOfBand: inner.tryHandleOutOfBand?.bind(inner),
+    ...forwardOptionalSessionMethods(inner),
   };
 }
 
@@ -497,7 +564,12 @@ function createRegistryEntry(
   };
 }
 
-function createResolvedProviderClient(
+// T296: exported so provider-registry-wrap.test.ts can prove, directly
+// against this real function, that a provider profile carrying model
+// overrides takes the wrapped path below (and therefore keeps every
+// optional AgentSession method), not only that the plain, no-override
+// builtin case returns `inner` unwrapped.
+export function createResolvedProviderClient(
   logger: Logger,
   provider: AgentProvider,
   resolved: ResolvedProvider,

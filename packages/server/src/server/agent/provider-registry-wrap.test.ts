@@ -1,16 +1,47 @@
 import { describe, expect, test } from "vitest";
 
+import type { QueueMode } from "@picompanion/protocol/messages";
+
 import type {
   AgentCapabilityFlags,
+  AgentClient,
   AgentPromptInput,
   AgentSession,
   AgentStreamEvent,
   AgentRuntimeInfo,
 } from "./agent-sdk-types.js";
-import { wrapSessionProvider } from "./provider-registry.js";
+import {
+  createResolvedProviderClient,
+  wrapSessionProvider,
+  type ResolvedProvider,
+} from "./provider-registry.js";
 
+/**
+ * T296: this mirrors `provider-registry.ts`'s own
+ * `AgentSessionOptionalMethodKey` — kept as a second, independent
+ * computation here rather than importing that type, because the point of
+ * this file is to prove the wrap actually forwards, at runtime, not to
+ * trust the production file's own bookkeeping.
+ *
+ * `{} extends Pick<AgentSession, K>` is the robust "is K optional" test.
+ * This file previously used `undefined extends AgentSession[K]`, which
+ * still resolved the full 14-member union correctly (proven at the P9-R
+ * gate: the exhaustiveness assertion below already reported
+ * `TS2322: Type 'true' is not assignable to type 'never'` at HEAD, with
+ * the six methods this task adds correctly named as the excluded members)
+ * — the formula was never the hole. The hole was that this file is a
+ * `*.test.ts`, which `tsconfig.server.typecheck.json` excludes, so the only
+ * thing that ever ran that check was
+ * `guard-server-test-typecheck-ceiling.mjs`'s test-file typecheck, which
+ * tolerates up to `TYPECHECK_ERROR_CEILING` (1051, ~1048 already in use)
+ * pre-existing errors — comfortably enough slack to swallow this one
+ * without the ceiling guard ever going red. `provider-registry.ts`'s new
+ * `SESSION_OPTIONAL_METHOD_KEYS` is the fix: the same exhaustiveness shape,
+ * moved to production source, where `npm run typecheck` has no ceiling to
+ * hide behind.
+ */
 type OptionalAgentSessionMethodName = {
-  [K in keyof AgentSession]-?: undefined extends AgentSession[K]
+  [K in keyof AgentSession]-?: {} extends Pick<AgentSession, K>
     ? NonNullable<AgentSession[K]> extends (...args: never[]) => unknown
       ? K
       : never
@@ -22,6 +53,12 @@ const OPTIONAL_AGENT_SESSION_METHOD_NAMES = [
   "setModel",
   "setThinkingOption",
   "setFeature",
+  "setSteeringMode",
+  "setFollowUpMode",
+  "getQueueModes",
+  "respondToEditorTextRequest",
+  "setAutoCompaction",
+  "getAutoCompaction",
   "revertConversation",
   "revertFiles",
   "revertBoth",
@@ -63,7 +100,7 @@ class FakeSession implements AgentSession {
 
   async run() {
     this.recordedCalls.push("run");
-    return { timeline: [] };
+    return { sessionId: "session-1", finalText: "", timeline: [] };
   }
 
   async startTurn() {
@@ -139,6 +176,32 @@ class FakeSession implements AgentSession {
     this.recordedCalls.push("setFeature");
   }
 
+  async setSteeringMode(_mode: QueueMode) {
+    this.recordedCalls.push("setSteeringMode");
+  }
+
+  async setFollowUpMode(_mode: QueueMode) {
+    this.recordedCalls.push("setFollowUpMode");
+  }
+
+  async getQueueModes() {
+    this.recordedCalls.push("getQueueModes");
+    return { steeringMode: null, followUpMode: null };
+  }
+
+  respondToEditorTextRequest(_requestId: string, _text: string) {
+    this.recordedCalls.push("respondToEditorTextRequest");
+  }
+
+  async setAutoCompaction(_enabled: boolean) {
+    this.recordedCalls.push("setAutoCompaction");
+  }
+
+  async getAutoCompaction() {
+    this.recordedCalls.push("getAutoCompaction");
+    return null;
+  }
+
   async revertConversation() {
     this.recordedCalls.push("revertConversation");
   }
@@ -176,6 +239,12 @@ describe("wrapSessionProvider", () => {
     await wrapped.setModel?.("sonnet");
     await wrapped.setThinkingOption?.("high");
     await wrapped.setFeature?.("feature-1", true);
+    await wrapped.setSteeringMode?.("all");
+    await wrapped.setFollowUpMode?.("one-at-a-time");
+    await wrapped.getQueueModes?.();
+    wrapped.respondToEditorTextRequest?.("request-1", "draft text");
+    await wrapped.setAutoCompaction?.(true);
+    await wrapped.getAutoCompaction?.();
     await wrapped.revertConversation?.({ messageId: "message-1" });
     await wrapped.revertFiles?.({ messageId: "message-1" });
     await wrapped.revertBoth?.({ messageId: "message-1" });
@@ -187,11 +256,87 @@ describe("wrapSessionProvider", () => {
       "setModel",
       "setThinkingOption",
       "setFeature",
+      "setSteeringMode",
+      "setFollowUpMode",
+      "getQueueModes",
+      "respondToEditorTextRequest",
+      "setAutoCompaction",
+      "getAutoCompaction",
       "revertConversation",
       "revertFiles",
       "revertBoth",
       "tryHandleOutOfBand",
       "tryHandleOutOfBand.run",
+    ]);
+  });
+});
+
+describe("createResolvedProviderClient", () => {
+  function fakeResolvedProvider(
+    session: FakeSession,
+    overrides: Partial<ResolvedProvider> = {},
+  ): ResolvedProvider {
+    const client: AgentClient = {
+      provider: "pi",
+      capabilities: CAPABILITIES,
+      createSession: async () => session,
+      resumeSession: async () => session,
+      fetchCatalog: async () => ({ models: [], modes: [] }),
+      isAvailable: async () => true,
+    };
+
+    return {
+      definition: {} as ResolvedProvider["definition"],
+      profileModels: [],
+      additionalModels: [],
+      profileModelsAreAdditive: false,
+      enabled: true,
+      derivedFromProviderId: null,
+      createBaseClient: () => client,
+      ...overrides,
+    };
+  }
+
+  test("the plain builtin case (no model overrides) returns the inner client unwrapped", async () => {
+    // This is the fast path T296's brief names: `inner.provider === provider
+    // && !hasModelOverrides`. An unwrapped client's session is `inner`
+    // itself, so every optional method is trivially present — this test
+    // exists to pin that the fast path really is taken here, not to prove
+    // forwarding (there is nothing to forward).
+    const session = new FakeSession();
+    const resolved = fakeResolvedProvider(session);
+    const client = createResolvedProviderClient({} as never, "pi", resolved);
+
+    const createdSession = await client.createSession({} as never);
+    expect(createdSession).toBe(session);
+    expect(typeof createdSession.respondToEditorTextRequest).toBe("function");
+  });
+
+  test("a provider profile carrying model overrides wraps the session, and every optional method survives", async () => {
+    // T296's actual escape: a provider profile with model overrides (or an
+    // aliased/derived provider whose base client reports a different
+    // `.provider`) fails `inner.provider === provider && !hasModelOverrides`
+    // and goes through `wrapClientProvider` -> `wrapSessionProvider`. Before
+    // this task, six optional AgentSession methods — including T293's
+    // `respondToEditorTextRequest` — were silently dropped on exactly this
+    // path.
+    const session = new FakeSession();
+    const resolved = fakeResolvedProvider(session, {
+      profileModels: [{ id: "custom-model", label: "Custom Model" }],
+    });
+    const client = createResolvedProviderClient({} as never, "pi", resolved);
+
+    const createdSession = await client.createSession({} as never);
+    expect(createdSession).not.toBe(session);
+
+    await createdSession.getQueueModes?.();
+    createdSession.respondToEditorTextRequest?.("request-1", "draft text");
+    await createdSession.setAutoCompaction?.(true);
+
+    expect(session.recordedCalls).toEqual([
+      "getQueueModes",
+      "respondToEditorTextRequest",
+      "setAutoCompaction",
     ]);
   });
 });
