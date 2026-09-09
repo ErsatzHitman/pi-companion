@@ -71,7 +71,12 @@ describe("DevicesRoute source", () => {
     expect(code).toMatch(/export default function DevicesRoute\(\)/);
   });
 
-  it("discloses that no tap path into this route exists yet, rather than implying one does", () => {
-    expect(source).toMatch(/Not tapped to from anywhere in the app yet/);
+  it("documents the real Settings-tab entry point, not the old 'not tapped to' disclosure (T301)", () => {
+    // CORRECTED (T301): this test used to pin the OPPOSITE claim — "Not
+    // tapped to from anywhere in the app yet". T301 wired the Settings
+    // row this comment already named, so pin the capability that now
+    // exists instead of the old disclosure.
+    expect(source).not.toMatch(/Not tapped to from anywhere in the app yet/);
+    expect(source).toMatch(/Reachable from the Settings tab \(T301\)/);
   });
 });

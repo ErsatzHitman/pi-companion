@@ -152,8 +152,15 @@ describe("DevicesScreen source", () => {
     expect(code).toMatch(/<Text[^>]*\bselectable\b/);
   });
 
-  it("discloses, rather than hides, the current lack of a tap path into this screen", () => {
-    expect(source).toMatch(/Nothing currently taps a UI element to reach this route/);
+  it("documents the real Settings-tab entry point, not the old 'nothing taps this' disclosure (T301)", () => {
+    // CORRECTED (T301): this test used to pin the OPPOSITE claim —
+    // "Nothing currently taps a UI element to reach this route" — as the
+    // honest state of the tree. T301 built the seam this doc comment
+    // already sketched (`onOpenDevices` on `SettingsScreen.tsx`), so pin
+    // the capability that now exists instead of the old disclosure.
+    expect(source).not.toMatch(/Nothing currently taps a UI element to reach this route/);
+    expect(source).toMatch(/Reachable from the Settings tab \(T301\)/);
+    expect(source).toMatch(/onOpenDevices/);
   });
 
   it("documents the revocation seam it actually built (T42A2), not the onRevoke prop an earlier draft sketched", () => {

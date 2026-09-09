@@ -1,6 +1,10 @@
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
-import { SettingsScreen } from "../../../../features/settings";
+import {
+  SettingsScreen,
+  pressOpenDevices,
+  pressOpenDiagnostics,
+} from "../../../../features/settings";
 import { useAppCore } from "../../../core-context";
 
 /**
@@ -19,13 +23,31 @@ import { useAppCore } from "../../../core-context";
  * `sessions.tsx` already threads through for its own persisted reads —
  * no fake, no second storage module.
  *
- * `serverId` is read but unused beyond proving this route resolved
- * (there is exactly one settings surface per app install today, not
- * one per host) — kept in the signature so a later per-host settings
- * split does not have to touch the route shape again.
+ * `serverId` is read for two things now (T301): proving this route
+ * resolved, and building the real `/h/:serverId/devices` /
+ * `/h/:serverId/diagnostics` hrefs `onOpenDevices`/`onOpenDiagnostics`
+ * navigate to below — there is exactly one settings surface per app
+ * install today, but devices/diagnostics are still per-host, so this
+ * route is where the two meet.
+ *
+ * `onOpenDevices`/`onOpenDiagnostics` go through `features/settings/
+ * settings-navigation-model.ts`'s `pressOpenDevices`/
+ * `pressOpenDiagnostics` rather than a hand-built template string here,
+ * so the real `useRouter()` this route holds is the only router either
+ * function ever sees — `SettingsScreen` itself never imports `expo-
+ * router` (T301, closing the gap `../../../../features/devices/
+ * DevicesScreen.tsx`'s own doc comment named).
  */
 export default function SettingsRoute() {
-  useLocalSearchParams<{ serverId: string }>();
+  const { serverId } = useLocalSearchParams<{ serverId: string }>();
   const core = useAppCore();
-  return <SettingsScreen storage={core.keyValueStorage} testId="settings-screen" />;
+  const router = useRouter();
+  return (
+    <SettingsScreen
+      storage={core.keyValueStorage}
+      onOpenDevices={() => pressOpenDevices(router, serverId)}
+      onOpenDiagnostics={() => pressOpenDiagnostics(router, serverId)}
+      testId="settings-screen"
+    />
+  );
 }

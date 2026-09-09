@@ -40,4 +40,29 @@ describe("SettingsRoute source", () => {
     expect(readCode()).toMatch(/useLocalSearchParams/);
     expect(readCode()).toMatch(/serverId/);
   });
+
+  it("wires onOpenDevices through the real router and the shared navigation model (T301)", () => {
+    expect(readCode()).toMatch(/import \{[\s\S]*?SettingsScreen,[\s\S]*?\}\s*from/);
+    expect(readCode()).toMatch(/pressOpenDevices,/);
+    expect(readCode()).toMatch(/pressOpenDiagnostics,?/);
+    expect(readCode()).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/features\/settings"/);
+    expect(readCode()).toMatch(/const router = useRouter\(\);/);
+    expect(readCode()).toMatch(
+      /onOpenDevices=\{\(\)\s*=>\s*pressOpenDevices\(router,\s*serverId\)\}/,
+    );
+  });
+
+  it("wires onOpenDiagnostics through the real router and the shared navigation model (T301)", () => {
+    expect(readCode()).toMatch(
+      /onOpenDiagnostics=\{\(\)\s*=>\s*pressOpenDiagnostics\(router,\s*serverId\)\}/,
+    );
+  });
+
+  it("never builds a devices/diagnostics href by hand — both go through the shared model", () => {
+    // Guards against a regression that inlines a template-string href
+    // (e.g. `/h/${serverId}/devices`) directly in this route file
+    // instead of going through settings-navigation-model.ts, which is
+    // what keeps SettingsScreen itself router-free.
+    expect(readCode()).not.toMatch(/`\/h\/\$\{serverId\}/);
+  });
 });

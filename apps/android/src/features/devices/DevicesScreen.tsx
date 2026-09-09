@@ -14,20 +14,19 @@
  * — the one route this task's `Owns` grant permits (`features/devices/`
  * only, per this task's brief).
  *
- * **Nothing currently taps a UI element to reach this route.** That is
- * the same state `../diagnostics/DiagnosticsScreen.tsx` shipped in at
- * T42A3 and still carries as of this task (confirmed by grep: no `Link`
- * or `router.push` targeting `/diagnostics` or `/devices` exists anywhere
- * under `apps/android/src` outside those two routes' own files). Filed
- * rather than hidden — see this task's report for the exact seam that
- * would close it: an `onOpenDevices` callback prop added to
- * `../settings/SettingsScreen.tsx` (rendering a "Devices" row only when
- * it is supplied, the same "omit the affordance entirely rather than
- * render it broken" convention `DiagnosticsScreen.tsx`'s missing-Clipboard
- * note already establishes), wired from `useRouter().push(...)` in
- * `app/h/[serverId]/(tabs)/settings.tsx` — both outside this task's Owns
- * grant (`features/devices/**` plus the one route file), so neither is
- * touched here.
+ * **Reachable from the Settings tab (T301).** This was the same
+ * unreachable state `../diagnostics/DiagnosticsScreen.tsx` shipped in at
+ * T42A3 — no `Link` or `router.push` anywhere under `apps/android/src`
+ * targeted `/diagnostics` or `/devices` outside those two routes' own
+ * files, confirmed by grep at the time. T301 closed it exactly the way
+ * this comment used to describe it should be closed: a "Devices" row on
+ * `../settings/SettingsScreen.tsx`, rendered only when its
+ * `onOpenDevices` callback prop is supplied (the same "omit the
+ * affordance entirely rather than render it broken" convention
+ * `DiagnosticsScreen.tsx`'s missing-Clipboard note establishes), wired
+ * from `features/settings/settings-navigation-model.ts`'s
+ * `pressOpenDevices` inside `app/h/[serverId]/(tabs)/settings.tsx`'s real
+ * `useRouter()`.
  *
  * **Revocation (T42A2).** `DeviceRow` renders a "Revoke" `Button` only
  * for a device that both (a) isn't this device (`isThisDevice`, matching

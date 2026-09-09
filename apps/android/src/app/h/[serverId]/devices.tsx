@@ -12,10 +12,11 @@ import { useAppCore } from "../../core-context";
  * (`../diagnostics.tsx`): the route supplies real adapters off
  * `useAppCore()` and owns nothing else.
  *
- * **Not tapped to from anywhere in the app yet** — see
- * `DevicesScreen.tsx`'s own doc comment and this task's report for the
- * exact seam (`SettingsScreen.tsx`'s `onOpenDevices` prop) that would
- * close that, which sits outside this task's Owns grant.
+ * **Reachable from the Settings tab (T301).** The "Devices" row on
+ * `app/h/[serverId]/(tabs)/settings.tsx` navigates here via
+ * `features/settings/settings-navigation-model.ts`'s `pressOpenDevices`
+ * — see `DevicesScreen.tsx`'s own doc comment for the full history of
+ * this gap.
  *
  * Dependency notes, each one a real adapter and never a fake:
  *
