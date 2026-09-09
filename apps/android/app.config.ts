@@ -382,6 +382,23 @@ const config: ExpoConfig = {
   // (`./src/platform/file-picker.ts` is where that branch lives) — filed
   // here by name since that task does not exist yet and owns none of this
   // file.
+  // T291 addendum: `npx expo install expo-audio` also printed "Add the
+  // following to your Expo config: { plugins: ["expo-audio"] }". Declined,
+  // for the same reason this file already gives for `expo-image-picker`'s
+  // plugin two paragraphs down, and measured the same way rather than
+  // assumed. `expo-audio@1.1.1`'s Android config plugin
+  // (`plugin/build/*.js`) adds exactly `android.permission.RECORD_AUDIO` and
+  // `android.permission.MODIFY_AUDIO_SETTINGS`; its own bundled
+  // `node_modules/expo-audio/android/src/main/AndroidManifest.xml` ALREADY
+  // declares both of those, plus `FOREGROUND_SERVICE` and
+  // `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, which Android's manifest merger
+  // admits for every installed native module with no `plugins` entry at all.
+  // So on this Android-only app the plugin's whole Android effect is a no-op
+  // and its remaining effect is iOS permission copy, which `platforms:
+  // ["android"]` above makes unreachable. Note the direction differs from the
+  // `expo-image-picker` case below: there the plugin would have ADDED a
+  // permission nothing needs, here the permission is genuinely needed (this
+  // app records voice) and arrives without the plugin either way.
   plugins: ["expo-router", "./plugins/with-share-intent-module"],
   experiments: {
     typedRoutes: true,
