@@ -386,6 +386,26 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: true,
   },
+  // T208: the EAS project this app builds under, written by hand because
+  // `eas init` refuses to edit a DYNAMIC config — it printed this exact
+  // `extra.eas.projectId` block and then failed with "Cannot automatically
+  // write to dynamic config at: app.config.ts", so the id below is copied
+  // from that output rather than invented. Until it existed, both Android
+  // workflows were blocked on more than the `EXPO_TOKEN` secret their
+  // headers name: `eas project:info` failed with "Accounts you can create
+  // projects in: ersatzhitman, ersatzhitmans-team", i.e. no project was
+  // linked at all, so a configured token alone would still have produced a
+  // failed build. The project is owned by the `ersatzhitman` account.
+  //
+  // This id is a public project identifier, not a credential — it appears
+  // in every built artifact's manifest — so it belongs in the committed
+  // config, unlike `EXPO_TOKEN`, which is a repository secret and must
+  // never be written into any file here.
+  extra: {
+    eas: {
+      projectId: "84d81907-8d9c-4096-9c66-5a3db488192c",
+    },
+  },
 };
 
 export default config;
