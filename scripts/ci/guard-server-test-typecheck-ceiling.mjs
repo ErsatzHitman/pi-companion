@@ -63,7 +63,18 @@
 // truly included is 1051 again: net zero change, and the ceiling stays at
 // 1051 — this is a fix landing beside the re-inclusion, not room being
 // carved out for the re-inclusion itself.
-export const TYPECHECK_ERROR_CEILING = 1051;
+//
+// T296 (commit 8352bd2) lowered this from 1051 (measured 1048 in use at
+// that commit's parent) to 1045: `provider-registry-wrap.test.ts` carried
+// its own type-level exhaustiveness check for `wrapSessionProvider`'s
+// optional-method forwarding, and that check was already reporting a real
+// `TS2322` at HEAD — correctly naming six missing methods — silently
+// absorbed by this ceiling's slack the whole time. Fixing the underlying
+// forwarding gap resolved that error; fixing `FakeSession.run()`'s
+// pre-existing `AgentRunResult` shape drift (needed so a new fixture in
+// the same file could satisfy `AgentSession`) resolved two more (`TS2416`
+// and one `TS2345`). Net drop: 3, well under `TYPECHECK_ERROR_MAX_DROP`.
+export const TYPECHECK_ERROR_CEILING = 1045;
 
 // T119: how far the measured error count is allowed to fall below the
 // ceiling in one run without an explicit ceiling update. A real fix lowers
