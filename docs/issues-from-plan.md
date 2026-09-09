@@ -566,6 +566,7 @@ that recomputation has to be domain-specific:
 | T307   | Explain, or remove, the hoisted root `expo@57` no workspace asks for            | phase-9   | android          | P9-U   | T291, T306                                                            |
 | T308   | Show the local wall-clock time on every transcript message                      | phase-9   | core             | P9-U   | T28A1, T28A2, T33A2                                                   |
 | T309   | The observation test's self-heal tick is both required and harmful              | phase-9   | server           | P9-U   | T240                                                                  |
+| T310   | Both EAS workflows invoked `npx eas`, a package that cannot run                 | phase-9   | tooling          | P9-U   | T208, T17B, T37F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14861,3 +14862,60 @@ the very next run of the identical commit. That is a runner stall rather than a 
 on the evidence available, and it is deliberately NOT being fixed by raising `testTimeout`
 here; if it recurs, file it separately with the recurrence recorded, and do not fold it into
 this task.
+
+#### T310 — Both EAS workflows invoked `npx eas`, a package that cannot run
+
+`labels: phase-9, area: tooling` · `depends-on: T208, T17B, T37F`
+
+The first real dispatch of `android-maestro-e2e.yml` (run `34368430903`, at `2d7c60f`) failed
+in all six jobs — five shards and `packaged-app-smoke` — with:
+
+```
+npm error could not determine executable to run
+```
+
+Every job reached it the same way: `Setup Expo and EAS` succeeded and installed
+`eas-cli@23.2.0`, and the next step ran `npx eas build …` and died in 1.7 seconds.
+
+**Cause, confirmed against the registry rather than guessed.** `eas` is a real published npm
+package — version `0.1.0` — and it declares **no `bin`**. So `npx eas` resolves that package,
+finds nothing to execute, and emits exactly the error above. The binary named `eas` is
+shipped by a differently-named package: `eas-cli`, whose manifest declares
+`bin = { eas: 'bin/run' }`. `npx <name>` takes a PACKAGE name, so `npx eas` was wrong from the
+day it was written and could never have worked on any runner.
+
+Both workflows carried it, six call sites in total:
+`android-apk-release.yml` (`build`, `build:view`) and `android-maestro-e2e.yml` (`build` and
+`build:view` for each of the `development` and `production-apk` profiles). All six now say
+`npx eas-cli`, and all three sites that start a build carry a comment saying why, so the next
+reader does not "simplify" the package name back to the binary name.
+
+**Why nothing caught this earlier, which is the part worth keeping.** Neither workflow had
+ever executed these steps: both gate on `EXPO_TOKEN`, which only existed from T208, and until
+then every run took the "Dry run (EXPO_TOKEN not configured)" branch and reported success.
+The steps were therefore untested infrastructure that looked green for months — the same shape
+as the P9-T gate's finding about a CI fixture that had never run. Local work did not catch it
+either: on a developer machine `eas` is on `PATH` from a global `eas-cli` install, so anyone
+typing `eas build` by hand sees it work, and `npx eas` is the only spelling that fails.
+
+**No EAS build minutes were consumed by the failed run.** Every job died before
+`eas build` started, so this cost nothing beyond runner time — worth stating because the
+obvious worry on seeing six failed EAS jobs is a spent build quota.
+
+- [x] All six call sites use the package name `eas-cli`
+- [x] Both workflow files still parse under a real YAML loader
+- [x] The three build-starting steps carry a comment naming the cause, so the fix is not
+      undone by someone shortening it back to `eas`
+- [ ] A real `android-maestro-e2e.yml` dispatch gets past `Build development APK on EAS`, with
+      the run id recorded — this entry is not closed by the fix alone, because the next
+      failure after this one is the first honest test of everything downstream (the EAS
+      development build itself, then `reactivecircus/android-emulator-runner`'s KVM support,
+      which that workflow's own header has always disclosed as unverified)
+- [ ] A guard so this cannot regress: fail the build when a workflow invokes `npx` with a
+      package name that publishes no `bin`, or at minimum when it invokes `npx eas`.
+      Deliberately NOT written as part of the fix — a new guard needs its own
+      `run-guard-*.mjs`, wiring into `ci.yml`, and an entry that satisfies
+      `guard-run-guard-wiring.mjs`, which is more than a one-line CLI correction should drag
+      in. Note when writing it that the general form is the valuable one: `npx <binary-name>`
+      is a mistake class, not a single typo, and this repository invokes npx in several
+      workflows.
