@@ -574,6 +574,7 @@ that recomputation has to be domain-specific:
 | T315   | The E2E APK is assembled by Gradle on the runner, not queued on EAS             | phase-9   | tooling          | P9-U   | T314, T312, T311, T37F                                                |
 | T316   | The local Expo module has never had a compileSdk, and nothing could notice      | phase-9   | android          | P9-U   | T315, T314, T36F                                                      |
 | T317   | The emulator asked for a device profile the runner's catalog has never had      | phase-9   | tooling          | P9-U   | T316, T315, T37F                                                      |
+| T318   | No emulator job had a timeout, so a hung flow would run for six hours           | phase-9   | tooling          | P9-U   | T317, T315, T37F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15451,3 +15452,39 @@ consumers, and that no step hardcodes a profile again.
 - [ ] A real dispatch boots the emulator, installs the APK, and runs this shard's flows, with
       the run id recorded — this is the criterion T310, T311, T312 and T315 are all still
       waiting on, since every one of them reduces to "the shards actually run"
+
+#### T318 — No emulator job had a timeout, so a hung flow would run for six hours
+
+`labels: phase-9, area: tooling` · `depends-on: T317, T315, T37F`
+
+Not one of `android-maestro-e2e.yml`'s three jobs declared `timeout-minutes`, so each
+inherited GitHub's 360-minute default. That was harmless while every dispatch died in seconds
+or minutes — T310 at 1.7s, T311 at 18s, T317 at 35s — and stops being harmless the moment
+the emulator actually boots, which T317 is the last known blocker for.
+
+**The specific hazard is that a Maestro flow does not fail when it goes wrong; it waits.** A
+selector that never matches leaves `maestro test` blocked, and `apps/android/e2e/run-flow.ts`
+sets no deadline of its own — its only `setTimeout` is the daemon boot delay. A single stuck
+flow would therefore hold a runner for six hours, and with `fail-fast: false` all five shards
+would do it in parallel.
+
+Three bounds, each derived from a real measurement where one exists:
+
+| Job                     | `timeout-minutes` | Basis                                                                                                                                                                                                                                            |
+| ----------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `build-development-apk` | 60                | 23m 09s observed on run `34392173679` (`BUILD SUCCESSFUL in 21m 27s` plus checkout, `npm ci`, prebuild); ~2.5× that, enough for a cold Gradle cache                                                                                              |
+| `maestro-e2e`           | 45                | no measurement exists — no shard has ever completed its flows — so this is the emulator action's own 10-minute boot budget plus a generous allowance for at most four flows, flagged in the workflow as a first-dispatch estimate to be replaced |
+| `packaged-app-smoke`    | 150               | 1h 06m wall-clock observed, dominated by EAS free-tier queue (1h 05m queued against 1m 54s building); allows a queue twice that long                                                                                                             |
+
+**One stale claim in the same file was corrected rather than left.** The header still said
+"every shard job below no-ops with a logged notice instead of failing ... so this workflow is
+dry-run-safe today". T315 deleted `maestro-e2e`'s dry-run step and the `configured` gate that
+selected it, so those shards fail loudly now; and requirement 1 of the two that sentence was
+waiting on (a development-variant build) exists. Only `packaged-app-smoke`'s own EXPO_TOKEN
+dry run remains. Requirement 2 — a booted emulator — is still genuinely unproven and is
+left disclosed as such, because no dispatch has yet reached boot.
+
+- [x] All three jobs declare a `timeout-minutes`
+- [x] Each bound cites the measurement it came from, or says plainly that none exists
+- [x] The header's dry-run claim matches what the jobs actually do
+- [ ] The `maestro-e2e` estimate is replaced by a measured value once a shard completes

@@ -30,14 +30,22 @@ name: Android Maestro E2E
 #      at providing via reactivecircus/android-emulator-runner, itself
 #      unverified here: GitHub-hosted Linux runners' KVM support for that
 #      action has not been confirmed in this repository).
-# Until both exist, every shard job below no-ops with a logged notice
-# instead of failing -- exactly like android-apk-release.yml's own
-# EXPO_TOKEN gate -- so this workflow is dry-run-safe today and starts
-# actually running the suite the moment both are wired up. This is a
-# manual (workflow_dispatch) workflow, not part of the push/pull_request
-# `ci.yml` gate: plan.md §15.4's "Required jobs from Phase 1 onward" list
-# does not include an emulator-backed Maestro run, and nothing in this
-# repository's CI has ever booted an Android emulator before.
+# CORRECTED (T318): this said "Until both exist, every shard job below
+# no-ops with a logged notice instead of failing ... so this workflow is
+# dry-run-safe today". Neither half survives. Requirement 1 exists --
+# `build-development-apk` assembles the APK with Gradle and succeeded in
+# 23m 09s on run 34392173679 -- and T315 removed `maestro-e2e`'s dry-run
+# step along with the `configured` gate that selected it, so these shards
+# fail loudly now rather than no-op. `packaged-app-smoke` still keeps its
+# own EXPO_TOKEN dry run, which is the only part of that sentence that was
+# still true. Requirement 2 remains genuinely unproven: no emulator has
+# ever booted here, because every dispatch so far died before boot -- most
+# recently on `Error: No device found matching --device pixel_8` (T317).
+# This is a manual (workflow_dispatch) workflow, not part of the
+# push/pull_request `ci.yml` gate: plan.md §15.4's "Required jobs from
+# Phase 1 onward" list does not include an emulator-backed Maestro run,
+# and nothing in this repository's CI has ever booted an Android emulator
+# before.
 #
 # --- T43B2b: the phase-8 packaging exit gate's Android half -------------
 #
@@ -189,6 +197,11 @@ jobs:
   build-development-apk:
     name: build-development-apk
     runs-on: ubuntu-latest
+    # T318: measured, not guessed. This job took 23m 09s on run 34392173679
+    # (Gradle's own `BUILD SUCCESSFUL in 21m 27s` plus checkout, npm ci and
+    # prebuild); 60 minutes is roughly 2.5x that, enough for a cold Gradle
+    # cache and slow enough to be reached only by something genuinely stuck.
+    timeout-minutes: 60
     env:
       APP_VARIANT: development
     steps:
@@ -267,6 +280,14 @@ jobs:
       - shard-matrix
       - build-development-apk
     runs-on: ubuntu-latest
+    # T318: a Maestro flow that waits for an element that never appears does
+    # not fail, it hangs, and `run-flow.ts` sets no deadline of its own -- so
+    # without this the job would sit at GitHub's 360-minute default. No shard
+    # has ever completed its flows, so there is no measured duration to scale
+    # from: 45 minutes is the emulator's own 10-minute boot budget plus a
+    # generous allowance for at most four flows, and is deliberately a
+    # first-dispatch estimate to be replaced with a measurement.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -364,6 +385,12 @@ jobs:
   packaged-app-smoke:
     name: packaged-app-smoke
     runs-on: ubuntu-latest
+    # T318: this job blocks on `eas build --wait`, and on the free tier the
+    # QUEUE dominates -- run 34392173679 spent 1h 05m queued against 1m 54s
+    # building, and this job took 1h 06m wall-clock. 150 minutes leaves room
+    # for a queue twice that long without ever letting a hung emulator run to
+    # the 360-minute default.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
