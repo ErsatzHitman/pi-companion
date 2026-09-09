@@ -8,12 +8,31 @@
 // rules forbid editing `package.json` anyway.
 //
 // Shape follows Expo's documented "create a local module" template
-// (https://docs.expo.dev/modules/get-started/) exactly: an
-// `android-library` Gradle module that applies
-// `expo-modules-core`'s shared Gradle plugin so it inherits the same
-// Kotlin/AGP/compileSdk versions as every other autolinked Expo module,
-// rather than pinning a second, possibly-drifting copy of those
-// versions here.
+// (https://docs.expo.dev/modules/get-started/): an `android-library`
+// Gradle module that applies `expo-modules-core`'s shared Gradle plugin
+// so it inherits the same Kotlin/AGP/compileSdk versions as every other
+// autolinked Expo module, rather than pinning a second,
+// possibly-drifting copy of those versions here.
+//
+// CORRECTED (T316): this said the shape followed that template "exactly",
+// and that applying the shared plugin was what made this module inherit
+// `compileSdk`. It did not. `ExpoModulesCorePlugin.gradle` exposes TWO
+// helpers, and this file called only one of them:
+// `applyKotlinExpoModulesCorePlugin()` configures Kotlin, while
+// `useDefaultAndroidSdkVersions()` is the one that sets
+// `compileSdkVersion`/`minSdkVersion`/`targetSdkVersion` (and
+// `lintOptions.abortOnError false`, which this file was duplicating by
+// hand). Without the second call AGP rejected the module outright --
+// "project ':share-intent' does not specify `compileSdk` in
+// build.gradle" -- and it failed the configuration phase of the whole
+// app, not just this module.
+//
+// Nothing caught it because nothing had ever run Gradle against this
+// project: EAS never reached the assemble step (it died earlier, at
+// `Bundle JavaScript` -- see T314), and `ci.yml` runs `expo prebuild
+// --no-install`, which GENERATES the native project without configuring
+// or building it. `scripts/ci/guard-local-expo-module-sdk.mjs` is the
+// static check that a future local module cannot repeat this.
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
@@ -24,16 +43,20 @@ def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.ab
 apply from: expoModulesCorePlugin
 applyKotlinExpoModulesCorePlugin()
 
+// The call that supplies compileSdk/minSdk/targetSdk from the root
+// project's `ext` (falling back to expo-modules-core's own defaults), so
+// this module tracks whatever every other autolinked Expo module uses
+// instead of pinning its own copy. It also sets
+// `lintOptions.abortOnError false`, which is why this file no longer
+// declares that by hand.
+useDefaultAndroidSdkVersions()
+
 android {
   namespace "sh.picompanion.shareintent"
 
   defaultConfig {
     versionCode 1
     versionName "1.0.0"
-  }
-
-  lintOptions {
-    abortOnError false
   }
 }
 

@@ -103,6 +103,26 @@ jobs:
       - name: Fail on any apps/android/**/*.web.* file
         run: node scripts/ci/run-guard-no-android-web-files.mjs
 
+  # T316: apps/android/modules/share-intent shipped without an Android
+  # compileSdk and was unbuildable from the day it was written. Nothing
+  # noticed because nothing ran Gradle: `android-tests` runs `expo prebuild
+  # --no-install`, which generates the native project without configuring
+  # it, and EAS never reached the assemble step. The real assemble in
+  # android-maestro-e2e.yml is the authoritative check; this is the static
+  # companion that costs milliseconds on every push.
+  guard-local-expo-module-sdk:
+    name: guard / local Expo modules establish an Android compileSdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on a local Expo module with no compileSdk
+        run: node scripts/ci/run-guard-local-expo-module-sdk.mjs
+
   guard-android-no-duplicate-permission-state:
     name: guard / apps/android has one permission-recovery vocabulary
     runs-on: ubuntu-latest

@@ -572,6 +572,7 @@ that recomputation has to be domain-specific:
 | T313   | `eas build --wait` fails without saying why, and the CI log kept the secret     | phase-9   | tooling          | P9-U   | T312, T311, T310                                                      |
 | T314   | Nothing in CI had ever bundled the Android app, and two defects grew there      | phase-9   | android          | P9-U   | T313, T311, T16                                                       |
 | T315   | The E2E APK is assembled by Gradle on the runner, not queued on EAS             | phase-9   | tooling          | P9-U   | T314, T312, T311, T37F                                                |
+| T316   | The local Expo module has never had a compileSdk, and nothing could notice      | phase-9   | android          | P9-U   | T315, T314, T36F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15274,3 +15275,70 @@ still unverified, unchanged by this task and still disclosed in the workflow hea
 - [ ] A real dispatch: `build-development-apk` produces an installable APK and the five shards
       install it, with the run id recorded. This also closes T310's, T311's and T312's last open
       criteria
+
+#### T316 — The local Expo module has never had a compileSdk, and nothing could have noticed
+
+`labels: phase-9, area: android` · `depends-on: T315, T314, T36F`
+
+The first runner-local Gradle assemble (T315, run `34389362451`) failed the configuration phase
+in 2m47s:
+
+```
+A problem occurred evaluating project ':react-native-reanimated'.
+> Failed to apply plugin 'com.facebook.react'.
+   > A problem occurred configuring project ':share-intent'.
+      > Android Gradle Plugin: project ':share-intent' does not specify `compileSdk` in
+        build.gradle (apps/android/modules/share-intent/android/build.gradle)
+```
+
+Note where it surfaced: while configuring a THIRD-PARTY project, with this repository's own
+module named only on the third line. Working back from `react-native-reanimated` to a file we
+own is the kind of trail a guard should spare the next reader.
+
+**Cause, read from the plugin's own source rather than guessed.**
+`expo-modules-core`'s `ExpoModulesCorePlugin.gradle` exposes two separate helpers:
+`applyKotlinExpoModulesCorePlugin()` configures Kotlin, and `useDefaultAndroidSdkVersions()`
+sets `compileSdkVersion` / `minSdkVersion` / `targetSdkVersion` (plus
+`lintOptions.abortOnError false`). `share-intent/android/build.gradle` called only the first.
+Its own header comment claimed applying the shared plugin was what made the module "inherit the
+same Kotlin/AGP/compileSdk versions as every other autolinked Expo module" — false from the day
+it was written, and corrected in place.
+
+The fix is one call, `useDefaultAndroidSdkVersions()`, which also supersedes the hand-rolled
+`lintOptions { abortOnError false }` block the file was duplicating.
+
+**Why no gate could have caught this, which is the reusable part.** Nothing in this repository
+had ever run Gradle against the Android project. `ci.yml`'s `android-tests` runs
+`expo prebuild --platform android --no-install`, which GENERATES the native project and stops —
+it never configures or assembles it. EAS never reached the assemble step either: it died
+earlier, at `Bundle JavaScript` (T314). So the module was unbuildable from T36F onward with
+every gate green, and only moving the E2E build onto a runner (T315) exposed it. This is the
+fourth defect in this sequence with the same shape — T310, T311, T314 and now T316 — each one
+hidden behind the previous one, and each surfacing only once the step in front of it started
+actually running.
+
+`scripts/ci/guard-local-expo-module-sdk.mjs` is the static check that a future local module
+cannot repeat it. Three mechanisms count as establishing a compileSdk, each verified against
+this app's real installed Expo rather than assumed: `useDefaultAndroidSdkVersions()`, the
+`expo-module-gradle-plugin` plugin (what `expo-constants` uses), or an explicit
+`compileSdk`/`compileSdkVersion` assignment. Applying `ExpoModulesCorePlugin.gradle` alone is
+deliberately NOT enough — that is exactly what the broken module did.
+
+Comments are stripped before matching, and there is a test for it: this guard's subject file now
+discusses `useDefaultAndroidSdkVersions()` at length in its own header while explaining the bug,
+so a naive substring match would pass a module that only talks about calling it. Same trap T305
+and `guard-capability-prose.mjs` each had to close.
+
+The guard is the fast companion to the real check, not a replacement for it: the authoritative
+answer is `./gradlew assembleRelease` in `android-maestro-e2e.yml`'s `build-development-apk`
+job. The static one costs milliseconds and runs on every push.
+
+- [x] `share-intent` calls `useDefaultAndroidSdkVersions()`, so it tracks the same SDK versions
+      as every other autolinked module instead of pinning its own
+- [x] The false claim in that file's own header is corrected in place
+- [x] A guard rejects a local Expo module that establishes no compileSdk, wired into `ci.yml`
+      and satisfying `guard-run-guard-wiring.mjs`
+- [x] The guard cannot be satisfied by a comment, proven by a test
+- [x] Non-vacuity: a test asserts the real tree has at least one local module to check, and a
+      mutation proof removes the real call from the real file and confirms it turns red
+- [ ] A real Gradle assemble gets past project configuration, with the run id recorded
