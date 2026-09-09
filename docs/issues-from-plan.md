@@ -570,6 +570,7 @@ that recomputation has to be domain-specific:
 | T311   | The `development` EAS profile asked for a dev client the app never had          | phase-9   | tooling          | P9-U   | T310, T208, T37F                                                      |
 | T312   | Five identical EAS builds per Maestro run, and the guard that went quiet        | phase-9   | tooling          | P9-U   | T311, T310, T207, T37F                                                |
 | T313   | `eas build --wait` fails without saying why, and the CI log kept the secret     | phase-9   | tooling          | P9-U   | T312, T311, T310                                                      |
+| T314   | Nothing in CI had ever bundled the Android app, and two defects grew there      | phase-9   | android          | P9-U   | T313, T311, T16                                                       |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15103,3 +15104,100 @@ be guessed at; the next dispatch is what will say.
 - [ ] The underlying `production-apk` build failure (build `4610d322-4cc8-435b-9efb-60b327c78011`)
       is diagnosed and filed as its own task — this entry is about the missing diagnosis, not
       about that build
+
+#### T314 — Nothing in CI had ever bundled the Android app, and two defects had grown in the gap
+
+`labels: phase-9, area: android` · `depends-on: T313, T311, T16`
+
+The `production-apk` build in run `34369364166` failed at EAS's `Bundle JavaScript` step with:
+
+```
+npx expo export:embed --eager --platform android --dev false exited with non-zero code: 1
+```
+
+Everything before it passed — install, prebuild, post-install hook, credentials. Only the Metro
+bundle failed, and the build took **1m 54s**; the hour was queue time.
+
+**Reproduced locally in 98 seconds**, which is the single most useful fact here:
+`npm run export --workspace=@picompanion/android` fails identically, so nothing about
+diagnosing this needs EAS, a token, or an hour.
+
+**Two independent defects, both in the same blind spot.**
+
+_One: 207 `.js` import specifiers Metro cannot resolve._
+
+```
+Error: Unable to resolve module ../../../../../features/connect/daemon-connection-store.js
+  from apps/android/src/app/h/[serverId]/session/[agentId]/index.tsx
+```
+
+`daemon-connection-store.ts` exists. `tsconfig.json` sets `moduleResolution: "bundler"`, and
+both `tsc` and Vitest rewrite a `.js` specifier onto the `.ts` beside it. Metro does not — it
+appends its `sourceExts` to the specifier as given and looks for
+`daemon-connection-store.js.ts`, then a literal `daemon-connection-store.js`. Counted rather
+than sampled: **207 such imports across 82 non-test files** under `apps/android/src`, every one
+of them unresolvable by Metro, every one of them fine for every gate this repository ran.
+
+Fixed with a `resolveRequest` shim in `metro.config.js` that retries the extensionless
+specifier, rather than by editing 207 import sites. `packages/*` are Node ESM and _require_ the
+`.js` specifier, so stripping it in the app would leave the repository with two opposite
+conventions and no mechanical way to tell which applies where. The literal specifier is tried
+first, so a real `.js` file on disk still wins.
+
+_Two: the `_.web._` blocklist matched every dependency's files, not just this app's._
+
+```
+Unable to resolve module ./animation/Bounce.web
+  from node_modules/react-native-reanimated/src/layoutReanimation/web/config.ts
+```
+
+`react-native-reanimated` ships that file and imports it from its own `config.ts`.
+`WEB_FILE_BLOCK_PATTERN` was `/\.web\.[^/\\.]+$/` — unanchored, so it matched any absolute path
+Metro resolved. The rule it encodes ("this app ships no `.web.*` file", plan.md §6, §9.1) was
+never a claim about what a dependency ships. Both it and `TEST_FILE_BLOCK_PATTERN` are now
+anchored to this app's own `src/`, which also leaves `apps/android/node_modules` correctly out
+of scope — something an `apps/android`-wide anchor would not have achieved.
+
+**The root cause is neither defect; it is that no gate ever resolved a module the way Metro
+does.** `android-tests` ran `expo prebuild --platform android --no-install`, `tsc`, and vitest.
+Prebuild generates the native project without bundling; the other two use Node/TypeScript
+resolution. Measured, not assumed: `git grep` for `expo export` / `export:embed` across
+`.github/workflows` and `scripts/ci` returned **nothing**. A real bundle had never been produced
+by CI, so both defects were free to accumulate with every gate green.
+
+`ci.yml`'s `android-tests` job gained an "Android bundle smoke (Metro resolution)" step running
+`npm run export --workspace=@picompanion/android` — Metro over the full router graph, writing a
+real Hermes bundle, failing on exactly what an EAS build fails on. It reports in about three
+minutes what previously cost an hour of EAS queue. The bundle now succeeds: 1990 modules,
+`entry-…hbc` at 7.34 MB. Output goes to `apps/android/dist`, already covered by `.gitignore`,
+and is deliberately not uploaded — the artifact is not the point; that it can be produced is.
+
+`apps/android/metro.config.test.ts` is the fast companion to that slow step: eight tests that
+fail in milliseconds and name which rule broke. Both halves were proven able to FIRE, not
+assumed — unscoping `WEB_FILE_BLOCK_PATTERN` back to its old form fails exactly two of them,
+and the file was restored from a scratchpad copy afterward, never `git checkout --`.
+
+**One thing deliberately NOT done, disclosed rather than skipped quietly.** No
+`CAPABILITIES` entry was registered in `guard-capability-prose.mjs` for this. Checked rather
+than assumed, per that guard's own "prove the runner can see your case" rule: `isShippedSourcePath`
+admits `<pkg-or-app>/src/`, `scripts/ci`, and — since T246 — exactly `apps/<name>/app.config.ts`.
+`apps/android/metro.config.js` matches none of them, and a CI job in `ci.yml` declares no symbol
+at all, so an entry naming either would be inert forever: the check-that-cannot-fail shape that
+file warns about. Registering it properly needs `APP_ROOT_CONFIG_PATTERN` widened to
+`metro.config.js`, which is its own decision with its own measurement, and is filed as future
+work rather than smuggled into a bundling fix.
+
+- [x] The failure is reproducible locally without EAS, a token, or an emulator
+- [x] `expo export --platform android` succeeds — first successful Android bundle in this
+      repository
+- [x] All 207 Metro-unresolvable `.js` specifiers resolve, without editing 82 source files
+- [x] A dependency's own `.web.*` and `*.test.*` files are no longer blocked; this app's own
+      still are, pinned by tests and mutation-proved
+- [x] CI bundles the app on every android-touching change, so neither defect class can recur
+      silently
+- [x] `npm run test --workspace=@picompanion/android` all-pass (220 files, 2876 tests) and
+      `tsc --noEmit` clean with the shim in place
+- [ ] A real EAS build gets past `Bundle JavaScript` — the local bundle is strong evidence, not
+      proof, because EAS runs `expo export:embed --eager --dev false` rather than `expo export`
+- [ ] Decide whether `guard-capability-prose.mjs`'s `isShippedSourcePath` should admit
+      `apps/<name>/metro.config.js`, so this capability can be registered rather than disclosed

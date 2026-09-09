@@ -752,6 +752,25 @@ jobs:
         if: ${{ hashFiles('apps/android/app.json', 'apps/android/app.config.ts', 'apps/android/app.config.js') != '' }}
         run: npm run build --workspace=@picompanion/android
 
+      # T314: the only step in this repository that resolves a module the way
+      # Metro does. Everything above it -- `expo prebuild --no-install`, `tsc`,
+      # vitest -- resolves through Node/TypeScript rules instead, and all three
+      # rewrite a `./x.js` specifier onto `x.ts`. Metro does not. That gap let
+      # 207 Metro-unresolvable imports accumulate across 82 files, and let an
+      # over-broad `*.web.*` blocklist in `apps/android/metro.config.js` break
+      # a correct `react-native-reanimated` import, with every gate green
+      # throughout. Both defects surfaced only when the first real EAS build
+      # (run 34369364166) reached `Bundle JavaScript` -- an hour of queue time
+      # to learn what this step reports in about three minutes.
+      #
+      # `expo export` runs Metro over the full router graph and writes a real
+      # Hermes bundle, so it fails on exactly what an EAS build would fail on.
+      # The output goes to `apps/android/dist`, which `.gitignore` already
+      # covers; nothing is uploaded, because the artifact is not the point --
+      # the point is that it can be produced at all.
+      - name: Android bundle smoke (Metro resolution)
+        run: npm run export --workspace=@picompanion/android
+
   # --- Targeted server tests on Linux and Windows -------------------------
   #
   # T233 investigated wiring `@picompanion/server`'s own `"test"` script
