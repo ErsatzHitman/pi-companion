@@ -43,8 +43,17 @@ name: Android Maestro E2E
 # change to the Phase 5 shard set. It answers a narrower, different
 # question than `maestro-e2e` does:
 #   - `maestro-e2e` (T37F, Phase 5): do all ten §14.4 scenarios pass on a
-#     DEVELOPMENT build (`sh.picompanion.debug`, EAS `development`
-#     profile, `developmentClient: true`)?
+#     DEVELOPMENT-VARIANT build (`sh.picompanion.debug`, EAS
+#     `development` profile)?
+#     CORRECTED (T311): this said that profile carried
+#     `developmentClient: true`. It did, and that flag is why the first
+#     real dispatch of this workflow (run 34369364166) failed all five
+#     shards -- see T311 for the whole finding. The flag is gone: a
+#     dev-client build has no embedded JS bundle and boots to the dev
+#     launcher waiting for a Metro server, which neither this workflow
+#     nor apps/android/maestro/README.md's local prerequisites ever
+#     start. The profile still sets `APP_VARIANT: development`, so the
+#     package it produces is unchanged.
 #   - `packaged-app-smoke` (T43B2b, Phase 8): does the app launch at all
 #     on the PACKAGED build (`sh.picompanion`, EAS `production-apk`
 #     profile, `apps/android/eas.json` -- the same profile
@@ -191,6 +200,19 @@ jobs:
       # step, but the `development` profile (sh.picompanion.debug, the
       # package apps/android/maestro/README.md's prerequisites require)
       # rather than `production-apk`.
+      #
+      # T311: that profile must NOT set `developmentClient: true`. It did
+      # until this fix, and every shard of run 34369364166 died here in
+      # 18 seconds with "we detected that you don't have expo-dev-client
+      # installed for your project" -- `apps/android/package.json`
+      # declares no such dependency, so the build was refused before it
+      # started. Installing that dependency would be the wrong repair: a
+      # dev-client APK carries no embedded JS bundle and boots to the dev
+      # launcher waiting for a Metro dev server, and nothing in this job
+      # starts one. What this job needs, and now gets, is a standalone
+      # APK of the development VARIANT -- `APP_VARIANT: development`
+      # still resolves `app.config.ts` to `sh.picompanion.debug`, which
+      # is the package `run-plan.ts`'s DEFAULT_APP_ID launches.
       - name: Build development APK on EAS
         id: eas_build
         if: steps.eas-secrets.outputs.configured == 'true'
@@ -346,7 +368,7 @@ jobs:
       # step, but `apps/android/eas.json`'s `production-apk` profile
       # (package `sh.picompanion`, `distribution: store`) -- the real
       # packaged/release build, not the `development` profile's
-      # `sh.picompanion.debug` developer client. EAS auto-manages signing
+      # `sh.picompanion.debug` variant. EAS auto-manages signing
       # credentials for this profile the same way it would for a real
       # release build; no keystore is committed to this repository
       # (plan.md §15.3, T44B1's "signing material is not present in the

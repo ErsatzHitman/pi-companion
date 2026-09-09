@@ -567,6 +567,7 @@ that recomputation has to be domain-specific:
 | T308   | Show the local wall-clock time on every transcript message                      | phase-9   | core             | P9-U   | T28A1, T28A2, T33A2                                                   |
 | T309   | The observation test's self-heal tick is both required and harmful              | phase-9   | server           | P9-U   | T240                                                                  |
 | T310   | Both EAS workflows invoked `npx eas`, a package that cannot run                 | phase-9   | tooling          | P9-U   | T208, T17B, T37F                                                      |
+| T311   | The `development` EAS profile asked for a dev client the app never had          | phase-9   | tooling          | P9-U   | T310, T208, T37F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14921,3 +14922,66 @@ obvious worry on seeing six failed EAS jobs is a spent build quota.
       in. Note when writing it that the general form is the valuable one: `npx <binary-name>`
       is a mistake class, not a single typo, and this repository invokes npx in several
       workflows.
+
+#### T311 — The `development` EAS profile asked for a dev client the app has never depended on
+
+`labels: phase-9, area: tooling` · `depends-on: T310, T208, T37F`
+
+The first dispatch of `android-maestro-e2e.yml` that got past T310's `npx eas` defect (run
+`34369364166`, at `be62bea`) failed all five `maestro-e2e` shards at `Build development APK on
+EAS`, 18 seconds in, with:
+
+```
+You want to build a development client build for platforms: Android
+However, we detected that you don't have expo-dev-client installed for your project.
+You'll need to install expo-dev-client manually.
+    Error: build command failed.
+```
+
+**Cause, read from the job log rather than inferred.** `apps/android/eas.json`'s `development`
+profile carried `"developmentClient": true`, and `apps/android/package.json` declares no
+`expo-dev-client` dependency — measured with `git grep`: the only two `expo-dev-client`
+declarations in the whole tree are in `packages/expo-two-way-audio`'s two vendored example
+apps, neither of which is `apps/android`. `eas build` validates that pairing before it queues
+anything, so the build was refused, not attempted.
+
+**Why installing `expo-dev-client` is the wrong repair, which is the part worth keeping.** A
+dev-client build carries no embedded JS bundle; it boots to the dev launcher and waits for a
+Metro dev server to hand it one. Nothing starts a Metro server in this workflow — its
+`maestro-e2e` job runs exactly `adb install -r <apk>` and then `run-flow.ts` per flow — and
+`apps/android/maestro/README.md`'s local prerequisites do not start one either; they say only
+that `sh.picompanion.debug` must be installed on the device. Adding the dependency would
+therefore have moved the failure from step 9 to the first `launchApp` of every flow, which is
+strictly worse: it would have looked like ten broken flows instead of one broken profile.
+
+The fix is to drop the flag. The profile keeps `APP_VARIANT: development`, so
+`apps/android/app.config.ts` still resolves the package to `sh.picompanion.debug` — the exact
+id `apps/android/e2e/harness/run-plan.ts`'s `DEFAULT_APP_ID` launches, and the one
+`guard-app-id-package-pairing.mjs` pairs this job's profile to. Nothing about which package is
+built or launched changes; only whether the artifact can run without a dev server.
+
+**Why nothing caught this earlier is the same answer T310 gave, one layer down.** Both
+consumers of this profile were dead code that had never executed: the CI step gated on
+`EXPO_TOKEN` (configured only at T208, and blocked behind T310's `npx eas` typo until now),
+and `apps/android/package.json`'s `android:development` script (`eas build --platform android
+--profile development`) would have failed the same way for any developer who ran it. It never
+worked on any machine, and no test could have told anyone, because the failure lives in EAS's
+own profile validation rather than in anything this repository executes.
+
+**`packaged-app-smoke` was unaffected and is the control.** It uses `production-apk`, which
+sets no `developmentClient`, and in the same run it started a real EAS build that ran for
+over half an hour — the first EAS build this repository has ever performed.
+
+- [x] `apps/android/eas.json`'s `development` profile no longer sets `developmentClient`
+- [x] The profile still sets `APP_VARIANT: development`, so the package it produces is
+      unchanged and `guard-app-id-package-pairing.mjs` still pairs it to `sh.picompanion.debug`
+- [x] The workflow's build step carries a comment naming the cause and saying why installing
+      `expo-dev-client` is the wrong repair, so the flag is not restored by someone reading
+      the error at face value
+- [x] Two prose sites falsified by this change ("developer client") corrected, plus
+      `apps/android/maestro/README.md`'s claim that `EXPO_TOKEN` is unconfigured, which T208
+      had already made false
+- [ ] A real dispatch gets past `Build development APK on EAS` — this closes T310's own last
+      open criterion too, and is the first honest test of everything downstream of it
+      (the EAS build itself, then `reactivecircus/android-emulator-runner`'s KVM support,
+      which this workflow's header has always disclosed as unverified)

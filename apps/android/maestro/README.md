@@ -181,11 +181,17 @@ workflow that reads it.
   `shards.json`. Each shard job calls the exact same single-flow command documented above
   (`npx tsx apps/android/e2e/run-flow.ts <flow-name>`) once per flow in its shard, in order —
   it adds no second way to run a flow. It needs an EAS `development` build of
-  `sh.picompanion.debug` (gated on the same unconfigured `EXPO_TOKEN` secret as
+  `sh.picompanion.debug` (gated on the same `EXPO_TOKEN` secret as
   `android-apk-release.yml`) and a booted emulator with Maestro installed
-  (`reactivecircus/android-emulator-runner`, unverified against this repository's runners); until
-  both exist it dry-runs with a logged notice instead of failing, the same pattern
+  (`reactivecircus/android-emulator-runner`, unverified against this repository's runners); when
+  the secret is absent it dry-runs with a logged notice instead of failing, the same pattern
   `android-apk-release.yml` already uses for its own EAS gate.
+  CORRECTED (T311): this said that secret was "unconfigured", which T208 made false — it has
+  been set as a repository secret since then, and run 34369364166 is the first dispatch that
+  actually took the real branch rather than the dry-run one. What that run then proved is
+  recorded as T311: the `development` profile carried `developmentClient: true` while
+  `apps/android/package.json` declares no `expo-dev-client`, so `eas build` refused before
+  starting. The flag is gone; the package this job installs is unchanged.
 - **What this does NOT prove.** This wave has no emulator and no device (same as every
   `T37E*` task before it). The ten-flow sharded run on the reference emulator — the exit
   gate's actual acceptance criterion — has never been performed and remains the one
@@ -200,7 +206,7 @@ T43B2b) rather than the Phase 5 exit gate above. It answers a different, narrowe
 not "do all ten §14.4 scenarios pass on a development build", but "does the app launch at all
 on the real PACKAGED build" — `apps/android/eas.json`'s `production-apk` profile
 (`sh.picompanion`, the same profile a real release uses, plan.md §15.3), not `development`'s
-`sh.picompanion.debug` developer client. It runs only `smoke.yaml` — the one flow
+`sh.picompanion.debug` variant. It runs only `smoke.yaml` — the one flow
 `../e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` already excludes from the ten-flow
 set because it has no daemon dependency and no paired-host precondition, making it the right
 size for "does the packaged artifact boot" rather than "do all ten scenarios work."
