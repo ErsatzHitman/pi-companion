@@ -14850,7 +14850,9 @@ outlast a race.
 - [x] Three consecutive local runs of the file, all three exit codes read
 - [x] Three consecutive local runs of `npm run test:unit --workspace=@picompanion/server`,
       all three exit codes read (T240)
-- [ ] `server-tests (windows-latest)` green on a real CI run, with the run id recorded
+- [x] `server-tests (windows-latest)` green on a real CI run: run `34368411533` at
+      `2d7c60f`, both `server-tests (windows-latest)` and `server-tests (ubuntu-latest)`
+      success — the same job that failed twice at `285124d`
 
 **A second, separate observation from the same investigation, filed here so it is not lost
 rather than because it is the same defect.** The first CI attempt at `285124d` (run
