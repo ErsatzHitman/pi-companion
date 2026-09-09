@@ -11,7 +11,10 @@ import {
   extractJobNeeds,
   extractWorkflowJobs,
   findAppIdPackagePairingViolations,
-  resolveInheritedProfiles,
+  describeBuildTarget,
+  jobBuildTarget,
+  resolveInheritedBuildTargets,
+  resolveTargetPackage,
   flattenShardFlowNames,
   resolveEasProfileVariants,
   resolvePackageForProfile,
@@ -436,7 +439,7 @@ jobs:
 // ---------------------------------------------------------------------------
 // T312: build-once/fan-out — the job that BUILDS the APK is no longer the
 // job that RUNS the flows, so the profile has to be inherited through
-// `needs:`. Without that, `collectAppIdPackagePairings`' `if (!job.profile)
+// `needs:`. Without that, `collectAppIdPackagePairings`' `if (!job.buildTarget)
 // continue` skips every dev-APK pairing and the guard still prints OK.
 // ---------------------------------------------------------------------------
 
@@ -480,7 +483,7 @@ jobs:
   assert.deepEqual(extractJobNeeds(`  runner:\n    needs: [a]\n`), ["a"]);
   assert.deepEqual(extractJobNeeds(`  runner:\n    runs-on: ubuntu-latest\n`), []);
   // A job declaring no `needs:` at all reads as an empty list, never null,
-  // so the BFS in `resolveInheritedProfiles` never has to null-check.
+  // so the BFS in `resolveInheritedBuildTargets` never has to null-check.
   assert.deepEqual(
     extractWorkflowJobs(`\njobs:\n  solo:\n    steps:\n      - run: echo hi\n`)[0].needs,
     [],
@@ -521,12 +524,12 @@ const FAN_OUT_INPUTS = {
 };
 
 test("T312: a job with no --profile inherits one through needs", () => {
-  const jobs = resolveInheritedProfiles(extractWorkflowJobs(FAN_OUT_WORKFLOW));
+  const jobs = resolveInheritedBuildTargets(extractWorkflowJobs(FAN_OUT_WORKFLOW));
   const runner = jobs.find((job) => job.name === "runner");
 
-  assert.equal(runner.profile, "development");
-  assert.equal(runner.profileSource, "inherited");
-  assert.equal(jobs.find((job) => job.name === "builder").profileSource, "own");
+  assert.deepEqual(runner.buildTarget, { kind: "profile", value: "development" });
+  assert.equal(runner.targetSource, "inherited");
+  assert.equal(jobs.find((job) => job.name === "builder").targetSource, "own");
 });
 
 test("T312: MUTATION PROOF — the inherited profile is really what pairs the flow, and it can FIRE", () => {
@@ -542,7 +545,7 @@ test("T312: MUTATION PROOF — the inherited profile is really what pairs the fl
 
   assert.equal(violations.length, 1);
   assert.equal(violations[0].job, "runner");
-  assert.equal(violations[0].profile, "development");
+  assert.equal(violations[0].target, 'EAS profile "development"');
   assert.equal(violations[0].resolvedPackage, "sh.picompanion.debug");
   assert.equal(violations[0].launchedAppId, "sh.picompanion");
 });
@@ -556,9 +559,9 @@ test("T312: removing the needs edge makes the runner unpairable — the fail-saf
   const detached = FAN_OUT_WORKFLOW.replace("    needs:\n      - builder\n", "");
   assert.notEqual(detached, FAN_OUT_WORKFLOW, "the mutation must actually change the workflow");
 
-  const jobs = resolveInheritedProfiles(extractWorkflowJobs(detached));
-  assert.equal(jobs.find((job) => job.name === "runner").profile, null);
-  assert.equal(jobs.find((job) => job.name === "runner").profileSource, "none");
+  const jobs = resolveInheritedBuildTargets(extractWorkflowJobs(detached));
+  assert.equal(jobs.find((job) => job.name === "runner").buildTarget, null);
+  assert.equal(jobs.find((job) => job.name === "runner").targetSource, "none");
 
   assert.deepEqual(
     findAppIdPackagePairingViolations({
@@ -585,12 +588,12 @@ jobs:
       - run: npx tsx apps/android/e2e/run-flow.ts smoke
 `;
 
-  const runner = resolveInheritedProfiles(extractWorkflowJobs(twoBuilders)).find(
+  const runner = resolveInheritedBuildTargets(extractWorkflowJobs(twoBuilders)).find(
     (job) => job.name === "runner",
   );
 
-  assert.equal(runner.profile, null);
-  assert.equal(runner.profileSource, "ambiguous");
+  assert.equal(runner.buildTarget, null);
+  assert.equal(runner.targetSource, "ambiguous");
 });
 
 test("T312: a profile is inherited transitively, not only from a direct need", () => {
@@ -609,12 +612,12 @@ jobs:
       - run: npx tsx apps/android/e2e/run-flow.ts smoke
 `;
 
-  const runner = resolveInheritedProfiles(extractWorkflowJobs(chained)).find(
+  const runner = resolveInheritedBuildTargets(extractWorkflowJobs(chained)).find(
     (job) => job.name === "runner",
   );
 
-  assert.equal(runner.profile, "development");
-  assert.equal(runner.profileSource, "inherited");
+  assert.deepEqual(runner.buildTarget, { kind: "profile", value: "development" });
+  assert.equal(runner.targetSource, "inherited");
 });
 
 test("T312: a needs cycle terminates instead of hanging", () => {
@@ -633,9 +636,9 @@ jobs:
       - run: echo b
 `;
 
-  const jobs = resolveInheritedProfiles(extractWorkflowJobs(cyclic));
-  assert.equal(jobs.find((job) => job.name === "a").profile, null);
-  assert.equal(jobs.find((job) => job.name === "b").profile, null);
+  const jobs = resolveInheritedBuildTargets(extractWorkflowJobs(cyclic));
+  assert.equal(jobs.find((job) => job.name === "a").buildTarget, null);
+  assert.equal(jobs.find((job) => job.name === "b").buildTarget, null);
 });
 
 test("T312: the real tree pairs EVERY shard flow against the maestro-e2e job", () => {
@@ -670,12 +673,188 @@ test("T312: the real maestro-e2e job resolves its profile by inheritance, not by
   // five-builds-per-run cost T312 removed has come back, and the person
   // re-adding it should say so deliberately rather than have the guard
   // quietly keep passing either way.
-  const jobs = resolveInheritedProfiles(extractWorkflowJobs(readFileSync(WORKFLOW_PATH, "utf8")));
+  const jobs = resolveInheritedBuildTargets(
+    extractWorkflowJobs(readFileSync(WORKFLOW_PATH, "utf8")),
+  );
   const maestro = jobs.find((job) => job.name === "maestro-e2e");
   const builder = jobs.find((job) => job.name === "build-development-apk");
 
-  assert.equal(maestro.profileSource, "inherited");
-  assert.equal(maestro.profile, "development");
-  assert.equal(builder.profileSource, "own");
-  assert.equal(builder.profile, "development");
+  assert.equal(maestro.targetSource, "inherited");
+  assert.deepEqual(maestro.buildTarget, { kind: "variant", value: "development" });
+  assert.equal(builder.targetSource, "own");
+  assert.deepEqual(builder.buildTarget, { kind: "variant", value: "development" });
+});
+
+// ---------------------------------------------------------------------------
+// T315: the E2E APK is assembled by Gradle on the runner, so the job that
+// decides the package carries `APP_VARIANT` and no `--profile` at all. An
+// EAS profile was only ever an indirection to that same variable.
+// ---------------------------------------------------------------------------
+
+test("T315: a job's APP_VARIANT is read from an env: block and from a shell assignment", () => {
+  const envBlock = `
+jobs:
+  build-development-apk:
+    env:
+      APP_VARIANT: development
+    steps:
+      - run: ./gradlew assembleRelease
+`;
+  const shellForm = `
+jobs:
+  build-development-apk:
+    steps:
+      - run: APP_VARIANT=development ./gradlew assembleRelease
+`;
+
+  assert.equal(extractWorkflowJobs(envBlock)[0].appVariant, "development");
+  assert.equal(extractWorkflowJobs(shellForm)[0].appVariant, "development");
+  assert.equal(
+    extractWorkflowJobs(`\njobs:\n  x:\n    steps:\n      - run: echo hi\n`)[0].appVariant,
+    null,
+  );
+});
+
+test("T315: jobBuildTarget prefers an explicit EAS profile over an APP_VARIANT", () => {
+  // A job doing both is not a shape this workflow has, but the precedence
+  // must be decided rather than incidental: `eas build --profile` is the
+  // thing that actually runs, and `eas.json` supplies the variant for it.
+  const target = jobBuildTarget({
+    name: "x",
+    profile: "production-apk",
+    appVariant: "development",
+    needs: [],
+    appIdOverride: null,
+    explicitFlow: null,
+    runsAllShardFlows: false,
+  });
+
+  assert.deepEqual(target, { kind: "profile", value: "production-apk" });
+});
+
+test("T315: resolveTargetPackage maps a variant to the same package app.config.ts would", () => {
+  const packageIds = {
+    developmentValue: "development",
+    developmentPackage: "sh.picompanion.debug",
+    releasePackage: "sh.picompanion",
+  };
+
+  assert.equal(
+    resolveTargetPackage({ kind: "variant", value: "development" }, {}, packageIds),
+    "sh.picompanion.debug",
+  );
+  // Anything that is not the development flag string takes the release
+  // branch of the ternary — the same rule a profile with no APP_VARIANT gets.
+  assert.equal(
+    resolveTargetPackage({ kind: "variant", value: "production" }, {}, packageIds),
+    "sh.picompanion",
+  );
+  assert.equal(resolveTargetPackage(null, {}, packageIds), null);
+  assert.equal(resolveTargetPackage({ kind: "variant", value: "development" }, {}, null), null);
+});
+
+const GRADLE_FAN_OUT_WORKFLOW = `
+jobs:
+  build-development-apk:
+    env:
+      APP_VARIANT: development
+    steps:
+      - run: ./gradlew assembleRelease
+  maestro-e2e:
+    needs:
+      - build-development-apk
+    steps:
+      - run: |
+          adb install -r "$RUNNER_TEMP/picompanion-debug.apk"
+          npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+
+test("T315: MUTATION PROOF — a Gradle-built job's flows are still paired, and it can FIRE", () => {
+  const violations = findAppIdPackagePairingViolations({
+    ...FAN_OUT_INPUTS,
+    workflowContent: GRADLE_FAN_OUT_WORKFLOW,
+    flowFiles: [{ name: "smoke", content: "appId: sh.picompanion\n" }],
+  });
+
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].job, "maestro-e2e");
+  assert.equal(violations[0].target, 'APP_VARIANT "development"');
+  assert.equal(violations[0].resolvedPackage, "sh.picompanion.debug");
+  assert.equal(violations[0].launchedAppId, "sh.picompanion");
+});
+
+test("T315: removing APP_VARIANT from the builder makes the whole fan-out unpairable", () => {
+  // The reason `APP_VARIANT` is set at JOB level in the real workflow rather
+  // than on one step: it is the only thing left tying this job to a package,
+  // so losing it is not a cosmetic edit. This documents the fail-safe, and
+  // the real-tree per-flow test above is what actually catches it.
+  const stripped = GRADLE_FAN_OUT_WORKFLOW.replace(
+    "    env:\n      APP_VARIANT: development\n",
+    "",
+  );
+  assert.notEqual(stripped, GRADLE_FAN_OUT_WORKFLOW, "the mutation must actually change the input");
+
+  assert.deepEqual(
+    collectAppIdPackagePairings({
+      ...FAN_OUT_INPUTS,
+      workflowContent: stripped,
+      flowFiles: [{ name: "smoke", content: "appId: sh.picompanion\n" }],
+    }),
+    [],
+  );
+});
+
+test("T315: a profile and a variant of the SAME string are two targets, not one", () => {
+  // Why BuildTarget is tagged rather than a bare string. `development` is
+  // both an EAS profile name and an APP_VARIANT value in this repository,
+  // and a job fanning in from one of each is genuinely ambiguous — it must
+  // not read as unanimous just because the two strings match.
+  const twoKinds = `
+jobs:
+  eas-builder:
+    steps:
+      - run: npx eas-cli build --platform android --profile development --non-interactive
+  gradle-builder:
+    env:
+      APP_VARIANT: development
+    steps:
+      - run: ./gradlew assembleRelease
+  runner:
+    needs: [eas-builder, gradle-builder]
+    steps:
+      - run: npx tsx apps/android/e2e/run-flow.ts smoke
+`;
+
+  const runner = resolveInheritedBuildTargets(extractWorkflowJobs(twoKinds)).find(
+    (job) => job.name === "runner",
+  );
+
+  assert.equal(runner.buildTarget, null);
+  assert.equal(runner.targetSource, "ambiguous");
+});
+
+test("T315: describeBuildTarget names the mechanism, so a failure message is not misleading", () => {
+  assert.equal(
+    describeBuildTarget({ kind: "profile", value: "production-apk" }),
+    'EAS profile "production-apk"',
+  );
+  assert.equal(
+    describeBuildTarget({ kind: "variant", value: "development" }),
+    'APP_VARIANT "development"',
+  );
+  assert.equal(describeBuildTarget(null), "(no build target)");
+});
+
+test("T315: the real build-development-apk job carries no EAS profile at all", () => {
+  // If someone puts `eas build --profile` back into this job, this fails —
+  // not because that is forbidden, but because it would mean the free-tier
+  // queue this task removed from the E2E path has come back, and that
+  // should be a deliberate, stated choice rather than a quiet one.
+  const jobs = extractWorkflowJobs(readFileSync(WORKFLOW_PATH, "utf8"));
+  const builder = jobs.find((job) => job.name === "build-development-apk");
+
+  assert.equal(builder.profile, null);
+  assert.equal(builder.appVariant, "development");
+  // packaged-app-smoke deliberately still uses EAS, for its release signing.
+  assert.equal(jobs.find((job) => job.name === "packaged-app-smoke").profile, "production-apk");
 });

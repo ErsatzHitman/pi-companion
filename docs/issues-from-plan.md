@@ -571,6 +571,7 @@ that recomputation has to be domain-specific:
 | T312   | Five identical EAS builds per Maestro run, and the guard that went quiet        | phase-9   | tooling          | P9-U   | T311, T310, T207, T37F                                                |
 | T313   | `eas build --wait` fails without saying why, and the CI log kept the secret     | phase-9   | tooling          | P9-U   | T312, T311, T310                                                      |
 | T314   | Nothing in CI had ever bundled the Android app, and two defects grew there      | phase-9   | android          | P9-U   | T313, T311, T16                                                       |
+| T315   | The E2E APK is assembled by Gradle on the runner, not queued on EAS             | phase-9   | tooling          | P9-U   | T314, T312, T311, T37F                                                |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15201,3 +15202,75 @@ work rather than smuggled into a bundling fix.
       proof, because EAS runs `expo export:embed --eager --dev false` rather than `expo export`
 - [ ] Decide whether `guard-capability-prose.mjs`'s `isShippedSourcePath` should admit
       `apps/<name>/metro.config.js`, so this capability can be registered rather than disclosed
+
+#### T315 — The E2E APK is assembled by Gradle on the runner; EAS is kept only where release signing matters
+
+`labels: phase-9, area: tooling` · `depends-on: T314, T312, T311, T37F, T43B2b`
+
+Measured across the first two real dispatches of `android-maestro-e2e.yml`: the EAS build itself
+took **1m 54s**, and the free-tier **queue in front of it took 1h 5m**. A free EAS plan runs one
+build at a time, so a dispatch that also runs `packaged-app-smoke` queues twice, serially — two
+queues plus two builds of wall-clock to produce one APK the runner could assemble itself.
+
+`build-development-apk` no longer calls EAS. It runs `expo prebuild --platform android` and
+`./gradlew assembleRelease` on `ubuntu-latest`, stages the APK under the basename every shard's
+`adb install` already expects, and uploads the same `picompanion-debug-apk` artifact. Nothing
+downstream changed: `maestro-e2e` is byte-identical apart from losing an `if:` gate it no longer
+needs.
+
+**Three decisions inside that, each of which could reasonably have gone the other way.**
+
+_`assembleRelease`, not `assembleDebug`_ — and this is T311's trap one layer down. A React Native
+debug variant does not embed the JS bundle; it expects a Metro dev server, which nothing in this
+workflow starts, so every flow would fail at its first `launchApp`. The release variant runs
+`expo export:embed` inside the Gradle build and embeds a Hermes bundle — the same bundling step
+EAS runs, which is why T314 had to land first. Expo's prebuild template signs `release` with the
+generated debug keystore unless a real one is configured, so this assembles and installs with no
+credential and nothing written into the repository (plan.md §15.3, T44B1).
+
+_`packaged-app-smoke` deliberately stays on EAS._ Its whole reason to exist (T43B2b) is
+exercising the real release artifact and its Expo-managed release signing. Moving it to Gradle
+would make it a second copy of the E2E build wearing the packaging gate's name. One queued EAS
+build per dispatch instead of two is the improvement; zero would be a different, worse thing.
+
+_The `development` EAS profile is kept, not deleted._ `apps/android/package.json`'s
+`android:development` script still uses it for a local developer build. CI simply no longer does.
+
+**The guard had to move with the workflow, and this is the part worth not re-deriving.**
+`guard-app-id-package-pairing.mjs` resolved a job's package from a `--profile` flag in that job's
+own text. A Gradle job has no profile, so `build-development-apk` would have resolved to nothing,
+`maestro-e2e` would have inherited nothing, and the ten dev-APK pairings would have vanished
+silently — leaving `packaged-app-smoke`'s single pairing and a green OK. That is the identical
+failure T312 found and fixed one wave earlier, re-created by a different workflow edit, which is
+the strongest argument yet that this guard's coupling to EAS specifically was the real defect.
+
+It now resolves a **build target**: either an EAS profile or an `APP_VARIANT` the job exports.
+The second is closer to the truth than the first ever was — `app.config.ts` reads
+`process.env["APP_VARIANT"]`, and a profile only ever mattered because `eas.json` sets that
+variable for it. Targets are tagged (`{kind, value}`) rather than bare strings deliberately:
+`development` is both a profile name and a variant value in this repository, so collapsing them
+would make a job fanning in from one of each read as unanimous when it is genuinely ambiguous.
+There is a test for exactly that.
+
+Verified by running the real runner, not by inference: **11 job × flow pairings before the switch,
+11 after**, with `build-development-apk` resolving `{kind: "variant", value: "development"}` from
+its own env and `maestro-e2e` inheriting it.
+
+Costs, stated plainly. A Gradle assemble on a runner takes longer than EAS's 1m 54s — expect
+roughly 10-20 minutes, cached — but it starts immediately instead of an hour later, and on a
+public repository the runner minutes are free and unmetered. The emulator step's KVM support is
+still unverified, unchanged by this task and still disclosed in the workflow header.
+
+- [x] `build-development-apk` builds with Gradle and calls no EAS command
+- [x] `assembleRelease`, so the APK carries an embedded Hermes bundle and needs no Metro server
+- [x] No signing material enters the repository — the debug keystore is generated on the runner
+- [x] `packaged-app-smoke` still uses EAS and its release signing; one queued EAS build per
+      dispatch instead of two
+- [x] `maestro-e2e` unchanged apart from dropping the `EXPO_TOKEN` gate it no longer needs
+- [x] The guard resolves a package from `APP_VARIANT` as well as from an EAS profile, and the
+      real tree still evaluates all 11 pairings — run, not inferred
+- [x] Ambiguity between a same-named profile and variant is proven to resolve to "skip", and
+      removing `APP_VARIANT` from the builder is proven to make the fan-out unpairable
+- [ ] A real dispatch: `build-development-apk` produces an installable APK and the five shards
+      install it, with the run id recorded. This also closes T310's, T311's and T312's last open
+      criteria

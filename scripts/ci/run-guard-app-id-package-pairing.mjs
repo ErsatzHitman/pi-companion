@@ -87,7 +87,7 @@ export function main() {
   console.error("guard-app-id-package-pairing: FAILED");
   for (const violation of violations) {
     console.error(
-      `  job "${violation.job}" builds EAS profile "${violation.profile}", which installs ` +
+      `  job "${violation.job}" builds ${violation.target}, which installs ` +
         `"${violation.resolvedPackage}", but runs flow "${violation.flow}", which would launch ` +
         `"${violation.launchedAppId}" — that package is never installed by this job.`,
     );

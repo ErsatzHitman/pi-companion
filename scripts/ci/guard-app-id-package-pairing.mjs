@@ -53,14 +53,20 @@
 //
 // `extractWorkflowJobs` splits the workflow into per-job text blocks (top-
 // level `  <job-name>:` keys under `jobs:`) and, per job, looks for:
-//   - `--profile <name>` in an `eas build` command — the profile this job
-//     builds. A job with none of its own inherits one through `needs:`
-//     when exactly one distinct profile is reachable that way (T312's
-//     build-once/fan-out shape: `build-development-apk` builds, the five
-//     `maestro-e2e` shards install what it produced). A job with neither
-//     — `shard-matrix`, which builds nothing and depends on nothing — is
-//     skipped entirely: there is no package to pair a flow against. See
-//     `resolveInheritedProfiles` for why ambiguity resolves to "skip"
+//   - What decides the package this job builds — its BUILD TARGET, which
+//     is one of two things (T315): `--profile <name>` in an `eas build`
+//     command (`packaged-app-smoke`), or an `APP_VARIANT` the job exports
+//     directly (`build-development-apk`, which assembles with Gradle on
+//     the runner and never calls EAS). The second is the more direct of
+//     the two — `app.config.ts` reads `APP_VARIANT`, and an EAS profile
+//     matters here only because `eas.json` sets that same variable for it.
+//     A job with neither of its own inherits one through `needs:` when
+//     exactly one distinct target is reachable that way (T312's
+//     build-once/fan-out shape: one job builds, the five `maestro-e2e`
+//     shards install what it produced). A job with neither — `shard-matrix`,
+//     which builds nothing and depends on nothing — is skipped entirely:
+//     there is no package to pair a flow against. See
+//     `resolveInheritedBuildTargets` for why ambiguity resolves to "skip"
 //     rather than to a guess.
 //   - An explicit `APP_ID=<value>` (shell-assignment form, what
 //     `packaged-app-smoke` uses) or `APP_ID: <value>` (a hypothetical
@@ -226,6 +232,8 @@ const NEEDS_PATTERN = /^ {4}needs:[ \t]*(.*)$/m;
 const NEEDS_SEQUENCE_ITEM_PATTERN = /^ {6}-\s*["']?([a-zA-Z0-9_-]+)["']?\s*$/;
 const APP_ID_SHELL_PATTERN = /\bAPP_ID=["']?([^\s"']+)["']?/;
 const APP_ID_ENV_BLOCK_PATTERN = /\bAPP_ID:\s*["']?([^\s"'\n]+)["']?/;
+const APP_VARIANT_SHELL_PATTERN = /\bAPP_VARIANT=["']?([^\s"']+)["']?/;
+const APP_VARIANT_ENV_BLOCK_PATTERN = /\bAPP_VARIANT:\s*["']?([^\s"'\n]+)["']?/;
 const EXPLICIT_FLOW_PATTERN = /run-flow\.ts\s+["']?([a-zA-Z][a-zA-Z0-9-]*)["']?/;
 const SHARDS_JSON_MENTION_PATTERN = /shards\.json/;
 
@@ -233,12 +241,77 @@ const SHARDS_JSON_MENTION_PATTERN = /shards\.json/;
  * @typedef {{
  *   name: string,
  *   profile: string | null,
+ *   appVariant: string | null,
  *   needs: string[],
  *   appIdOverride: string | null,
  *   explicitFlow: string | null,
  *   runsAllShardFlows: boolean,
  * }} WorkflowJob
  */
+
+/**
+ * @typedef {{ kind: "profile" | "variant", value: string }} BuildTarget
+ */
+
+/**
+ * T315: an EAS profile is not the only way a job decides which package it
+ * builds, and after the E2E build moved off EAS onto a runner-local Gradle
+ * assemble it stopped being the way THIS repository's `maestro-e2e` path
+ * decides at all.
+ *
+ * `apps/android/app.config.ts` reads `process.env["APP_VARIANT"]`. An EAS
+ * profile only matters here because `eas.json` sets that variable for it —
+ * the profile is an indirection, never the source of truth. A job that
+ * exports `APP_VARIANT` directly (what the Gradle build does) picks the
+ * package by the same expression, one step more directly, so this guard
+ * reads both and treats them as the same kind of fact.
+ *
+ * Recording it as a tagged target rather than a bare string matters for
+ * inheritance: `"development"` as a profile name and `"development"` as an
+ * `APP_VARIANT` value happen to coincide today, and collapsing them into
+ * one string would make two jobs that decide the package by different
+ * mechanisms look identical — so a genuinely ambiguous fan-in would read as
+ * unambiguous.
+ *
+ * @param {WorkflowJob} job
+ * @returns {BuildTarget | null}
+ */
+export function jobBuildTarget(job) {
+  if (job.profile) return { kind: "profile", value: job.profile };
+  if (job.appVariant) return { kind: "variant", value: job.appVariant };
+  return null;
+}
+
+/**
+ * @param {BuildTarget | null} target
+ * @param {Record<string, string | null>} easProfileVariants
+ * @param {{ developmentValue: string, developmentPackage: string, releasePackage: string } | null} packageIds
+ * @returns {string | null} the package this target resolves to, or `null`
+ *   when it cannot be determined (fails safe — callers must skip)
+ */
+export function resolveTargetPackage(target, easProfileVariants, packageIds) {
+  if (!target || !packageIds) return null;
+  if (target.kind === "profile") {
+    return resolvePackageForProfile(target.value, easProfileVariants, packageIds);
+  }
+  return target.value === packageIds.developmentValue
+    ? packageIds.developmentPackage
+    : packageIds.releasePackage;
+}
+
+/**
+ * How a target reads in a failure message. `packaged-app-smoke` still
+ * builds an EAS profile, so both phrasings appear in this repository today.
+ *
+ * @param {BuildTarget | null} target
+ * @returns {string}
+ */
+export function describeBuildTarget(target) {
+  if (!target) return "(no build target)";
+  return target.kind === "profile"
+    ? `EAS profile "${target.value}"`
+    : `APP_VARIANT "${target.value}"`;
+}
 
 /**
  * T312: the job that BUILDS an APK and the job that INSTALLS it need not
@@ -305,32 +378,39 @@ export function extractJobNeeds(jobContent) {
  * @param {WorkflowJob[]} jobs
  * @returns {(WorkflowJob & { profileSource: "own" | "inherited" | "none" | "ambiguous" })[]}
  */
-export function resolveInheritedProfiles(jobs) {
+export function resolveInheritedBuildTargets(jobs) {
   const byName = new Map(jobs.map((job) => [job.name, job]));
 
   return jobs.map((job) => {
-    if (job.profile) return { ...job, profileSource: "own" };
+    const own = jobBuildTarget(job);
+    if (own) return { ...job, buildTarget: own, targetSource: "own" };
 
     const seen = new Set();
     const queue = [...job.needs];
-    const found = new Set();
+    /** @type {Map<string, BuildTarget>} */
+    const found = new Map();
     while (queue.length > 0) {
       const name = queue.shift();
       if (seen.has(name)) continue;
       seen.add(name);
       const dependency = byName.get(name);
       if (!dependency) continue;
-      if (dependency.profile) {
-        found.add(dependency.profile);
+      const target = jobBuildTarget(dependency);
+      if (target) {
+        found.set(`${target.kind}:${target.value}`, target);
         continue;
       }
       queue.push(...dependency.needs);
     }
 
     if (found.size !== 1) {
-      return { ...job, profileSource: found.size === 0 ? "none" : "ambiguous" };
+      return {
+        ...job,
+        buildTarget: null,
+        targetSource: found.size === 0 ? "none" : "ambiguous",
+      };
     }
-    return { ...job, profile: [...found][0], profileSource: "inherited" };
+    return { ...job, buildTarget: [...found.values()][0], targetSource: "inherited" };
   });
 }
 
@@ -352,12 +432,19 @@ export function extractWorkflowJobs(workflowContent) {
     const profileMatch = content.match(PROFILE_PATTERN);
     const appIdShellMatch = content.match(APP_ID_SHELL_PATTERN);
     const appIdEnvMatch = content.match(APP_ID_ENV_BLOCK_PATTERN);
+    const appVariantShellMatch = content.match(APP_VARIANT_SHELL_PATTERN);
+    const appVariantEnvMatch = content.match(APP_VARIANT_ENV_BLOCK_PATTERN);
     const explicitFlowMatch = content.match(EXPLICIT_FLOW_PATTERN);
     const runsAllShardFlows = SHARDS_JSON_MENTION_PATTERN.test(content) && !explicitFlowMatch;
 
     return {
       name: header[1],
       profile: profileMatch ? profileMatch[1] : null,
+      appVariant: appVariantShellMatch
+        ? appVariantShellMatch[1]
+        : appVariantEnvMatch
+          ? appVariantEnvMatch[1]
+          : null,
       needs: extractJobNeeds(content),
       appIdOverride: appIdShellMatch ? appIdShellMatch[1] : appIdEnvMatch ? appIdEnvMatch[1] : null,
       explicitFlow: !runsAllShardFlows && explicitFlowMatch ? explicitFlowMatch[1] : null,
@@ -367,7 +454,7 @@ export function extractWorkflowJobs(workflowContent) {
 }
 
 /**
- * @typedef {{ job: string, flow: string, profile: string, resolvedPackage: string, launchedAppId: string }} PairingViolation
+ * @typedef {{ job: string, flow: string, target: string, resolvedPackage: string, launchedAppId: string }} PairingViolation
  */
 
 /**
@@ -397,9 +484,9 @@ export function collectAppIdPackagePairings({
 
   const pairings = [];
 
-  for (const job of resolveInheritedProfiles(extractWorkflowJobs(workflowContent))) {
-    if (!job.profile) continue;
-    const resolvedPackage = resolvePackageForProfile(job.profile, easProfileVariants, packageIds);
+  for (const job of resolveInheritedBuildTargets(extractWorkflowJobs(workflowContent))) {
+    if (!job.buildTarget) continue;
+    const resolvedPackage = resolveTargetPackage(job.buildTarget, easProfileVariants, packageIds);
     if (!resolvedPackage) continue;
 
     let flowNames;
@@ -421,7 +508,7 @@ export function collectAppIdPackagePairings({
       pairings.push({
         job: job.name,
         flow: flowName,
-        profile: job.profile,
+        target: describeBuildTarget(job.buildTarget),
         resolvedPackage,
         launchedAppId: launchedAppId ?? "(unresolvable)",
         ok: Boolean(launchedAppId) && launchedAppId === resolvedPackage,
@@ -437,7 +524,7 @@ export function collectAppIdPackagePairings({
  * from before the P8-W11 gate split the two apart.
  *
  * @param {Parameters<typeof collectAppIdPackagePairings>[0]} inputs
- * @returns {{ job: string, flow: string, profile: string, resolvedPackage: string, launchedAppId: string }[]}
+ * @returns {{ job: string, flow: string, target: string, resolvedPackage: string, launchedAppId: string }[]}
  */
 export function findAppIdPackagePairingViolations(inputs) {
   return collectAppIdPackagePairings(inputs)

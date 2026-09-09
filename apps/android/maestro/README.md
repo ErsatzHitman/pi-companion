@@ -180,9 +180,9 @@ workflow that reads it.
   does not include an emulator-backed run) whose matrix has one job per shard name in
   `shards.json`. Each shard job calls the exact same single-flow command documented above
   (`npx tsx apps/android/e2e/run-flow.ts <flow-name>`) once per flow in its shard, in order —
-  it adds no second way to run a flow. It needs an EAS `development` build of
-  `sh.picompanion.debug` (gated on the same `EXPO_TOKEN` secret as
-  `android-apk-release.yml`) and a booted emulator with Maestro installed
+  it adds no second way to run a flow. It needs a development-variant build of
+  `sh.picompanion.debug` (since T315, assembled by Gradle on the runner — no
+  `EXPO_TOKEN`, no EAS queue) and a booted emulator with Maestro installed
   (`reactivecircus/android-emulator-runner`, unverified against this repository's runners); when
   the secret is absent it dry-runs with a logged notice instead of failing, the same pattern
   `android-apk-release.yml` already uses for its own EAS gate.
