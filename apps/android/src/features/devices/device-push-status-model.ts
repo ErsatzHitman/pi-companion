@@ -37,15 +37,53 @@ export const UNREAD_DEVICE_PUSH_STATUS: DevicePushStatusSnapshot = {
 };
 
 /**
+ * The permission states in which a registered token cannot produce a
+ * delivered notification, so `registered` must not be reported in their
+ * place. `granted` and `undetermined` are deliberately absent: neither
+ * contradicts a live registration, and `undetermined` is the state a
+ * permission read races through.
+ */
+function isSettledNegativePermission(permissionStatus: PermissionState | null): boolean {
+  return (
+    permissionStatus === "denied" ||
+    permissionStatus === "denied-permanently" ||
+    permissionStatus === "unavailable"
+  );
+}
+
+/**
  * One human-readable sentence describing `snapshot` — the ONLY thing
  * `DevicesScreen.tsx` renders for this device's push state, so a test
  * against this function is a test against everything a user reads here.
- * `registered` always wins over `permissionStatus`: a token can outlive a
- * later permission read racing behind it (see `use-device-push-status.ts`),
- * and "registered" is the more useful, and equally true, fact to show.
+ *
+ * `registered` wins over `permissionStatus` ONLY where the two are not in
+ * conflict: a token can outlive a later permission read racing behind it
+ * (see `use-device-push-status.ts`), so while `permissionStatus` is `null`
+ * or has settled on `granted`/`undetermined`, "registered" is the more
+ * useful fact to show. A SETTLED NEGATIVE read — `denied`,
+ * `denied-permanently`, `unavailable` — wins over `registered` instead,
+ * because in those states the registered token is real and the delivery it
+ * implies is not: Android drops the notification before the user sees it.
+ *
+ * CORRECTED at the P9-S merge gate. This said `registered` "always wins
+ * over `permissionStatus`" because "'registered' is the more useful, and
+ * equally true, fact to show". The race half is sound; **"equally true" is
+ * false for every negative state**, and the conflicting combination is
+ * ordinary rather than exotic: `registered` is
+ * `getLastRegisteredToken() !== null`, which
+ * `../notifications/push-registration-model.ts` moves only on daemon
+ * registration outcomes and on `resetForNewConnection()` — never because
+ * the OS permission changed. So "grant → register → later turn
+ * notifications off in system settings" left this function permanently
+ * asserting "This device is registered to receive push notifications." for
+ * a device that receives none, and suppressed the one sentence naming the
+ * fix. Measured by executing each of the five settled states one at a time
+ * with `registered: true`: BEFORE the fix all five returned the registered
+ * sentence, `unavailable` included — one state more than the gate's own
+ * report named.
  */
 export function describeDevicePushStatus(snapshot: DevicePushStatusSnapshot): string {
-  if (snapshot.registered) {
+  if (snapshot.registered && !isSettledNegativePermission(snapshot.permissionStatus)) {
     return "This device is registered to receive push notifications.";
   }
   if (snapshot.permissionStatus === null) {

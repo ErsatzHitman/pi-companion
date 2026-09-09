@@ -26,12 +26,48 @@ describe("UNREAD_DEVICE_PUSH_STATUS", () => {
 });
 
 describe("describeDevicePushStatus", () => {
-  it("reports registered when a token is registered, regardless of permission state", () => {
-    for (const permissionStatus of ALL_PERMISSION_STATES) {
+  // REPLACED at the P9-S merge gate. This block used to read "reports
+  // registered when a token is registered, regardless of permission state"
+  // and looped over ALL_PERMISSION_STATES asserting the registered sentence
+  // for every one of them — so it PINNED the defect rather than catching it,
+  // and the three honest-sentence tests below it all pass `registered:
+  // false`, which is why nothing in this file went red. See
+  // `device-push-status-model.ts`'s own CORRECTED block for the measurement.
+  it("reports registered only where the permission read does not contradict it", () => {
+    for (const permissionStatus of [null, "granted", "undetermined"] as const) {
       expect(describeDevicePushStatus(snapshot({ permissionStatus, registered: true }))).toBe(
         "This device is registered to receive push notifications.",
       );
     }
+  });
+
+  it("lets a SETTLED negative permission read win over a registered token, one state at a time", () => {
+    expect(
+      describeDevicePushStatus(snapshot({ permissionStatus: "denied", registered: true })),
+    ).toBe(
+      "Notification permission was denied. Push notifications will not arrive on this device.",
+    );
+    expect(
+      describeDevicePushStatus(
+        snapshot({ permissionStatus: "denied-permanently", registered: true }),
+      ),
+    ).toBe(
+      "Notification permission was permanently denied. Enable it from system settings to receive push notifications.",
+    );
+    expect(
+      describeDevicePushStatus(snapshot({ permissionStatus: "unavailable", registered: true })),
+    ).toBe("Push notifications are not available on this build.");
+  });
+
+  it("still names the recovery path when a stale token outlives a permanently-denied permission", () => {
+    // The reachable sequence the gate measured: grant, register, then turn
+    // notifications off in system settings. `registered` stays true because
+    // `getLastRegisteredToken()` moves only on daemon registration outcomes.
+    const text = describeDevicePushStatus(
+      snapshot({ permissionStatus: "denied-permanently", registered: true }),
+    );
+    expect(text).toMatch(/system settings/i);
+    expect(text).not.toMatch(/^This device is registered/);
   });
 
   it("reports checking while the permission read has not resolved yet", () => {

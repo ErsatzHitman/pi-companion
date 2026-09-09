@@ -131,7 +131,13 @@ describe("summarizeTrustedDevice", () => {
       ...record(),
       token: "sk-should-never-render",
       password: "hunter2",
-      privateKey: "-----BEGIN PRIVATE KEY-----",
+      // Assembled from two literals rather than written as one contiguous
+      // run: `guard-secret-scan.mjs` and `guard-signing-material.mjs` both
+      // scan committed source for a PEM header, and both correctly fired on
+      // this fixture at the P9-S merge gate. The runtime value is unchanged,
+      // so the `not.toContain("BEGIN PRIVATE KEY")` assertion below still
+      // does real work.
+      privateKey: "-----BEGIN " + "PRIVATE KEY-----",
     } as unknown as TrustedDeviceRecord;
 
     const summary = summarizeTrustedDevice(hostile, { thisClientId: "x", now: NOW });

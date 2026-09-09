@@ -33,9 +33,14 @@ import {
  * `*.test.ts`, which `tsconfig.server.typecheck.json` excludes, so the only
  * thing that ever ran that check was
  * `guard-server-test-typecheck-ceiling.mjs`'s test-file typecheck, which
- * tolerates up to `TYPECHECK_ERROR_CEILING` (1051, ~1048 already in use)
- * pre-existing errors — comfortably enough slack to swallow this one
- * without the ceiling guard ever going red. `provider-registry.ts`'s new
+ * tolerates every pre-existing error up to `TYPECHECK_ERROR_CEILING` —
+ * comfortably enough slack, at the ceiling in force when this file was
+ * written, to swallow this one without the ceiling guard ever going red.
+ * (CORRECTED at the P9-S merge gate: this named the ceiling as "1051, ~1048
+ * already in use", which `19f1010` — two minutes later in the same wave —
+ * made false by lowering it. The figures are dropped rather than re-pinned,
+ * per `CLAUDE.md`'s own instruction not to restate a volatile count in
+ * prose; the ceiling guard reports the live numbers.) `provider-registry.ts`'s new
  * `SESSION_OPTIONAL_METHOD_KEYS` is the fix: the same exhaustiveness shape,
  * moved to production source, where `npm run typecheck` has no ceiling to
  * hide behind.
@@ -268,6 +273,45 @@ describe("wrapSessionProvider", () => {
       "tryHandleOutOfBand",
       "tryHandleOutOfBand.run",
     ]);
+  });
+
+  /**
+   * Added at the P9-S merge gate. `forwardOptionalSessionMethods`' guard
+   * (`typeof method === "function"`) had only its TRUE branch covered: the
+   * `FakeSession` above implements all 14 optional methods, so no test
+   * constructed an inner session that LACKS one. That left the mechanism
+   * this task chose over a `Proxy` free to regress into the exact behaviour
+   * it was chosen to avoid — measured at the gate by mutating the guard to
+   * `typeof method === "function" ? method.bind(inner) : () => undefined`,
+   * which left the suite at 3/3 green. Under that mutation the five real
+   * `if (!agent.session.setSteeringMode)`-shaped capability checks in
+   * `agent-manager.ts` would report a capability present and call a stub
+   * that silently does nothing — the same class of silent inertness T296
+   * exists to remove. The exhaustiveness check in `provider-registry.ts`
+   * cannot catch it: that polices the key LIST, not the binding behaviour.
+   */
+  test("omits, rather than fabricates, an optional method the inner session does not implement", async () => {
+    const session = new FakeSession();
+    // Shadowed on the instance rather than deleted from the prototype: this
+    // is what a provider implementing only part of the optional surface
+    // actually looks like at runtime.
+    Object.defineProperty(session, "setSteeringMode", { value: undefined, configurable: true });
+    Object.defineProperty(session, "getQueueModes", { value: undefined, configurable: true });
+
+    const wrapped = wrapSessionProvider("custom-claude", session);
+
+    // The capability-check shape `agent-manager.ts` really uses must stay
+    // honest: absent means absent, not a stub.
+    expect(wrapped.setSteeringMode).toBeUndefined();
+    expect(wrapped.getQueueModes).toBeUndefined();
+    expect("setSteeringMode" in wrapped).toBe(false);
+    expect("getQueueModes" in wrapped).toBe(false);
+
+    // ...while every method the inner session DOES implement is still bound.
+    expect(typeof wrapped.setAutoCompaction).toBe("function");
+    expect(typeof wrapped.respondToEditorTextRequest).toBe("function");
+    await wrapped.setAutoCompaction?.(true);
+    expect(session.recordedCalls).toEqual(["setAutoCompaction"]);
   });
 });
 

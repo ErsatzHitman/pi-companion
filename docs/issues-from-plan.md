@@ -555,6 +555,12 @@ that recomputation has to be domain-specific:
 | T296   | wrapSessionProvider drops six optional AgentSession methods                     | phase-9   | server           | P9-W75 | T293                                                                  |
 | T297   | Land T280's deterministic ENOTEMPTY reproduction as a real test                 | phase-9   | server           | P9-W76 | T280                                                                  |
 | T298   | Pin app.config.ts's permission decision as a registered capability              | phase-9   | tooling          | P9-W77 | T294                                                                  |
+| T299   | Revoking a trusted device does not stop its push notifications                  | phase-9   | daemon           | P9-W78 | T42A2                                                                 |
+| T300   | No revoked-clientId denylist: a revoked device can silently re-register         | phase-9   | daemon           | P9-W79 | T42A2                                                                 |
+| T301   | Give the devices and diagnostics routes a navigable entry point                 | phase-9   | android          | P9-W80 | T42A1, T42A2                                                          |
+| T302   | Move websocket-server.browser-tools.test.ts into test:unit:serial               | phase-9   | server           | P9-W81 | T240                                                                  |
+| T303   | Fix the format-check guard's bracketed-path parent-existence false positive     | phase-9   | tooling          | P9-W82 | none                                                                  |
+| T304   | Retire the duplicate exhaustiveness check that only the ceiling guard sees      | phase-9   | server           | P9-W83 | T296                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14269,3 +14275,254 @@ the named export in `apps/android/app.config.ts`.
 - [ ] The full-tree scan still exits 0
 - [ ] Neither forbidden count (`scripts/ci` tests, `CAPABILITIES` entries) is restated in
       `CLAUDE.md`
+
+#### T299 — Revoking a trusted device does not stop its push notifications
+
+`labels: phase-9, area: daemon` · `wave: P9-W78` · `depends-on: T42A2`
+
+T42A2 shipped device revocation and disclosed this gap rather than hiding it. The P9-S merge
+gate re-derived it independently against the real server source, and the orchestrator re-derived
+it a third time; all three agree, so this is a measured hole, not a suspicion:
+
+- `packages/server/src/server/push/token-store.ts`'s `PushTokenStore` holds
+  `private tokens: Set<string>` with `addToken(token)` / `removeToken(token)`. **There is no
+  `clientId` anywhere in the file** — a token cannot be attributed to the device that
+  registered it.
+- `handleRegisterPushToken` passes only the raw token, discarding the connection that carried it.
+- `handleTrustedDeviceRevokeRequest` in `websocket-server.ts` calls
+  `cleanupConnection(target, "Revoked via trusted_device.revoke")` and **never touches
+  `pushTokenStore`**.
+
+So a revoked device loses its socket and keeps receiving every push notification. For the
+owner's likely reason to revoke — a lost or stolen phone — that is the wrong half of the job.
+
+The seam: persist `{ clientId, token }` pairs (or a `clientId` → set-of-tokens map), thread the
+connection's `clientId` through both the register and unregister handlers, and add
+`removeTokensForClient(clientId)` called from `handleTrustedDeviceRevokeRequest` alongside
+`cleanupConnection`. Migration matters — tokens already persisted have no `clientId`, so decide
+explicitly whether an unattributed token is dropped or grandfathered, and say which.
+
+**Interim client-side mitigation, in scope for this task if the daemon change lands later:** the
+revoke confirmation dialog's copy honestly warns about re-registration (see T300) and says
+nothing about notifications continuing. One clause there costs nothing and is true today.
+
+Owns: `packages/server/src/server/push/token-store.ts` and its test,
+`packages/server/src/server/websocket-server.ts`'s two push handlers and
+`handleTrustedDeviceRevokeRequest`, and — only for the mitigation clause —
+`apps/android/src/features/devices/DevicesScreen.tsx`.
+
+- [ ] A token is attributable to the `clientId` that registered it, proven by a test
+- [ ] Revoking a device removes that device's tokens, proven by an observable consequence (the
+      next send does not reach it), not by "a removal was called"
+- [ ] Tokens persisted without a `clientId` have a stated, tested disposition
+- [ ] Removing the revoke-time call makes a committed test FAIL, demonstrated both ways
+- [ ] Any prose asserting revocation stops notifications, or that it does not, matches the code
+      in the same commit (T124)
+
+#### T300 — No revoked-`clientId` denylist: a revoked device can silently re-register
+
+`labels: phase-9, area: daemon` · `wave: P9-W79` · `depends-on: T42A2`
+
+The second gap T42A2 disclosed, re-derived the same three times. Grepping
+`packages/server/src` for `revokedClientIds`, `isRevoked` and `removeTokensForClient` returns
+**zero hits**. `handleHello` accepts a hello from any `clientId` once the shared bearer token
+validates, then calls `externalSessionsByKey.set(clientId, connection)`. Trust in this daemon is
+one shared password, so a revoked device that still holds it reappears in the trusted list on its
+next connect, with nothing recorded anywhere that it was ever revoked.
+
+The revoke dialog's user-visible copy already discloses this honestly ("If it can still
+authenticate to this daemon, it can reconnect and appear as a trusted device again — revoking
+here doesn't block that"), so the product is not lying to the owner. That disclosure is the
+argument for closing it, not for leaving it: revocation that any revoked device can undo by
+reconnecting is a control the owner will reasonably over-trust.
+
+The seam: a persisted revoked-`clientId` store written by `handleTrustedDeviceRevokeRequest` and
+consulted by `handleHello` before a connection is created or resumed. Two decisions must be
+argued rather than assumed:
+
+1. **What a denied hello looks like on the wire.** A silent drop and a named rejection are not
+   equivalent — the second tells a legitimately re-provisioned device what happened.
+2. **How a denylist entry is ever removed**, so the owner can re-trust a device they revoked by
+   mistake. A denylist with no exit is a support burden, and inventing one later is a schema
+   change.
+
+Do NOT close this by rotating the shared daemon password: that revokes every device at once,
+which is a different feature with a different blast radius.
+
+Owns: the new revoked-`clientId` store and its test,
+`packages/server/src/server/websocket-server.ts`'s `handleHello` and
+`handleTrustedDeviceRevokeRequest`, and the protocol addition if the rejection is named on the
+wire.
+
+- [ ] A revoked `clientId` cannot re-establish a trusted connection, proven by a test that fails
+      when the `handleHello` consultation is removed
+- [ ] The denylist survives a daemon restart, proven against real storage
+- [ ] A revoked device's rejection is either named on the wire or the silence is a recorded
+      decision with its reason
+- [ ] Un-revoking is possible and tested, or its absence is a recorded decision
+- [ ] The dialog copy in `DevicesScreen.tsx` matches whatever this task actually delivers
+
+#### T301 — Give the devices and diagnostics routes a navigable entry point
+
+`labels: phase-9, area: android` · `wave: P9-W80` · `depends-on: T42A1, T42A2`
+
+**Two mounted surfaces now ship with no way in.** The P9-S merge gate traced the navigation
+graph rather than taking either task's word for it: every `router.push`, `<Link>` and
+`useRouter()` call site under `apps/android/src` resolves to `/connect`, `/share`, or a tool URL,
+and the only occurrences of the string `/devices` outside the feature's own directory are inside
+`DevicesScreen.tsx`'s own doc comment describing this gap. `app/h/[serverId]/devices.tsx` is a
+real registered route (`router-root.test.ts` lists it as a route, not an exception), so the
+screen renders if reached — nothing reaches it. `/h/:serverId/diagnostics` is in exactly the
+same state, and has been for longer.
+
+T42A1's "same state as `diagnostics.tsx`" justification is accurate, which is precisely why this
+is one task and not two: both need the identical seam, and closing one alone leaves the
+repository's "exported is not CALLED" defect standing next door. This shape has now shipped
+twice here.
+
+The seam T42A1 already sketched: an `onOpenDevices` / `onOpenDiagnostics` callback prop on
+`features/settings/SettingsScreen.tsx`, rendering a row only when the prop is supplied, wired
+from `useRouter().push(...)` in `app/h/[serverId]/(tabs)/settings.tsx`. Keeping it a prop rather
+than importing the router into the feature module is what preserves this app's
+platform-boundary rule and keeps the rows testable without a router.
+
+Registration is not receipt: **the acceptance bar is a test that fails when the row is removed**,
+not a test that the prop type exists.
+
+Owns: `apps/android/src/features/settings/SettingsScreen.tsx` and its test,
+`apps/android/src/app/h/[serverId]/(tabs)/settings.tsx`.
+
+- [ ] A user can reach the devices screen from the shipped UI, proven by a test that fails when
+      the entry point is removed
+- [ ] The same for diagnostics, proven separately — one row passing must not stand in for the
+      other
+- [ ] Neither row renders when its callback is absent, so no dead row ships
+- [ ] The `<Composer>`-adjacent app-shell contract tests still pass (P9-P's regression shape:
+      those pin shared source text whole)
+- [ ] `DevicesScreen.tsx`'s doc comment describing the unreachability is corrected in the same
+      commit that makes it false (T124)
+
+#### T302 — Move `websocket-server.browser-tools.test.ts` into `test:unit:serial`
+
+`labels: phase-9, area: server` · `wave: P9-W81` · `depends-on: T240`
+
+A sixth `test:unit:serial` member, filed by T240's own rule rather than by "it failed once". The
+P9-S merge gate ran `npm run test:unit --workspace=@picompanion/server` three times on
+`3688c37`: exit 0, exit 0, then exit 1 with `1 failed | 245 passed`,
+`src/server/websocket-server.browser-tools.test.ts`, `Error: Connection timed out`, and **zero
+assertion failures** — T240's contention signature exactly.
+
+Four measurements, in T240's required order:
+
+- **Not a wave regression.** `git log 0173304..HEAD --` on the file is empty; it was last
+  modified at `ac367b9` on 2026-09-06, so none of P9-S's commits can have caused this.
+- **It carries the trait.** The file stands up a real `node:http` `createServer` plus a real
+  WebSocket upgrade (reading `AddressInfo` for the port) — the same real-loopback-transport shape
+  `CLAUDE.md` already names as the cause for the two hub WebSocket files isolated in serial. It
+  currently sits in `test:unit:parallel` and is not in that script's exclude list.
+- **The mechanism is specific.** The harness's `connectBrowserHostClient` passes
+  `connectTimeoutMs: 500`, and `daemon-client.ts` sets `lastErrorValue = "Connection timed out"`
+  when that budget elapses. A 500 ms real-loopback handshake budget while ~245 sibling files
+  contend for CPU is the whole failure.
+- **The decisive measurement.** Run **alone**, the file passes in **20.54s**, of which 19.28s is
+  module import. That is not a margin.
+
+**Do not close this by raising `connectTimeoutMs` or `testTimeout`** — T240 rules that out and
+gives the reason: a higher budget hides the contention instead of removing it, and a passing run
+would prove nothing about the next one. Moving the file removes the contention itself.
+
+Owns: `packages/server/package.json`'s `test:unit:parallel` / `test:unit:serial` scripts, and
+`CLAUDE.md`'s T240 paragraph (which must record this sixth member and its measurement, the way
+it records the fifth).
+
+- [ ] The file runs in `test:unit:serial` and no longer in the parallel lane
+- [ ] Neither `connectTimeoutMs` nor `testTimeout` is raised
+- [ ] `npm run test:unit --workspace=@picompanion/server` run three times on one commit, all
+      three exit codes read individually, all 0
+- [ ] `CLAUDE.md`'s T240 paragraph records this member with its own measurement
+- [ ] `guard-workspace-test-coverage.mjs` still exits 0 (the file must not fall out of both lanes)
+
+#### T303 — Fix the format-check guard's bracketed-path parent-existence false positive
+
+`labels: phase-9, area: tooling` · `wave: P9-W82` · `depends-on: none`
+
+`scripts/ci/guard-format-check-per-commit.mjs`'s `tryLoadBlobAtCommit` asserts in its own doc
+comment that "Any `git show` failure is treated as 'path absent at this commit'; **the only
+realistic cause here is exactly that**." That premise is false for any path containing `[` or
+`]`, which is every Expo Router dynamic segment in both apps. Measured at the P9-S gate: asking
+`git show` for a plain path absent at a commit fails with `fatal: path '...' exists on disk, but
+not in '<sha>'`, which throws and correctly yields `null` — while asking it for
+`<sha>:apps/android/src/app/h/[serverId]/devices.tsx`, equally absent at that commit, **exits 0
+and prints a commit dump**, because git falls back to interpreting the bracketed string as a
+pathspec.
+
+`existsAtParent.set(relPath, parentBlob !== null)` therefore records **`true`** for a file that
+did not exist at the parent — which is the alarming diagnostic noise the guard printed for
+`ad4f3b8`'s two `app/h/[serverId]/` files at that gate.
+
+**It is currently inert, and the inertness was measured rather than assumed** — which is why
+this is a task and not a wave blocker. `redAtParent` requires `existsAtParent === true` **and**
+`redAtParentSet.has(relPath)`. `redAtParentSet` is built by
+`relativizeOxfmtListDifferentOutput`, which only strips the scratch root from lines that _start_
+with it; oxfmt cannot parse a commit dump, so it errors (`Invalid characters after number`, exit 2) with diagnostic lines beginning `x` / `,-[` / `1 |`, never the root. The real path never
+enters the set, `redAtParent` lands on `false` anyway, and `classifyFormatRedCommits`' excusal
+branch (`redAtParent && !pathWasWorsened`) is never taken. A newly-added _red_ dynamic-route file
+is still correctly flagged today.
+
+So: a genuine latent defect held harmless by two independent accidents, either of which a future
+change to oxfmt's error output or to the relativizer could remove — and the failure mode then is
+a **false OK**, the worst kind for a guard.
+
+The fix is to stop asking `git show` a question it answers ambiguously: use
+`git cat-file -e "<sha>:<path>"` for the existence check, or pass the path after `--`. Correct
+the doc comment's premise in the same commit; a comment asserting the only realistic cause is
+the shape that let this sit unnoticed.
+
+Owns: `scripts/ci/guard-format-check-per-commit.mjs` and its test.
+
+- [ ] A bracketed path absent at a commit is reported absent, proven by a test using a real
+      `app/**/[param]/*` path
+- [ ] The test FAILS against the pre-fix implementation, demonstrated both ways
+- [ ] The doc comment's "the only realistic cause here is exactly that" premise is corrected
+- [ ] `node scripts/ci/run-guard-format-check-per-commit.mjs <base>..HEAD` still exits 0 and no
+      longer prints the commit-dump noise
+- [ ] The guard is exercised with a range argument, never with none (it defaults to the entire
+      repository history)
+
+#### T304 — Retire the duplicate exhaustiveness check that only the ceiling guard sees
+
+`labels: phase-9, area: server` · `wave: P9-W83` · `depends-on: T296`
+
+T296 moved its optional-method exhaustiveness check into production source
+(`provider-registry.ts`'s `SESSION_OPTIONAL_METHOD_KEYS`), where `npm run typecheck` has no
+ceiling to hide behind — the right fix, and proven at the P9-S gate in both directions (a
+fifteenth optional method added to `AgentSession` fails `TS2741`; making `setModel` required
+fails `TS2353`). The gate also confirmed the _test-file_ duplicate
+(`_allOptionalAgentSessionMethodsAreCovered` in `provider-registry-wrap.test.ts`) survives as a
+`TS6133` "declared but never read", and is now one of the tolerated errors under
+`TYPECHECK_ERROR_CEILING`.
+
+Nothing is broken by it — T296 never claimed to fix that error, and the production check is the
+real protection. Two facts make it worth one small task anyway:
+
+- The surviving duplicate is only ever _seen_ by `guard-server-test-typecheck-ceiling.mjs`, which
+  is exactly the mechanism that let the original drift hide for six methods.
+- **The ceiling now has zero headroom** — measured at the gate and again by the orchestrator: the
+  guard reports the real count equal to the ceiling. That is the safe side (a regression fails
+  immediately), but it means the next wave that adds any test-file type error goes red with no
+  slack, so retiring a tolerated error that no longer earns its keep has real operational value.
+
+Either delete the test-file duplicate (the production check subsumes it) or `void`-reference it
+so it is read. If it is kept, argue why a second copy in a file the production typecheck excludes
+is worth a tolerated error. Lower the ceiling by however many errors actually go away, measured,
+not predicted — and re-run the guard, since a ceiling set below the true count fails immediately.
+
+Owns: `packages/server/src/server/agent/provider-registry-wrap.test.ts` and
+`scripts/ci/guard-server-test-typecheck-ceiling.mjs`'s `TYPECHECK_ERROR_CEILING`.
+
+- [ ] The `TS6133` is gone, or its retention is argued in the file
+- [ ] `TYPECHECK_ERROR_CEILING` is lowered by the measured delta and the guard exits 0
+- [ ] `npm run typecheck --workspace=@picompanion/server` still exits 0
+- [ ] The production exhaustiveness check is re-proven able to FAIL after the change, in both
+      directions
+- [ ] The file's own header comment still describes what the file actually does
