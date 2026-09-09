@@ -539,50 +539,74 @@ const BRACKETED_PATH = "apps/android/src/app/h/[serverId]/devices.tsx";
 // the `assert.equal(result, null)` below failed on a clean, committed tree.
 // The test was order-dependent on nothing but "has anyone touched this file
 // since", which is not a property any test should depend on.
-const bracketedPathAddedAtSha = realGit([
-  "log",
-  "--diff-filter=A",
-  "-1",
-  "--format=%H",
-  "--",
-  BRACKETED_PATH,
-]);
-const bracketedPathAbsentAtSha = realGit(["rev-parse", `${bracketedPathAddedAtSha}^`]);
+// Resolved LAZILY, inside a memo the tests call, never at module scope.
+// CORRECTED at the P9-T gate's CI read: these two shas WERE resolved at module
+// scope, so on the `changes` job's then-shallow checkout the `git rev-parse
+// <sha>^` below threw during module load and the runner reported it as
+// "A resource generated asynchronous activity after the test ended ...
+// uncaughtException", with the whole FILE marked `not ok` and no indication
+// which fixture was at fault. A failure inside a memo is attributed to the
+// test that asked for it.
+let fixtureShas = null;
+function bracketedPathShas() {
+  if (fixtureShas) return fixtureShas;
+
+  // A shallow checkout has exactly one commit, so `--diff-filter=A` resolves
+  // THAT commit as the add commit for every path and its parent does not
+  // exist. Assert it rather than skip: a skip here would make this fixture a
+  // check that cannot fail on CI, which is the shape CLAUDE.md warns about in
+  // three separate sections. `.github/workflows/ci.yml`'s `changes` job takes
+  // `fetch-depth: 0` for exactly this reason.
+  assert.equal(
+    realGit(["rev-parse", "--is-shallow-repository"]),
+    "false",
+    "this fixture needs real history: the checkout is shallow, so the commit that " +
+      "added the bracketed path cannot be resolved. Give the job `fetch-depth: 0`.",
+  );
+
+  const addedAt = realGit(["log", "--diff-filter=A", "-1", "--format=%H", "--", BRACKETED_PATH]);
+  assert.notEqual(addedAt, "", `no add commit found for ${BRACKETED_PATH}`);
+
+  const absentAt = realGit(["rev-parse", `${addedAt}^`]);
+  fixtureShas = { addedAt, absentAt };
+  return fixtureShas;
+}
 
 // Fixture precondition, asserted through a DIFFERENT git mechanism than the
 // function under test (`git cat-file -e`, not `git show`'s pathspec parsing),
 // so a future history shift fails here with a legible message instead of
 // surfacing as an opaque content mismatch inside the first test below.
 test("fixture: the bracketed path is genuinely absent at the resolved parent commit", () => {
+  const { addedAt, absentAt } = bracketedPathShas();
   let existsAtParent = true;
   try {
-    realGit(["cat-file", "-e", `${bracketedPathAbsentAtSha}:${BRACKETED_PATH}`]);
+    realGit(["cat-file", "-e", `${absentAt}:${BRACKETED_PATH}`]);
   } catch {
     existsAtParent = false;
   }
   assert.equal(
     existsAtParent,
     false,
-    `expected ${BRACKETED_PATH} to be absent at ${bracketedPathAbsentAtSha} ` +
-      `(parent of its add commit ${bracketedPathAddedAtSha})`,
+    `expected ${BRACKETED_PATH} to be absent at ${absentAt} ` +
+      `(parent of its add commit ${addedAt})`,
   );
 });
 
 test("tryLoadBlobAtCommit: a bracketed Expo Router path absent at a commit is reported absent (null), not the git argument-parsing fallback's commit dump", () => {
-  const result = tryLoadBlobAtCommit(bracketedPathAbsentAtSha, BRACKETED_PATH);
+  const result = tryLoadBlobAtCommit(bracketedPathShas().absentAt, BRACKETED_PATH);
   assert.equal(result, null);
 });
 
 test("tryLoadBlobAtCommit: a plain (unbracketed) absent path is still reported absent (null) -- sanity check that the fix does not regress the ordinary case", () => {
   const result = tryLoadBlobAtCommit(
-    bracketedPathAbsentAtSha,
+    bracketedPathShas().absentAt,
     "apps/android/src/app/h/nonexistent-plain-file-t303.tsx",
   );
   assert.equal(result, null);
 });
 
 test("tryLoadBlobAtCommit: a bracketed path that genuinely exists at a commit returns its real blob content, not null", () => {
-  const result = tryLoadBlobAtCommit(bracketedPathAddedAtSha, BRACKETED_PATH);
+  const result = tryLoadBlobAtCommit(bracketedPathShas().addedAt, BRACKETED_PATH);
   assert.equal(typeof result, "string");
   assert.ok(
     result.includes("DevicesScreen"),

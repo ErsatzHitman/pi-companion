@@ -370,21 +370,33 @@ export const AUDIT_BASELINE = [
   {
     package: "expo-linking",
     severity: "moderate",
-    // Range re-synced at the P9-P merge gate. Upstream advisory data grew ONE
-    // trailing arm, `>=58.0.0-canary-20260806-8c2d007`, which made this entry
-    // report simultaneously as an unbaselined advisory and as a stale entry.
-    // This is bookkeeping, not a new risk acceptance, and that was measured
-    // rather than assumed: the installed version is 8.0.12, already inside the
-    // pre-existing `2.2.2 - 55.0.0-canary-20260223-05214f1` arm, so the new arm
-    // covers only versions ABOVE what this repository resolves. Same advisory,
-    // same owner, same reason, same exposure. Nothing in wave P9-P touched
+    // Range re-synced TWICE, at the P9-P and P9-T merge gates. Both re-syncs
+    // moved only this entry's trailing arm, and neither changed exposure.
+    //
+    // At P9-P upstream advisory data GREW that arm, as open-ended
+    // `>=58.0.0-canary-20260806-8c2d007`. At P9-T it was NARROWED to
+    // `58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260908-e343e6e`, i.e.
+    // upstream published a fixed version and gave the arm an upper bound. Each
+    // time, the entry reported simultaneously as an unbaselined advisory (new
+    // range) and as a stale entry (old range no longer matched), which is the
+    // signature of a re-published range rather than a new finding.
+    //
+    // Measured rather than assumed, both times: the installed version is
+    // 8.0.12, already inside the pre-existing
+    // `2.2.2 - 55.0.0-canary-20260223-05214f1` arm, so the trailing arm covers
+    // only versions ABOVE what this repository resolves and its bounds do not
+    // touch this repository's exposure either way. Same advisory, same owner,
+    // same reason, same exposure. Nothing in wave P9-P or wave P9-T touched
     // `package-lock.json`, this guard, or `docs/security-and-version-drift.md`
-    // (`git log <base>..HEAD --` those three paths returns nothing), so the
-    // change came from the registry, not from the tree. If a future re-sync
-    // adds an arm that DOES cover the installed version, that is a new
-    // acceptance and needs the owner, not a range edit.
+    // (`git log <base>..HEAD --` those three paths returns nothing in either
+    // wave), so the change came from the registry, not from the tree.
+    //
+    // A NARROWING is the safe direction and needs no owner. If a future
+    // re-sync adds or widens an arm so that it DOES cover the installed
+    // version, that is a new acceptance and needs the owner, not a range
+    // edit.
     range:
-      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || >=58.0.0-canary-20260806-8c2d007",
+      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260908-e343e6e",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },

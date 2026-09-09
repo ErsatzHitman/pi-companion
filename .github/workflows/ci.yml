@@ -46,6 +46,19 @@ jobs:
       nix: ${{ steps.filter.outputs.nix }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # `node --test scripts/ci/*.test.mjs` below includes T303's real-git
+          # fixture in `guard-format-check-per-commit.test.mjs`, which resolves
+          # the commit that ADDED a bracketed Expo Router path and then asks
+          # for that commit's PARENT. On the default shallow checkout there is
+          # exactly one commit, `git log --diff-filter=A` resolves it as the
+          # add commit for every path, and `git rev-parse <it>^` fails with
+          # `unknown revision` — which is how this job first went red, at
+          # `a94e79b`. Same `fetch-depth: 0` the two range guards below already
+          # take, and for the same reason: a history-dependent check needs the
+          # history to be present, and skipping it on a shallow checkout would
+          # make it a check that cannot fail on CI.
+          fetch-depth: 0
 
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter
