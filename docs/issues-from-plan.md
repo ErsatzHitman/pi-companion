@@ -573,6 +573,7 @@ that recomputation has to be domain-specific:
 | T314   | Nothing in CI had ever bundled the Android app, and two defects grew there      | phase-9   | android          | P9-U   | T313, T311, T16                                                       |
 | T315   | The E2E APK is assembled by Gradle on the runner, not queued on EAS             | phase-9   | tooling          | P9-U   | T314, T312, T311, T37F                                                |
 | T316   | The local Expo module has never had a compileSdk, and nothing could notice      | phase-9   | android          | P9-U   | T315, T314, T36F                                                      |
+| T317   | The emulator asked for a device profile the runner's catalog has never had      | phase-9   | tooling          | P9-U   | T316, T315, T37F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14919,14 +14920,50 @@ obvious worry on seeing six failed EAS jobs is a spent build quota.
       failure after this one is the first honest test of everything downstream (the EAS
       development build itself, then `reactivecircus/android-emulator-runner`'s KVM support,
       which that workflow's own header has always disclosed as unverified)
-- [ ] A guard so this cannot regress: fail the build when a workflow invokes `npx` with a
-      package name that publishes no `bin`, or at minimum when it invokes `npx eas`.
-      Deliberately NOT written as part of the fix — a new guard needs its own
-      `run-guard-*.mjs`, wiring into `ci.yml`, and an entry that satisfies
-      `guard-run-guard-wiring.mjs`, which is more than a one-line CLI correction should drag
-      in. Note when writing it that the general form is the valuable one: `npx <binary-name>`
-      is a mistake class, not a single typo, and this repository invokes npx in several
-      workflows.
+- [x] A guard so this cannot regress: `scripts/ci/guard-npx-binary-package.mjs`, wired into
+      `ci.yml` as the `guard-npx-binary-package` job. It is written in the general form this
+      criterion asked for rather than as an `npx eas` special case.
+
+      **What makes it checkable without a network or a `node_modules`:** `package-lock.json`
+      is `lockfileVersion` 3, and a v3 lockfile records each installed package's own `bin`
+      map. `collectLockfileBins` reads exactly that, so the set of binaries that will exist on
+      `node_modules/.bin` after `npm ci` is derivable from a committed file. Every `npx`
+      target must be in that set, or be registered in `EXTERNAL_NPX_PACKAGES` with a real
+      reason. Two packages are registered today: `eas-cli` (installed at job time by
+      `expo/expo-github-action`, so no lockfile bin can vouch for it) and `lockfile-lint`
+      (deliberately not a dependency — it audits the lockfile, so installing it through that
+      lockfile would make the auditor a member of what it audits).
+
+      **The diagnostic is specific rather than generic.** Each registration records the
+      differently-named `binary` inside the package, so `npx eas` is not merely reported as
+      unknown: it is reported as `` `npx eas` … names a BINARY, not a package … write
+      `npx eas-cli` ``. That mapping is also the step that would have caught the original
+      defect, because writing the entry forces the author to name the package that ships the
+      binary.
+
+      **Scope is text that would actually execute**, never raw file text: each `run:` step's
+      content in `.github/workflows/*.yml` with `#` comments blanked, plus every tracked
+      `package.json`'s own `scripts` values. This matters more here than usual — both real
+      `npx eas-cli` steps sit under comment blocks spelling out `npx eas` several times to
+      explain this very bug, and so does the guard's own header, so a raw-text matcher would
+      report its own explanation as the defect. `extractRunStepContents` and
+      `stripHashComments` are imported from `guard-run-guard-wiring.mjs` rather than
+      re-implemented a fourth time; the only change to that file is exporting the second of
+      them, which was already module-private beside an exported peer that calls it.
+
+      **Two failure modes closed beyond the main rule**, both from lessons this repository has
+      already paid for: the registry is walked over its OWN keys (T211's shape), so an entry
+      nothing invokes any more, or one the lockfile now ships locally, is reported as stale
+      rather than sitting unfalsifiable forever; and the runner fails outright on ZERO
+      invocations found, because this repository runs npx in CI today and an empty scan means
+      the extraction broke, not that the tree got cleaner.
+
+      Proven able to fire before being trusted, not assumed: rewriting the real
+      `npx eas-cli build` step in `android-maestro-e2e.yml` to `npx eas build` turns the real
+      tree red naming `eas-cli` as the fix; restoring the file from a scratchpad copy (never
+      `git checkout --`) returns it to exit 0 with `git status --porcelain` empty.
+      `guard-npx-binary-package.test.mjs` pins that as a mutation proof against the real
+      committed workflow, alongside a real-tree non-vacuity assertion.
 
 #### T311 — The `development` EAS profile asked for a dev client the app has never depended on
 
@@ -15341,4 +15378,60 @@ job. The static one costs milliseconds and runs on every push.
 - [x] The guard cannot be satisfied by a comment, proven by a test
 - [x] Non-vacuity: a test asserts the real tree has at least one local module to check, and a
       mutation proof removes the real call from the real file and confirms it turns red
-- [ ] A real Gradle assemble gets past project configuration, with the run id recorded
+- [x] A real Gradle assemble gets past project configuration, with the run id recorded:
+      **run `34392173679`** (on `6d8726e`), `build-development-apk` **success in 23m 09s**. The
+      previous dispatch aborted during project configuration in under three minutes; 23 minutes
+      is Kotlin/Java compilation, `expo export:embed`, resource packaging and signing actually
+      running. The APK uploaded, and all five shards downloaded it — so this run also confirms
+      T312's build-once/fan-out split end to end.
+
+#### T317 — The emulator asked for a device profile the runner's catalog has never had
+
+`labels: phase-9, area: tooling` · `depends-on: T316, T315, T37F`
+
+Run `34392173679` was the first dispatch in this sequence to get an APK as far as an emulator.
+All five shards then failed in **35 seconds** at AVD creation:
+
+```
+[command]avdmanager create avd --force -n test --package 'system-images;android-35;default;x86_64' --device 'pixel_8'
+Error: No device found matching --device pixel_8.
+```
+
+Both emulator jobs in `android-maestro-e2e.yml` passed a hardcoded `profile: pixel_8` to
+`reactivecircus/android-emulator-runner`. `avdmanager`'s device catalog is fixed by whichever
+`cmdline-tools` version the GitHub runner image ships, and that image does not define
+`pixel_8`.
+
+**This is the first defect in the P9-U sequence that no committed file could have predicted.**
+T310, T311, T314 and T316 were each provable from this repository's own contents — a package
+with no `bin`, a flag with no dependency behind it, specifiers Metro cannot resolve, a module
+with no `compileSdk`. The AVD catalog is a property of a runner image that changes without
+notice, so a static guard asserting `pixel_8` exists would itself be the defect one level up:
+it would encode today's runner image as a permanent fact and go red the next time GitHub
+changed it, exactly as this hardcoded string did.
+
+**The fix therefore resolves rather than asserts.** `scripts/ci/avd-device-profile.mjs` parses
+`avdmanager list device` and picks the first profile the catalog really has, from a preference
+list led by `pixel_8` — `plan.md` §14 names "a Pixel 8 API 35 reference emulator", so that
+choice is kept whenever it is available and the fallbacks (`pixel_7`, `pixel_6`, `pixel_5`,
+`pixel_4`) only decide what happens when it is not. When the catalog has none of them the
+resolver emits `""`, which makes the emulator action omit `--device` entirely — its own
+documented default, and a valid AVD — with a `::warning::` saying the AVD is no longer the
+shape `plan.md` describes. `run-resolve-avd-device-profile.mjs` also prints the whole catalog
+into a collapsed log group, so the next person debugging this reads what the runner offered
+instead of inferring it from a one-line rejection.
+
+**Both emulator jobs were fixed, not just the failing one.** `packaged-app-smoke` carried the
+same literal string and would have hit the same wall on its own first real run; a test asserts
+the workflow has exactly two resolver steps and two `${{ steps.avd.outputs.profile }}`
+consumers, and that no step hardcodes a profile again.
+
+- [x] Neither emulator step names a device profile literally
+- [x] The chosen profile is the best one the runner's own catalog offers, with `pixel_8` first
+- [x] An empty catalog match degrades to the action's default instead of failing the job
+- [x] The full catalog is printed to the CI log, so the next failure of this kind is readable
+- [x] Unit tests cover the parser (including an id containing a space), the preference order,
+      the empty-match fallback, and both workflow call sites
+- [ ] A real dispatch boots the emulator, installs the APK, and runs this shard's flows, with
+      the run id recorded — this is the criterion T310, T311, T312 and T315 are all still
+      waiting on, since every one of them reduces to "the shards actually run"

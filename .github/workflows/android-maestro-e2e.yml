@@ -326,12 +326,22 @@ jobs:
       # shard-plan.test.ts proves that order never matters (every flow
       # starts with its own clearState: true launchApp), so this loop
       # could run its flows in any order and reach the same result.
+      # T317: `profile: pixel_8` was hardcoded here and all five shards of
+      # run 34392173679 died 35s in with `Error: No device found matching
+      # --device pixel_8` -- the runner image's avdmanager catalog does not
+      # have that id. No committed file can know which device definitions a
+      # GitHub runner image ships, so the profile is resolved against the
+      # real catalog instead of asserted.
+      - name: Resolve an AVD device profile this runner's catalog actually has
+        id: avd
+        run: node scripts/ci/run-resolve-avd-device-profile.mjs
+
       - name: Boot emulator, install the APK, and run this shard's flows
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_8
+          profile: ${{ steps.avd.outputs.profile }}
           disable-animations: true
           script: |
             set -euo pipefail
@@ -499,13 +509,21 @@ jobs:
       # `scripts/ci/guard-app-id-package-pairing.mjs` fails CI if this
       # job's profile and the package its flow launches ever drift apart
       # again.
+      # T317 -- see the identical step in `maestro-e2e` above for why the
+      # device profile is resolved against the runner's real avdmanager
+      # catalog rather than hardcoded.
+      - name: Resolve an AVD device profile this runner's catalog actually has
+        id: avd
+        if: steps.eas-secrets.outputs.configured == 'true'
+        run: node scripts/ci/run-resolve-avd-device-profile.mjs
+
       - name: Boot emulator, install the packaged APK, and run the smoke flow
         if: steps.eas-secrets.outputs.configured == 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_8
+          profile: ${{ steps.avd.outputs.profile }}
           disable-animations: true
           script: |
             set -euo pipefail
