@@ -562,6 +562,8 @@ that recomputation has to be domain-specific:
 | T303   | Fix the format-check guard's bracketed-path parent-existence false positive     | phase-9   | tooling          | P9-W82 | none                                                                  |
 | T304   | Retire the duplicate exhaustiveness check that only the ceiling guard sees      | phase-9   | server           | P9-W83 | T296                                                                  |
 | T305   | Give `.pc-message__text` the same `white-space: pre-wrap` the thinking body has | phase-9   | web              | P9-U   | T28A3                                                                 |
+| T306   | Re-pin `expo-secure-store` to the version this app's own `expo` bundles         | phase-9   | android          | P9-U   | T291                                                                  |
+| T307   | Explain, or remove, the hoisted root `expo@57` no workspace asks for            | phase-9   | android          | P9-U   | T291, T306                                                            |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14556,3 +14558,105 @@ already correct by the time it reaches the DOM; only the CSS drops the newlines.
 - [ ] Confirm the shimmer-gradient treatment on `.pc-message__text:has(.pc-message__cursor)`
       still looks right with the new wrapping, since `background-clip: text` interacts with
       line boxes
+
+#### T306 — Re-pin `expo-secure-store` to the version this app's own `expo` bundles
+
+`labels: phase-9, area: android` · `depends-on: T291`
+
+Found while fixing T291, which was the same defect one package over: `apps/android`
+declared an `expo-audio` range no version of its own `expo` had ever bundled. The check
+that found it — `npx expo install --check`, run FROM `apps/android` so it reads that app's
+own nested `expo`, not the root's — names a second package the same way, and T291's scope
+was one package.
+
+Measured directly rather than inferred, all four figures from the real installed tree:
+
+| Fact                                                       | Value                           |
+| ---------------------------------------------------------- | ------------------------------- |
+| `apps/android/package.json` declares                       | `expo-secure-store: ~57.0.2`    |
+| Resolved, at the repository ROOT                           | `expo-secure-store@57.0.3`      |
+| `apps/android`'s own `expo`                                | `54.0.37` (declared `^54.0.18`) |
+| That `expo`'s `bundledNativeModules.json` for this package | `~15.0.8`                       |
+
+`expo-secure-store@57` is the SDK-57-line build (Expo's unified versioning gives a package
+the SDK's own major from SDK 57 on), so this is not a patch-level drift inside one SDK — it
+is an SDK-57 native module installed into a tree whose `expo` is SDK 54. It is also not
+symmetrical with T291: `expo-audio`'s wrong pin was a version that never existed for this
+SDK, while this one is a version that exists and belongs to a different SDK entirely.
+
+Why this is worth a task rather than a one-line bump. The mismatch is a NATIVE module, so
+nothing local exercises it: every `apps/android` test that touches it does so through
+`vi.mock("expo-secure-store", ...)` (see `src/app/resume-wiring.test.ts` and
+`src/app-shell/core.test.ts`), which is correct for those tests and means a local green
+suite says nothing about whether the real module builds or runs. The first thing that can
+disagree is a real EAS build or an on-device launch.
+
+Read T307 before choosing the fix. The two share a cause, and bumping this pin down without
+answering T307's question may simply move the inconsistency rather than remove it.
+
+- [ ] `npx expo install --check`, run from `apps/android`, reports nothing for
+      `expo-secure-store`
+- [ ] The chosen version is justified against `apps/android`'s own `expo`'s
+      `bundledNativeModules.json`, quoted, not against the root's
+- [ ] `package-lock.json` is regenerated and the resolved version recorded — say whether it
+      resolves at the root or nested under `apps/android`, since today it is the root
+- [ ] `npm audit`'s advisory set is unchanged, or the delta is explained (T291's own bump
+      moved the baseline and this one can too)
+- [ ] A real EAS build, or an explicit statement that no build was run and the native half
+      is therefore unverified — do not report a green local suite as evidence here
+
+#### T307 — Explain, or remove, the hoisted root `expo@57` no workspace asks for
+
+`labels: phase-9, area: android` · `depends-on: T291, T306`
+
+The repository root carries `expo@57.0.18` in `node_modules`, and no workspace declares a
+range that admits it. Measured, not assumed — every `expo` declaration in the tree, from
+`git`-tracked manifests:
+
+| Manifest                                                        | Field              | Range      |
+| --------------------------------------------------------------- | ------------------ | ---------- |
+| `apps/android/package.json`                                     | `dependencies`     | `^54.0.18` |
+| `packages/expo-two-way-audio/package.json`                      | `peerDependencies` | `*`        |
+| `packages/expo-two-way-audio/examples/basic-usage/package.json` | `dependencies`     | `^52.0.0`  |
+| `packages/expo-two-way-audio/examples/flow-api/package.json`    | `dependencies`     | `^52.0.25` |
+
+The root `workspaces` globs are `packages/*` and `apps/*`, so the two `examples/*`
+manifests are not workspaces and their `^52` ranges are never installed — they are
+reference material inside a ported package. That leaves exactly one real dependency range,
+`apps/android`'s `^54.0.18`, which resolves to a NESTED `apps/android/node_modules/expo@54.0.37`,
+and one unbounded `peerDependencies: *`.
+
+The `*` is the likely mechanism and the thing to confirm first: an unbounded peer range
+lets npm satisfy the root with whatever is newest, and the SDK-57-line packages already
+hoisted there (`expo-secure-store@57.0.3` — T306) peer-depend on `expo` the same unbounded
+way. So the root `expo` may be a consequence of T306's wrong pin rather than an
+independent problem, in which case fixing T306 could remove this by itself. Verify that
+before doing anything else here; it changes the whole shape of the fix.
+
+Two ways this bites, both invisible locally today:
+
+- Any tool that resolves `expo` from the repository root — as opposed to from
+  `apps/android` — reads SDK 57's `bundledNativeModules.json`. That is exactly the trap
+  T291 and T306 were found through: the same `npx expo install --check` gives different
+  answers depending on the directory it runs in, and the root's answer is the wrong one for
+  this app.
+- The EAS archive carries the whole monorepo, so the remote build resolves against the same
+  two-SDK tree the local one does. Nothing here is Windows-specific or local-only.
+
+`packages/expo-two-way-audio`'s `peerDependencies: *` may well be correct for a ported,
+SDK-agnostic native module — do not tighten it reflexively. If it stays, this task's
+deliverable is a written explanation of why the root `expo` is harmless plus something that
+would notice if it stopped being harmless, which is a legitimate outcome. What is not
+acceptable is leaving the tree with two SDK majors and no record of which is intended.
+
+- [ ] State which manifest actually causes the root `expo@57`, proven by re-resolving (a
+      lockfile read plus a clean install), not by reasoning from the ranges alone
+- [ ] Either the root `expo` is gone, or a committed note says why it is there and why it is
+      safe — in a citable home, not only in a commit message
+- [ ] Say plainly whether fixing T306 removed this on its own; if it did, this task is
+      closed by that, and record it rather than inventing separate work
+- [ ] `apps/android` still resolves its own `expo` at `54.x` after the change, checked
+      through `apps/android/node_modules`, not the root
+- [ ] If `peerDependencies: *` is narrowed, justify it against what
+      `packages/expo-two-way-audio` actually supports — it is ported AGPL code with its own
+      compatibility surface, not ours to guess at
