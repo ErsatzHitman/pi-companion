@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
@@ -254,4 +257,137 @@ describe("TranscriptMessageRow", () => {
     );
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
+});
+
+describe("message timestamp (T308)", () => {
+  /**
+   * The row calls `formatMessageTimestamp(entry.timestamp)` with no options,
+   * so the VISIBLE text is deliberately rendered in the host's own zone and
+   * locale — which is the product requirement and also means asserting exact
+   * digits here would make this file pass or fail by machine. So the visible
+   * label is asserted by shape, and the machine-readable `dateTime`
+   * attribute — which is `date.toISOString()`, zone-independent — is
+   * asserted exactly. `formatMessageTimestamp`'s own test
+   * (`packages/frontend-core/src/timeline/message-timestamp.test.ts`) pins
+   * the formatting itself against a fixed zone.
+   */
+  it("renders a timestamp under an assistant message", () => {
+    render(
+      <TranscriptMessageRow
+        entry={assistantEntry({ timestamp: "2026-09-09T12:12:08.000Z" })}
+        streaming={false}
+        testId="row-stamp-a"
+      />,
+    );
+
+    const stamp = screen.getByTestId("row-stamp-a-timestamp");
+    expect(stamp.tagName).toBe("TIME");
+    expect(stamp.getAttribute("datetime")).toBe("2026-09-09T12:12:08.000Z");
+    expect(stamp.textContent).toMatch(/\d{1,2}:\d{2}:\d{2}/);
+  });
+
+  it("renders a timestamp under a user message too", () => {
+    render(
+      <TranscriptMessageRow
+        entry={userEntry({ timestamp: "2026-09-09T12:12:08.000Z" })}
+        streaming={false}
+        testId="row-stamp-u"
+      />,
+    );
+
+    expect(screen.getByTestId("row-stamp-u-timestamp").getAttribute("datetime")).toBe(
+      "2026-09-09T12:12:08.000Z",
+    );
+  });
+
+  it("carries the full dated time as a title, since the visible label may omit the date", () => {
+    render(
+      <TranscriptMessageRow
+        entry={assistantEntry({ timestamp: "2026-09-09T12:12:08.000Z" })}
+        streaming={false}
+        testId="row-stamp-title"
+      />,
+    );
+
+    const title = screen.getByTestId("row-stamp-title-timestamp").getAttribute("title");
+    expect(title).toContain("2026");
+    expect(title).toContain("September");
+  });
+
+  it("renders no timestamp element at all for an unparseable timestamp", () => {
+    render(
+      <TranscriptMessageRow
+        entry={assistantEntry({ timestamp: "not a date" })}
+        streaming={false}
+        testId="row-stamp-bad"
+      />,
+    );
+
+    // "Invalid Date" must never reach the transcript — the element is absent.
+    expect(screen.queryByTestId("row-stamp-bad-timestamp")).toBeNull();
+    expect(screen.getByTestId("row-stamp-bad").textContent).not.toContain("Invalid");
+  });
+
+  it("re-renders when only the timestamp changes", () => {
+    // The memo comparator must read every field the row displays. Before
+    // T308 added `timestamp` to `areRowPropsEqual`, this row would have kept
+    // showing an optimistic row's local submission time after the daemon's
+    // own timestamp reconciled it.
+    const entry = userEntry({ timestamp: "2026-09-09T12:12:08.000Z" });
+    const { rerender } = render(
+      <TranscriptMessageRow entry={entry} streaming={false} testId="row-stamp-memo" />,
+    );
+    expect(
+      screen.getByTestId("row-stamp-memo").parentElement?.getAttribute("data-render-count"),
+    ).toBe("1");
+
+    rerender(
+      <TranscriptMessageRow
+        entry={{ ...entry, timestamp: "2026-09-09T13:13:09.000Z" }}
+        streaming={false}
+        testId="row-stamp-memo"
+      />,
+    );
+    expect(
+      screen.getByTestId("row-stamp-memo").parentElement?.getAttribute("data-render-count"),
+    ).toBe("2");
+    expect(screen.getByTestId("row-stamp-memo-timestamp").getAttribute("datetime")).toBe(
+      "2026-09-09T13:13:09.000Z",
+    );
+  });
+
+  it("keeps the row accessible with the timestamp present", async () => {
+    const { container } = render(
+      <TranscriptMessageRow
+        entry={assistantEntry({ timestamp: "2026-09-09T12:12:08.000Z" })}
+        streaming={false}
+        testId="row-stamp-axe"
+      />,
+    );
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("T308: only message rows carry a timestamp", () => {
+  /**
+   * The requirement is explicit that reasoning, tool-call, and compaction
+   * rows must NOT be dated — they are process detail, not something either
+   * party said. Nothing enforces that beyond those files not asking for it,
+   * which is exactly the kind of "true today, silently false tomorrow"
+   * property worth pinning: a later task adding a footer to one of those
+   * rows should have to see this assertion and decide deliberately.
+   */
+  const others = ["thinking-row.tsx", "tool-call-row.tsx", "compaction-row.tsx"];
+
+  it.each(others)("%s renders no timestamp", (file) => {
+    // The `join(dirname(fileURLToPath(...)))` form, matching
+    // `transcript.test.tsx`'s own CSS read. Under this workspace's jsdom
+    // config `import.meta.url` is a served path, not a real file URL, so
+    // `new URL("./x", import.meta.url)` resolves the drive letter away and
+    // reads `D:\src\...`; taking `dirname` of the converted path avoids it.
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), file), "utf8");
+    expect(source).not.toContain("pc-transcript__timestamp");
+    expect(source).not.toContain("formatMessageTimestamp");
+  });
 });

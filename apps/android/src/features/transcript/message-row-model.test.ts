@@ -12,6 +12,7 @@ import {
   isCoreMessageEntry,
   roleAffordanceFor,
   speakerFor,
+  timestampLabelFor,
   type CoreMessageEntry,
   type TranscriptMessageRowProps,
 } from "./message-row-model";
@@ -433,5 +434,101 @@ describe("roleAffordanceFor: matches the shared StreamingMessage recipe it docum
   it("StreamingMessage.tsx renders a border only for the user speaker, as this model's hasBorder claims", () => {
     const code = readStreamingMessageCode();
     expect(code).toMatch(/borderWidth:\s*speaker === "user" \? 1 : 0/);
+  });
+});
+
+describe("timestampLabelFor (T308): delegates to frontend-core, same clock as web", () => {
+  const IST = "Asia/Kolkata";
+  const EN_GB = "en-GB";
+
+  function entryAt(timestamp: string): CoreMessageEntry {
+    return {
+      kind: "assistant-message",
+      id: "row-9",
+      epoch: "epoch-1",
+      seqStart: 9,
+      seqEnd: 9,
+      timestamp,
+      provider: "pi",
+      pending: false,
+      stale: false,
+      text: "done",
+      corrected: false,
+    } as CoreMessageEntry;
+  }
+
+  it("returns the device-local time for the entry's own timestamp", () => {
+    const label = timestampLabelFor(entryAt("2026-09-09T12:12:08.000Z"), {
+      now: new Date("2026-09-09T18:00:00.000Z"),
+      timeZone: IST,
+      locale: EN_GB,
+    });
+
+    expect(label?.text).toBe("17:42:08");
+    expect(label?.iso).toBe("2026-09-09T12:12:08.000Z");
+  });
+
+  it("produces byte-identical output to calling frontend-core directly", () => {
+    // The point of this helper is that it adds no formatting of its own — a
+    // second implementation here is exactly the web/Android drift T308 set
+    // out to prevent, so this pins delegation rather than behaviour twice.
+    const entry = entryAt("2026-09-08T19:00:00.000Z");
+    const options = { now: new Date("2026-09-09T06:00:00.000Z"), timeZone: IST, locale: EN_GB };
+
+    expect(timestampLabelFor(entry, options)).toEqual(
+      coreTimeline.formatMessageTimestamp(entry.timestamp, options),
+    );
+  });
+
+  it("returns null for an unparseable timestamp so the row renders nothing", () => {
+    expect(timestampLabelFor(entryAt("not a date"), { timeZone: IST })).toBeNull();
+  });
+
+  it("uses the device clock and locale when no options are passed", () => {
+    // The production call site passes nothing; this proves that path works
+    // rather than only the pinned-zone one the assertions above use.
+    const label = timestampLabelFor(entryAt(new Date().toISOString()));
+
+    expect(label).not.toBeNull();
+    expect(label?.text).toMatch(/\d{1,2}:\d{2}:\d{2}/);
+  });
+});
+
+describe("areMessageRowPropsEqual: reads timestamp, the field T308 made the row render", () => {
+  function entryAt(timestamp: string): CoreMessageEntry {
+    return {
+      kind: "user-message",
+      id: "row-1",
+      epoch: "epoch-1",
+      seqStart: 1,
+      seqEnd: 1,
+      timestamp,
+      provider: "pi",
+      pending: false,
+      stale: false,
+      text: "Hi Pi",
+    } as CoreMessageEntry;
+  }
+
+  it("treats a changed timestamp as a change", () => {
+    const previous = {
+      entry: entryAt("2026-09-09T12:12:08.000Z"),
+      streaming: false,
+      testId: "row",
+    };
+    const next = { entry: entryAt("2026-09-09T13:13:09.000Z"), streaming: false, testId: "row" };
+
+    expect(areMessageRowPropsEqual(previous, next)).toBe(false);
+  });
+
+  it("still treats an identical-valued fresh object as equal", () => {
+    const previous = {
+      entry: entryAt("2026-09-09T12:12:08.000Z"),
+      streaming: false,
+      testId: "row",
+    };
+    const next = { entry: entryAt("2026-09-09T12:12:08.000Z"), streaming: false, testId: "row" };
+
+    expect(areMessageRowPropsEqual(previous, next)).toBe(true);
   });
 });

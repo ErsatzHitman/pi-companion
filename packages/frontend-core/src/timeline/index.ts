@@ -34,6 +34,12 @@
  * one state transition per frame tick, without ever dropping, replacing,
  * or reordering a row (plan.md §7.4, §14.5).
  *
+ * T308 ("Show the local time on every transcript message") adds
+ * `./message-timestamp.ts`: `formatMessageTimestamp`, the one shared
+ * answer for how `TranscriptEntry.timestamp` becomes a short human label,
+ * so `apps/web` and `apps/android` render the same clock rather than each
+ * inventing one.
+ *
  * Repository invariant: this module must never import React, React
  * Native, Expo, DOM types, or browser globals.
  */
@@ -68,3 +74,5 @@ export { RunGenerationTracker, fenceAsyncResponse } from "./run-generation.js";
 export type { RunGeneration, RunGenerationSnapshot } from "./run-generation.js";
 export { TimelineCoalescer } from "./coalescer.js";
 export type { TimelineCoalescerListener } from "./coalescer.js";
+export { formatMessageTimestamp } from "./message-timestamp.js";
+export type { MessageTimestampLabel, MessageTimestampOptions } from "./message-timestamp.js";

@@ -564,6 +564,7 @@ that recomputation has to be domain-specific:
 | T305   | Give `.pc-message__text` the same `white-space: pre-wrap` the thinking body has | phase-9   | web              | P9-U   | T28A3                                                                 |
 | T306   | Re-pin `expo-secure-store` to the version this app's own `expo` bundles         | phase-9   | android          | P9-U   | T291                                                                  |
 | T307   | Explain, or remove, the hoisted root `expo@57` no workspace asks for            | phase-9   | android          | P9-U   | T291, T306                                                            |
+| T308   | Show the local wall-clock time on every transcript message                      | phase-9   | core             | P9-U   | T28A1, T28A2, T33A2                                                   |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14660,3 +14661,76 @@ acceptable is leaving the tree with two SDK majors and no record of which is int
 - [ ] If `peerDependencies: *` is narrowed, justify it against what
       `packages/expo-two-way-audio` actually supports — it is ported AGPL code with its own
       compatibility surface, not ours to guess at
+
+#### T308 — Show the local wall-clock time on every transcript message
+
+`labels: phase-9, area: core` · `depends-on: T28A1, T28A2, T33A2`
+
+`TranscriptEntry.timestamp` has carried the daemon's own timestamp verbatim on every entry
+since T28A1 (`packages/frontend-core/src/timeline/transcript-view.ts`), and neither app
+displayed it. A reader could not tell a five-second gap from an overnight one anywhere in
+the transcript, on either platform, despite the data being present at the row renderer the
+whole time.
+
+Scope, and the boundary that matters: `user-message` and `assistant-message` rows only.
+`reasoning`, `tool_call`, `todo`, `error` and `compaction` rows are deliberately NOT dated
+— they are process detail rather than something either party said, and the thinking row
+already shows an elapsed-duration readout of its own (`useElapsedLabel` in
+`apps/web/src/features/transcript/thinking-row.tsx`), which is a different question from
+"when did this happen". Every assistant message is dated, not only a turn's last one, so an
+intermediate message emitted between tool calls carries its own time.
+
+One shared formatter, in `frontend-core`, is the load-bearing decision:
+`formatMessageTimestamp` (`packages/frontend-core/src/timeline/message-timestamp.ts`). Both
+apps' row renderers do nothing but display what it returns, because two independently
+written date formatters is how web and Android end up disagreeing about what time it is.
+`apps/android`'s `message-row-model.ts` re-exports it as `timestampLabelFor` to keep that
+file the single RN-free home for what its view maps, matching `speakerFor`/`boundedText`.
+
+Three properties the formatter is built around, each of them a decision rather than a
+detail:
+
+- **Local time by default, injectable for tests.** A reader wants their own wall clock, so
+  `timeZone`/`locale` default to the host's. That makes a naive test machine-dependent,
+  which is why both are accepted as overrides rather than pinned to UTC the way
+  `apps/web/src/features/files/format.ts`'s `formatModifiedAt` pins them. Pinning would
+  have been cheaper and wrong: a message sent at 17:42 IST would read "12:12" to the person
+  who sent it.
+- **Never throws, never renders garbage.** An absent or unparseable timestamp returns
+  `null` and the row omits the element, rather than showing `Invalid Date` — the same
+  "degrade, do not fabricate" stance `transcript-view.ts` takes with its `"unknown"` entry
+  kind. An unsupported `timeZone` or malformed `locale` makes `Intl` throw `RangeError`, so
+  both are caught and retried without the offending option.
+- **The label widens only as far as ambiguity requires**: time alone for today, plus day
+  and month for an earlier day, plus the year for an earlier year. The `title`/
+  `accessibilityLabel` is always complete, including the zone name, so the short form never
+  loses information a reader needs.
+
+Two things a future reader should not re-derive. Same-day comparison happens in the DISPLAY
+zone, not UTC — a message sent at 23:30 IST is "yesterday" to an IST reader and "today" to
+a UTC one, and only the display zone's answer matches the label being rendered. And both
+row comparators (`areRowPropsEqual`, `areMessageRowPropsEqual`) had to start reading
+`timestamp`: a memo comparator that ignores a field its component displays is the classic
+stale-render bug, and here it would show as a reconciled optimistic row keeping the local
+submission time it was created with.
+
+`apps/android/src/features/transcript/message-row.tsx` also collapsed to a single `return`.
+It previously returned a bare `StreamingMessage` early when the entry had no images, then a
+second tree with them; both now need the timestamp, and two trees is how they drift. Its
+test pins the single return path directly.
+
+- [x] Every `assistant_message` — intermediate and final — shows its local time on web
+- [x] Every `assistant_message` shows its local time on Android
+- [x] User messages show theirs too, on both
+- [x] Reasoning, tool-call, todo, error and compaction rows show none; pinned by a test that
+      reads the other row files rather than trusting them to stay that way
+- [x] One formatter, in `frontend-core`, used by both apps — no second date implementation
+      in either app, pinned by a test that forbids `Intl`/`toLocale*` in the Android view
+- [x] Formatting proven against a fixed zone and locale, including a half-hour offset, so
+      the assertions do not depend on the machine running them
+- [x] An unparseable timestamp renders nothing rather than `Invalid Date`
+- [x] Both memo comparators read `timestamp`
+- [x] The CSS class the web element carries is proven to exist and to use only tokens — a
+      `<time>` whose class has no rule is invisible to every DOM assertion
+- [ ] Confirm on a real device and a real browser that the two look consistent, or state
+      plainly which check was not run

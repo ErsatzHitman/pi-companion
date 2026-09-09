@@ -23,7 +23,7 @@
  * produces hands a fresh `CoreMessageEntry` object, not a mutated one, the
  * same assumption every other compared field here already relies on.
  */
-import type { timeline } from "@picompanion/frontend-core";
+import { timeline } from "@picompanion/frontend-core";
 
 import type { ResolveImageUri } from "./message-attachments";
 
@@ -38,6 +38,29 @@ export function isCoreMessageEntry(entry: timeline.TranscriptEntry): entry is Co
 
 export function speakerFor(entry: CoreMessageEntry): "assistant" | "user" {
   return entry.kind === "assistant-message" ? "assistant" : "user";
+}
+
+/**
+ * The local wall-clock label for one message row, or `null` when the entry
+ * carries no usable timestamp and the row should show nothing.
+ *
+ * A one-line delegation to `frontend-core`'s `formatMessageTimestamp` rather
+ * than a second implementation: the whole point of putting that function in
+ * the shared package is that this app and `apps/web` cannot drift on how a
+ * time is written. It is re-exported through the model module (not called
+ * straight from the `.tsx`) to keep this file the single RN-free home for
+ * everything the view maps, matching how `speakerFor` and `boundedText`
+ * are already arranged.
+ *
+ * `options` exists for tests, which must pin `timeZone`/`locale` to stay
+ * machine-independent; production callers pass nothing and get the device's
+ * own clock and locale.
+ */
+export function timestampLabelFor(
+  entry: CoreMessageEntry,
+  options?: timeline.MessageTimestampOptions,
+): timeline.MessageTimestampLabel | null {
+  return timeline.formatMessageTimestamp(entry.timestamp, options);
 }
 
 /**
@@ -136,6 +159,11 @@ export function areMessageRowPropsEqual(
   return (
     previous.entry.id === next.entry.id &&
     previous.entry.text === next.entry.text &&
+    // T308: the row renders `timestamp`, so the comparator has to read it.
+    // A comparator that ignores a field its component displays is the
+    // classic stale-render bug, and it would show here as a reconciled row
+    // keeping the optimistic local time it was created with.
+    previous.entry.timestamp === next.entry.timestamp &&
     previous.entry.pending === next.entry.pending &&
     previous.entry.stale === next.entry.stale &&
     previous.entry.images === next.entry.images &&

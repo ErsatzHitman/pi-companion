@@ -1,5 +1,5 @@
 import { memo, useRef } from "react";
-import type { timeline } from "@picompanion/frontend-core";
+import { timeline } from "@picompanion/frontend-core";
 
 import { Button } from "../../ui/primitives/index.js";
 import { StreamingMessage } from "../../ui/recipes/index.js";
@@ -137,6 +137,13 @@ function TranscriptMessageRowImpl({
   const renderCount = useRef(0);
   renderCount.current += 1;
 
+  // Not memoized: `formatMessageTimestamp` is two `Intl.DateTimeFormat`
+  // builds on a string this row already holds, and it is only reached when
+  // the row re-renders at all — which `areRowPropsEqual` below already
+  // restricts to a real change. A `useMemo` here would add a dependency
+  // array to keep correct for no measurable saving.
+  const stamp = timeline.formatMessageTimestamp(entry.timestamp);
+
   return (
     <div data-render-count={renderCount.current}>
       <StreamingMessage
@@ -153,6 +160,16 @@ function TranscriptMessageRowImpl({
           resolveImageSrc={resolveImageSrc}
           testId={testId ? `${testId}-attachments` : undefined}
         />
+      ) : null}
+      {stamp ? (
+        <time
+          className="pc-transcript__timestamp"
+          dateTime={stamp.iso}
+          title={stamp.title}
+          data-testid={testId ? `${testId}-timestamp` : undefined}
+        >
+          {stamp.text}
+        </time>
       ) : null}
       {entry.kind === "user-message" && onEditFromHere ? (
         <Button
@@ -192,6 +209,11 @@ function areRowPropsEqual(
   return (
     previous.entry.id === next.entry.id &&
     previous.entry.text === next.entry.text &&
+    // T308: this row renders `timestamp`, so the comparator has to read it.
+    // A comparator that ignores a field its component displays is the
+    // classic stale-render bug, and it would show here as a reconciled row
+    // keeping the optimistic local time it was created with.
+    previous.entry.timestamp === next.entry.timestamp &&
     previous.entry.pending === next.entry.pending &&
     previous.entry.stale === next.entry.stale &&
     (previous.entry.kind === "assistant-message" && next.entry.kind === "assistant-message"

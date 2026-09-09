@@ -66,3 +66,28 @@
    * virtualizer's per-row measurement rather than a flex container. */
   padding-bottom: var(--spacing-3);
 }
+
+/* T308: the local wall-clock time of a message, rendered beneath it by
+ * `message-row.tsx` for `user-message` and `assistant-message` rows only —
+ * never for reasoning, tool-call, todo, error, or compaction rows, which
+ * are process detail rather than something either party said.
+ *
+ * Styled to match `recipes.css`'s `.pc-thinking__duration` rather than
+ * inventing a second treatment for a numeric readout: same `--color-ink-3`
+ * de-emphasis, same `--font-size-xs`, same mono family, and the same
+ * `tabular-nums`, which here also keeps the times vertically aligned down
+ * a long transcript instead of jittering with each digit's width.
+ *
+ * Indented by the bubble's own `--spacing-3` padding so it reads as part of
+ * the message above it, and capped at the same `32rem` as `.pc-message` so
+ * it can never be the thing that widens a row. */
+.pc-transcript__timestamp {
+  display: block;
+  max-width: 32rem;
+  margin-top: var(--spacing-1);
+  padding-left: var(--spacing-3);
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}

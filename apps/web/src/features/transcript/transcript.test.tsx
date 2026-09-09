@@ -657,3 +657,53 @@ describe("Transcript edit-from-here wiring (T105)", () => {
     expect(screen.queryByTestId("transcript-row-a1-edit-from-here")).toBeNull();
   });
 });
+
+/**
+ * T308 — the message timestamp's own styling. `message-row.test.tsx` proves
+ * the element renders with the right attributes; this proves the class it
+ * carries is actually declared, and declared from tokens.
+ *
+ * Worth pinning separately because a `<time className="...">` whose class
+ * has no rule renders as ordinary body text: visually wrong, invisible to
+ * every DOM assertion, and exactly the failure a component test cannot see.
+ */
+describe("Transcript message timestamp styling (T308)", () => {
+  function timestampRule(): string {
+    const cssPath = join(dirname(fileURLToPath(import.meta.url)), "transcript.css");
+    // Comments first — this file's own doc comments quote class names and
+    // token names, and slicing to the first `}` would otherwise stop inside
+    // one. The same trap T305 hit in `recipes.test.tsx`.
+    const css = readFileSync(cssPath, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const at = css.indexOf(".pc-transcript__timestamp {");
+    expect(
+      at,
+      ".pc-transcript__timestamp is not declared in transcript.css",
+    ).toBeGreaterThanOrEqual(0);
+    const close = css.indexOf("}", at);
+    expect(close, ".pc-transcript__timestamp has no closing brace").toBeGreaterThan(at);
+    return css.slice(at, close);
+  }
+
+  it("declares the timestamp class", () => {
+    expect(timestampRule()).toContain(".pc-transcript__timestamp");
+  });
+
+  it("takes its colour and size from design tokens, never a raw value", () => {
+    const rule = timestampRule();
+    expect(rule).toMatch(/color:\s*var\(--color-ink-3\)/);
+    expect(rule).toMatch(/font-size:\s*var\(--font-size-xs\)/);
+    // Repository invariant: no raw colour under `apps/web`.
+    expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(rule).not.toMatch(/rgba?\(/);
+  });
+
+  it("uses tabular figures so times do not jitter down a long transcript", () => {
+    expect(timestampRule()).toMatch(/font-variant-numeric:\s*tabular-nums/);
+  });
+
+  it("cannot widen a row: capped at the same max-width as the message bubble", () => {
+    const rule = timestampRule();
+    expect(rule).toMatch(/max-width:\s*32rem/);
+    expect(rule).toMatch(/display:\s*block/);
+  });
+});

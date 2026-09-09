@@ -69,3 +69,55 @@ describe("message-row.tsx: T33A5 renders entry.images via MessageAttachments", (
     expect(source).toMatch(/resolveImageUri=\{resolveImageUri\}/);
   });
 });
+
+describe("message-row.tsx: T308 renders the message's local time beneath it", () => {
+  it("takes the label from the model's timestampLabelFor, never formatting a date inline", () => {
+    const source = readCode();
+    expect(source).toMatch(/const stamp = timestampLabelFor\(entry\)/);
+    // A second, private formatter here is the web/Android drift T308 exists
+    // to prevent — so no `Intl`, `toLocale*`, or hand-built date string may
+    // appear in this file at all.
+    expect(source).not.toMatch(/Intl\./);
+    expect(source).not.toMatch(/toLocale(Time|Date)String/);
+    expect(source).not.toMatch(/getHours\(\)|getMinutes\(\)/);
+  });
+
+  it("renders the label inside a Text, guarded so a null label renders nothing", () => {
+    const source = readCode();
+    expect(source).toMatch(/\{stamp \? \(/);
+    expect(source).toMatch(/<Text[\s\S]*?\{stamp\.text\}[\s\S]*?<\/Text>/);
+  });
+
+  it("imports Text from react-native rather than reaching for a web element", () => {
+    expect(readCode()).toMatch(/import \{ StyleSheet, Text, View \} from "react-native"/);
+  });
+
+  it("exposes the full dated time as the accessible name, since the visible label may omit the date", () => {
+    expect(readCode()).toMatch(/accessibilityLabel=\{stamp\.title\}/);
+  });
+
+  it("suffixes the row's testId for the timestamp, matching web's -timestamp convention", () => {
+    expect(readCode()).toMatch(/testID=\{testId \? `\$\{testId\}-timestamp` : undefined\}/);
+  });
+
+  it("has ONE return path, so the timestamp cannot be rendered in one branch and forgotten in the other", () => {
+    const source = readCode();
+    // The pre-T308 shape returned a bare `StreamingMessage` early when the
+    // entry had no images, then a second tree with them. Both trees now have
+    // to carry the timestamp, and two of them is how they drift — so the
+    // component body has exactly one `return`.
+    const returns = source.match(/^\s{2}return \(/gm) ?? [];
+    expect(returns).toHaveLength(1);
+    expect(source).not.toMatch(/if \(images\.length === 0\)/);
+    // …and the attachments are now conditional inside that single tree.
+    expect(source).toMatch(/\{images\.length > 0 \? \(/);
+  });
+
+  it("styles the timestamp from theme tokens, never a raw colour or size", () => {
+    const source = readCode();
+    expect(source).toMatch(/timestamp: \{[\s\S]*?color: theme\.colors\["ink-3"\]/);
+    expect(source).toMatch(
+      /timestamp: \{[\s\S]*?fontSize: theme\.typography\.variant\.caption\.fontSize/,
+    );
+  });
+});
