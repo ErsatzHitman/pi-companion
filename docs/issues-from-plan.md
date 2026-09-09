@@ -15577,3 +15577,8 @@ dash supports it.
       has exactly two; a mutation proof restores the real defect and confirms it turns red
 - [x] Registered in `guard-capability-prose.mjs`'s `CAPABILITIES` in the same commit that
       shipped it, watched firing on a real tracked file and restored from a scratchpad copy
+- [x] `emulator-boot-timeout` raised from this action's 600s default to 1200s in both jobs.
+      Measured, not guessed: boot took 358363 ms on run `34401219271`, which is 60% of the
+      default — not a margin when five shards boot at once on shared hardware, and a boot
+      timeout would cost a whole 30-minute cycle because 23 minutes of Gradle assembly sits in
+      front of it
