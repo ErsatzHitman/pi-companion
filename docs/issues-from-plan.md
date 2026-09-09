@@ -561,6 +561,7 @@ that recomputation has to be domain-specific:
 | T302   | Move websocket-server.browser-tools.test.ts into test:unit:serial               | phase-9   | server           | P9-W81 | T240                                                                  |
 | T303   | Fix the format-check guard's bracketed-path parent-existence false positive     | phase-9   | tooling          | P9-W82 | none                                                                  |
 | T304   | Retire the duplicate exhaustiveness check that only the ceiling guard sees      | phase-9   | server           | P9-W83 | T296                                                                  |
+| T305   | Give `.pc-message__text` the same `white-space: pre-wrap` the thinking body has | phase-9   | web              |        | T28A3                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -14526,3 +14527,32 @@ Owns: `packages/server/src/server/agent/provider-registry-wrap.test.ts` and
 - [ ] The production exhaustiveness check is re-proven able to FAIL after the change, in both
       directions
 - [ ] The file's own header comment still describes what the file actually does
+
+#### T305 — Give `.pc-message__text` the same `white-space: pre-wrap` the thinking body has
+
+`labels: phase-9, area: web` · `depends-on: T28A3`
+
+Found at the P9-T merge gate while checking whether the Pi output-style work had any
+web-side consequence. `apps/web/src/ui/recipes/recipes.css` declares
+`white-space: pre-wrap` on `.pc-thinking__body p` but not on `.pc-message__text`, so a
+newline the model emits survives in a thinking body and collapses to a single space in an
+assistant message. The same text renders with its newlines intact on Android, because React
+Native `<Text>` preserves them by default and needs no equivalent declaration — so this is
+both an inconsistency inside one stylesheet and a web/Android divergence for identical
+model output.
+
+Not fixed at the gate: the gate's own rule is that it repairs what the wave under
+adjudication touched, and no P9-T commit touched `recipes.css`. Filed instead of edited
+mid-wave.
+
+Do not "fix" this by reformatting the model's text anywhere in the pipeline. The text is
+already correct by the time it reaches the DOM; only the CSS drops the newlines.
+
+- [ ] `.pc-message__text` preserves newlines in rendered assistant text
+- [ ] A test pins it — assert the computed/declared `white-space`, or assert rendered
+      output for a two-line message, rather than only eyeballing it
+- [ ] Show the same two-line message rendering identically on web and Android, or state
+      plainly which check you could not run
+- [ ] Confirm the shimmer-gradient treatment on `.pc-message__text:has(.pc-message__cursor)`
+      still looks right with the new wrapping, since `background-clip: text` interacts with
+      line boxes

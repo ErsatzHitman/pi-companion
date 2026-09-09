@@ -491,9 +491,14 @@ function main() {
   reportInherited();
   console.error(
     "  At least one commit in this range ITSELF turned a file from green (or absent) to format-red " +
-      "(see CLAUDE.md's T93 section and docs/issues-from-plan.md's T137/T148). Fix the offending " +
-      "commit(s) — amend/rebase if the range is still local, or land a follow-up commit that reformats the " +
-      "named files and says so in its message.",
+      "(see CLAUDE.md's T93 section and docs/issues-from-plan.md's T137/T148). The ONLY fix is to " +
+      "make the named commit(s) format-green as of their own content — amend or squash while the " +
+      "range is still local. A later commit that reformats the named files does NOT clear this, " +
+      "however clearly its message says so: `classifyFormatRedCommits` compares each touched path " +
+      "against that commit's own parent and never reads any later commit. That is T137's stated " +
+      "acceptance criterion, not an oversight — the incident it was built for (`4a23d89`) WAS " +
+      "repaired by a later commit in the same range, and the criterion is that the check fails " +
+      "anyway.",
   );
   process.exitCode = 1;
 }

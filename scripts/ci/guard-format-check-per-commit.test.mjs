@@ -211,6 +211,50 @@ test("classifyFormatRedCommits: real P6-W13 shape -- an inherited break is a NOT
   ]);
 });
 
+// P9-T merge gate: pin the design intent the runner's failure advice used to
+// contradict. That advice offered "or land a follow-up commit that reformats
+// the named files and says so in its message" as an alternative remedy. No
+// such mechanism has ever existed here -- `classifyFormatRedCommits` reads
+// only each commit and its own parent, never any later commit and never any
+// commit message -- and T137's acceptance criterion is explicitly the
+// opposite: "A committed check fails when any commit in a range is
+// format-red, even if the tip is green", against `4a23d89`, an incident where
+// a later commit in the same range DID repair the file. Without this test the
+// runner's prose was the only statement of the behaviour, and it was wrong;
+// with it, re-adding the hatch fails a test instead of quietly weakening the
+// guard.
+test("classifyFormatRedCommits: a later commit that reformats the named path, and says so, does NOT clear the commit that introduced the break", () => {
+  const commits = [
+    {
+      sha: "RED",
+      message: "T300: a revoked device can no longer silently re-register",
+      redPaths: [
+        {
+          path: "packages/server/src/server/devices/revoked-device-store.test.ts",
+          redAtParent: false,
+          parentSha: "BASE",
+        },
+      ],
+    },
+    {
+      sha: "FOLLOWUP",
+      message: "T300: fix oxfmt formatting on the two new test files",
+      redPaths: [],
+    },
+  ];
+
+  const { introduced, inherited } = classifyFormatRedCommits(commits);
+
+  assert.deepEqual(introduced, [
+    {
+      sha: "RED",
+      message: "T300: a revoked device can no longer silently re-register",
+      paths: ["packages/server/src/server/devices/revoked-device-store.test.ts"],
+    },
+  ]);
+  assert.deepEqual(inherited, []);
+});
+
 test("classifyFormatRedCommits: a path added by a root commit (no parent at all) is introduced, never inherited", () => {
   const commits = [
     {
@@ -483,8 +527,46 @@ function realGit(args) {
 }
 
 const BRACKETED_PATH = "apps/android/src/app/h/[serverId]/devices.tsx";
-const bracketedPathAddedAtSha = realGit(["log", "-1", "--format=%H", "--", BRACKETED_PATH]);
+
+// `--diff-filter=A` is load-bearing, not decoration. CORRECTED at the P9-T
+// merge gate: this resolved the ADD commit with a bare
+// `git log -1 --format=%H -- <path>`, which returns the MOST RECENT commit
+// touching the path, not the one that added it. That happened to coincide
+// while T42A1 (`ad4f3b8`) was the only commit to have touched the file, and
+// stopped coinciding inside the very next wave: T301 edited this route's doc
+// comment, became the most-recent toucher, and its parent genuinely contains
+// the file -- so `tryLoadBlobAtCommit` correctly returned real content and
+// the `assert.equal(result, null)` below failed on a clean, committed tree.
+// The test was order-dependent on nothing but "has anyone touched this file
+// since", which is not a property any test should depend on.
+const bracketedPathAddedAtSha = realGit([
+  "log",
+  "--diff-filter=A",
+  "-1",
+  "--format=%H",
+  "--",
+  BRACKETED_PATH,
+]);
 const bracketedPathAbsentAtSha = realGit(["rev-parse", `${bracketedPathAddedAtSha}^`]);
+
+// Fixture precondition, asserted through a DIFFERENT git mechanism than the
+// function under test (`git cat-file -e`, not `git show`'s pathspec parsing),
+// so a future history shift fails here with a legible message instead of
+// surfacing as an opaque content mismatch inside the first test below.
+test("fixture: the bracketed path is genuinely absent at the resolved parent commit", () => {
+  let existsAtParent = true;
+  try {
+    realGit(["cat-file", "-e", `${bracketedPathAbsentAtSha}:${BRACKETED_PATH}`]);
+  } catch {
+    existsAtParent = false;
+  }
+  assert.equal(
+    existsAtParent,
+    false,
+    `expected ${BRACKETED_PATH} to be absent at ${bracketedPathAbsentAtSha} ` +
+      `(parent of its add commit ${bracketedPathAddedAtSha})`,
+  );
+});
 
 test("tryLoadBlobAtCommit: a bracketed Expo Router path absent at a commit is reported absent (null), not the git argument-parsing fallback's commit dump", () => {
   const result = tryLoadBlobAtCommit(bracketedPathAbsentAtSha, BRACKETED_PATH);
