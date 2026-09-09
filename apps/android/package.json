@@ -11,7 +11,8 @@
     "android:production": "eas build --platform android --profile production-apk",
     "guard:no-web": "node scripts/run-guard-no-web-artifacts.mjs",
     "typecheck": "npm run build --workspace=@picompanion/design-tokens && npm run build --workspace=@picompanion/frontend-core && npm run build --workspace=@picompanion/highlight && npm run build --workspace=@picompanion/protocol && tsc -p tsconfig.json --noEmit --incremental false",
-    "test": "npm run build --workspace=@picompanion/design-tokens && npm run build --workspace=@picompanion/frontend-core && npm run build --workspace=@picompanion/highlight && npm run build --workspace=@picompanion/protocol && vitest run"
+    "test": "npm run build --workspace=@picompanion/design-tokens && npm run build --workspace=@picompanion/frontend-core && npm run build --workspace=@picompanion/highlight && npm run build --workspace=@picompanion/protocol && vitest run",
+    "eas-build-post-install": "npm run build --workspace=@picompanion/protocol && npm run build --workspace=@picompanion/design-tokens && npm run build --workspace=@picompanion/highlight && npm run build --workspace=@picompanion/frontend-core"
   },
   "dependencies": {
     "@expo/metro-runtime": "^6.1.2",

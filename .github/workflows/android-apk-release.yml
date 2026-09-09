@@ -81,6 +81,24 @@ jobs:
       # CORRECTED (T44B1): this step previously omitted `@picompanion/highlight`
       # entirely, and its own comment falsely claimed parity with
       # `android-tests`, which already built four packages, not three.
+      # T236, SETTLED: this step builds those four workspaces on the RUNNER,
+      # and that does NOT cover the remote EAS build. Measured with a real
+      # `eas build:inspect --platform android --profile production-apk --stage
+      # archive`, which is the only thing that could answer it and needed the
+      # `EXPO_TOKEN` T208 has now configured: every one of the four workspaces
+      # is present in the archive, but each one's `dist/` is an EMPTY
+      # directory — `packages/protocol/dist` holds 212 files locally and 0 in
+      # the archive — because `dist/` is gitignored and the archive respects
+      # that. `packages/protocol`'s `exports` resolves only through
+      # `./dist/*`, so the remote build would resolve every one of these four
+      # packages to files the archive lacks.
+      #
+      # The fix is `apps/android/package.json`'s `eas-build-post-install`
+      # script, which runs these same four builds in the same order inside the
+      # remote build. That is EAS's own documented hook, so nothing here
+      # invokes it; this step stays because the runner's own later steps
+      # (typecheck/export) need the built output too, and the two are now
+      # deliberately redundant rather than accidentally so.
       - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
         run: |
           npm run build --workspace=@picompanion/protocol
