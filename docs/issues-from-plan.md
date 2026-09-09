@@ -569,6 +569,7 @@ that recomputation has to be domain-specific:
 | T310   | Both EAS workflows invoked `npx eas`, a package that cannot run                 | phase-9   | tooling          | P9-U   | T208, T17B, T37F                                                      |
 | T311   | The `development` EAS profile asked for a dev client the app never had          | phase-9   | tooling          | P9-U   | T310, T208, T37F                                                      |
 | T312   | Five identical EAS builds per Maestro run, and the guard that went quiet        | phase-9   | tooling          | P9-U   | T311, T310, T207, T37F                                                |
+| T313   | `eas build --wait` fails without saying why, and the CI log kept the secret     | phase-9   | tooling          | P9-U   | T312, T311, T310                                                      |
 | T50    | Decide how the agent's configured surface is exposed                            | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15058,3 +15059,47 @@ version mismatch between the action's copy and npx's.
 - [ ] A real dispatch: `build-development-apk` succeeds once and all five shards install the
       shared artifact, with the run id recorded — this also closes T310's and T311's last
       open criteria
+
+#### T313 — `eas build --wait` fails without ever saying why, and the CI log kept the secret
+
+`labels: phase-9, area: tooling` · `depends-on: T312, T311, T310`
+
+Run `34369364166`'s `packaged-app-smoke` job spent **67 minutes** on a real EAS build of the
+`production-apk` profile and then emitted, in full:
+
+```
+✖ Build failed
+##[error]Process completed with exit code 1.
+```
+
+That is the entire diagnosis available in the CI log. The actual reason lives only on
+`expo.dev`, behind the account, at the build page the step had printed an hour earlier —
+build `4610d322-4cc8-435b-9efb-60b327c78011`. Nobody reading the workflow run could tell a
+Gradle compile failure from a credentials problem from a builder timeout, and every retry
+costs another hour to learn the same nothing.
+
+This is the same shape as T310 and T311 one level out: infrastructure whose failure mode had
+never been exercised, so nobody noticed it reports nothing. The two prior defects were at
+least self-describing once they fired; this one is not.
+
+Each of the three EAS build steps in this repository now carries an `if: failure()` sibling
+that runs `eas build:list --platform android --limit 3 --non-interactive --json`, so the
+failing build's own status and error text land in the CI log next to the failure. `|| true`
+and `set -uo pipefail` without `-e`, deliberately: a diagnostic that can itself fail the job
+it is diagnosing turns one useless log into two.
+
+**What this does NOT do, stated so it is not mistaken for a fix.** It does not make the build
+pass, and it does not retrieve the failure reason for run `34369364166` — that run is over,
+and reading its reason needs either the expo.dev build page or a token-authenticated
+`eas build:view`. The `development` profile has still never completed a build either, so
+whether it fails for the same underlying reason as `production-apk` is unknown and should not
+be guessed at; the next dispatch is what will say.
+
+- [x] All three EAS build steps (`build-development-apk`, `packaged-app-smoke`,
+      `publish-android-apk`) have a failure-path step that prints the build's own status and
+      error into the CI log
+- [x] The diagnostic cannot itself fail the job
+- [ ] A real failing dispatch shows the reason in the CI log without anyone opening expo.dev
+- [ ] The underlying `production-apk` build failure (build `4610d322-4cc8-435b-9efb-60b327c78011`)
+      is diagnosed and filed as its own task — this entry is about the missing diagnosis, not
+      about that build

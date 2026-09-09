@@ -171,6 +171,24 @@ jobs:
 
           echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
 
+      # T313: `eas build --wait` prints `✖ Build failed` and exits 1 without
+      # ever naming the reason -- the reason lives only on expo.dev, behind
+      # the account. Run 34369364166's `packaged-app-smoke` spent 67 minutes
+      # to produce exactly that one line, and nobody without the token could
+      # tell a Gradle failure from a credentials problem from a timeout.
+      # This step makes the next failure legible in the CI log itself.
+      # `|| true` because a diagnostic that can fail the job it is diagnosing
+      # replaces one useless log with two.
+      - name: Explain the EAS build failure
+        if: failure()
+        shell: bash
+        run: |
+          set -uo pipefail
+          cd apps/android
+          echo "::group::Most recent EAS builds"
+          npx eas-cli build:list --platform android --limit 3 --non-interactive --json || true
+          echo "::endgroup::"
+
       - name: Resolve APK artifact URL
         id: artifact
         if: steps.eas-secrets.outputs.configured == 'true'
