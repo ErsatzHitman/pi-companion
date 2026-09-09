@@ -103,6 +103,24 @@ jobs:
       - name: Fail on any apps/android/**/*.web.* file
         run: node scripts/ci/run-guard-no-android-web-files.mjs
 
+  # T319: reactivecircus/android-emulator-runner runs its `script:` through
+  # `/usr/bin/sh -c` (dash on Ubuntu), not bash. `set -euo pipefail` there
+  # died with `set: Illegal option -o pipefail` on the FIRST LINE, after a
+  # six-minute emulator boot, on every shard of Maestro run 34401219271. An
+  # ordinary `run:` step defaults to bash and is deliberately not checked.
+  guard-emulator-script-posix:
+    name: guard / emulator scripts are POSIX sh, not bash
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fail on a bashism in an android-emulator-runner script
+        run: node scripts/ci/run-guard-emulator-script-posix.mjs
+
   # T310: `npx eas` named the BINARY, not the package. npx resolves package
   # names, the npm package literally called `eas` is an unrelated squat with
   # no bin, and all six jobs of Maestro run 34368430903 died on `npm error

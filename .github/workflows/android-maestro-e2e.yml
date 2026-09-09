@@ -365,7 +365,12 @@ jobs:
           profile: ${{ steps.avd.outputs.profile }}
           disable-animations: true
           script: |
-            set -euo pipefail
+            # T319: POSIX `sh`, not bash. This action runs `script:` through
+            # `/usr/bin/sh -c`, which on Ubuntu is dash, and `set -o pipefail`
+            # is a bashism dash rejects outright -- `set: Illegal option -o
+            # pipefail`, exit 2, after a 6-minute emulator boot. Nothing here
+            # pipes, so `set -eu` loses nothing.
+            set -eu
             adb install -r "$RUNNER_TEMP/picompanion-debug.apk"
             flows="$(node -e "
               const cfg = require('./apps/android/maestro/shards.json');
@@ -553,7 +558,9 @@ jobs:
           profile: ${{ steps.avd.outputs.profile }}
           disable-animations: true
           script: |
-            set -euo pipefail
+            # T319 -- see the identical note on `maestro-e2e`'s script above:
+            # this action's `script:` runs under dash, which has no `pipefail`.
+            set -eu
             adb install -r "${{ steps.artifact.outputs.apk_path }}"
             APP_ID=sh.picompanion npx tsx apps/android/e2e/run-flow.ts smoke
 

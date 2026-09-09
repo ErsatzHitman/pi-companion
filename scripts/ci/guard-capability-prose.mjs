@@ -2088,6 +2088,32 @@ export const CAPABILITIES = [
     // this capability, then restoring that file from a scratchpad copy —
     // never `git checkout --` — and confirming exit 0 with `git status
     // --porcelain` empty.
+    // T319: `guard-emulator-script-posix.mjs` shipped
+    // `findEmulatorScriptViolations`, which reads the `script:` handed to
+    // `reactivecircus/android-emulator-runner` — keyed off the `uses:` line,
+    // so an ordinary bash `run:` step is never confused for it — and reports
+    // a curated set of bashisms that dash rejects. Registered in the same
+    // commit that shipped it, per this file's own "add an entry the moment
+    // you ship one" rule.
+    //
+    // Bare-string member: `findEmulatorScriptViolations` is declared in
+    // exactly one shipped file, measured with `git grep -w` rather than
+    // assumed, so neither an AND-group nor a shape anchor is needed.
+    //
+    // FORWARD guard, T162's shape. The phrases avoid the wording the guard's
+    // own header and the ledger's T319 section use to narrate the pre-fix
+    // failure ("died with `set: Illegal option -o pipefail`"), the same
+    // collision T215 resolved by rephrasing rather than by adding an
+    // exclusion.
+    name: "emulator scripts are checked for bashisms (findEmulatorScriptViolations)",
+    methodNames: ["findEmulatorScriptViolations"],
+    denyingPhrases: [
+      /(?:nothing|no guard|no check) (?:verifies|validates|checks) (?:that )?(?:the )?emulator (?:action'?s )?`?script:?`? (?:is|stays) posix/i,
+      /a bashism in (?:the|an) android-emulator-runner script (?:is never|cannot be) (?:caught|detected|flagged)/i,
+      /the `?script:?`? (?:input|block) (?:handed|passed) to the emulator action is (?:not|never) (?:linted|checked) for shell compatibility/i,
+    ],
+  },
+  {
     // T314: Metro retries a relative `./x.js` specifier as `./x` when the
     // literal path does not resolve. `tsconfig.json` sets
     // `moduleResolution: "bundler"`, so `tsc` and Vitest rewrite `./x.js` to
