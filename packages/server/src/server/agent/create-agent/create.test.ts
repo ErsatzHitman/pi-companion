@@ -1,16 +1,28 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, readdirSync, rmdirSync, rmSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 import { createTestAgentClients } from "../../test-utils/fake-agent-client.js";
 import { createProviderSnapshotManagerStub } from "../../test-utils/session-stubs.js";
+import * as atomicFile from "../../atomic-file.js";
 import { AgentManager } from "../agent-manager.js";
 import { AgentStorage } from "../agent-storage.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../../worktree-session.js";
 import { createAgentCommand } from "./create.js";
 import type { ManagedAgent } from "../agent-manager.js";
+import type {
+  AgentClient,
+  AgentPersistenceHandle,
+  AgentProvider,
+  AgentRunResult,
+  AgentSession,
+  AgentSessionConfig,
+  AgentStreamEvent,
+} from "../agent-sdk-types.js";
 
 const logger = createTestLogger();
 
@@ -38,6 +50,152 @@ function fakeWorktreeCreator(args: { repoRoot: string; createdWorkspaceId: strin
       created: true,
       setupContinuation: { kind: "agent" as const, startAfterAgentCreate: () => {} },
     }) as unknown as CreatePaseoWorktreeWorkflowResult;
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+const CONTROLLABLE_CAPABILITIES = {
+  supportsStreaming: true,
+  supportsSessionPersistence: true,
+  supportsDynamicModes: false,
+  supportsMcpServers: false,
+  supportsReasoningStream: false,
+  supportsToolInvocations: false,
+} as const;
+
+// A minimal AgentSession whose dispatched turn stays "running" until the test
+// explicitly calls `finishTurn()` -- see T297. This is what lets the test
+// FORCE the ordering the historical bug depended on (the completion-triggered
+// background persist is not even enqueued until the turn genuinely finishes)
+// instead of hoping the fast fixtures elsewhere in this file happen to race.
+class ControllableAgentSession implements AgentSession {
+  readonly provider: AgentProvider;
+  readonly capabilities = CONTROLLABLE_CAPABILITIES;
+  readonly id = randomUUID();
+  private subscribers = new Set<(event: AgentStreamEvent) => void>();
+  private turnIdCounter = 0;
+  private releaseTurn: Deferred<void> | null = null;
+
+  constructor(private readonly config: AgentSessionConfig) {
+    this.provider = config.provider;
+  }
+
+  async run(): Promise<AgentRunResult> {
+    return { sessionId: this.id, finalText: "", timeline: [] };
+  }
+
+  async startTurn(): Promise<{ turnId: string }> {
+    const turnId = `turn-${++this.turnIdCounter}`;
+    this.releaseTurn = deferred<void>();
+    void (async () => {
+      this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+      await this.releaseTurn?.promise;
+      this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+    })();
+    return { turnId };
+  }
+
+  // Lets the turn started above actually complete. Until this is called, the
+  // dispatched run stays genuinely "running" -- nothing has enqueued a
+  // completion-triggered background persist yet.
+  finishTurn(): void {
+    this.releaseTurn?.resolve();
+  }
+
+  subscribe(callback: (event: AgentStreamEvent) => void): () => void {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+
+  private pushEvent(event: AgentStreamEvent): void {
+    for (const callback of this.subscribers) {
+      callback(event);
+    }
+  }
+
+  async *streamHistory(): AsyncGenerator<AgentStreamEvent> {}
+
+  async getRuntimeInfo() {
+    return {
+      provider: this.provider,
+      sessionId: this.id,
+      model: this.config.model ?? null,
+      modeId: this.config.modeId ?? null,
+    };
+  }
+
+  async getAvailableModes() {
+    return [];
+  }
+
+  async getCurrentMode() {
+    return null;
+  }
+
+  async setMode(): Promise<void> {}
+
+  getPendingPermissions() {
+    return [];
+  }
+
+  async respondToPermission(): Promise<void> {}
+
+  describePersistence(): AgentPersistenceHandle {
+    return { provider: this.provider, sessionId: this.id };
+  }
+
+  async interrupt(): Promise<void> {}
+
+  async close(): Promise<void> {}
+}
+
+class ControllableAgentClient implements AgentClient {
+  readonly provider: AgentProvider;
+  readonly capabilities = CONTROLLABLE_CAPABILITIES;
+  readonly createdSessions: ControllableAgentSession[] = [];
+
+  constructor(provider: AgentProvider = "codex") {
+    this.provider = provider;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return true;
+  }
+
+  async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+    const session = new ControllableAgentSession(config);
+    this.createdSessions.push(session);
+    return session;
+  }
+
+  async resumeSession(
+    _handle: AgentPersistenceHandle,
+    config?: Partial<AgentSessionConfig>,
+  ): Promise<AgentSession> {
+    const session = new ControllableAgentSession({
+      provider: this.provider,
+      cwd: config?.cwd ?? process.cwd(),
+    });
+    this.createdSessions.push(session);
+    return session;
+  }
+
+  async fetchCatalog() {
+    return { models: [], modes: [] };
+  }
 }
 
 test("session create forwards clientMessageId to the initial prompt run options", async () => {
@@ -275,8 +433,21 @@ test("session create stamps the requested workspaceId when no worktree setup run
     // the same gate, `AgentStorage.pendingWrites.size` is 0 at that point in
     // both of them, so there is no live window there to close — but the
     // protection is narrower than "every real-storage test", and a future
-    // prompt-less case that DOES queue a write would not be covered. T297
-    // owns landing the deterministic reproduction and a prompt-bearing case.
+    // prompt-less case that DOES queue a write would not be covered.
+    //
+    // CORRECTED at T297: this used to say "T297 owns landing the
+    // deterministic reproduction and a prompt-bearing case" as an open item.
+    // It is landed -- see the prompt-bearing "a background persist not yet
+    // enqueued..." test at the end of this file, which forces (never sleeps
+    // for) exactly the two things this comment describes: a completion
+    // persist not yet enqueued when settleBackgroundDispatch() is called,
+    // and that write's on-disk landing held at the temp-file stage so a
+    // premature removal reproduces a real ENOTEMPTY. Reverting
+    // `waitForBackgroundDispatchToSettle` to a bare `agentStorage.flush()`
+    // makes that test fail with a real assertion (not a timeout), proven at
+    // T297. The prompt-less gap named above is otherwise still open: no test
+    // in this file covers a prompt-less create whose background persist
+    // queues a write.
     //
     // This is the T240 measure-the-source rule rather than a timeout bump:
     // it removes the write from the race instead of widening the window the
@@ -512,6 +683,155 @@ test("session create keeps an explicit title after the initial prompt settles", 
     expect(settled?.title).toBe(title);
   } finally {
     await settleBackgroundDispatch(); // see the first such cleanup in this file for why
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+// T297: lands the deterministic ENOTEMPTY reproduction this file's first
+// cleanup comment (above) promised. Two things are FORCED explicitly here,
+// neither by sleep nor by hoping today's fast fixtures happen to race:
+//
+//   1. The dispatched turn is held "running" (via ControllableAgentSession)
+//      until this test calls `finishTurn()`, so the completion-triggered
+//      background persist genuinely has not been enqueued yet at the moment
+//      `settleBackgroundDispatch()` is invoked -- reproducing the exact gap
+//      `waitForAgentEvent(..., { waitForActive: true })` closes.
+//   2. Once that write DOES start, its on-disk landing (writeJsonFileAtomic's
+//      temp-file-then-rename) is held open at the temp-file stage via a spy
+//      on the imported `writeJsonFileAtomic`, so a directory enumeration
+//      taken before the write started provably does not include the file
+//      that is, at that exact moment, sitting on disk.
+test("a background persist not yet enqueued when settleBackgroundDispatch is called is not missed, and a premature removal would ENOTEMPTY (T297)", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "create-agent-enotempty-test-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const client = new ControllableAgentClient("codex");
+  const agentManager = new AgentManager({
+    clients: { codex: client },
+    registry: storage,
+    logger,
+  });
+
+  let recordPath: string | null = null;
+  let holdRename = false;
+  let releaseRename: (() => void) | undefined;
+  const tempFileCreated = deferred<void>();
+  const originalWriteJsonFileAtomic = atomicFile.writeJsonFileAtomic;
+  const writeSpy = vi
+    .spyOn(atomicFile, "writeJsonFileAtomic")
+    .mockImplementation(async (filePath: string, value: unknown) => {
+      recordPath = filePath;
+      if (!holdRename) {
+        return originalWriteJsonFileAtomic(filePath, value);
+      }
+      // One-shot: only the write this test arms is held; everything else
+      // (including whatever else might be in flight) proceeds normally.
+      holdRename = false;
+      const dir = dirname(filePath);
+      await mkdir(dir, { recursive: true });
+      const tempPath = join(dir, `.late-write-${randomUUID()}.tmp`);
+      await writeFile(tempPath, JSON.stringify(value, null, 2), "utf8");
+      tempFileCreated.resolve();
+      await new Promise<void>((resolve) => {
+        releaseRename = resolve;
+      });
+      await rename(tempPath, filePath);
+    });
+
+  try {
+    const created = await createAgentCommand(
+      {
+        agentManager,
+        agentStorage: storage,
+        logger,
+        providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+      },
+      {
+        kind: "session",
+        config: { provider: "codex", cwd: workdir },
+        workspaceId: "ws-enotempty",
+        initialPrompt: "hello",
+        labels: {},
+        provisionalTitle: null,
+        firstAgentContext: { attachments: [] },
+        buildSessionConfig: async (config) => ({ sessionConfig: config }),
+      },
+    );
+
+    // Prompt-bearing: the handle under test is real, not the `() =>
+    // Promise.resolve()` default assigned when no prompt was dispatched.
+    expect(created.initialPromptStarted).toBe(true);
+    expect(client.createdSessions).toHaveLength(1);
+    const session = client.createdSessions[0]!;
+    expect(recordPath).not.toBeNull();
+
+    const recordDir = dirname(recordPath!);
+    // Captured BEFORE the completion write starts: only the creation record.
+    const entriesBeforeLateWrite = readdirSync(recordDir);
+
+    // Invoke the real, currently-shipped settleBackgroundDispatch(), but do
+    // not await it yet -- the dispatched turn is still "running" (finishTurn
+    // has not been called), so nothing has enqueued the completion persist.
+    let settled = false;
+    const settlePromise = created.settleBackgroundDispatch().then(() => {
+      settled = true;
+    });
+
+    // Forced ordering check #1: settleBackgroundDispatch() must NOT resolve
+    // while the turn is still active. A reverted create.ts (bare
+    // `agentStorage.flush()`, no `waitForAgentEvent` first) has nothing of
+    // this agent's completion queued at this instant and resolves almost
+    // immediately -- this bounded race (the same technique already used by
+    // this package's own `agent-manager.test.ts` to prove the identical
+    // `waitForAgentEvent` primitive is still pending) would then see
+    // "resolved", not "pending".
+    const earlyOutcome = await Promise.race([
+      settlePromise.then(() => "resolved" as const),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 50)),
+    ]);
+    expect(earlyOutcome).toBe("pending");
+    expect(settled).toBe(false);
+
+    // Now arm the write-level hold and let the turn actually finish. This is
+    // when `emitState` -> `enqueueBackgroundPersist` -> `applySnapshot`
+    // fires for real, for the first time.
+    holdRename = true;
+    session.finishTurn();
+
+    // Explicit signal, not a sleep: wait until the held write has genuinely
+    // created its temp file on disk.
+    await tempFileCreated.promise;
+
+    // Forced ordering check #2: settleBackgroundDispatch() is STILL pending
+    // -- agentStorage.flush() (its last step) is legitimately waiting on the
+    // very write this test is holding mid-rename.
+    expect(settled).toBe(false);
+
+    // The forced ENOTEMPTY reproduction itself: a caller who acted on the
+    // pre-T280 signal (or no signal at all) would believe it is safe to
+    // remove now. The temp file this enumeration never saw is still on disk.
+    for (const name of entriesBeforeLateWrite) {
+      rmSync(join(recordDir, name), { force: true });
+    }
+    let removalError: NodeJS.ErrnoException | null = null;
+    try {
+      rmdirSync(recordDir);
+    } catch (error) {
+      removalError = error as NodeJS.ErrnoException;
+    }
+    expect(removalError?.code).toBe("ENOTEMPTY");
+
+    // Let the held write finish and prove settleBackgroundDispatch() only
+    // resolves once it has genuinely landed.
+    releaseRename?.();
+    await settlePromise;
+    expect(settled).toBe(true);
+
+    // Now a real cleanup, done the way every other test in this file does
+    // it (await settleBackgroundDispatch() first), succeeds cleanly -- the
+    // write has fully landed, so there is nothing left for rmSync to race.
+    rmSync(workdir, { recursive: true, force: true });
+  } finally {
+    writeSpy.mockRestore();
     rmSync(workdir, { recursive: true, force: true });
   }
 });
