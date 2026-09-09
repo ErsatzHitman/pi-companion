@@ -58,38 +58,37 @@
  * app's established "omit the affordance rather than render it broken"
  * convention.
  *
- * ## Two disclosed gaps this module cannot close (read before assuming revocation is complete)
+ * ## One disclosed gap this module cannot close (read before assuming revocation is complete)
  *
- * Both acceptance boxes below are genuine gaps in the DAEMON
+ * The acceptance box below is a genuine gap in the DAEMON
  * (`packages/server`), not in this client module, and this task's `Owns`
- * grant forbids editing `packages/server` — so both are named here, by
- * file and function, rather than built around.
+ * grant forbids editing `packages/server` — so it is named here, by file
+ * and function, rather than built around.
  *
- * **"Revoking a device stops its notifications" — not true today.**
- * `packages/server/src/server/push/token-store.ts`'s `PushTokenStore`
- * persists push tokens as a flat `Set<string>` with no association to
- * any `clientId` at all: `packages/server/src/server/session.ts`'s
- * `handleRegisterPushToken`/`handleUnregisterPushToken` call
- * `PushTokenStore.addToken`/`removeToken` with only the raw token,
- * never the connection's `clientId`. `packages/server/src/server/
- * websocket-server.ts`'s `handleTrustedDeviceRevokeRequest` closes the
- * revoked device's live sockets and clears its session
- * (`cleanupConnection`), but never touches `pushTokenStore` — there is
- * no `clientId` on that store to remove even if it tried. A revoked
- * device's Expo push token stays registered and keeps receiving
- * notifications exactly as before. The seam that would close this:
- * `PushTokenStore` would need to persist `{ clientId, token }` pairs
- * (or a `clientId -> Set<token>` map) instead of a bare token set, both
- * `handleRegisterPushToken`/`handleUnregisterPushToken` would need to
- * pass the connection's `clientId` when calling it, and
- * `handleTrustedDeviceRevokeRequest` would need to call a new
+ * CORRECTED (T299): this section used to also carry a box for
+ * **"Revoking a device stops its notifications" — not true today**,
+ * describing `packages/server/src/server/push/token-store.ts`'s
+ * `PushTokenStore` as a flat `Set<string>` with no `clientId`
+ * association, and `handleTrustedDeviceRevokeRequest` as never touching
+ * it. T299 closed that: `PushTokenStore` now persists `{ clientId, token
+ * }` pairs, `session.ts`'s `handleRegisterPushToken`/
+ * `handleUnregisterPushToken` pass the connection's own `clientId`, and
+ * `handleTrustedDeviceRevokeRequest` calls the new
  * `PushTokenStore.removeTokensForClient(clientId)` alongside
- * `cleanupConnection`. This client only proves the half it can reach:
- * `revoke-device-model.test.ts`'s round-trip case proves a revoked
- * device disappears from a subsequent `listTrustedDevices` call — never
- * that its push notifications stopped, which no fake in this workspace
- * can honestly simulate without recreating the server's own (currently
- * absent) `clientId`-to-token link.
+ * `cleanupConnection` — proven at the daemon layer by
+ * `websocket-server.trusted-device-revoke.test.ts` and
+ * `token-store.test.ts` (both `packages/server`). One residual is
+ * disclosed there rather than fixed: a token persisted before T299 has
+ * no recorded `clientId` and is grandfathered, so revoking a device
+ * whose only token predates that daemon version does not stop it until
+ * that device registers a fresh token. This client module still cannot
+ * prove any of this itself — `revoke-device-model.test.ts`'s round-trip
+ * case proves a revoked device disappears from a subsequent
+ * `listTrustedDevices` call, never that its push notifications stopped,
+ * which no fake in this workspace can honestly simulate without a real
+ * daemon — but the claim this header made about the daemon's OWN
+ * behaviour is no longer the true one, so it is corrected rather than
+ * left standing.
  *
  * **"A revoked device cannot silently re-register" — not true today.**
  * Trust here is a single shared daemon password

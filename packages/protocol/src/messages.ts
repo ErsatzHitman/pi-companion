@@ -2677,19 +2677,17 @@ export const ListCommandsRequestSchema = z.object({
  * Push-token registration contract (T61, plan.md §9.3).
  *
  * `packages/server`'s `PushTokenStore` (`src/server/push/token-store.ts`)
- * is a flat `Set<string>` of raw token values with **no device identity
- * at all** — it is keyed only by the exact token string. Confirmed by
- * reading `PushTokenStore.addToken`: it dedupes an identical token
- * string, but a *new* token (e.g. from an OS-level token refresh on a
- * device that already registered one) is **appended**, not used to
- * replace whatever that device registered before. There is nothing in
- * the store, the request, or the daemon's handler that says "this token
- * supersedes that one" — every token any device has ever sent stays in
- * the set, and every push fan-out (`push/notifications.ts`) sends to
- * the full set, until either `unregister_push_token` (below) removes an
- * entry explicitly, or an Expo delivery attempt to it comes back
- * `DeviceNotRegistered` / `InvalidCredentials` (`push-service.ts`
- * `handleTickets`, which then calls `PushTokenStore.removeToken`).
+ * dedupes an identical token string, but a *new* token (e.g. from an
+ * OS-level token refresh on a device that already registered one) is
+ * **appended**, not used to replace whatever that device registered
+ * before. There is nothing in the store, the request, or the daemon's
+ * handler that says "this token supersedes that one" — every token any
+ * device has ever sent stays registered, and every push fan-out
+ * (`push/notifications.ts`) sends to the full set, until either
+ * `unregister_push_token` (below) removes an entry explicitly, or an
+ * Expo delivery attempt to it comes back `DeviceNotRegistered` /
+ * `InvalidCredentials` (`push-service.ts` `handleTickets`, which then
+ * calls `PushTokenStore.removeToken`).
  *
  * So a superseded token does **not** provably stop receiving on
  * registration alone: a caller that mints a new token (refresh, re-auth,
@@ -2697,6 +2695,16 @@ export const ListCommandsRequestSchema = z.object({
  * `unregister_push_token` for the old token before, or instead of
  * relying on, sending `register_push_token` for the new one.
  * `register_push_token` is purely additive.
+ *
+ * CORRECTED (T299): this comment used to describe the store as a flat
+ * `Set<string>` "with no device identity at all", "keyed only by the
+ * exact token string". `PushTokenStore` now also attributes each token
+ * to the `clientId` of the connection that sent this message — see
+ * `token-store.ts`'s "clientId attribution (T299)" section — so that a
+ * `trusted_device.revoke` can remove a device's tokens as a group. That
+ * attribution is derived server-side from the connection, not carried
+ * on the wire: this schema is unchanged, and everything above about
+ * `register_push_token` being purely additive is still exactly true.
  */
 export const RegisterPushTokenMessageSchema = z.object({
   type: z.literal("register_push_token"),

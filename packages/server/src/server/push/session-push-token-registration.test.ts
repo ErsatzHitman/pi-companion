@@ -112,8 +112,12 @@ describe("Session push-token wiring (T61)", () => {
 
   test("an unregister_push_token message dispatched through Session.handleMessage removes exactly that token from the real store", async () => {
     const store = newStore();
-    store.addToken("ExponentPushToken[keep]");
-    store.addToken("ExponentPushToken[remove-me]");
+    // Both attributed to this session's own clientId (T299 scopes
+    // unregister to the connection's own tokens) — see
+    // "removeToken with a clientId only removes that client's own copy"
+    // in token-store.test.ts for the cross-client case.
+    store.addToken("ExponentPushToken[keep]", "push-token-test-client");
+    store.addToken("ExponentPushToken[remove-me]", "push-token-test-client");
     const session = createSessionWithRealPushTokenStore(store);
 
     await session.handleMessage({
@@ -126,7 +130,7 @@ describe("Session push-token wiring (T61)", () => {
 
   test("unregistering a token the store never held, via the real message path, is a no-op and emits no error to the client", async () => {
     const store = newStore();
-    store.addToken("ExponentPushToken[keep]");
+    store.addToken("ExponentPushToken[keep]", "push-token-test-client-2");
     const outbound: unknown[] = [];
     const session = new Session({
       clientId: "push-token-test-client-2",

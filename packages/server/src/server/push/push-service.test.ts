@@ -62,8 +62,8 @@ describe("push token lifecycle end-to-end (T61)", () => {
     const { logger } = createCapturingLogger();
     const tokenStore = new PushTokenStore(logger, tokenPath);
 
-    tokenStore.addToken("ExponentPushToken[device-A-old]");
-    tokenStore.addToken("ExponentPushToken[device-B]");
+    tokenStore.addToken("ExponentPushToken[device-A-old]", "device-a");
+    tokenStore.addToken("ExponentPushToken[device-B]", "device-b");
 
     // Simulate the same effect `unregister_push_token` produces through
     // Session.handleUnregisterPushToken (see
@@ -98,7 +98,7 @@ describe("push token lifecycle end-to-end (T61)", () => {
     const { logger } = createCapturingLogger();
     const tokenStore = new PushTokenStore(logger, tokenPath);
 
-    tokenStore.addToken("ExponentPushToken[real-device]");
+    tokenStore.addToken("ExponentPushToken[real-device]", "device-real");
     // Named no-op: removing something never registered must not throw,
     // must not remove the real token, and must not error.
     expect(() => tokenStore.removeToken("ExponentPushToken[phantom]")).not.toThrow();
@@ -139,7 +139,7 @@ describe("push token lifecycle end-to-end (T61)", () => {
     const { tokenPath, cleanup: rm } = tempTokenPath();
     cleanup = rm;
     const tokenStore = new PushTokenStore(logger, tokenPath);
-    tokenStore.addToken(secretToken);
+    tokenStore.addToken(secretToken, "device-secret");
 
     const pushService = new PushService(logger, tokenStore);
     await pushService.sendPush([secretToken], { title: "Hi", body: "there" });

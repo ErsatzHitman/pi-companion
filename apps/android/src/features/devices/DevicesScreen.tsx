@@ -44,13 +44,27 @@
  * `refreshDevices()` so the device disappears without a manual reload; a
  * failure surfaces as a named `Banner`, and the row stays present.
  *
- * **Two disclosed gaps this screen cannot close** — "revoking stops
- * notifications" and "a revoked device cannot silently re-register" are
- * NOT true end-to-end today; both are `packages/server` gaps, named by
- * file and function in `revoke-device-model.ts`'s header "Two disclosed
- * gaps" section (which this task's `Owns` grant forbids fixing here).
- * The confirmation dialog's own description states the re-registration
- * limit honestly rather than implying a guarantee this app can't back up.
+ * **One disclosed gap this screen cannot close** — "a revoked device
+ * cannot silently re-register" (T300) is NOT true end-to-end today; it
+ * is a `packages/server` gap, named by file and function in
+ * `revoke-device-model.ts`'s header "One disclosed gap" section (which
+ * this task's `Owns` grant forbids fixing here). The confirmation
+ * dialog's own description states the re-registration limit honestly
+ * rather than implying a guarantee this app can't back up.
+ *
+ * CORRECTED (T299): this section used to also name "revoking stops
+ * notifications" as a live gap. `packages/server/src/server/push/
+ * token-store.ts`'s `PushTokenStore` now attributes every token to the
+ * `clientId` that registered it, and `handleTrustedDeviceRevokeRequest`
+ * removes a revoked device's tokens alongside its sockets — so a
+ * revoke DOES stop notifications for any token registered under this
+ * fix. The residual: a token this daemon persisted BEFORE T299 has no
+ * recorded `clientId` to revoke by (grandfathered — see `token-store.ts`'s
+ * "Migration decision (T299)"), so revoking a device whose only
+ * registered token predates that daemon version does not stop it; it
+ * clears itself the next time that device's OS issues a fresh token and
+ * the app registers it again. The confirmation dialog's description
+ * says so.
  *
  * **Never a secret on screen.** See `trusted-devices-model.ts`'s "Never a
  * secret on screen" section — the wire payload carries no password, key,
@@ -299,7 +313,7 @@ export function DevicesScreen({
         title="Revoke this device?"
         description={
           revokeState.target
-            ? `"${revokeState.target.clientId}" will be disconnected immediately. If it can still authenticate to this daemon, it can reconnect and appear as a trusted device again — revoking here doesn't block that.`
+            ? `"${revokeState.target.clientId}" will be disconnected immediately. If it can still authenticate to this daemon, it can reconnect and appear as a trusted device again — revoking here doesn't block that. Push notifications to it stop too, unless it registered for them before this update — those may keep arriving until it registers again.`
             : ""
         }
         confirmLabel="Revoke"

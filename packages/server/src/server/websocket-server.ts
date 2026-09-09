@@ -2167,6 +2167,13 @@ export class VoiceAssistantWebSocketServer {
       } catch {}
     }
     await this.cleanupConnection(target, "Revoked via trusted_device.revoke");
+    // T299: stop the revoked device's push notifications too — closing
+    // its sockets above only stops live traffic, not Expo pushes, which
+    // are keyed to tokens `pushTokenStore` holds independently of any
+    // open connection. See `token-store.ts`'s "clientId attribution
+    // (T299)" section for why this is safe to call unconditionally: a
+    // `clientId` with no registered tokens is a no-op.
+    this.pushTokenStore.removeTokensForClient(trimmed);
     this.sendToClient(
       ws,
       wrapSessionMessage({

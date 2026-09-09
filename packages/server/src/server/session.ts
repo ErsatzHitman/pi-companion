@@ -4194,10 +4194,13 @@ export class Session {
   }
 
   /**
-   * Handle push token registration
+   * Handle push token registration. Attributes the token to this
+   * connection's own `clientId` (T299), so a later
+   * `trusted_device.revoke` for this device can find and remove it —
+   * see `token-store.ts`'s "clientId attribution (T299)" section.
    */
   private handleRegisterPushToken(token: string): void {
-    this.pushTokenStore.addToken(token);
+    this.pushTokenStore.addToken(token, this.clientId);
     this.sessionLogger.info("Registered push token");
   }
 
@@ -4209,9 +4212,15 @@ export class Session {
    * token the store never held is a silent no-op — `removeToken` only
    * acts (and only logs) when the token was actually present — so this
    * never lets a caller learn whether a given token was registered.
+   *
+   * Scoped to this connection's own `clientId` (T299): a client can only
+   * ever deregister a token it registered itself, never one belonging to
+   * another device it happens to have learned the value of. That is the
+   * same silent no-op as the "never registered" case above, by design —
+   * see `token-store.ts`'s `removeToken` doc comment.
    */
   private handleUnregisterPushToken(token: string): void {
-    this.pushTokenStore.removeToken(token);
+    this.pushTokenStore.removeToken(token, this.clientId);
     this.sessionLogger.info("Unregistered push token");
   }
 

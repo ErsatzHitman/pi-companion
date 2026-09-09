@@ -204,8 +204,9 @@ describe("the client-reachable round trip: revoke then re-list", () => {
    * removes it": a revoked device stops appearing in a subsequent
    * `listTrustedDevices` call. This fake does NOT, and cannot honestly,
    * model push-token delivery — see `revoke-device-model.ts`'s header
-   * "Two disclosed gaps" section for why that half is a server gap this
-   * package cannot close or fake around.
+   * "One disclosed gap" section (`CORRECTED (T299)`) for why that half
+   * was, and in one residual case still is, outside what this package
+   * can prove or fake around.
    */
   function createFakeDaemon(initial: TrustedDeviceRecord[]): TrustedDevicesClient {
     let devices = [...initial];
