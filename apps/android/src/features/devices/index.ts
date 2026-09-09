@@ -10,6 +10,7 @@ export {
 export type {
   TrustedDeviceListResult,
   TrustedDeviceRecord,
+  TrustedDeviceRevokeResult,
   TrustedDeviceRowSummary,
   TrustedDevicesClient,
   TrustedDevicesLoadStatus,
@@ -17,6 +18,22 @@ export type {
 } from "./trusted-devices-model.js";
 export { UNREAD_DEVICE_PUSH_STATUS, describeDevicePushStatus } from "./device-push-status-model.js";
 export type { DevicePushStatusSnapshot } from "./device-push-status-model.js";
+export {
+  IDLE_REVOKE_DEVICE_STATE,
+  beginConfirmedRevokeDevice,
+  completeRevokeDevice,
+  dismissRevokeRequest,
+  failRevokeDevice,
+  performRevokeDevice,
+  requestRevokeDevice,
+} from "./revoke-device-model.js";
+export type {
+  BeginConfirmedRevokeResult,
+  RevokeDeviceError,
+  RevokeDeviceOutcome,
+  RevokeDevicePhase,
+  RevokeDeviceState,
+} from "./revoke-device-model.js";
 export { useTrustedDevices } from "./use-trusted-devices.js";
 export type { UseTrustedDevicesOptions, UseTrustedDevicesResult } from "./use-trusted-devices.js";
 export { useDevicePushStatus } from "./use-device-push-status.js";

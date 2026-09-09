@@ -1,14 +1,14 @@
 /**
- * Android devices screen (T42A1, plan.md §9.3 devices surface — see
- * `docs/issues-from-plan.md`'s T42A1 acceptance boxes). Mirrors
+ * Android devices screen (T42A1/T42A2, plan.md §9.3 devices surface —
+ * see `docs/issues-from-plan.md`'s T42A1/T42A2 acceptance boxes). Mirrors
  * `../diagnostics/DiagnosticsScreen.tsx`'s controller/view split exactly:
  * all logic lives in `trusted-devices-model.ts`/`use-trusted-devices.ts`/
- * `device-push-status-model.ts`/`use-device-push-status.ts`; this
- * component only renders. `react-native` component modules can't be
- * rendered under this workspace's plain `vitest` setup (the
- * "RN-in-vitest limitation" this repo's `CLAUDE.md` names) — like every
- * other screen in this tree, this file's own shape is proven by
- * `DevicesScreen.test.ts`'s anchored source-text assertions.
+ * `device-push-status-model.ts`/`use-device-push-status.ts`/
+ * `revoke-device-model.ts`; this component only renders. `react-native`
+ * component modules can't be rendered under this workspace's plain
+ * `vitest` setup (the "RN-in-vitest limitation" this repo's `CLAUDE.md`
+ * names) — like every other screen in this tree, this file's own shape
+ * is proven by `DevicesScreen.test.ts`'s anchored source-text assertions.
  *
  * **Mounted at `/h/:serverId/devices`** by `app/h/[serverId]/devices.tsx`
  * — the one route this task's `Owns` grant permits (`features/devices/`
@@ -29,31 +29,47 @@
  * grant (`features/devices/**` plus the one route file), so neither is
  * touched here.
  *
- * **Revocation is NOT this screen's job — T42A2 owns it.** The seam this
- * screen leaves: `DeviceRow` below takes no action prop today. T42A2
- * should add an `onRevoke?: (clientId: string) => void` prop to
- * `DevicesScreen`, thread it into `DeviceRow`, and render a "Revoke"
- * `Button` only when it is supplied (never a disabled/dead one). Wire it
- * from the route via
- * `core.connection.getActiveLifecycle()?.getDaemonClient()?.
- * revokeTrustedDevice(clientId)`, then call this screen's own `refresh()`
- * (returned by `useTrustedDevices`, not currently exposed outside this
- * file) on a successful revoke so the device disappears without a manual
- * reload — see `trusted-devices-model.ts`'s header for why
- * `revokeTrustedDevice` itself is deliberately absent from that module.
+ * **Revocation (T42A2).** `DeviceRow` renders a "Revoke" `Button` only
+ * for a device that both (a) isn't this device (`isThisDevice`, matching
+ * `packages/server/src/server/websocket-server.ts`'s own
+ * `handleTrustedDeviceRevokeRequest` "Cannot revoke current device"
+ * rule — this screen simply never offers the dead end) and (b) has a
+ * client that actually supports it (`canRevoke`, below — never a
+ * disabled/dead button). Tapping it opens `revoke-device-model.ts`'s
+ * confirmation dialog (`RevokeDeviceState.target`); only confirming it
+ * (`handleConfirmRevoke`) calls `getClient()?.revokeTrustedDevice`, never
+ * a single tap. There is no separate `onRevoke` prop — see
+ * `revoke-device-model.ts`'s header ("Why there is no separate `onRevoke`
+ * prop") for why revocation goes through the same `getClient()` accessor
+ * listing already uses. A successful revoke calls this screen's own
+ * `refreshDevices()` so the device disappears without a manual reload; a
+ * failure surfaces as a named `Banner`, and the row stays present.
+ *
+ * **Two disclosed gaps this screen cannot close** — "revoking stops
+ * notifications" and "a revoked device cannot silently re-register" are
+ * NOT true end-to-end today; both are `packages/server` gaps, named by
+ * file and function in `revoke-device-model.ts`'s header "Two disclosed
+ * gaps" section (which this task's `Owns` grant forbids fixing here).
+ * The confirmation dialog's own description states the re-registration
+ * limit honestly rather than implying a guarantee this app can't back up.
  *
  * **Never a secret on screen.** See `trusted-devices-model.ts`'s "Never a
  * secret on screen" section — the wire payload carries no password, key,
  * or token, and `summarizeTrustedDevice` is an explicit allow-list
  * projection. This device's own push-registration TOKEN never reaches
  * this component at all — see `device-push-status-model.ts`'s header.
+ * `trusted_device.revoke.response` carries only `requestId`/`clientId`/
+ * `success`/`error` — see `revoke-device-model.ts`'s own copy of this
+ * section.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
+  Banner,
   Button,
   Card,
+  Dialog,
   EmptyState,
   ErrorState,
   Section,
@@ -63,6 +79,16 @@ import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import type { PermissionState } from "../composer/permission-recovery.js";
 import { describeDevicePushStatus } from "./device-push-status-model.js";
+import {
+  IDLE_REVOKE_DEVICE_STATE,
+  beginConfirmedRevokeDevice,
+  completeRevokeDevice,
+  dismissRevokeRequest,
+  failRevokeDevice,
+  performRevokeDevice,
+  requestRevokeDevice,
+  type RevokeDeviceState,
+} from "./revoke-device-model.js";
 import {
   sortTrustedDevices,
   summarizeTrustedDevice,
@@ -84,7 +110,18 @@ export interface DevicesScreenProps {
   testId?: string;
 }
 
-function DeviceRow({ summary, testId }: { summary: TrustedDeviceRowSummary; testId?: string }) {
+function DeviceRow({
+  summary,
+  onRequestRevoke,
+  revoking,
+  testId,
+}: {
+  summary: TrustedDeviceRowSummary;
+  /** Omitted (never a disabled button) for this device's own row, and whenever the client doesn't support revocation — see `canRevoke` in `DevicesScreen` below. */
+  onRequestRevoke?: () => void;
+  revoking: boolean;
+  testId?: string;
+}) {
   const { theme } = useTheme();
   const styles = useMemo(() => createRowStyles(theme), [theme]);
   return (
@@ -111,6 +148,17 @@ function DeviceRow({ summary, testId }: { summary: TrustedDeviceRowSummary; test
       />
       <Text style={styles.meta}>{summary.appVersionLabel}</Text>
       <Text style={styles.meta}>Last seen {summary.lastSeenLabel}</Text>
+      {onRequestRevoke ? (
+        <View style={styles.rowActions}>
+          <Button
+            kind="danger"
+            label={revoking ? "Revoking…" : "Revoke"}
+            onPress={onRequestRevoke}
+            disabled={revoking}
+            testId={testId ? `${testId}-revoke` : undefined}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -136,6 +184,7 @@ export function DevicesScreen({
     isRegistered,
     subscribeToConnectionChanges,
   });
+  const [revokeState, setRevokeState] = useState<RevokeDeviceState>(IDLE_REVOKE_DEVICE_STATE);
 
   const rows = useMemo(() => {
     const sorted = sortTrustedDevices(snapshot.devices, thisClientId);
@@ -143,9 +192,49 @@ export function DevicesScreen({
     return sorted.map((device) => summarizeTrustedDevice(device, { thisClientId, now: asOf }));
   }, [snapshot.devices, thisClientId, now]);
 
+  // Re-read on every render, the same fresh-read convention `getClient`
+  // itself follows everywhere else in this file — a reconnect can swap
+  // in a client that (dis)gained the capability. Never gates on a stale
+  // snapshot of the client taken once at mount.
+  const canRevoke = Boolean(getClient()?.revokeTrustedDevice);
+
   function handleRefresh(): void {
     refreshDevices();
     refreshPushStatus();
+  }
+
+  function handleRequestRevoke(target: TrustedDeviceRowSummary): void {
+    setRevokeState((current) => requestRevokeDevice(current, target));
+  }
+
+  function handleDismissRevoke(): void {
+    setRevokeState((current) => dismissRevokeRequest(current));
+  }
+
+  // T42A2: "confirmed explicitly" — this is the only path that ever
+  // calls performRevokeDevice, and it is only reachable once
+  // beginConfirmedRevokeDevice has consumed a target that
+  // handleRequestRevoke opened and the Dialog's own confirm button (not
+  // its dismiss) triggered.
+  function handleConfirmRevoke(): void {
+    const begin = beginConfirmedRevokeDevice(revokeState);
+    if (!begin.clientId) return;
+    const clientId = begin.clientId;
+    setRevokeState(begin.state);
+    void performRevokeDevice(getClient(), clientId).then((outcome) => {
+      if (outcome.status === "success") {
+        setRevokeState((current) => completeRevokeDevice(current, clientId));
+        // Only now — from the daemon's own confirmation — does the
+        // device disappear, never spliced out ahead of it.
+        refreshDevices();
+        return;
+      }
+      const message =
+        outcome.status === "unavailable"
+          ? "Device revocation isn't available on this connection."
+          : (outcome.error ?? "Couldn't revoke this device.");
+      setRevokeState((current) => failRevokeDevice(current, clientId, message));
+    });
   }
 
   return (
@@ -185,14 +274,42 @@ export function DevicesScreen({
             testId={testId ? `${testId}-error` : undefined}
           />
         ) : null}
+        {revokeState.error ? (
+          <Banner
+            tone="danger"
+            message={revokeState.error.message}
+            testId={testId ? `${testId}-revoke-error` : undefined}
+          />
+        ) : null}
         {rows.map((summary) => (
           <DeviceRow
             key={summary.clientId}
             summary={summary}
+            onRequestRevoke={
+              canRevoke && !summary.isThisDevice ? () => handleRequestRevoke(summary) : undefined
+            }
+            revoking={
+              revokeState.phase === "revoking" && revokeState.pendingClientId === summary.clientId
+            }
             testId={testId ? `${testId}-device-${summary.clientId}` : undefined}
           />
         ))}
       </Section>
+      <Dialog
+        open={revokeState.target !== null}
+        title="Revoke this device?"
+        description={
+          revokeState.target
+            ? `"${revokeState.target.clientId}" will be disconnected immediately. If it can still authenticate to this daemon, it can reconnect and appear as a trusted device again — revoking here doesn't block that.`
+            : ""
+        }
+        confirmLabel="Revoke"
+        cancelLabel="Cancel"
+        dangerous
+        onConfirm={handleConfirmRevoke}
+        onClose={handleDismissRevoke}
+        testId={testId ? `${testId}-revoke-dialog` : undefined}
+      />
     </ScrollView>
   );
 }
@@ -236,6 +353,11 @@ function createRowStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     meta: {
       color: theme.colors["ink-3"],
       fontSize: theme.typography.variant.label.fontSize,
+    },
+    rowActions: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      paddingTop: theme.spacing[1],
     },
   });
 }

@@ -84,10 +84,55 @@ describe("DevicesScreen source", () => {
     expect(code.toLowerCase()).not.toMatch(/\bpin\b/);
   });
 
-  it("declares no revoke affordance yet — that is T42A2's job, not this screen's", () => {
+  it("offers Revoke through the shared client accessor, never a separate onRevoke prop (T42A2)", () => {
+    // CORRECTED (T42A2): a prior version of this test asserted the
+    // OPPOSITE — that no revoke affordance existed yet. It now exists,
+    // wired through `getClient()` rather than a second callback prop —
+    // see `revoke-device-model.ts`'s header for why.
     expect(code).not.toMatch(/onRevoke/);
-    expect(code).not.toMatch(/revokeTrustedDevice/);
-    expect(code).not.toMatch(/Revoke/);
+    expect(code).toMatch(/performRevokeDevice\(getClient\(\),\s*clientId\)/);
+    expect(code).toMatch(/canRevoke\s*=\s*Boolean\(getClient\(\)\?\.revokeTrustedDevice\)/);
+  });
+
+  it("never offers Revoke for this device's own row, matching the daemon's own 'cannot revoke current device' rule", () => {
+    expect(code).toMatch(/canRevoke\s*&&\s*!summary\.isThisDevice/);
+  });
+
+  it("requires explicit confirmation before revoking — only the Dialog's onConfirm reaches performRevokeDevice", () => {
+    expect(code).toMatch(/onConfirm=\{handleConfirmRevoke\}/);
+    expect(code).toMatch(/onClose=\{handleDismissRevoke\}/);
+    // The dismiss handler calls the model's dismiss function and nothing
+    // resembling a confirm/perform call — anchored to the handler's own
+    // body, not merely somewhere else in the file.
+    const dismissBody = code.match(/function handleDismissRevoke\(\)[^}]*\{([^}]*)\}/);
+    expect(dismissBody).not.toBeNull();
+    expect(dismissBody?.[1]).toMatch(/dismissRevokeRequest\(/);
+    expect(dismissBody?.[1]).not.toMatch(/performRevokeDevice|beginConfirmedRevokeDevice/);
+  });
+
+  it("only calls performRevokeDevice by way of beginConfirmedRevokeDevice consuming the confirmed target", () => {
+    const confirmBody = code.match(/function handleConfirmRevoke\(\)[\s\S]*?\n  \}/);
+    expect(confirmBody).not.toBeNull();
+    expect(confirmBody?.[0]).toMatch(/beginConfirmedRevokeDevice\(revokeState\)/);
+    expect(confirmBody?.[0]).toMatch(/if \(!begin\.clientId\) return;/);
+    expect(confirmBody?.[0]).toMatch(/performRevokeDevice\(/);
+  });
+
+  it("refreshes the device list only after a successful revoke, never speculatively", () => {
+    const confirmBody = code.match(/function handleConfirmRevoke\(\)[\s\S]*?\n  \}/)?.[0] ?? "";
+    const successBranch = confirmBody.match(/status === "success"[\s\S]*?return;/)?.[0] ?? "";
+    expect(successBranch).toMatch(/refreshDevices\(\)/);
+  });
+
+  it("shows a named error banner on a failed revoke, keeping the row present", () => {
+    expect(code).toMatch(/revokeState\.error/);
+    expect(code).toMatch(/tone="danger"/);
+  });
+
+  it("names both server-side gaps in its own doc comment rather than implying revocation is complete", () => {
+    expect(source).toMatch(/notifications/i);
+    expect(source).toMatch(/re-register/i);
+    expect(source).toMatch(/packages\/server/);
   });
 
   it("uses only theme tokens for colour, never a raw hex literal", () => {
@@ -111,9 +156,13 @@ describe("DevicesScreen source", () => {
     expect(source).toMatch(/Nothing currently taps a UI element to reach this route/);
   });
 
-  it("names the exact revocation seam T42A2 should add", () => {
+  it("documents the revocation seam it actually built (T42A2), not the onRevoke prop an earlier draft sketched", () => {
+    // CORRECTED (T42A2): this test used to pin the SKETCHED seam
+    // (`onRevoke?: (clientId: string) => void`) as the thing to build.
+    // The seam that shipped is different — see `revoke-device-model.ts`'s
+    // header — so pin what actually exists instead of the old sketch.
     expect(source).toMatch(/T42A2/);
-    expect(source).toMatch(/onRevoke\?:\s*\(clientId: string\) => void/);
+    expect(source).not.toMatch(/onRevoke\?:\s*\(clientId: string\) => void/);
   });
 
   it("is a named, importable export", () => {

@@ -5,7 +5,7 @@
  * one without exposing a secret" — no live daemon, socket, or device
  * required to test any of it. `DevicesScreen.tsx` only renders what this
  * module (and `device-push-status-model.ts`, for this device's own push
- * state) computes.
+ * state, and `revoke-device-model.ts`, for revoking one) computes.
  *
  * ## The request this proves against
  *
@@ -15,15 +15,19 @@
  * payload: { requestId, devices: [{ clientId, appVersion, lastSeenAt,
  * connected }] } }`) are the wire shape this module reads.
  * `packages/client/src/daemon-client.ts`'s real `listTrustedDevices(options?)`
- * is the one production caller `TrustedDevicesClient` below is a
- * structural subset of — read directly rather than re-declared here, so a
- * real `DaemonClient` instance satisfies it as-is (width subtyping),
- * exactly like `../composer/slash-command-model.ts`'s narrow
- * `listCommands?` client shape.
+ * and `revokeTrustedDevice(clientId, options?)` are the two production
+ * callers `TrustedDevicesClient` below is a structural subset of — read
+ * directly rather than re-declared here, so a real `DaemonClient`
+ * instance satisfies it as-is (width subtyping), exactly like
+ * `../composer/slash-command-model.ts`'s narrow `listCommands?` client
+ * shape.
  *
- * `revokeTrustedDevice` is deliberately NOT part of this module — T42A2
- * owns device revocation and this file's job stops at listing. See
- * `DevicesScreen.tsx`'s doc comment for the exact seam T42A2 should add.
+ * `revokeTrustedDevice` (T42A2) is declared here, on the one client
+ * interface both listing and revoking share, rather than on a second,
+ * parallel interface in `revoke-device-model.ts` — see that module's own
+ * header ("Why there is no separate `onRevoke` prop") for why one shared
+ * accessor was chosen over threading a second callback prop through
+ * `DevicesScreen`.
  *
  * ## Never a secret on screen
  *
@@ -65,15 +69,28 @@ export interface TrustedDeviceListResult {
   readonly devices: readonly TrustedDeviceRecord[];
 }
 
+export interface TrustedDeviceRevokeResult {
+  readonly requestId: string;
+  readonly clientId: string;
+  readonly success: boolean;
+  readonly error: string | null;
+}
+
 /**
- * Structural subset of `DaemonClient.listTrustedDevices`
- * (`packages/client/src/daemon-client.ts`). Optional so a client build
- * (or test fake) that omits it entirely is still a valid
+ * Structural subset of `DaemonClient.listTrustedDevices` and
+ * `DaemonClient.revokeTrustedDevice`
+ * (`packages/client/src/daemon-client.ts`). Both optional so a client
+ * build (or test fake) that omits either — or both — is still a valid
  * `TrustedDevicesClient` — see this module's header "Degrading, never
- * throwing" section.
+ * throwing" section, and `revoke-device-model.ts`'s own copy of that
+ * section for the revoke side.
  */
 export interface TrustedDevicesClient {
   listTrustedDevices?(options?: { requestId?: string }): Promise<TrustedDeviceListResult>;
+  revokeTrustedDevice?(
+    clientId: string,
+    options?: { requestId?: string },
+  ): Promise<TrustedDeviceRevokeResult>;
 }
 
 export type TrustedDevicesLoadStatus = "loading" | "loaded" | "error" | "unavailable";
