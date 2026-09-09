@@ -110,19 +110,66 @@ const NO_INSTALL_REASON =
 //      target `14.0.2` — five majors ahead; grep every `import ... from
 //      "uuid"` call site first, since that package's default-export shape
 //      has changed across majors before. This is the 7th.
+//
+// ## CORRECTED (P9-U): step 3 is DONE, steps 1 and 2 are now WRONG
+//
+// Step 3 was taken and is no longer pending. `uuid` is `^14.0.2` in
+// `packages/server/package.json` and resolves 14.0.2. The export worry the
+// step names did not materialise: all thirteen call sites import the NAMED
+// `v4`, not a default export, and `v4` is still a named export in 14.0.2
+// (checked by calling it, not by reading a changelog). `tsgo` typecheck exits
+// 0 and the ceiling guard is unmoved.
+//
+// Steps 1 and 2 were then attempted and REVERTED, and the reason is the
+// standing lesson here rather than a one-off: **`fixAvailable` is a moving
+// target, and following it can move a dependency INTO a newly-published
+// vulnerable range.** Measured within a single session, two `npm audit` runs
+// minutes apart:
+//
+//   - Step 1's premise is gone. `express`'s fix is no longer non-major; it is
+//     now `express@5.2.1`, `isSemVerMajor: true`. The cause is a NEW `qs`
+//     advisory, "array-limit bypass via bracket-key comma parsing", covering
+//     `>=6.14.2 <=6.15.3` — and `express@^4.18.2` already resolves `qs@6.15.3`
+//     in this tree, so this arrived without anyone changing anything.
+//   - Step 2's target is wrong twice over. It says `ai@7.0.93`; the current
+//     `fixAvailable` is `ai@7.0.94`. More importantly, the interim `ai@5.0.253`
+//     that one audit run offered as a NON-major fix is itself covered by a new
+//     advisory spanning `5.0.223 - 5.0.253`, while the pinned `5.0.78` sits
+//     outside it. Bumping to 5.0.253 therefore traded a `low` advisory for a
+//     `moderate` one and took the total from 36 to 37.
+//
+// Both were reverted from scratchpad copies of `package-lock.json` and
+// `packages/server/package.json` (never `git checkout --`), `npm install` was
+// re-run, and `git status --porcelain` confirmed the restore was
+// byte-identical. So: **all six remaining SERVER_BACKEND_OWNER advisories now
+// need a semver-major bump** (`express@5.2.1`, `ai@7.0.94`), not the
+// "3 non-major + 4 major" split step 1 and 2 describe. Re-read
+// `fixAvailable` immediately before acting; do not trust the figures in this
+// comment either, for exactly the reason it documents.
 //   4. After each bump: `npm run build --workspace=@picompanion/server`,
 //      `npm run typecheck --workspace=@picompanion/server`, and
 //      `npm run test:unit --workspace=@picompanion/server` three times in a
 //      row on one commit (this repository's own T240 rule for that
 //      workspace's test suite). Then re-run
-//      `node scripts/ci/run-guard-audit-baseline.mjs`: the 7 SERVER_BACKEND_
-//      OWNER entries should print as STALE ("likely fixed or withdrawn"),
-//      which is this guard's non-failing "safe to prune" signal — prune
-//      those 7 lines from AUDIT_BASELINE below in the SAME commit as the
-//      bump, never left dangling. If `run-guard-audit-baseline.mjs` instead
-//      FAILS naming a package still in this list, the bump did not fully
-//      clear that advisory (a different range, or a new one) — treat that
-//      as a new, unreviewed finding, not something to re-baseline reflexively.
+//      `node scripts/ci/run-guard-audit-baseline.mjs`: the remaining
+//      SERVER_BACKEND_OWNER entries should print as STALE ("likely fixed or
+//      withdrawn"), which is this guard's non-failing "safe to prune" signal
+//      — prune those lines from AUDIT_BASELINE below in the SAME commit as
+//      the bump, never left dangling. If `run-guard-audit-baseline.mjs`
+//      instead FAILS naming a package still in this list, the bump did not
+//      fully clear that advisory (a different range, or a new one) — treat
+//      that as a new, unreviewed finding, not something to re-baseline
+//      reflexively.
+//
+//      P9-U found a third outcome this step did not anticipate, and it is the
+//      one that actually happened: the advisory can survive a successful bump
+//      because a DIFFERENT node matches the same (package, severity, range)
+//      triple. Clearing `packages/server`'s own `uuid` left the entry in
+//      place via `node_modules/xcode/node_modules/uuid`. That is neither
+//      stale nor a failure — it is a correct entry whose OWNER changed, and
+//      the fix is to reassign the owner (see the `uuid` entry below), not to
+//      prune it. Read `nodes` in `npm audit --json`, not just the package
+//      name, before concluding a bump did nothing.
 //
 // Take the EXPO/ANDROID 29 second. Every one of their `fixAvailable`s points
 // at `expo@57.0.20` (this app pins `^54.0.18`, three majors back) or a
@@ -232,9 +279,22 @@ export const AUDIT_BASELINE = [
   },
   {
     package: "uuid",
+    // Owner REASSIGNED (P9-U): `packages/server` bumped its own direct
+    // `uuid` from `^9.0.1` to `^14.0.2`, which cleared the server's node.
+    // The advisory did not disappear, because a DIFFERENT node still
+    // matches this same (package, severity, range) triple:
+    // `node_modules/xcode/node_modules/uuid`, transitive through the Expo
+    // toolchain, whose `fixAvailable` is now `expo@57.0.21`
+    // (`isSemVerMajor: true`). So this entry belongs to the Android
+    // toolchain owner and NOT to the seven the owner sequence above calls
+    // "the SERVER seven" — it is an Expo-line entry wearing a server
+    // package's name, and reading the name alone would send the wrong owner
+    // after it. This is the exact shape this guard's own header warns about
+    // under "a baseline that outlives the advisory", one level in: the
+    // triple outlived the NODE it was accepted for.
     severity: "moderate",
     range: "<11.1.1",
-    owner: SERVER_BACKEND_OWNER,
+    owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
 
