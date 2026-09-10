@@ -49,9 +49,10 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.bodySmall.fontSize,
     },
-    // The mono family with tabular figures for the +/-/~ counters (docs/
-    // beautiful-ui-reference.md "Geist Mono for all numerals ... with
-    // tabular-nums on counters and timers").
+    // The mono family with tabular figures for the +/-/~ counters
+    // (docs/beautiful-ui-reference.md's rule for numerals on counters and
+    // timers). T356: this used to quote that document's own "Geist Mono",
+    // a face name that has been wrong on Android since T345.
     stat: {
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.caption.fontSize,

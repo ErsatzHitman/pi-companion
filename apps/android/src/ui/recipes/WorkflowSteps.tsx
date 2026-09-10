@@ -53,8 +53,11 @@ export function WorkflowSteps({ items, accessibleName, testId }: WorkflowStepsPr
           accessibilityState={{ selected: item.status === "active" }}
           accessibilityLabel={`Step ${index + 1} of ${items.length}: ${item.label}, ${statusText[item.status]}`}
         >
-          {/* Mono ordinal (docs/beautiful-ui-reference.md "small `01`, `02`
-              numbers in Geist Mono with tabular figures"). */}
+          {/* Mono ordinal with tabular figures — docs/beautiful-ui-
+              reference.md's small `01`, `02` numbering. T356: this used
+              to quote that document's "Geist Mono", a face name that has
+              been wrong on Android since T345 swapped the mono face to
+              JetBrains Mono. */}
           <Text style={styles.ordinal} accessibilityElementsHidden>
             {String(index + 1).padStart(2, "0")}
           </Text>

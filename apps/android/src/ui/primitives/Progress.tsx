@@ -84,9 +84,14 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       color: theme.colors["ink-2"],
       fontSize: theme.typography.variant.caption.fontSize,
     },
-    // The percentage/duration readout is a counter (docs/beautiful-ui-
-    // reference.md "Geist Mono for all numerals ... with tabular-nums on
-    // counters and timers").
+    // The percentage/duration readout is a counter, so it takes the mono
+    // family with tabular figures (docs/beautiful-ui-reference.md's rule
+    // for numerals on counters and timers). T356: that document names
+    // Geist Mono and this comment used to quote the face name, which has
+    // been wrong on Android since T345 swapped the mono face to JetBrains
+    // Mono. The rule is what was borrowed; the face comes from
+    // `theme.typography.variant.code.fontFamily`, which is why the code
+    // below never named one.
     percentText: {
       color: theme.colors["ink-2"],
       fontFamily: theme.typography.variant.code.fontFamily,

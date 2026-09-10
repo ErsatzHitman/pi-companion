@@ -1,3 +1,12 @@
+import {
+  BLOCK_GAP,
+  BLOCK_PADDING_HORIZONTAL,
+  BLOCK_PADDING_VERTICAL,
+  BLOCK_RADIUS,
+  blockOutline,
+  blockSurface,
+  type BlockKind,
+} from "../../ui/theme/block-shape";
 import type { ComposerEntryStatus } from "./composer-model";
 
 /**
@@ -16,6 +25,16 @@ import type { ComposerEntryStatus } from "./composer-model";
  * below is the whole decision, and it is worth a real behavioural test
  * rather than a source-regex pin.
  *
+ * **T356 moved the shape itself out of this file.** The geometry and
+ * the surface table now live in `../../ui/theme/block-shape.ts`,
+ * because the transcript's tool cards, its messages and the extension
+ * elements draw the same block and three features reaching into a
+ * fourth feature's model is the layering this repository's own rules
+ * exist to prevent. What stays here is the part that is genuinely the
+ * composer's: which `BlockKind` a `ComposerEntryStatus` is. The
+ * constants below are re-exported unchanged so nothing that already
+ * imported them had to move.
+ *
  * ## Why `failed` is its own surface and not just a red chip
  *
  * The chip already says "Failed" in words, so the surface is not
@@ -28,12 +47,12 @@ import type { ComposerEntryStatus } from "./composer-model";
  */
 
 /** Radius of every block the redesign draws (`.blk`). */
-export const ENTRY_BLOCK_RADIUS = 14;
+export const ENTRY_BLOCK_RADIUS = BLOCK_RADIUS;
 /** `.blk` padding, in the artifact's own order (9px top/bottom, 12px left/right). */
-export const ENTRY_BLOCK_PADDING_VERTICAL = 9;
-export const ENTRY_BLOCK_PADDING_HORIZONTAL = 12;
+export const ENTRY_BLOCK_PADDING_VERTICAL = BLOCK_PADDING_VERTICAL;
+export const ENTRY_BLOCK_PADDING_HORIZONTAL = BLOCK_PADDING_HORIZONTAL;
 /** `.blk`'s `margin: 10px 0` — expressed as the gap between stacked blocks. */
-export const ENTRY_BLOCK_GAP = 10;
+export const ENTRY_BLOCK_GAP = BLOCK_GAP;
 
 /**
  * The `theme.colors` key a block's background reads from. A key rather
@@ -42,15 +61,22 @@ export const ENTRY_BLOCK_GAP = 10;
  */
 export type EntryBlockSurface = "field" | "inset" | "tool-error-bg";
 
-export function entryBlockSurface(status: ComposerEntryStatus): EntryBlockSurface {
+/** Which kind of block one entry status is. The composer's own decision, hence its home here. */
+export function entryBlockKind(status: ComposerEntryStatus): BlockKind {
   switch (status) {
     case "sent":
-      return "field";
+      return "user";
     case "pending":
-      return "inset";
+      return "pending";
     case "failed":
-      return "tool-error-bg";
+      return "tool-error";
   }
+}
+
+export function entryBlockSurface(status: ComposerEntryStatus): EntryBlockSurface {
+  // Never `null` for any entry status: every kind above is a filled
+  // one, and only `assistant` — which no entry can be — is unfilled.
+  return blockSurface(entryBlockKind(status)) as EntryBlockSurface;
 }
 
 /**
@@ -61,5 +87,5 @@ export function entryBlockSurface(status: ComposerEntryStatus): EntryBlockSurfac
  * beside a chip that already reads "Failed".
  */
 export function entryBlockIsOutlined(status: ComposerEntryStatus): boolean {
-  return status === "failed";
+  return blockOutline(entryBlockKind(status)) !== null;
 }

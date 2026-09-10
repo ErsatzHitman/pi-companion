@@ -14,6 +14,18 @@
  * a live update to one call does not re-render every already-settled
  * tool-call row already in the list.
  *
+ * **T356: the card carries the redesign's own tool surfaces.** §7.2
+ * gives a finished tool call `tool-success-bg` and a failed one
+ * `tool-error-bg`, which is what `toolBlockKind` below maps a
+ * `ToolCallViewModel.status` onto. `Card` still supplies the radius,
+ * the padding and the 1px ring; only the fill (and, for a failure, a
+ * red outline) is overridden, so a tool call still reads as the same
+ * kind of object as every other card in this app. A running call keeps
+ * the neutral `surface` it always had: it has no outcome yet, and
+ * colouring it as though it did is the thing this whole table exists to
+ * avoid. `StatusIndicator` above still spells the status out in words,
+ * so none of this is colour alone (plan.md §10.5).
+ *
  * §11.6's governing rule: "Never fail the transcript because a plugin
  * returns a new tool detail shape." Every family this file does not
  * explicitly branch on — `tool.family === "generic"`, which is exactly
@@ -29,6 +41,7 @@ import { Linking, StyleSheet, Text, View } from "react-native";
 import type { tools } from "@picompanion/frontend-core";
 
 import { Card, CodeBlock, Link, RecordList, StatusIndicator } from "../../ui/primitives";
+import { blockOutline, blockSurface, type BlockKind } from "../../ui/theme/block-shape";
 import { CodeListing, DiffSummary, WorkflowSteps } from "../../ui/recipes";
 import type { WorkflowStepItem } from "../../ui/recipes";
 import { useTheme } from "../../ui/theme/theme-context";
@@ -55,6 +68,31 @@ export type { ToolCallTranscriptEntry, TranscriptToolCallRowProps } from "./tool
 export { isToolCallEntry } from "./tool-call-row-model";
 
 const MAX_LIST_ROWS = 20;
+
+/**
+ * Which `.blk` a tool call is. `running` and every other in-flight
+ * status is deliberately absent from the mapping — see this file's own
+ * T356 paragraph for why an outcome-coloured card before there is an
+ * outcome is the failure mode this avoids.
+ */
+function toolBlockKind(status: tools.ToolCallViewModel["status"]): BlockKind | null {
+  if (status === "completed") return "tool-ok";
+  if (status === "failed") return "tool-error";
+  return null;
+}
+
+/** The `Card` style override for one tool call's status, or `undefined` while it is still running. */
+function useToolCardStyle(status: tools.ToolCallViewModel["status"]) {
+  const { theme } = useTheme();
+  const kind = toolBlockKind(status);
+  if (kind === null) return undefined;
+  const surface = blockSurface(kind);
+  const outline = blockOutline(kind);
+  return {
+    backgroundColor: surface === null ? undefined : theme.colors[surface],
+    ...(outline === null ? {} : { borderWidth: 1, borderColor: theme.colors[outline] }),
+  };
+}
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
@@ -316,11 +354,12 @@ function UnknownToolCard({
   styles: Styles;
   testId?: string;
 }) {
+  const cardStyle = useToolCardStyle(tool.status);
   const resultLabel = tool.status === "failed" ? "Error" : "Result";
   const showResultPanel =
     tool.status === "failed" ? tool.rawError !== undefined : tool.result !== undefined;
   return (
-    <Card testID={testId}>
+    <Card style={cardStyle} testID={testId}>
       <ToolCallHeader tool={tool} testId={testId} />
       <View style={styles.body}>
         <Text style={[styles.meta, tool.status === "failed" ? styles.metaError : null]}>
@@ -348,8 +387,9 @@ function KnownToolCard({
   styles: Styles;
   testId?: string;
 }) {
+  const cardStyle = useToolCardStyle(tool.status);
   return (
-    <Card testID={testId}>
+    <Card style={cardStyle} testID={testId}>
       <ToolCallHeader tool={tool} testId={testId} />
       {tool.summary ? <Text style={styles.meta}>{tool.summary}</Text> : null}
       {tool.status === "failed" && tool.errorText ? (

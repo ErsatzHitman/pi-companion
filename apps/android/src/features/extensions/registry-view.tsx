@@ -22,6 +22,19 @@
  * 5. in development (`__DEV__`), shows a small revision badge so a stale
  *    element is visibly distinguishable while debugging.
  *
+ * **T356: every element draws inside the redesign's `.blk.ext`.** §7.2
+ * gives extension elements their own surface (`extension-bg`) and the
+ * same radius/padding as every other block, which is what makes an
+ * extension's contribution visibly an extension's rather than
+ * something the model said. The wrapper is applied HERE, once, rather
+ * than inside each registered kind component: the kinds are
+ * independently registered and several are shared with fixtures, so
+ * asking each to remember its own container is how one of them ends up
+ * without it. It wraps the diagnostic path too, deliberately — a
+ * malformed element is still that extension's element, and letting it
+ * fall out of the block would make a broken extension look like part
+ * of the transcript.
+ *
  * Individual kinds (`status`, `widget`, `progress`, ...) render through
  * here once T34A2 onward register them; until then every element renders
  * through step 2's fallback, which is the same fallback a genuinely-
@@ -36,6 +49,12 @@ import { extensions } from "@picompanion/frontend-core";
 import type { Logger, LogFields } from "@picompanion/frontend-core";
 import type { PiUiAction, PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
+import {
+  BLOCK_PADDING_HORIZONTAL,
+  BLOCK_PADDING_VERTICAL,
+  BLOCK_RADIUS,
+  blockSurface,
+} from "../../ui/theme/block-shape";
 import { useTheme } from "../../ui/theme/theme-context";
 import { DangerousActionConfirmDialog } from "./registry-confirm";
 import { ExtensionDiagnostic } from "./registry-diagnostic";
@@ -256,7 +275,15 @@ export function PiUiElementView({
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
-    wrapper: { gap: theme.spacing[1] },
+    // T356: the `.blk.ext` block. `blockSurface("extension")` is never
+    // `null` — only `assistant` is — so this reads the token directly.
+    wrapper: {
+      gap: theme.spacing[1],
+      borderRadius: BLOCK_RADIUS,
+      paddingVertical: BLOCK_PADDING_VERTICAL,
+      paddingHorizontal: BLOCK_PADDING_HORIZONTAL,
+      backgroundColor: theme.colors[blockSurface("extension") ?? "extension-bg"],
+    },
     revBadge: {
       alignSelf: "flex-end",
       color: theme.colors["ink-3"],

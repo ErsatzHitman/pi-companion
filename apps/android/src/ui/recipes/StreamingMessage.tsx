@@ -9,6 +9,12 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import {
+  BLOCK_PADDING_HORIZONTAL,
+  BLOCK_PADDING_VERTICAL,
+  BLOCK_RADIUS,
+  blockSurface,
+} from "../theme/block-shape";
 import { asFontWeight } from "../theme/native-style-helpers";
 import { useTheme } from "../theme/theme-context";
 
@@ -21,6 +27,9 @@ import { useTheme } from "../theme/theme-context";
  * plain colour interpolation over the same 1.4s linear cycle instead.
  */
 const SHIMMER_DURATION_MS = 1400;
+
+/** §7.2's caret width. See this component's doc comment for the phase the artifact has and this app does not. */
+const CARET_WIDTH = 2;
 
 export interface StreamingMessageProps {
   speaker: "assistant" | "user";
@@ -39,6 +48,25 @@ export interface StreamingMessageProps {
  * visible "Pi is still responding" caption repeats that as on-screen text
  * (not just the blinking cursor) so the state survives without colour or
  * animation. The cursor pulse respects `reduceMotion` by staying static.
+ *
+ * **T356: the turn is now the redesign's `.blk`** — the one block shape
+ * the whole session screen draws in (`../theme/block-shape.ts`). A user
+ * turn is `.usr` on `field`; the model's own prose is deliberately
+ * UNFILLED, which is what `blockSurface("assistant")` returning `null`
+ * means and why this file branches on it rather than picking a second
+ * fill. The artifact boxes the user's prompts, the tool calls and the
+ * extension elements precisely so the model's prose reads as the page
+ * itself; filling it too would make the transcript a wall of boxes and
+ * spend the contrast the boxes exist to create.
+ *
+ * The caret is 2px wide (§7.2), not the 8px block it used to be. §7.2
+ * describes it as "solid while streaming then blinking", which belongs
+ * to the artifact's character-by-character reveal: solid while the
+ * reveal is behind the text, blinking once it catches up. Android
+ * receives already-coalesced text and runs no reveal, so there is no
+ * first phase to be solid during — the caret blinks for as long as the
+ * turn is streaming, and that is stated here rather than faked with a
+ * timer that would mean nothing.
  */
 export function StreamingMessage({ speaker, text, streaming, testId }: StreamingMessageProps) {
   const { theme, motion, reduceMotion } = useTheme();
@@ -103,14 +131,17 @@ export function StreamingMessage({ speaker, text, streaming, testId }: Streaming
 }
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"], speaker: "assistant" | "user") {
+  const surface = blockSurface(speaker === "user" ? "user" : "assistant");
   return StyleSheet.create({
     wrapper: {
       gap: theme.spacing[1],
-      padding: theme.spacing[3],
-      borderRadius: theme.radii.control,
-      backgroundColor: speaker === "assistant" ? theme.colors.canvas : theme.colors.surface,
-      borderWidth: speaker === "user" ? 1 : 0,
-      borderColor: theme.colors.line,
+      paddingVertical: BLOCK_PADDING_VERTICAL,
+      paddingHorizontal: BLOCK_PADDING_HORIZONTAL,
+      borderRadius: BLOCK_RADIUS,
+      // `null` is the unfilled `assistant` case — see this file's own
+      // T356 paragraph. `"transparent"` rather than `canvas` so the
+      // block inherits whatever the transcript is drawn on.
+      backgroundColor: surface === null ? "transparent" : theme.colors[surface],
     },
     speaker: {
       color: theme.colors["ink-3"],
@@ -123,12 +154,14 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], speaker: "ass
       fontSize: theme.typography.variant.body.fontSize,
       lineHeight: theme.typography.variant.body.lineHeight,
     },
+    // §7.2's 2px caret. A rule, not a block: at 8px wide it read as a
+    // highlight sitting after the text rather than as the place the
+    // next character lands.
     cursor: {
-      width: 8,
-      height: 16,
+      width: CARET_WIDTH,
+      height: theme.typography.variant.body.lineHeight,
       marginLeft: theme.spacing[1],
       backgroundColor: theme.colors.accent,
-      borderRadius: theme.radii.chip,
     },
     caption: {
       color: theme.colors["ink-3"],

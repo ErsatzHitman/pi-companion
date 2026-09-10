@@ -612,6 +612,7 @@ that recomputation has to be domain-specific:
 | T353   | The composer's controls sat above the prompt bar, and the model picker had never been handed a client                | phase-9   | android          | P9-U   | T352, T39B, T132                                                      |
 | T354   | No control on the phone could switch a session between Build and Plan, or turn auto-compaction on                    | phase-9   | android          | P9-U   | T353, T39B, T132                                                      |
 | T355   | The composer's queued prompts were flat rows, not the blocks every other element on the screen is                    | phase-9   | android          | P9-U   | T354, T338, T346                                                      |
+| T356   | The transcript drew four different container shapes where the design draws one, and cited a wrong font               | phase-9   | android          | P9-U   | T355, T345                                                            |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -653,8 +654,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**564 tasks** (distinct IDs counted directly from the table above), recounted at T355 with
-`grep`/`sort -u` over the table's own rows — one past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**565 tasks** (distinct IDs counted directly from the table above), recounted at T356 with
+`grep`/`sort -u` over the table's own rows — one past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17630,3 +17631,76 @@ registered by T352–T354.
 - [x] The block geometry is the artifact's own 14/9/12/10, taken from the model rather than re-typed
 - [x] The ScrollView decision is recorded with its reason and pinned by a test that fails if it is dropped
 - [x] The one stale pin was re-anchored, not weakened, and the reason is written where the next reader will hit it
+
+#### T356 — The transcript drew four different container shapes where the design draws one, and cited a wrong font
+
+`labels: phase-9, area: android` · `depends-on: T355, T345`
+
+`HANDOFF.md` §7.2 gives the block shape once and then reuses it for everything the session screen
+stacks: radius 14, padding 9×12, 10 apart, with a background that says _what_ a block is rather
+than how important it is. Four things on Android were each drawing their own container instead —
+a message turn on `canvas` or `surface` with a conditional 1px border, a tool card on `surface`
+whatever happened, an extension element in a bare gap-only `View`, and the composer's entries in
+the block T355 had just given them.
+
+**The shape moved to `ui/theme/block-shape.ts`.** T355 put the geometry in the composer's own
+model, which was right while the composer was the only caller. Three more features needed it, and
+three features reaching into a fourth feature's model is the layering this repository's rules
+exist to prevent. What each feature keeps is the mapping from ITS domain onto a `BlockKind` — an
+entry status, a tool status, a speaker — because that mapping is a feature decision and the
+shared module should not know what a `ComposerEntryStatus` is. `entry-block-model.ts` still
+exports the same constants, now re-exported, so nothing that already imported them had to move.
+
+**`assistant` is deliberately unfilled, and the type says so.** `blockSurface` returns `null` for
+it, and every caller branches on that rather than picking a second fill. The artifact boxes the
+user's prompts, the tool calls and the extension elements precisely so the model's own prose reads
+as the page itself; filling it too would make the transcript a wall of boxes and spend the
+contrast the boxes exist to create.
+
+**A running tool call keeps the neutral card.** `toolBlockKind` maps only `completed` and `failed`
+onto a surface; everything in flight returns `null` and gets no override at all. Colouring a call
+as though it had an outcome before it has one is exactly the failure the surface table is for.
+`StatusIndicator` still spells the status out in words on every card, so none of this is colour
+alone.
+
+**The extension block wraps the diagnostic path too, on purpose.** The `.blk.ext` container is
+applied once in `registry-view.tsx`, the single place every element passes through, rather than
+inside each registered kind: the kinds are independently registered and several are shared with
+fixtures, so asking each to remember its own container is how one of them ends up without it. A
+malformed element is still that extension's element, and letting it fall out of the block would
+make a broken extension look like part of the transcript.
+
+**The caret is the design's 2px rule.** §7.2 describes it as "solid while streaming then
+blinking", which belongs to the artifact's character-by-character reveal — solid while the reveal
+is behind the text, blinking once it catches up. Android receives already-coalesced text and runs
+no reveal, so there is no first phase to be solid during. The caret blinks for as long as the turn
+is streaming, and the recipe says that in its own doc comment rather than faking a phase with a
+timer that would mean nothing.
+
+`message-row-model.ts`'s `RoleAffordance` carried a `hasBorder` boolean documenting the old
+Android-only shape cue, quoting the recipe's `borderWidth: speaker === "user" ? 1 : 0`. That cue is
+now a fill, so the field would have been `false` for every speaker and meant nothing; it is
+`blockKind` + `surfaceToken` instead, and the pin that mutation-checked the claim against the real
+recipe source now checks that the recipe asks the same shared table this model asks, so the two
+cannot disagree.
+
+**§9.3's "Geist Mono" sweep, with one correction to the list.** The handoff named five component
+files; `features/extensions/renderers/progress.tsx` carries no such comment — measured with
+`grep -rn`, not assumed — so it was four: `ui/primitives/Progress.tsx`, `ui/recipes/DiffSummary.tsx`,
+`ui/recipes/TaskRows.tsx`, `ui/recipes/WorkflowSteps.tsx`. Each quoted
+`docs/beautiful-ui-reference.md`'s numerals rule verbatim, including a face name that has been
+wrong on Android since T345 swapped the mono face to JetBrains Mono. They now cite the rule and
+say which face it is here, rather than misquoting the source or silently rewriting its words —
+the reference document itself is frozen and was not touched. `ui/theme/fonts.ts`'s two mentions
+narrate that very swap and are correct as history, as the handoff said.
+
+No `CAPABILITIES` entry: nothing here reaches the wire.
+
+- [x] One block shape, in `ui/theme/block-shape.ts`, used by the composer, the transcript, the tool cards and the extension elements
+- [x] Surfaces and geometry are proven by execution and name token roles, never colours
+- [x] `assistant` is unfilled by design, and the type forces every caller to handle it
+- [x] A running tool call is not coloured as though it had finished
+- [x] The extension block wraps the diagnostic path as well as the rendered kinds
+- [x] The streaming caret is 2px, with the artifact's missing phase stated rather than faked
+- [x] `RoleAffordance` describes the cue that exists now, with a historical marker on the one it replaced
+- [x] The four wrong "Geist Mono" citations are corrected; the frozen reference document is untouched

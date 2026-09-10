@@ -88,3 +88,36 @@ describe("tool-call-row.tsx: memoized on the model's comparator", () => {
     expect(readCode()).toMatch(/memo\(TranscriptToolCallRowImpl,\s*areToolCallRowPropsEqual\)/);
   });
 });
+
+describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
+  it("takes the card's fill from the shared block table, never from a colour written here", () => {
+    const code = readCode();
+    expect(code).toMatch(/blockSurface\(kind\)/);
+    expect(code).toMatch(/blockOutline\(kind\)/);
+    expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it("maps a finished call to tool-ok and a failed one to tool-error", () => {
+    const code = readCode();
+    expect(code).toMatch(/if \(status === "completed"\) return "tool-ok";/);
+    expect(code).toMatch(/if \(status === "failed"\) return "tool-error";/);
+  });
+
+  it("leaves a still-running call on the neutral card, because it has no outcome to colour", () => {
+    // `toolBlockKind` returns `null` for everything that is not finished,
+    // and `useToolCardStyle` turns that into no style override at all —
+    // so a running call keeps `Card`'s own surface.
+    const code = readCode();
+    expect(code).toMatch(/if \(kind === null\) return undefined;/);
+  });
+
+  it("applies the override to BOTH cards, so a generic tool is coloured like a known one", () => {
+    const code = readCode();
+    const matches = code.match(/<Card style=\{cardStyle\} testID=\{testId\}>/g) ?? [];
+    expect(matches).toHaveLength(2);
+  });
+
+  it("keeps the status in words beside the fill, so colour is never the only signal", () => {
+    expect(readCode()).toMatch(/statusText=\{statusTextFor\(tool\.status\)\}/);
+  });
+});

@@ -131,7 +131,8 @@ describe("message-row-model: shared fixture — assistant-message-correction", (
     expect(roleAffordanceFor(entry)).toEqual({
       speaker: "assistant",
       speakerLabel: "Pi",
-      hasBorder: false,
+      blockKind: "assistant",
+      surfaceToken: null,
     });
   });
 });
@@ -213,7 +214,7 @@ describe("message-row-model: shared fixture — message-attachments", () => {
     },
   ];
 
-  it("classifies the user row as the user speaker with the border affordance, and passes images through unrendered", () => {
+  it("classifies the user row as the user speaker with the filled-block affordance, and passes images through unrendered", () => {
     const entries = messageEntries(ingestAll(messages));
     expect(entries).toHaveLength(2);
     const [userEntry, assistantEntry] = entries;
@@ -223,7 +224,8 @@ describe("message-row-model: shared fixture — message-attachments", () => {
     expect(roleAffordanceFor(userEntry)).toEqual({
       speaker: "user",
       speakerLabel: "You",
-      hasBorder: true,
+      blockKind: "user",
+      surfaceToken: "field",
     });
     // T52A2's images passthrough survives this model unchanged, even
     // though this task's view does not render it yet (see
@@ -431,9 +433,25 @@ describe("roleAffordanceFor: matches the shared StreamingMessage recipe it docum
     expect(code).toMatch(/speaker === "assistant" \? "Pi" : "You"/);
   });
 
-  it("StreamingMessage.tsx renders a border only for the user speaker, as this model's hasBorder claims", () => {
+  it("T356: StreamingMessage.tsx fills a user block and leaves an assistant one unfilled, as this model's surfaceToken claims", () => {
     const code = readStreamingMessageCode();
-    expect(code).toMatch(/borderWidth:\s*speaker === "user" \? 1 : 0/);
+    // The recipe asks the same shared table this model asks, so the two
+    // cannot disagree about which speaker gets a fill.
+    expect(code).toMatch(/blockSurface\(speaker === "user" \? "user" : "assistant"\)/);
+    expect(code).toMatch(/surface === null \? "transparent" : theme\.colors\[surface\]/);
+  });
+
+  it("T356: StreamingMessage.tsx takes the block geometry from block-shape.ts rather than re-typing it", () => {
+    const code = readStreamingMessageCode();
+    expect(code).toMatch(/borderRadius: BLOCK_RADIUS/);
+    expect(code).toMatch(/paddingVertical: BLOCK_PADDING_VERTICAL/);
+    expect(code).toMatch(/paddingHorizontal: BLOCK_PADDING_HORIZONTAL/);
+  });
+
+  it("T356: the streaming caret is the design's 2px rule, not the 8px block it used to be", () => {
+    const code = readStreamingMessageCode();
+    expect(code).toMatch(/const CARET_WIDTH = 2;/);
+    expect(code).toMatch(/width: CARET_WIDTH/);
   });
 });
 

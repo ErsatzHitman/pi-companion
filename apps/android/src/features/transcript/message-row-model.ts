@@ -25,6 +25,7 @@
  */
 import { timeline } from "@picompanion/frontend-core";
 
+import { blockSurface, type BlockKind, type BlockSurfaceToken } from "../../ui/theme/block-shape";
 import type { ResolveImageUri } from "./message-attachments";
 
 export type CoreMessageEntry = Extract<
@@ -86,31 +87,40 @@ export function boundedText(text: string): string {
  * visible label — "Pi" / "You" — is the invariant shared with web
  * (`apps/web/src/ui/recipes/StreamingMessage.tsx`'s identical
  * `speaker === "assistant" ? "Pi" : "You"` text). Android's
- * `StreamingMessage` recipe (`../../ui/recipes/StreamingMessage.tsx`,
- * built in an earlier wave, not owned by this task) additionally renders
- * a border on user rows and none on assistant rows
- * (`borderWidth: speaker === "user" ? 1 : 0`) — a second, Android-only
- * shape cue with no web equivalent (web instead varies alignment/background
- * via its `pc-message--${speaker}` CSS class). This function documents
- * both cues as data so a caller — or a test — can assert the affordance
- * without rendering RN; `message-row-model.test.ts` mutation-checks the
- * claim against the actual recipe source.
+ * `StreamingMessage` recipe (`../../ui/recipes/StreamingMessage.tsx`)
+ * additionally gives a user row a filled block and an assistant row
+ * none — a second, Android-only shape cue with no web equivalent (web
+ * instead varies alignment/background via its `pc-message--${speaker}`
+ * CSS class). This function documents both cues as data so a caller —
+ * or a test — can assert the affordance without rendering RN;
+ * `message-row-model.test.ts` mutation-checks the claim against the
+ * actual recipe source.
+ *
+ * CORRECTED (T356): the second cue used to be a 1px BORDER on user
+ * rows, and this comment said so, quoting the recipe's own
+ * `borderWidth: speaker === "user" ? 1 : 0`. T356 replaced it with the
+ * redesign's `.blk` fill, so `RoleAffordance` now carries the block
+ * kind and its surface token rather than a `hasBorder` boolean that
+ * would be `false` for every speaker and mean nothing.
  */
 export interface RoleAffordance {
   speaker: "assistant" | "user";
   /** Visible text naming the speaker, independent of any colour token. */
   speakerLabel: string;
-  /** Whether the shared `StreamingMessage` recipe additionally renders a
-   * border for this speaker (Android-only shape cue; see doc comment). */
-  hasBorder: boolean;
+  /** Which `.blk` the shared recipe draws this speaker in (T356). */
+  blockKind: BlockKind;
+  /** The `theme.colors` key that block is filled with, or `null` when it is deliberately unfilled. */
+  surfaceToken: BlockSurfaceToken | null;
 }
 
 export function roleAffordanceFor(entry: CoreMessageEntry): RoleAffordance {
   const speaker = speakerFor(entry);
+  const blockKind: BlockKind = speaker === "user" ? "user" : "assistant";
   return {
     speaker,
     speakerLabel: speaker === "assistant" ? "Pi" : "You",
-    hasBorder: speaker === "user",
+    blockKind,
+    surfaceToken: blockSurface(blockKind),
   };
 }
 
