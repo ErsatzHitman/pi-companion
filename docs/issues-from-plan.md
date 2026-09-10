@@ -581,6 +581,7 @@ that recomputation has to be domain-specific:
 | T322   | A failing Maestro flow threw away every piece of evidence about why                           | phase-9   | tooling          | P9-U   | T321, T320, T37F                                                      |
 | T323   | Two Windows temp-dir races turned CI red on consecutive pushes                                | phase-9   | server           | P9-U   | T240, T280, T297                                                      |
 | T324   | The emulator ran with `-accel off` for every run, and nothing said so                         | phase-9   | tooling          | P9-U   | T322, T319, T37F                                                      |
+| T325   | An SDK-57 native module was autolinked into an SDK-54 app and killed it on launch             | phase-9   | android          | P9-U   | T324, T307, T322                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15954,6 +15955,70 @@ on the strength of that theory, and T307's own entry says so.
 - [x] Both emulator jobs enable KVM before the emulator action runs
 - [x] The workflow header's "KVM ... has not been confirmed" disclosure is corrected rather than
       deleted, naming what was actually wrong
-- [ ] A dispatch shows the emulator booting with acceleration — no `ProbeKVM` permission line,
-      no `-accel off`, and a boot time in the low minutes rather than 6-8
-- [ ] With acceleration on, the flows report real assertion results instead of System UI ANRs
+- [x] A dispatch shows the emulator booting with acceleration. Run `34430342405`:
+      `disable Linux hardware acceleration: false`, no `ProbeKVM` line, no `-accel off` in the
+      emulator argv, and **`Boot completed in 35129 ms`** against 358-481 seconds before — a
+      13x improvement
+- [x] With acceleration on, the flows report real assertion results instead of System UI ANRs:
+      the smoke flow failed in twenty seconds on a real captured screen, which is what exposed
+      T325's crash
+
+#### T325 — An SDK-57 native module was autolinked into an SDK-54 app and killed it on launch
+
+`labels: phase-9, area: android` · `depends-on: T324, T307, T322`
+
+With T324's KVM fix in place the emulator booted in **35 seconds** instead of eight minutes, and
+the smoke flow failed in twenty seconds with a real result instead of behind a System UI ANR.
+The captured hierarchy showed the Android LAUNCHER — Gallery, Phone, Messaging, Camera — not
+the app. Maestro's own device log says why:
+
+```
+FATAL EXCEPTION: pool-2-thread-1
+Process: sh.picompanion, PID: 2454
+java.lang.NoClassDefFoundError: Failed resolution of: Lexpo/modules/kotlin/types/AnyTypeCache;
+	at expo.modules.webview.DomWebViewModule.definition(DomWebViewModule.kt:108)
+	at expo.modules.kotlin.ModuleRegistry.register(ModuleRegistry.kt:27)
+	at expo.modules.adapters.react.ModuleRegistryAdapter.createNativeModules
+```
+
+`DomWebViewModule` is `@expo/dom-webview@57.0.1` — the exact package `npm explain` identified
+under T307 as the root of the SDK-57 hoist. Expo autolinking compiled it into the APK, and it
+resolves an `expo-modules-core` class the linked core does not contain. The app dies during
+native module registration, on every launch, before React renders anything. **This is what the
+`connect-onboarding` assertion had been failing on all along.**
+
+**The app never needed it.** `expo@54.0.37` declares `@expo/dom-webview` only as an UNBOUNDED
+optional peer (`peerDependenciesMeta: { "@expo/dom-webview": { optional: true } }`), so npm
+installed the newest — an SDK-57 build — into an SDK-54 app. Nothing in `apps/android/src`
+contains a `use dom` directive; measured, not assumed.
+
+Fixed with `expo.autolinking.exclude` in `apps/android/package.json`, covering two packages:
+
+| Package                    | Why excluded                                                            |
+| -------------------------- | ----------------------------------------------------------------------- |
+| `@expo/dom-webview@57.0.1` | the crashing module; the app has no DOM components                      |
+| `@expo/log-box@57.0.4`     | not a dependency of `expo@54` at all — it belongs to the root `expo@57` |
+
+Verified locally with `npx expo-modules-autolinking resolve -p android --json`: 15 linked
+modules before, 13 after, and both named packages gone from the list.
+
+**One SDK-57 module remains linked and is deliberately left**: `expo-asset@57.0.15`, resolved
+from the ROOT even though `expo@54.0.37` requires `~12.0.13` and the correct copy is installed
+at `apps/android/node_modules/expo/node_modules/expo-asset@12.0.13`. It cannot be excluded —
+`expo` genuinely needs it — and whether it crashes the same way is unknown, because the app
+has never got past `dom-webview`. One dispatch answers that; more theory does not.
+
+**Two mechanisms proposed for this crash were WRONG and are recorded as such**, because both
+were mine and both were plausible. First, that the two Expo JS runtimes found under T307
+(`expo-audio` resolving `expo-modules-core@2.5.0` while app code resolves `3.0.30`) were the
+cause — disproved by the logcat, which shows the app's native libraries loading cleanly.
+Second, that `dom-webview` must ship a prebuilt AAR compiled against SDK 57 — disproved by
+measurement: it has 9 Kotlin source files and no prebuilt binary, so it compiled from source in
+this repository's own Gradle build and still failed at runtime. The exclusion is justified by
+the observed crash and by the package being unused, not by either mechanism.
+
+- [x] `@expo/dom-webview` and `@expo/log-box` are excluded from autolinking
+- [x] The exclusion is verified against the real autolinking resolver, not assumed
+- [x] The app is confirmed to contain no `use dom` component
+- [ ] A dispatch where the app survives native module registration and renders its first screen
+- [ ] Whether `expo-asset@57.0.15` is the next such crash, answered by that dispatch
