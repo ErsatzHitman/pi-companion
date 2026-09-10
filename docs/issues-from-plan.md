@@ -579,6 +579,7 @@ that recomputation has to be domain-specific:
 | T320   | The emulator action runs each script LINE as its own shell, so the shard loop could not exist | phase-9   | tooling          | P9-U   | T319, T312, T37F                                                      |
 | T321   | The daemon stop command never worked, and Maestro's driver never had time to start            | phase-9   | tooling          | P9-U   | T320, T37D, T37F                                                      |
 | T322   | A failing Maestro flow threw away every piece of evidence about why                           | phase-9   | tooling          | P9-U   | T321, T320, T37F                                                      |
+| T323   | Two Windows temp-dir races turned CI red on consecutive pushes                                | phase-9   | server           | P9-U   | T240, T280, T297                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15824,3 +15825,62 @@ that into a second failure would bury the first.
 - [x] A green run uploads nothing, and a shard that dies before Maestro warns rather than fails
 - [ ] The `connect-onboarding` assertion is diagnosed from real artifacts and either the app or
       the flow is fixed
+
+#### T323 — Two Windows temp-dir races turned CI red on consecutive pushes
+
+`labels: phase-9, area: server` · `depends-on: T240, T280, T297`
+
+`server-tests (windows-latest)` failed on two consecutive pushes, each time with **zero
+assertion failures**, each time on a different file, and each time on deleting a temp directory
+the test itself had just been using. They are the same family but need OPPOSITE fixes, and this
+repository has already written down which is which.
+
+**At `2b2bfe7`: `EBUSY` — a sibling-contention race, serialised.**
+
+```
+Error: EBUSY: resource busy or locked, unlink '...\paseo-executable-test-AXN2sp\...\claude.exe'
+```
+
+`src/executable-resolution/executable-resolution.test.ts` mkdtemps a directory, does
+`copyFileSync(process.execPath, claude)` — a real copy of node.exe — spawns it to test
+invocability, then recursively deletes. That is the shape `CLAUDE.md`'s T240 section already
+credits `terminal-activity-route.test.ts` with, so it became the seventh `test:unit:serial`
+member. Recorded there honestly as different in kind from the previous six: run alone it takes
+**1.66s**, so there is no timeout margin argument — serialising removes the concurrency the
+handle race needs, and that is the whole justification.
+
+**At `c55b89c`: `ENOTEMPTY` — a self-continuation race, fixed rather than scheduled around.**
+
+```
+Error: ENOTEMPTY: directory not empty, rmdir '...\agent-manager-interrupt-after-completion-*\agents'
+```
+
+`agent-manager.test.ts`'s `createControlledInterruptFixture` returned
+`cleanup: () => rmSync(workdir, ...)`. The failing test pushes a `turn_completed` event and
+awaits the agent reaching `idle`, but the agent's own storage write can still be in flight when
+the delete starts enumerating. T297 rules on exactly this case: _"Do not close this by raising a
+timeout, retrying the `rmSync`, or moving the file into `test:unit:serial`"_ — because the race
+is between one test and its own asynchronous continuation. So the fixture now holds its
+`AgentStorage` and `cleanup` awaits `flush()` before deleting, the same close T280 made for
+`create-agent`. `cleanup()` became async and all four call sites await it.
+
+That fix also matches the file's own established convention rather than introducing a new one:
+`agent-manager.test.ts` already contains 40 `.flush()` calls, and this fixture was one of the
+few paths without one.
+
+**A bounded sweep, reported rather than acted on.** Five other test files construct an
+`AgentStorage` under a `mkdtempSync` directory and `rmSync` it with no `flush()` anywhere:
+`agent-storage.test.ts`, `import-sessions.test.ts`,
+`backfill-workspace-id.migration.test.ts`, `session.workspaces.test.ts`, and
+`workspace-registry-bootstrap.test.ts`. None has failed, and not every one dispatches a
+background write — several drive storage directly — so changing all five on suspicion would be
+speculative churn against files that are currently green. They are listed here so the next
+occurrence of this error starts from a candidate list instead of a fresh investigation.
+
+- [x] The `ENOTEMPTY` race is closed by awaiting the pending write, not by retrying the delete
+- [x] `cleanup()` is async and every call site awaits it
+- [x] The `EBUSY` file is serialised, with its solo runtime measured and the difference from the
+      previous six stated
+- [x] `agent-manager.test.ts` passes locally (158 tests)
+- [ ] Two consecutive green `server-tests (windows-latest)` runs, since one green run cannot
+      distinguish a fixed race from a lucky one

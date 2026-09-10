@@ -523,7 +523,18 @@ interface ControlledInterruptFixture {
   manager: AgentManager;
   session: ControlledInterruptSession;
   startForegroundRun(): Promise<void>;
-  cleanup(): void;
+  /**
+   * T323: async, and every caller must await it. The `rmSync` below used to
+   * run while the agent's own storage write was still in flight, which is
+   * how CI hit `ENOTEMPTY: directory not empty, rmdir
+   * '...\agent-manager-interrupt-after-completion-*\agents'` at
+   * `c55b89c`. Awaiting `AgentStorage.flush()` first closes the window the
+   * same way T280 closed it for `create-agent` — this is a race between
+   * one test and its own asynchronous continuation, so per T297 it is NOT
+   * closed by retrying the delete or by moving the file into
+   * `test:unit:serial`.
+   */
+  cleanup(): Promise<void>;
 }
 
 async function createControlledInterruptFixture(options: {
@@ -543,9 +554,10 @@ async function createControlledInterruptFixture(options: {
       return session;
     }
   })();
+  const registry = new AgentStorage(join(workdir, "agents"), logger);
   const manager = new AgentManager({
     clients: { codex: client },
-    registry: new AgentStorage(join(workdir, "agents"), logger),
+    registry,
     logger,
     rescueTimeouts: { interruptSessionMs: 10 },
     idFactory: () => options.agentId,
@@ -567,7 +579,11 @@ async function createControlledInterruptFixture(options: {
       })();
       await manager.waitForAgentRunStart(agent.id);
     },
-    cleanup: () => rmSync(workdir, { recursive: true, force: true }),
+    async cleanup() {
+      // See ControlledInterruptFixture.cleanup's doc comment (T323).
+      await registry.flush();
+      rmSync(workdir, { recursive: true, force: true });
+    },
   };
 }
 
@@ -1618,7 +1634,7 @@ test("cancelAgentRun preserves running state when the provider interrupt hangs",
     expect(fixture.session.interruptCalled).toBe(true);
     expect(fixture.manager.getAgent(fixture.agentId)?.lifecycle).toBe("running");
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -1649,7 +1665,7 @@ test("cancelAgentRun preserves the active turn when the provider rejects the int
       turnId: "provider-still-active-turn",
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -1682,7 +1698,7 @@ test("cancelAgentRun succeeds when the foreground turn finishes before the provi
       activeForegroundTurnId: null,
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -1712,7 +1728,7 @@ test("cancelAgentRun succeeds when the provider queues completion before rejecti
       activeForegroundTurnId: null,
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
