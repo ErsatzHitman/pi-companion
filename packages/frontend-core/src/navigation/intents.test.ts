@@ -31,6 +31,9 @@ describe("navigationIntentToPath", () => {
       navigationIntentToPath({ type: "sessionFiles", serverId: "srv_1", agentId: "agt_1" }),
     ).toBe("/h/srv_1/session/agt_1/files/");
     expect(
+      navigationIntentToPath({ type: "sessionLive", serverId: "srv_1", agentId: "agt_1" }),
+    ).toBe("/h/srv_1/session/agt_1/live");
+    expect(
       navigationIntentToPath({
         type: "sessionTerminal",
         serverId: "srv_1",

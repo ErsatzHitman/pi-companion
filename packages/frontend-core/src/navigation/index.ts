@@ -21,6 +21,7 @@ export type {
   SessionFilesIntent,
   SessionIntent,
   SessionListIntent,
+  SessionLiveIntent,
   SessionTerminalIntent,
   SettingsIntent,
 } from "./types.js";

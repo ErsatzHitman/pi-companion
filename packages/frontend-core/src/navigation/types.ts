@@ -57,6 +57,20 @@ export interface SessionFilesIntent {
   path?: string[];
 }
 
+/**
+ * Reaches `/h/:serverId/session/:agentId/live`: one session's live
+ * activity view — its running subagents, its workflow progress and its
+ * context-window usage, plus the way in to that session's files and
+ * terminal. A sibling detail route of `sessionFiles`/`sessionTerminal`,
+ * not a top-level destination: it is always reached from the session it
+ * describes, never as an alternative to the session list.
+ */
+export interface SessionLiveIntent {
+  type: "sessionLive";
+  serverId: string;
+  agentId: string;
+}
+
 /** Reaches `/h/:serverId/session/:agentId/terminal/:terminalId`: one terminal session. */
 export interface SessionTerminalIntent {
   type: "sessionTerminal";
@@ -87,6 +101,7 @@ export type NavigationDestinationIntent =
   | SessionListIntent
   | SessionIntent
   | SessionFilesIntent
+  | SessionLiveIntent
   | SessionTerminalIntent
   | SettingsIntent;
 

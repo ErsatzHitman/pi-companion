@@ -606,6 +606,7 @@ that recomputation has to be domain-specific:
 | T347   | A blocked submit button could never show why it was blocked                                                          | phase-9   | android          | P9-U   | T346, T34B2                                                           |
 | T348   | Re-sync expo-linking's audit range after upstream narrowed it                                                        | phase-9   | ci               | P9-U   | T44A3                                                                 |
 | T349   | The S7 icon set had no vector renderer to draw it                                                                    | phase-9   | android          | P9-U   | T345                                                                  |
+| T350   | A session's running work had no screen, and Files/Terminal crowded the transcript                                    | phase-9   | android          | P9-U   | T349, T79, T339                                                       |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -647,8 +648,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**558 tasks** (distinct IDs counted directly from the table above), recounted at T349 with
-`grep`/`sort -u` over the table's own rows — one past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**559 tasks** (distinct IDs counted directly from the table above), recounted at T350 with
+`grep`/`sort -u` over the table's own rows — one past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17202,4 +17203,86 @@ omission reads as a decision.
 - [x] No product colour is hardcoded in the drawing; the caller passes a resolved token
 - [x] The `react-native-svg` install lands in this, the first commit that imports it
 - [x] `npm test --workspace=@picompanion/android` is all-pass, including the eight files that needed the new stand-in
+
+#### T350 — A session's running work had no screen, and Files/Terminal crowded the transcript
+
+`labels: phase-9, area: android` · `depends-on: T349, T79, T339`
+
+Two problems with one answer.
+
+A session's running work — its subagent fleet, its workflow steps — only ever reached the user
+as a strip above the composer. That strip is capped at 360dp or 45% of the window
+(`PINNED_AREA_MAX_HEIGHT_DP`, T342) and shares the screen with a transcript and a composer,
+which is the right trade for a glance and the wrong one for actually reading a fleet: T342 and
+T346 both exist because a single roster plus a single panel already overflowed it. And Files and
+Terminal sat as two buttons under the session header (T79), taking the transcript's first rows
+on every session screen, for two routes a user opens rarely and deliberately.
+
+The redesign's answer is the Live (A2) screen, and this task builds it.
+
+`features/live/live-screen-model.ts` decides what the screen says, as data, with no React
+Native anywhere in its graph. It SELECTS from the Pi UI elements the session already holds
+rather than inventing a parallel feed: a `roster` payload is a subagent fleet and a `progress`
+payload is a workflow step, both already arriving over the wire (`plan.md` §11.3). Placement is
+deliberately ignored, unlike `pinned-model.ts`'s `selectPinnedElements` — that filter exists
+because the pinned strip competes for the session screen's height, and this screen competes with
+nothing, so a fleet published as `inline` is exactly as live as one published as `pinned`.
+
+`features/live/live-screen.tsx` draws it and takes no router at all: `onBack` and the Files/
+Terminal node are props, so the component's own contract can be pinned without `expo-router` in
+its graph. `app/h/[serverId]/session/[agentId]/live.tsx` supplies the three things only a route
+can — the params, the shared element store, and a router.
+
+**Files and Terminal moved onto it**, keeping `session-nav-actions-files` and
+`session-nav-actions-terminal` on the same two controls (this redesign's testID-continuity
+rule). The move was checked against the flow that names them rather than assumed safe:
+`apps/android/maestro/files-and-terminal.yaml` reaches both routes by `openLink` deep link and
+never taps either button — its own header says so and explains why — so the flow is unaffected.
+The session route's own test case for T79's mount is REPLACED rather than deleted, with a
+negative pin (`not.toMatch(/SessionNavActions/)`), so the move cannot silently half-revert into
+two controls in two places; the positive half now lives in `live.test.ts`.
+
+**Three pieces of plumbing this needed, each done properly rather than short-cut:**
+
+- `frontend-core`'s `navigation` module gained a `sessionLive` intent, so this route's path
+  comes from `navigationIntentToPath` like every other one and not from a string a route file
+  invented. `app-shell/deep-link-routing.ts` gained the matching branch, scoped to exactly one
+  trailing segment so `/live/anything` is still `not-found`, and `router-root.test.ts`'s
+  `REAL_ROUTES` gained the file.
+- Two shared pieces the remaining redesigned screens all need: `ui/recipes/ScreenBar.tsx` (the
+  artifact's top bar — a 36dp mark button inside a 48dp `Pressable`, a title, an optional mono
+  subtitle, an optional status slot) and `ui/recipes/PixelLoader.tsx` (its running mark, the
+  staggered 3×3 grid, which renders fully lit and static under reduced motion so the state never
+  depends on the animation). Both are in `recipe-accessibility.test.ts`'s list and `ScreenBar`
+  in `touch-targets.test.ts`'s; both are deliberately OUT of
+  `testing.recipeLabManifest`, because that manifest is asserted by BOTH apps' recipe labs and a
+  name added to it obliges a web twin to exist. Nothing asserts the reverse direction, and each
+  module's own header says the omission is a decision.
+- `ui/primitives/StatusPill.tsx`, the artifact's 26dp pill, finished and landed. It had been
+  written and left unexported and unreferenced by an abandoned attempt, with a broken import and
+  a `styles[\`tone\_${tone}\`]`lookup TypeScript cannot narrow; both are fixed, and the tone now
+resolves through two explicit`satisfies Record<StatusTone, …>`maps so a tone the sheet forgot
+is a compile error rather than an`undefined` style.
+
+The bar's pill is driven by the same real `createTurnRunningSignal` the session route already
+uses, not a literal, and the route re-issues T339's `setViewedAgentTimeline([agentId])`
+registration — without it, leaving the session route runs that route's cleanup, which registers
+`[]`, and this screen would show a snapshot frozen at the moment it opened.
+
+A `CAPABILITIES` entry ("One session's running work has its own screen, reachable in-app
+(LiveScreen / pressSessionLive)") was registered in the same change and watched firing against a
+scratchpad-backed copy of `docs/legacy-retirement.md` before being trusted. Its phrases
+deliberately avoid the "reachable only by deep link" wording: that belongs to a DIFFERENT
+capability (T79's), and that wording is still live, correctly, as history in a Maestro flow's own
+comment.
+
+- [x] A session's subagents and workflow steps are readable on a screen of their own, not only in a capped strip
+- [x] The screen selects from the store the session already reads, opening no second subscription
+- [x] Files and Terminal keep their testIDs, on the same controls, in their new home
+- [x] The session screen no longer mounts them, pinned negatively so the move cannot half-revert
+- [x] `files-and-terminal.yaml` was read, not assumed: it reaches both routes by deep link and is unaffected
+- [x] The route's path is a registered `navigationIntentToPath` destination, matched by the deep-link router
+- [x] Every card renders when empty, so a silent feed is distinguishable from an idle session
+- [x] The running mark animates from `motion.duration` and goes static under reduced motion
+- [x] A `CAPABILITIES` entry was registered and proven to fire
 - [x] `icons.tsx`'s falsified sentence is corrected in the same commit, and a `CAPABILITIES` entry proven to fire

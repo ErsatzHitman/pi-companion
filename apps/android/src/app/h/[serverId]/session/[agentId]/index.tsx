@@ -5,7 +5,6 @@ import { useWindowDimensions } from "react-native";
 import { timeline as coreTimeline } from "@picompanion/frontend-core";
 
 import { CompactSessionShell } from "../../../../../app-shell/compact-shell";
-import { SessionNavActions } from "../../../../../app-shell/session-nav-actions";
 import {
   ApprovalsContainer,
   type DaemonPermissionsSource,
@@ -706,6 +705,16 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * `app-shell/navigation-shell.tsx` is enough. `SessionSheetExtensions`
  * (T32S12, above) joins it there for the identical reason.
  *
+ * **T350 (the redesign) moved Files and Terminal off this screen.**
+ * The paragraph below records what T79 did and why, because the gap it
+ * closed is still real and the fix is still live — only its LOCATION
+ * changed. `SessionNavActions` now mounts on the Live route
+ * (`./live.tsx`), keeping `session-nav-actions-files`/
+ * `session-nav-actions-terminal` on the same two controls; this
+ * header slot is `TranscriptHeader` alone again. Nothing about the
+ * "no in-app control reaches either route" defect has come back — read
+ * `./live.tsx`'s doc comment for where the control lives now.
+ *
  * **T79 mount**: `header` used to be `TranscriptHeader` alone. Both the
  * files route (`/h/:serverId/session/:agentId/files/*`) and the terminal
  * route (`/h/:serverId/session/:agentId/terminal/:terminalId`) were
@@ -862,14 +871,11 @@ export default function SessionRoute() {
         composerContentMinHeight={composerContentMinHeight}
         composerMaxHeight={composerMaxHeight}
         header={
-          <>
-            <TranscriptHeader
-              hostLabel={serverId ?? ""}
-              sessionTitle={agentId ?? ""}
-              status={status}
-            />
-            <SessionNavActions serverId={serverId ?? ""} agentId={agentId ?? ""} />
-          </>
+          <TranscriptHeader
+            hostLabel={serverId ?? ""}
+            sessionTitle={agentId ?? ""}
+            status={status}
+          />
         }
         statusStrip={<TranscriptStatusStrip status={status} />}
         transcript={<SessionTranscript status={status} agentId={agentId ?? ""} />}

@@ -43,6 +43,7 @@ export type DeepLinkMatch =
       readonly agentId: string;
       readonly path: readonly string[];
     }
+  | { readonly kind: "sessionLive"; readonly serverId: string; readonly agentId: string }
   | {
       readonly kind: "sessionTerminal";
       readonly serverId: string;
@@ -101,6 +102,9 @@ export function matchDeepLinkPath(pathname: string): DeepLinkMatch {
 
       if (tail.length === 0) {
         return { kind: "session", serverId, agentId };
+      }
+      if (tail.length === 1 && tail[0] === "live") {
+        return { kind: "sessionLive", serverId, agentId };
       }
       if (tail[0] === "files") {
         return { kind: "sessionFiles", serverId, agentId, path: tail.slice(1) };

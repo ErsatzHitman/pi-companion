@@ -2394,6 +2394,29 @@ export const CAPABILITIES = [
       /(?:cannot|can(?:'|’)t) draw (?:a |the )?(?:stroked )?(?:vector )?paths? (?:on android|here)/i,
     ],
   },
+  {
+    // T350: `features/live/live-screen.tsx`'s `LiveScreen` is a whole
+    // route for one session's running work -- its subagent fleet, its
+    // workflow steps -- selected from the same Pi UI element store the
+    // pinned area reads, and `app-shell/session-nav-actions-model.ts`'s
+    // `pressSessionLive` is the in-app navigation that reaches it.
+    // Before it, a running subagent was only ever visible as a strip
+    // above the composer, bounded by that strip's own cap. An
+    // OR-across-members pair rather than T168's same-file AND-group:
+    // the two names are declared in two different files, each uniquely,
+    // and either one existing means this capability is real. The
+    // phrases are worded in T350's own voice and deliberately avoid the
+    // "reachable only by deep link" wording that belongs to a DIFFERENT
+    // capability (T79's Files/Terminal control) and is still live, as
+    // history, in a Maestro flow's own comment.
+    name: "One session's running work has its own screen, reachable in-app (LiveScreen / pressSessionLive)",
+    methodNames: ["LiveScreen", "pressSessionLive"],
+    denyingPhrases: [
+      /no (?:dedicated )?(?:live )?screen (?:reports|shows|lists) (?:a|this|the) session's (?:running|live) work/i,
+      /(?:android|this app) has no (?:live|activity) (?:screen|route)/i,
+      /running subagents? (?:are|is) only ever visible (?:in|above) the (?:pinned area|composer)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

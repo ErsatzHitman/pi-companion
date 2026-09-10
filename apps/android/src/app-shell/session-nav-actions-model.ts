@@ -53,6 +53,22 @@ export function buildSessionTerminalId(agentId: string): string {
   return agentId;
 }
 
+/**
+ * Navigates to this session's Live screen (T350) — its running
+ * subagents, workflow progress and context usage, and the way in to
+ * Files and Terminal. Same `destinationHref` conversion as the two
+ * below; `frontend-core`'s `navigation` module gained the matching
+ * `sessionLive` intent in the same change, so this is not a hand-built
+ * path.
+ */
+export function pressSessionLive(
+  router: SessionNavRouter,
+  serverId: string,
+  agentId: string,
+): void {
+  router.push(destinationHref({ type: "sessionLive", serverId, agentId }));
+}
+
 /** Navigates to this session's file browser root. */
 export function pressSessionFiles(
   router: SessionNavRouter,

@@ -42,6 +42,21 @@ describe("matchDeepLinkPath", () => {
     });
   });
 
+  it("matches /h/:serverId/session/:agentId/live", () => {
+    expect(matchDeepLinkPath("/h/abc123/session/agent-9/live")).toEqual({
+      kind: "sessionLive",
+      serverId: "abc123",
+      agentId: "agent-9",
+    });
+  });
+
+  it("does not match a deeper path under live, which registers no route of its own", () => {
+    expect(matchDeepLinkPath("/h/abc123/session/agent-9/live/extra")).toEqual({
+      kind: "not-found",
+      path: "/h/abc123/session/agent-9/live/extra",
+    });
+  });
+
   it("matches /h/:serverId/session/:agentId/files/... with an empty path", () => {
     expect(matchDeepLinkPath("/h/abc123/session/agent-9/files")).toEqual({
       kind: "sessionFiles",

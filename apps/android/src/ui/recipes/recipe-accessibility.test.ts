@@ -38,6 +38,12 @@ const RECIPE_FILES = [
   "WorkflowSteps",
   "CodeListing",
   "SelectionActions",
+  // T350: the redesign's shared top bar, mounted by the Live screen and
+  // by every other redesigned screen as they land.
+  "ScreenBar",
+  // T350: the redesign's running mark, drawn as the artifact's 3x3
+  // staggered grid rather than a spinner.
+  "PixelLoader",
 ];
 
 function readRecipeSource(name: string): string {
@@ -79,7 +85,7 @@ describe("§10.4 recipes: theme-only colour, no raw hex", () => {
 });
 
 describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
-  const animated = ["ThinkingSection", "StreamingMessage"];
+  const animated = ["ThinkingSection", "StreamingMessage", "PixelLoader"];
   for (const name of animated) {
     it(`${name} drives Reanimated timing from theme motion tokens`, () => {
       const code = readRecipeCode(name);
@@ -91,6 +97,12 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
   it("StreamingMessage checks reduceMotion before repeating its cursor animation", () => {
     const code = readRecipeCode("StreamingMessage");
     expect(code).toMatch(/reduceMotion/);
+  });
+
+  it("PixelLoader renders every cell fully lit, and animates nothing, under reduced motion", () => {
+    const code = readRecipeCode("PixelLoader");
+    expect(code).toMatch(/animate=\{!reduceMotion\}/);
+    expect(code).toMatch(/if \(!animate\) \{\s*opacity\.value = 1;/);
   });
 });
 
@@ -111,6 +123,16 @@ describe("§10.4 recipes: TalkBack roles, states, and non-colour status text", (
   it("ToolChips gives every chip a visible status-text accessible label, not tone alone", () => {
     const code = readRecipeCode("ToolChips");
     expect(code).toMatch(/accessibilityLabel=\{`\$\{item\.label\}: \$\{item\.statusText\}`\}/);
+  });
+
+  it("ScreenBar names every bar action, and hides the decorative mark it draws", () => {
+    const code = readRecipeCode("ScreenBar");
+    expect(code).toMatch(/accessibilityRole="button"/);
+    expect(code).toMatch(/accessibilityLabel=\{action\.accessibleName\}/);
+    expect(code).toMatch(/accessibilityElementsHidden/);
+    expect(code).toMatch(/importantForAccessibility="no-hide-descendants"/);
+    // The bar itself is the screen's heading, so TalkBack can jump to it.
+    expect(code).toMatch(/accessibilityRole="header"/);
   });
 
   it("TaskRows folds each row's status word into its accessible label", () => {

@@ -31,6 +31,8 @@ export function navigationIntentKey(intent: NavigationDestinationIntent): string
       // place (see `applyNavigationIntent`) rather than growing the stack
       // one entry per file visited.
       return `sessionFiles:${intent.serverId}:${intent.agentId}`;
+    case "sessionLive":
+      return `sessionLive:${intent.serverId}:${intent.agentId}`;
     case "sessionTerminal":
       return `sessionTerminal:${intent.serverId}:${intent.agentId}:${intent.terminalId}`;
     case "settings":
@@ -64,6 +66,8 @@ export function navigationIntentToPath(intent: NavigationDestinationIntent): str
       const path = intent.path ?? [];
       return path.length === 0 ? `${base}/` : `${base}/${path.map(encodeSegment).join("/")}`;
     }
+    case "sessionLive":
+      return `/h/${encodeSegment(intent.serverId)}/session/${encodeSegment(intent.agentId)}/live`;
     case "sessionTerminal":
       return `/h/${encodeSegment(intent.serverId)}/session/${encodeSegment(intent.agentId)}/terminal/${encodeSegment(intent.terminalId)}`;
     case "settings":

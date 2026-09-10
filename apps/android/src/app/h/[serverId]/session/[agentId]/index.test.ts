@@ -73,15 +73,18 @@ describe("SessionRoute source", () => {
     expect(readCode()).toMatch(/statusStrip=\{<TranscriptStatusStrip\b/);
   });
 
-  // --- T79: the files/terminal in-app navigation entry points, mounted
-  // as a sibling of TranscriptHeader inside the same header slot -------
+  // --- T350: Files/Terminal moved off this screen onto the Live route.
+  // T79's own case (SessionNavActions as a sibling of TranscriptHeader
+  // in this header slot) is replaced rather than deleted: the defect it
+  // guarded -- no in-app control reaching either route -- is now
+  // guarded on the Live route instead, by `./live.test.ts`. What has to
+  // stay pinned HERE is that this screen no longer mounts them, so the
+  // move cannot silently half-revert into two controls in two places.
 
-  it("mounts SessionNavActions from app-shell/session-nav-actions as a sibling of TranscriptHeader inside the header slot, given this route's own serverId/agentId", () => {
+  it("no longer mounts SessionNavActions: Files and Terminal live on the Live route since T350", () => {
     const code = readCode();
-    expect(code).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-nav-actions"/);
-    expect(code).toMatch(
-      /header=\{\s*<>\s*<TranscriptHeader[\s\S]*?\/>\s*<SessionNavActions serverId=\{serverId \?\? ""\} agentId=\{agentId \?\? ""\} \/>\s*<\/>\s*\}/,
-    );
+    expect(code).not.toMatch(/SessionNavActions/);
+    expect(code).not.toMatch(/session-nav-actions/);
   });
 
   it("fills composer with Composer from features/composer, given a turnService and turnRunning", () => {

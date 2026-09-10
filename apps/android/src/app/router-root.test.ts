@@ -124,6 +124,11 @@ describe("Expo Router root contains only real routes (or a named exception)", ()
     // diagnostics.tsx above (devices is not a tab either).
     "./h/[serverId]/devices.tsx",
     "./h/[serverId]/session/[agentId]/index.tsx",
+    // T350: the Live (A2) screen, at the path frontend-core's own
+    // `sessionLive` intent renders. A plain sibling of `index.tsx`, not
+    // under `(tabs)/`: it is always reached from the session it
+    // describes.
+    "./h/[serverId]/session/[agentId]/live.tsx",
     "./h/[serverId]/session/[agentId]/files/[...path].tsx",
     // T331: the catch-all's own root. Expo Router's `*path` wildcard
     // needs one or more segments, so `/files` with nothing after it fell

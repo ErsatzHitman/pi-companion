@@ -41,6 +41,8 @@ export { Sheet } from "./Sheet";
 export type { SheetProps } from "./Sheet";
 export { StatusIndicator } from "./StatusIndicator";
 export type { StatusIndicatorProps, StatusTone } from "./StatusIndicator";
+export { StatusPill } from "./StatusPill";
+export type { StatusPillProps } from "./StatusPill";
 export { TextArea } from "./TextArea";
 export type { TextAreaProps } from "./TextArea";
 export { TextField } from "./TextField";

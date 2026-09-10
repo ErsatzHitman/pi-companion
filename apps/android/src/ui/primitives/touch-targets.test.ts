@@ -130,6 +130,9 @@ const CRITICAL_INTERACTIVE_PRIMITIVES: AuditedComponent[] = [
   // ui/primitives/ — this is the component the loop previously could not
   // reach without a path.
   { name: "ComposerIconAction", path: "../../features/composer/composer-icon-action.tsx" },
+  // T350: the redesign's shared top bar draws a 36dp circle inside a
+  // 48dp Pressable, the same split IconButton above already uses.
+  { name: "ScreenBar", path: "../recipes/ScreenBar.tsx" },
 ];
 
 const INTERACTIVE_TAG_PATTERN =

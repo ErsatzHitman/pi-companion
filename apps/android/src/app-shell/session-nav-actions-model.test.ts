@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildSessionTerminalId,
   pressSessionFiles,
+  pressSessionLive,
   pressSessionTerminal,
   type SessionNavRouter,
 } from "./session-nav-actions-model";
@@ -15,6 +16,22 @@ import {
  * asks for: a fake router standing in for the mounted session screen's
  * own `useRouter()`, never a deep link constructed by the test.
  */
+describe("pressSessionLive", () => {
+  it("navigates the router to this session's Live screen, matching frontend-core's own navigationIntentToPath exactly", () => {
+    const router: SessionNavRouter = { push: vi.fn() };
+    pressSessionLive(router, "srv_1", "agt_1");
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith(
+      navigation.navigationIntentToPath({
+        type: "sessionLive",
+        serverId: "srv_1",
+        agentId: "agt_1",
+      }),
+    );
+    expect(router.push).toHaveBeenCalledWith("/h/srv_1/session/agt_1/live");
+  });
+});
+
 describe("pressSessionFiles", () => {
   it("navigates the router to this session's files route, matching frontend-core's own navigationIntentToPath exactly", () => {
     const router: SessionNavRouter = { push: vi.fn() };
