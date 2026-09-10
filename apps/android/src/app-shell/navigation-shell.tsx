@@ -1,8 +1,12 @@
 import { Stack } from "expo-router";
 import { useMemo } from "react";
+import { StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PortalHost } from "../ui/primitives";
 import { useTheme } from "../ui/theme/theme-context";
+
+const SAFE_AREA_EDGES = ["top", "bottom"] as const;
 
 /**
  * Lives in `app-shell/`, not the Expo Router root — see
@@ -45,6 +49,24 @@ import { useTheme } from "../ui/theme/theme-context";
  * depend on this landing before their own sheets can prove anything past
  * the inline fallback — see this task's own report for why this shipped
  * first.
+ *
+ * **T327: `<SafeAreaView edges={["top", "bottom"]}>` wraps `<Stack>`,
+ * inside `<PortalHost>`.** Expo SDK 54 / Android 15+ draws every app
+ * edge-to-edge and nothing in this app applied the resulting insets, so
+ * every screen's content started at y=0 — under the status bar — and ran
+ * to the bottom of the display, under the navigation bar. Measured on
+ * Maestro run 34439323899, the first dispatch to survive native module
+ * registration (T325/T326): the onboarding heading painted entirely inside
+ * the status bar window's `[0,0][1080,136]`, so the accessibility layer
+ * pruned it as not visible to the user and every flow's first assertion,
+ * `"Welcome to Pi Companion" is visible`, failed on a heading the
+ * screenshot plainly shows. `headerShown: false` on every screen means no
+ * native header was ever going to absorb that inset, so the shell applies
+ * it once here rather than per screen. `<PortalHost>` stays outermost on
+ * purpose: a sheet's backdrop should cover the whole display, insets
+ * included. The `(tabs)` layout passes `safeAreaInsets={{ bottom: 0 }}`
+ * to its navigator because the tab bar would otherwise add the bottom
+ * inset a second time on top of this view's padding.
  */
 export function NavigationShell() {
   const { theme } = useTheme();
@@ -55,10 +77,16 @@ export function NavigationShell() {
     }),
     [theme],
   );
+  const styles = useMemo(
+    () => StyleSheet.create({ safeArea: { flex: 1, backgroundColor: theme.colors.page } }),
+    [theme],
+  );
 
   return (
     <PortalHost>
-      <Stack screenOptions={screenOptions} />
+      <SafeAreaView edges={SAFE_AREA_EDGES} style={styles.safeArea}>
+        <Stack screenOptions={screenOptions} />
+      </SafeAreaView>
     </PortalHost>
   );
 }

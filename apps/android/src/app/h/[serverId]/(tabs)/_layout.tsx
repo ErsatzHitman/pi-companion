@@ -37,8 +37,14 @@ export default function HostTabsLayout() {
     [theme],
   );
 
+  // T327: `app-shell/navigation-shell.tsx`'s <SafeAreaView> already pads
+  // the bottom inset around every route, and the tab bar would otherwise
+  // detect the same inset and pad for it again. `safeAreaInsets` overrides
+  // only the keys it names, so top/left/right stay auto-detected.
+  const safeAreaInsets = useMemo(() => ({ bottom: 0 }), []);
+
   return (
-    <Tabs screenOptions={screenOptions}>
+    <Tabs screenOptions={screenOptions} safeAreaInsets={safeAreaInsets}>
       {TOP_LEVEL_DESTINATIONS.map((destination) => (
         <Tabs.Screen
           key={destination.type}

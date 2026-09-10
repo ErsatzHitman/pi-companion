@@ -29,6 +29,14 @@ describe("HostTabsLayout source", () => {
     }
   });
 
+  it("T327: tells the tab navigator the bottom inset is already applied by the shell's SafeAreaView", () => {
+    // Otherwise the tab bar pads for the navigation bar a second time.
+    expect(code).toMatch(/safeAreaInsets = useMemo\(\(\) => \(\{ bottom: 0 \}\), \[\]\)/);
+    expect(code).toMatch(
+      /<Tabs screenOptions=\{screenOptions\} safeAreaInsets=\{safeAreaInsets\}>/,
+    );
+  });
+
   it("themes the tab bar through useTheme() rather than a raw hex literal", () => {
     expect(code).toMatch(/useTheme\(\)/);
     expect(code).toMatch(/theme\.colors\./);

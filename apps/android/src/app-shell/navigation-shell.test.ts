@@ -58,4 +58,18 @@ describe("NavigationShell source", () => {
     expect(code).toMatch(/from "\.\.\/ui\/primitives"/);
     expect(code).toMatch(/<PortalHost>[\s\S]*?<Stack\b[\s\S]*?<\/PortalHost>/);
   });
+
+  it("T327: applies the top and bottom safe-area insets once, around <Stack>, inside <PortalHost>", () => {
+    // Edge-to-edge is mandatory on this SDK and no screen applies insets
+    // itself; without this, every screen's content starts under the
+    // status bar (Maestro run 34439323899: the onboarding heading painted
+    // inside the status bar window and was pruned from the accessibility
+    // tree, failing every flow's first assertion). The portal host stays
+    // outside so a sheet's backdrop still covers the whole display.
+    expect(code).toMatch(/from "react-native-safe-area-context"/);
+    expect(code).toMatch(/SAFE_AREA_EDGES = \["top", "bottom"\] as const/);
+    expect(code).toMatch(
+      /<PortalHost>[\s\S]*?<SafeAreaView edges=\{SAFE_AREA_EDGES\}[\s\S]*?<Stack\b[\s\S]*?<\/SafeAreaView>[\s\S]*?<\/PortalHost>/,
+    );
+  });
 });

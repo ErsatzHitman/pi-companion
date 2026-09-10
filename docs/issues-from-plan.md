@@ -583,6 +583,7 @@ that recomputation has to be domain-specific:
 | T324   | The emulator ran with `-accel off` for every run, and nothing said so                         | phase-9   | tooling          | P9-U   | T322, T319, T37F                                                      |
 | T325   | An SDK-57 native module was autolinked into an SDK-54 app and killed it on launch             | phase-9   | android          | P9-U   | T324, T307, T322                                                      |
 | T326   | Every Expo package the app can see must belong to its own SDK, read from the lockfile         | phase-9   | ci/android       | P9-U   | T307, T325, T322                                                      |
+| T327   | Every screen rendered under the status bar, and the heading Maestro asserts was pruned        | phase-9   | android          | P9-U   | T326, T325                                                            |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -624,8 +625,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                           | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                           | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**535 tasks** (distinct IDs counted directly from the table above), recounted at T326 with
-`awk`/`sort -u` over the table's own rows — 73 rows past the **462** recounted at the P9-C
+**536 tasks** (distinct IDs counted directly from the table above), recounted at T327 with
+`awk`/`sort -u` over the table's own rows — one past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16179,5 +16180,43 @@ cross-checked against anything", which this guard makes false.
 - [x] `CAPABILITIES` entry registered and watched firing
 - [x] Local baseline: `node --test scripts/ci/*.test.mjs` all-pass and `oxfmt --check .` clean,
       on a tree `run-guard-clean-working-tree.mjs` reports clean
-- [ ] The Maestro dispatch after this lands: the app survives native module registration and
-      renders its first screen (T325's open box; this task's whole point)
+- [x] The Maestro dispatch after this lands: the app survives native module registration and
+      renders its first screen (T325's open box; this task's whole point) — run 34439323899:
+      no `FATAL EXCEPTION`, `ReactNativeJS: Running "main"`, and the onboarding screen in both
+      the screenshot and the hierarchy. It then failed on T327, a layout defect the crash had
+      been hiding.
+
+#### T327 — Every screen rendered under the status bar, and the heading Maestro asserts was pruned
+
+`labels: phase-9, area: android` · `depends-on: T326, T325`
+
+Maestro run 34439323899 was the first dispatch in which the app survived native module
+registration, and every shard and the packaged smoke then failed on the same, earlier-looking
+assertion: `Assertion is false: "Welcome to Pi Companion" is visible`. T322's artifacts settle
+it in one look. The screenshot shows the heading — painted across the status bar clock, at the
+very top of the display. The hierarchy does not contain it at all: the onboarding `ScrollView`
+spans `[0,0][1080,2400]`, the whole display, its first child is the card at `y=149`, and the
+status bar window is `[0,0][1080,136]`. The heading painted entirely inside that band, so the
+accessibility layer pruned it as not visible to the user, and the Maestro assertion — which
+reads the accessibility tree, not the pixels — was correct.
+
+The cause is not the onboarding screen. Expo SDK 54 (Android 15+ target) draws every app
+edge-to-edge, `apps/android` has had `headerShown: false` on every route since T32S1 so no
+native header absorbs the status-bar inset, and `git grep useSafeAreaInsets apps/android/src`
+returns nothing: no screen applied an inset anywhere. Every screen's content started at `y=0`
+and ran under the navigation bar at the bottom; the onboarding heading was simply the first
+thing a flow asserts on.
+
+Fixed once, in `app-shell/navigation-shell.tsx`: `<SafeAreaView edges={["top", "bottom"]}>`
+from `react-native-safe-area-context` wraps `<Stack>` inside `<PortalHost>` — the portal host
+stays outermost so a sheet's backdrop still covers the full display. The `(tabs)` layout passes
+`safeAreaInsets={{ bottom: 0 }}` to its navigator, because React Navigation's tab bar detects
+the bottom inset on its own and would otherwise pad for it a second time on top of the shell's
+padding; `BottomTabView` merges that prop per key, so top/left/right stay auto-detected.
+Both files' source-level tests pin the new shape.
+
+- [x] The shell applies top and bottom insets once, around every route
+- [x] The tab bar does not double-pad the bottom inset
+- [x] `npm run export --workspace=@picompanion/android` still bundles
+- [ ] A dispatch where the onboarding heading is in the hierarchy and the flows proceed past
+      it — the box T325 and T326 both leave open, now T327's to close
