@@ -213,7 +213,22 @@ severity and affected range, in `scripts/ci/guard-audit-baseline.mjs`'s
 `AUDIT_BASELINE` — this is the full list; **nothing was dropped, and none
 were merged or summarized away.**
 
-### 2.2 Why every one of the 36 is currently un-fixable here, not silently waived
+(UPDATED at T326 — the figures above are the T44A3 measurement; the live
+baseline is now **35: 0 critical, 10 high, 22 moderate, 3 low**. T307/T326
+removed the SDK-57 Expo tree that npm had hoisted to the repository root,
+and with it two advisories that existed only because of that tree —
+`@expo/inline-modules` and `@expo/local-build-cache-provider`, neither of
+which `expo@54` depends on. The `expo` advisory itself is unchanged, but its
+reported range narrowed from `40.0.0-alpha.0 - 40.0.0-beta.5 || >=41.0.0-alpha.0`
+to `>=41.0.0-alpha.0`, because npm audit states the range relative to what
+is installed and only one `expo@54.0.37` remains. One entry is new:
+`expo-audio` (moderate), reached via the now-correct `expo-asset@12.0.13`;
+the installed `1.1.1` sits below the advisory range's floor, so this is the
+via-chain shape, and its named fix is the same SDK upgrade as every other
+entry with the Android owner. Net 36 → 35; the guard's stale-entry report
+is what surfaced all three changes.)
+
+### 2.2 Why every one of the 35 is currently un-fixable here, not silently waived
 
 Every advisory's only available fix (`npm audit --json`'s own
 `fixAvailable`) requires an `npm install`, and in every case here that
@@ -225,11 +240,11 @@ install is a semver-major bump:
   via `express`, moderate), and `uuid` (direct, moderate — the available fix
   is `uuid@14.0.2`, a jump of 5 major versions from the current `^9.0.1`
   pin). **Owner: `packages/server` dependency owner.**
-- **29 are the Expo/React Native toolchain `apps/android` depends on**:
-  `expo` itself (direct, high) and its satellites
-  (`@expo/cli`/`@expo/config`/`@expo/config-plugins`/`@expo/inline-modules`/
-  `@expo/local-build-cache-provider`/`@expo/metro`/`@expo/metro-config`/
-  `@expo/prebuild-config`), the Metro bundler chain
+- **28 are the Expo/React Native toolchain `apps/android` depends on**
+  (29 at T44A3; see the T326 note in §2.1): `expo` itself (direct, high)
+  and its satellites (`@expo/cli`/`@expo/config`/`@expo/config-plugins`/
+  `@expo/metro`/`@expo/metro-config`/`@expo/prebuild-config`), `expo-audio`
+  (via `expo-asset`), the Metro bundler chain
   (`@react-native/metro-config`/`metro`/`metro-config`/
   `metro-transform-worker`/`image-size`/`postcss`), React Navigation (via
   `expo-router`: `@react-navigation/bottom-tabs`/`core`/`elements`/`native`/
@@ -259,7 +274,7 @@ hides real findings instead of documenting them.
 Instead, `scripts/ci/guard-audit-baseline.mjs` (wired as the
 `guard-audit-baseline` job, which runs `npm ci` then
 `node scripts/ci/run-guard-audit-baseline.mjs`) diffs `npm audit`'s live
-output against the 36-entry `AUDIT_BASELINE` above, matched by
+output against the 35-entry `AUDIT_BASELINE` above, matched by
 **(package, severity, range)** — not package name alone. This means:
 
 - **A genuinely new advisory** (a 37th package, or an existing package's

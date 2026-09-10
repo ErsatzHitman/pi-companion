@@ -320,20 +320,6 @@ export const AUDIT_BASELINE = [
     reason: NO_INSTALL_REASON,
   },
   {
-    package: "@expo/inline-modules",
-    severity: "moderate",
-    range: ">=0.0.2-canary-20260409-6fc2991",
-    owner: ANDROID_TOOLCHAIN_OWNER,
-    reason: NO_INSTALL_REASON,
-  },
-  {
-    package: "@expo/local-build-cache-provider",
-    severity: "moderate",
-    range: "*",
-    owner: ANDROID_TOOLCHAIN_OWNER,
-    reason: NO_INSTALL_REASON,
-  },
-  {
     package: "@expo/metro",
     severity: "high",
     range: "<=55.1.1 || 56.0.0-rc.0 - 56.0.1",
@@ -405,9 +391,26 @@ export const AUDIT_BASELINE = [
     reason: NO_INSTALL_REASON,
   },
   {
+    // T326: the range was `40.0.0-alpha.0 - 40.0.0-beta.5 || >=41.0.0-alpha.0`
+    // while an SDK-57 `expo@57.0.18` sat at the root beside the app's 54;
+    // npm audit reports the range relative to what is installed, and with
+    // one `expo@54.0.37` left it reports only the upper arm. Same advisory.
     package: "expo",
     severity: "high",
-    range: "40.0.0-alpha.0 - 40.0.0-beta.5 || >=41.0.0-alpha.0",
+    range: ">=41.0.0-alpha.0",
+    owner: ANDROID_TOOLCHAIN_OWNER,
+    reason: NO_INSTALL_REASON,
+  },
+  {
+    // T326: surfaced once `expo-asset` moved to the SDK-54 `12.0.13` the app
+    // actually needs — npm audit now reaches `expo-audio` through it. The
+    // installed `1.1.1` is BELOW the reported range's floor; this is the
+    // via-chain shape, not a vulnerable install, and the fix npm names is
+    // the same SDK upgrade as every other entry with this owner.
+    package: "expo-audio",
+    severity: "moderate",
+    range:
+      "1.1.2-canary-20260119-17896bf - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.9-canary-20260424-7bedc9d - 55.0.9-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
