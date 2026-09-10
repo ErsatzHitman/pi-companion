@@ -18,8 +18,14 @@ import type { TerminalTheme } from "./terminal-theme";
  * `apps/android/package.json` carries no `react-native-webview` today,
  * and this task may not run `npm install`.
  * `expo/bundledNativeModules.json` pins `react-native-webview` at
- * `13.16.1` and `@expo/dom-webview` at `~57.0.1` for whenever it is
- * added. `createUnavailableTerminalWebViewPort` below is therefore this
+ * `13.15.0` for whenever it is added. (CORRECTED at T326: this said
+ * `13.16.1`, and that the same file pinned `@expo/dom-webview` at
+ * `~57.0.1`. Both figures were read from the SDK-57 `expo` that T307 found
+ * hoisted at the repository root; the SDK-54 `expo` this app actually
+ * resolves pins `13.15.0` and has no `@expo/dom-webview` entry at all —
+ * measured against `apps/android`'s own resolution of the file, which
+ * `scripts/ci/guard-expo-sdk-alignment.mjs` now keeps honest.)
+ * `createUnavailableTerminalWebViewPort` below is therefore this
  * module's only production implementation: it never reports `onReady`,
  * so `terminal-session-controller.ts` never sends a byte to it and never
  * claims a resize — a silent, honest "nothing to draw" rather than a

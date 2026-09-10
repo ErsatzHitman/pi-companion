@@ -1550,3 +1550,27 @@ jobs:
 
       - name: Fail when npm audit reports an advisory outside the documented baseline
         run: node scripts/ci/run-guard-audit-baseline.mjs
+
+  # T326. Needs `npm ci` first for one file only: `expo/bundledNativeModules.json`
+  # ships inside the `expo` package and is not in the lockfile. Everything
+  # else it checks is `package-lock.json`, so the verdict is about what
+  # `npm ci` installs, not what one machine happens to hold. Three Maestro
+  # dispatches (T325, and the two `expo-asset` runs after it) each spent
+  # twenty minutes of emulator time to discover ONE foreign-SDK Expo package
+  # autolinked into the SDK-54 app; this reads the same fact from the lock
+  # in milliseconds. See scripts/ci/guard-expo-sdk-alignment.mjs.
+  guard-expo-sdk-alignment:
+    name: guard / every Expo package apps/android can see belongs to its own SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Fail on an installed Expo package outside the SDK apps/android's expo belongs to
+        run: node scripts/ci/run-guard-expo-sdk-alignment.mjs

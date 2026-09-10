@@ -34,10 +34,10 @@
     "@types/jest": "^29.5.14",
     "@types/react": "^18.0.25",
     "expo-module-scripts": "^5.0.8",
-    "expo-modules-core": "^2.0.4"
+    "expo-modules-core": "~3.0.30"
   },
   "peerDependencies": {
-    "expo": "*",
+    "expo": "^54.0.0",
     "react": "*",
     "react-native": "*"
   }

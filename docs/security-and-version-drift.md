@@ -83,7 +83,17 @@ the tree, not assumed:
   packages) is not cross-checked against anything — there is no second
   "daemon-side" declaration of that version to drift against; it is a
   single pin whose only "drift" risk is going stale, which §2 below covers
-  (as a dependency-audit finding, not a version-drift one).
+  (as a dependency-audit finding, not a version-drift one). (CORRECTED at
+  T326: this said the pin is not cross-checked against anything, and that
+  there is no second declaration to drift against. There is one — the
+  `expo` package's own `bundledNativeModules.json`, the map from every
+  satellite package to the version its SDK ships — and
+  `scripts/ci/guard-expo-sdk-alignment.mjs` now checks every installed
+  package `apps/android` can see against it, from `package-lock.json`.
+  Three Maestro dispatches had each found one satellite from the wrong
+  SDK the slow way before that guard existed. The pin itself is still
+  only ever stale, never drifted; the satellites around it are what
+  drift, and are what the guard reads.)
 - **The daemon's own self-reported `daemonVersion`**
   (`packages/server/src/server/daemon-version.ts`'s `resolveDaemonVersion()`)
   reads `packages/server/package.json`'s `version` LIVE, at runtime, via

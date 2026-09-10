@@ -28,5 +28,9 @@
     "typescript": "^5.9.3",
     "vite": "^8.2.2",
     "vitest": "^4.1.6"
+  },
+  "overrides": {
+    "expo-asset": "~12.0.13",
+    "react-native-worklets": "0.5.1"
   }
 }

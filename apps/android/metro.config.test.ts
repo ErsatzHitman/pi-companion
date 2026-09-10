@@ -144,4 +144,54 @@ describe("metro resolveRequest", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0].origin).toBe(path.join(APP_DIR, "node_modules", "react-native", "package.json"));
   });
+
+  it("T326: pins every react and react/* request to this app's own copy, from any importer", () => {
+    // `apps/web` needs react@^19.2 and this app pins 19.1.0; npm hoisted
+    // the web one to the root next to the root-hoisted `react-native`, so
+    // the renderer's own `require("react")` walked up to a different React
+    // than this app's components use. Bare `react`, the JSX runtime every
+    // compiled dependency imports, and a deep path all go through the pin.
+    const seen: { origin: unknown; name: string }[] = [];
+    const context = {
+      originModulePath: path.join(APP_DIR, "..", "..", "node_modules", "react-native", "x.js"),
+      resolveRequest: (innerContext: { originModulePath?: string }, moduleName: string) => {
+        seen.push({ origin: innerContext.originModulePath, name: moduleName });
+        return { type: "sourceFile", filePath: "react" };
+      },
+    };
+
+    for (const specifier of ["react", "react/jsx-runtime", "react/jsx-dev-runtime"]) {
+      config.resolver.resolveRequest(context, specifier, "android");
+    }
+
+    expect(seen.map((entry) => entry.name)).toEqual([
+      "react",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ]);
+    for (const entry of seen) {
+      expect(entry.origin).toBe(path.join(APP_DIR, "node_modules", "react", "package.json"));
+    }
+  });
+
+  it("T326: the react pin does not capture react-native, react-dom, or any react-* package", () => {
+    // A prefix match on "react" would swallow `react-native` (which has its
+    // own pin and origin) and every `react-native-*`/`react-dom` request.
+    const seen: { origin: unknown; name: string }[] = [];
+    const context = {
+      originModulePath: "somewhere/else",
+      resolveRequest: (innerContext: { originModulePath?: string }, moduleName: string) => {
+        seen.push({ origin: innerContext.originModulePath, name: moduleName });
+        return { type: "sourceFile", filePath: "x" };
+      },
+    };
+
+    config.resolver.resolveRequest(context, "react-native", "android");
+    config.resolver.resolveRequest(context, "react-native-reanimated", "android");
+    config.resolver.resolveRequest(context, "react-dom", "android");
+
+    expect(seen[0].origin).toBe(path.join(APP_DIR, "node_modules", "react-native", "package.json"));
+    expect(seen[1].origin).toBe("somewhere/else");
+    expect(seen[2].origin).toBe("somewhere/else");
+  });
 });

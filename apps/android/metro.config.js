@@ -29,7 +29,7 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.platforms = ["android"];
 
-// Pin every `react-native` resolution to this app's own pinned copy.
+// Pin every `react-native` and `react` resolution to this app's own copy.
 //
 // This is an npm workspace, and `packages/expo-two-way-audio` declares a
 // loose `react-native: "*"` peerDependency. That can cause npm to hoist a
@@ -42,7 +42,28 @@ config.resolver.platforms = ["android"];
 // Flow-typed source Metro cannot parse. Force every `react-native` request,
 // from any importer, through this app's local copy so root-level hoisting
 // elsewhere in the workspace can never change what gets bundled.
-const REACT_NATIVE_ORIGIN = path.join(__dirname, "node_modules", "react-native", "package.json");
+//
+// T326 extends the identical pin to `react` (and `react/jsx-runtime`, which
+// every compiled JSX file in `node_modules` imports), for the mirror-image
+// hoist. `apps/web` needs `react@^19.2`; this app pins `19.1.0`, the version
+// `react-native@0.81.5`'s renderer is built against; npm can hoist only one
+// of them, and the web one won the root — right beside the root-hoisted
+// `react-native` itself. The renderer's own files then walk up to the root
+// `react` while this app's components use the nested one: two React
+// instances in one bundle, and a hook called from a component the other
+// instance's renderer is drawing has no dispatcher. Same shape, same fix.
+//
+// `APP_PINNED_MODULES` is read by `scripts/ci/run-guard-expo-sdk-alignment.mjs`,
+// which tolerates a root-hoisted copy of a listed package being outside this
+// app's Expo SDK only BECAUSE this pin keeps that copy out of the bundle.
+// Adding a name here is what tells the guard to stop caring about that
+// package's root copy — so add one only when the pin below really covers it.
+const APP_PINNED_MODULES = ["react", "react-native"];
+/** @param {string} name */
+const appPinnedOrigin = (name) => path.join(__dirname, "node_modules", name, "package.json");
+/** @param {string} moduleName */
+const pinnedModuleFor = (moduleName) =>
+  APP_PINNED_MODULES.find((name) => moduleName === name || moduleName.startsWith(`${name}/`));
 const defaultResolveRequest = config.resolver.resolveRequest;
 
 // T314: resolve a relative `./x.js` import against `x.ts`/`x.tsx` when no
@@ -77,8 +98,9 @@ const RELATIVE_JS_SPECIFIER = /^\.\.?\//;
 /** @type {import("@expo/metro/metro-resolver").CustomResolver} */
 const resolveRequest = (context, moduleName, platform) => {
   const resolve = defaultResolveRequest ?? context.resolveRequest;
-  if (moduleName === "react-native" || moduleName.startsWith("react-native/")) {
-    return resolve({ ...context, originModulePath: REACT_NATIVE_ORIGIN }, moduleName, platform);
+  const pinned = pinnedModuleFor(moduleName);
+  if (pinned) {
+    return resolve({ ...context, originModulePath: appPinnedOrigin(pinned) }, moduleName, platform);
   }
   if (RELATIVE_JS_SPECIFIER.test(moduleName) && moduleName.endsWith(".js")) {
     try {

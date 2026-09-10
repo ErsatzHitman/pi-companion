@@ -582,6 +582,7 @@ that recomputation has to be domain-specific:
 | T323   | Two Windows temp-dir races turned CI red on consecutive pushes                                | phase-9   | server           | P9-U   | T240, T280, T297                                                      |
 | T324   | The emulator ran with `-accel off` for every run, and nothing said so                         | phase-9   | tooling          | P9-U   | T322, T319, T37F                                                      |
 | T325   | An SDK-57 native module was autolinked into an SDK-54 app and killed it on launch             | phase-9   | android          | P9-U   | T324, T307, T322                                                      |
+| T326   | Every Expo package the app can see must belong to its own SDK, read from the lockfile         | phase-9   | ci/android       | P9-U   | T307, T325, T322                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -623,8 +624,11 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                           | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                           | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**462 tasks** (distinct IDs counted directly from the table above), recounted at the P9-C
-merge gate — the commit that filed `T250` and `T251`, two rows past the **460** recounted at the
+**535 tasks** (distinct IDs counted directly from the table above), recounted at T326 with
+`awk`/`sort -u` over the table's own rows — 73 rows past the **462** recounted at the P9-C
+merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
+shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
+`T250` and `T251`, two rows past the **460** recounted at the
 P9-B merge gate — the commit that filed `T248` and `T249`, two rows past the **458** recounted at
 the P9-A merge gate, which filed `T246` and `T247`, two past the **456** filed at
 the P9-W9 gate with `T244`, three past the **455** counted just after the
@@ -14717,17 +14721,78 @@ T322) — two Expo runtimes is exactly the shape that breaks native module regis
 it is a SUSPECT, not a diagnosis. T322's artifacts are what will settle it, and no fix is being
 made here on the strength of the theory alone.
 
-- [ ] State which manifest actually causes the root `expo@57`, proven by re-resolving (a
-      lockfile read plus a clean install), not by reasoning from the ranges alone
-- [ ] Either the root `expo` is gone, or a committed note says why it is there and why it is
-      safe — in a citable home, not only in a commit message
-- [ ] Say plainly whether fixing T306 removed this on its own; if it did, this task is
-      closed by that, and record it rather than inventing separate work
-- [ ] `apps/android` still resolves its own `expo` at `54.x` after the change, checked
-      through `apps/android/node_modules`, not the root
-- [ ] If `peerDependencies: *` is narrowed, justify it against what
+**ANSWERED at T326 (measured — and it CORRECTS the "ANSWERED at T306's fix" paragraph above,
+which was itself a correction).** The `npm explain` chain above is real but was read backwards:
+`@expo/dom-webview@57.0.1` peer-requires `expo@"*"`, which an `expo@54` at the root would have
+satisfied just as well; it did not FORCE `expo@57`. What put `expo@57.0.18` at the root was the
+first unbounded `expo` peer npm placed there — `packages/expo-two-way-audio`'s
+`peerDependencies: expo: "*"`, exactly the mechanism this section first guessed and then
+retracted with "`expo-two-way-audio` is not involved". Proven the way the first box asks, by
+re-resolving: bounding that one peer to `^54.0.0`, with no other change, moved the root `expo`
+from `57.0.18` to `54.0.37`, removed `@expo/log-box@57` from the tree entirely, and dropped the
+root `expo-font` from `57.0.2` to `14.0.12`.
+
+The `overrides: { expo }` attempt recorded above failed for a different reason than the one
+stated. npm applies an override only when it has to re-PLACE a package, and a lockfile entry
+that already satisfied every range pointing at it was never re-placed — so "npm left the tree
+unchanged" was true and "`overrides` does not reach auto-installed peers" was not. The same
+override for `expo-asset` took effect the moment its stale entry was deleted from
+`package-lock.json` and `npm install --package-lock-only` had to resolve it again. (One more
+trap, recorded because it cost an hour: with `package-lock.json` deleted and `node_modules`
+present, npm rebuilds the lock FROM `node_modules` rather than from the manifests, so
+`rm package-lock.json && npm install` re-created the SDK-57 tree three times over. A clean
+re-resolve needs the lock present and the stale entries removed from it, or no `node_modules`
+at all.)
+
+Three further edges finished the job, each found by the next re-resolve rather than guessed:
+
+| Edge                                                                                   | Effect it had                                                                                                                             | Fix                                                                                                                |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `packages/expo-two-way-audio` `devDependencies: expo-modules-core: ^2.0.4`             | once `expo@54` moved to the root, hoisted the SDK-52 `expo-modules-core@2.5.0` there beside it, where autolinking would now find it first | re-pinned to `~3.0.30`, the core `expo@54.0.37` itself bundles                                                     |
+| `expo-audio@1.1.1` `peerDependencies: expo-asset: "*"`                                 | kept `expo-asset@57.0.15` at the root — the crash T325's last box predicted, and run 34433407469 confirmed                                | `expo-asset: ~12.0.13` declared in `apps/android`, plus a root `overrides` entry so the peer can never float again |
+| `react-native-reanimated@4.1.7` `peerDependencies: react-native-worklets: "0.5 - 0.8"` | floated `react-native-worklets` to `0.8.3` against the SDK's exact `0.5.1` — found by T326's guard, not by an emulator                    | pinned `0.5.1` in `apps/android` and in root `overrides`, the same two ways                                        |
+
+Resolved from `apps/android`, the tree now carries ONE Expo generation. Every module
+`npx expo-modules-autolinking resolve -p android` links is the version `expo@54.0.37`'s own
+`bundledNativeModules.json` names; `expo-asset` links at `12.0.13` and `expo-modules-core` at
+`3.0.30`, both from the root; and nothing at `55.x` or above remains anywhere except
+`@expo/require-utils@55.0.8`, which is `expo@54`'s own dependency and versioned on its own line.
+The final re-resolve dropped every `apps/android/node_modules/*` entry from the lock and let npm
+hoist afresh: 118 lock entries fewer, and the only package left nested under the app is
+`react@19.1.0`, because `apps/web` holds the root slot at `19.2.8` (see T326 for why that one is
+safe). That hoist also removed a second, subtler break the intermediate tree had introduced — a
+root `babel-preset-expo` beside an app-local `expo-router`, so the preset's router plugin could
+not resolve `expo-router` and left `process.env.EXPO_ROUTER_APP_ROOT` un-inlined, which failed
+`npm run export` at `_ctx.android.js`'s `require.context`. `ci.yml`'s "Android bundle smoke
+(Metro resolution)" step is the check that caught it locally before it was pushed.
+
+On the last box: `expo-two-way-audio`'s peer WAS narrowed, and the justification is what the
+repository actually builds it against rather than a guess at its upstream surface. It is
+consumed by exactly one workspace, `apps/android`, on SDK 54; its native Gradle module compiles
+against whichever `expo-modules-core` autolinking hands it, which this repository has only ever
+made `3.0.x`; and an unbounded `*` was not a statement of compatibility but the single edge that
+let npm choose SDK 57 for a tree with no SDK-57 consumer. `^54.0.0` says what is true here. If
+the package is ever published for other consumers, that is the moment to widen it, with a build
+against each SDK it claims.
+
+The "something that would notice if it stopped being harmless" the third box asked for is
+`scripts/ci/guard-expo-sdk-alignment.mjs` (T326), which reads the answer from `package-lock.json`
+instead of from twenty minutes of emulator time.
+
+- [x] State which manifest actually causes the root `expo@57`, proven by re-resolving (a
+      lockfile read plus a clean install), not by reasoning from the ranges alone — done
+      above; `packages/expo-two-way-audio`'s `expo: "*"` peer, and the three edges behind it
+- [x] Either the root `expo` is gone, or a committed note says why it is there and why it is
+      safe — in a citable home, not only in a commit message — the root `expo` is `54.0.37`
+- [x] Say plainly whether fixing T306 removed this on its own; if it did, this task is
+      closed by that, and record it rather than inventing separate work — it did not; the
+      cause was four manifest edges, none of them T306's
+- [x] `apps/android` still resolves its own `expo` at `54.x` after the change, checked
+      through `apps/android/node_modules`, not the root — `expo@54.0.37` is the only `expo`
+      in the tree; T326's guard checks the app's resolution on every push
+- [x] If `peerDependencies: *` is narrowed, justify it against what
       `packages/expo-two-way-audio` actually supports — it is ported AGPL code with its own
-      compatibility surface, not ours to guess at
+      compatibility surface, not ours to guess at — narrowed to `^54.0.0`, justified above
 
 #### T308 — Show the local wall-clock time on every transcript message
 
@@ -16017,8 +16082,102 @@ measurement: it has 9 Kotlin source files and no prebuilt binary, so it compiled
 this repository's own Gradle build and still failed at runtime. The exclusion is justified by
 the observed crash and by the package being unused, not by either mechanism.
 
-- [x] `@expo/dom-webview` and `@expo/log-box` are excluded from autolinking
+**UPDATED at T326.** The dispatch after this section, run 34433407469, answered the last box:
+the app died the same way on `expo-asset@57.0.15` — `NoClassDefFoundError:
+expo.modules.kotlin.types.AnyTypeCache` at `AssetModule.kt:125`, every shard and the packaged
+smoke alike — so the exclusion above was never a strategy, only a way of reaching the next
+crash, and a third exclusion was refused for the reason already given: the app genuinely needs
+`expo-asset`. T307's cause is now fixed at its source (see that task's second ANSWERED
+paragraph), the SDK-57 tree is gone, and with it both excluded packages — neither
+`@expo/dom-webview` nor `@expo/log-box` is installed anywhere any more — so the
+`expo.autolinking.exclude` block was REMOVED from `apps/android/package.json` rather than left
+exempting packages that do not exist. The first two boxes below describe what T325 did at the
+time; they are not the tree today. `guard-expo-sdk-alignment` (T326) is what fails first now,
+in milliseconds and on every push, if any of the three ever returns.
+
+- [x] `@expo/dom-webview` and `@expo/log-box` are excluded from autolinking — at the time;
+      the block is gone now that neither package is installed (T326)
 - [x] The exclusion is verified against the real autolinking resolver, not assumed
 - [x] The app is confirmed to contain no `use dom` component
 - [ ] A dispatch where the app survives native module registration and renders its first screen
-- [ ] Whether `expo-asset@57.0.15` is the next such crash, answered by that dispatch
+- [x] Whether `expo-asset@57.0.15` is the next such crash, answered by that dispatch — it was;
+      fixed at the source under T307/T326
+
+#### T326 — Every Expo package the app can see must belong to its own SDK, read from the lockfile
+
+`labels: phase-9, area: ci, area: android` · `depends-on: T307, T325, T322`
+
+Three Maestro dispatches in a row each spent twenty minutes of emulator time to discover ONE
+foreign-SDK Expo package autolinked into the SDK-54 app — `@expo/dom-webview`, then
+`@expo/log-box`, then `expo-asset` — because a crash at native module registration reports only
+the first module that fails. Every one of those facts was already in `package-lock.json`. This
+task reads them from there.
+
+`scripts/ci/guard-expo-sdk-alignment.mjs` takes Expo's own `bundledNativeModules.json` (shipped
+inside the `expo` package, the file `npx expo install` reads; resolved from `apps/android`, the
+way Node, Metro and autolinking resolve it) and, for every package it names, checks the copy
+`apps/android` RESOLVES — `apps/android/node_modules/<name>` if present, else the root — against
+the SDK's range. The source of truth is the lockfile, so the verdict is about what `npm ci` will
+install, and the runner refuses to run if the installed `expo` disagrees with the lock's (a stale
+`node_modules` must never produce a green result — the same standing reason `CLAUDE.md` gives for
+a stale `dist`). `expo` itself, which that file does not list, is checked against the range
+`apps/android/package.json` declares. The range matcher is hand-rolled for the three shapes the
+real file uses (`~`, `^`, exact — measured across all 119 entries), because a `semver` import
+from `scripts/ci` would need declaring at the root under T227's guard; a fourth shape is reported
+as `unrecognised-range`, never skipped.
+
+**Two findings on its first real run, neither of which any emulator had reached yet:**
+
+- `react-native-worklets@0.8.3` at the root against the SDK's exact `0.5.1`, floated there by
+  `react-native-reanimated@4.1.7`'s `0.5 - 0.8` peer. A real `sdk-mismatch`: worklets checks its
+  JavaScript and native versions agree at startup. Fixed under T307's table.
+- `react@19.2.8` at the root (`apps/web` needs `^19.2.8`) beside this app's own `19.1.0`, with
+  `react-native@0.81.5` itself hoisted to the root. Metro resolves a root-hoisted dependent's
+  imports by walking UP from that dependent, so the renderer's own `require("react")` found the
+  root copy while the app's components used the nested one: two React instances in one bundle,
+  and a hook called from a component the other instance's renderer is drawing has no dispatcher.
+  This is the mirror image of the `react-native` hoist `apps/android/metro.config.js` already
+  pinned for, and it is fixed the same way: the resolver's pin is generalised to an
+  `APP_PINNED_MODULES = ["react", "react-native"]` list, so `react` and `react/jsx-runtime` (which
+  every compiled JSX file in `node_modules` imports) go through the app's copy from any importer.
+  `metro.config.test.ts` pins both the new rule and that it does not swallow `react-native`,
+  `react-dom` or any `react-*` package by prefix.
+
+That second finding shaped the guard's second rule. A root copy SHADOWED by a correct app-local
+one is still reported (`shadowed-root-copy`), for the Metro walk-up reason above, and the only
+exemption is a name in `APP_PINNED_MODULES` — which the runner reads from the real
+`metro.config.js`, so removing a pin un-exempts its package in the same commit. A pin never
+excuses the copy the app actually resolves. A package `apps/android` never bundles at all is
+skipped through a curated, reasoned `ANDROID_NEVER_LOADS` list (today exactly `react-dom`, the DOM
+renderer for `apps/web`), and a listed name that is no longer in `bundledNativeModules.json` or no
+longer installed is `stale-allowlist-entry` — the T211/T213 shape, closed on day one. Deeper
+nesting (`node_modules/expo/node_modules/expo-asset`) is a legal npm arrangement the app cannot see
+and is deliberately not checked.
+
+Wired as `guard-expo-sdk-alignment` in `ci.yml`, with `npm ci` (for the one file not in the lock).
+Registered in `guard-capability-prose.mjs`'s `CAPABILITIES` and proven able to FIRE before being
+trusted: a denying sentence in this entry's own wording, appended to a real tracked in-scope file,
+made `run-guard-capability-prose.mjs` exit 1 naming this capability; restoring the file from a
+scratchpad copy (never `git checkout --`) returned exit 0 with a clean `git status --porcelain`.
+One thing that proof taught: the capability inventory comes from `git ls-files`, so a NEW guard
+file must be at least staged before the firing proof can pass — untracked, it is invisible and
+the proof "fails" silently.
+
+Two pieces of prose T307's hoist had quietly falsified were corrected in the same commit:
+`apps/android/src/features/terminal/terminal-webview-port.ts` cited `react-native-webview@13.16.1`
+and `@expo/dom-webview@~57.0.1` as `bundledNativeModules.json`'s pins — figures read from the
+root `expo@57`; the SDK-54 file says `13.15.0` and has no `@expo/dom-webview` entry at all — and
+`docs/security-and-version-drift.md`'s version-drift register said the Expo SDK pin "is not
+cross-checked against anything", which this guard makes false.
+
+- [x] `guard-expo-sdk-alignment.mjs` reports the exact 5aab232 lockfile shape, naming every
+      foreign-SDK copy `apps/android` can see, and is clean on the fixed tree
+- [x] Wired into `ci.yml`, with a `node --test` suite and a real-tree case that skips only where
+      `expo` is not installed (the `changes` job runs before any `npm ci`)
+- [x] The `react` two-copies hazard is pinned in `metro.config.js` and covered by
+      `metro.config.test.ts`
+- [x] `CAPABILITIES` entry registered and watched firing
+- [x] Local baseline: `node --test scripts/ci/*.test.mjs` all-pass and `oxfmt --check .` clean,
+      on a tree `run-guard-clean-working-tree.mjs` reports clean
+- [ ] The Maestro dispatch after this lands: the app survives native module registration and
+      renders its first screen (T325's open box; this task's whole point)

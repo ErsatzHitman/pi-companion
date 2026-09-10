@@ -2173,6 +2173,27 @@ export const CAPABILITIES = [
       /package-lock\.json'?s? (?:own )?bin maps? (?:are|is) (?:not|never) (?:read|consulted) by any (?:guard|check)/i,
     ],
   },
+  {
+    // T326: three consecutive Maestro dispatches each died on ONE foreign-SDK
+    // Expo package autolinked into the SDK-54 app (`@expo/dom-webview`, then
+    // `@expo/log-box`, then `expo-asset`), twenty minutes of emulator time
+    // apiece to learn a fact `package-lock.json` already stated. This guard
+    // reads the lock against the app's own `expo/bundledNativeModules.json`.
+    //
+    // `findExpoSdkAlignmentViolations` is declared in exactly one shipped
+    // file, measured the same way as the entries above; a bare string is
+    // enough. Phrases are worded in T326's own voice — none is lifted from
+    // the guard's header, the ledger, or `docs/security-and-version-drift.md`,
+    // all of which narrate the pre-fix state at length (the T215 collision,
+    // avoided the same way T215 avoided it).
+    name: "installed Expo packages visible to apps/android stay inside its SDK's bundledNativeModules ranges (findExpoSdkAlignmentViolations)",
+    methodNames: ["findExpoSdkAlignmentViolations"],
+    denyingPhrases: [
+      /(?:nothing|no guard|no check) (?:in this repository )?(?:compares|checks) (?:the )?(?:installed|linked) `?expo-?\*?`? (?:package |module )?versions? (?:against|with|to) `?bundledNativeModules(?:\.json)?`?/i,
+      /a (?:foreign|wrong|mismatched)[- ]sdk `?expo(?:-[a-z-]+)?`? (?:package |module |copy )?(?:at|in) the (?:repository )?root (?:is|goes|would go|stays) (?:unnoticed|undetected|uncaught)/i,
+      /only (?:an? )?(?:emulator|maestro) (?:run|dispatch) (?:can|could|will) (?:reveal|discover|find) (?:an? )?(?:autolinked )?(?:native )?module from (?:the wrong|another|a different) (?:expo )?sdk/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
