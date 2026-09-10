@@ -41,16 +41,46 @@ describe("T33A1 header/status strip: no raw hex, theme-only styling", () => {
     });
   }
 
-  it("header.tsx reads its styling from useTheme()", () => {
-    expect(readSource("header")).toMatch(/useTheme\(\)/);
+  it("header.tsx owns no styling of its own, so there is nothing for it to theme", () => {
+    // T351: every pixel this file used to describe now belongs to
+    // `ScreenBar` and `StatusPill`, both of which read `useTheme()`
+    // themselves and are audited by
+    // `../../ui/recipes/recipe-accessibility.test.ts` and
+    // `../../ui/primitives/touch-targets.test.ts`. A local StyleSheet
+    // here would be a second, drifting copy of the bar's look.
+    const source = readCode("header");
+    expect(source).not.toMatch(/StyleSheet\.create/);
+    expect(source).not.toMatch(/useTheme\(\)/);
   });
 });
 
 describe("T33A1 header/status strip: status conveyed in text as well as colour", () => {
-  it("header.tsx composes Section + Chip (title as heading text, status as a labelled chip)", () => {
-    const source = readSource("header");
-    expect(source).toMatch(/<Section title=\{model\.title\}>/);
-    expect(source).toMatch(/<Chip label=\{model\.chipLabel\} tone=\{model\.tone\}/);
+  it("header.tsx composes ScreenBar + StatusPill (title as the bar's own heading, status as a worded pill)", () => {
+    // T351 replaced Section + Chip with the redesign's shared bar and
+    // its 26dp pill. The pill's label is still model-derived and still
+    // visible text, which is the property this case has always been
+    // about; only the two components changed.
+    const source = readCode("header");
+    expect(source).toMatch(/<ScreenBar\b/);
+    expect(source).toMatch(/title=\{model\.title\}/);
+    expect(source).toMatch(/<StatusPill\b/);
+    expect(source).toMatch(/label=\{model\.chipLabel\}/);
+    expect(source).toMatch(/tone=\{model\.tone\}/);
+    expect(source).not.toMatch(/label="[^"]*"/); // never a hardcoded status word
+  });
+
+  it("header.tsx keeps the status readout on transcript-header-status-chip", () => {
+    // The testID predates the redesign and eight flows plus their
+    // contracts find the status by it. T351 moved it from a `Chip` onto
+    // the `StatusPill` that replaced it, on purpose, so nothing that
+    // names it has to change.
+    expect(readCode("header")).toMatch(/testId=\{`\$\{testId\}-status-chip`\}/);
+  });
+
+  it("header.tsx names both bar marks for assistive tech rather than shipping a bare glyph", () => {
+    const source = readCode("header");
+    expect(source).toMatch(/accessibleName: "Sessions"/);
+    expect(source).toMatch(/accessibleName: "Live"/);
   });
 
   it("status-strip.tsx composes StatusIndicator, which pairs its coloured dot with visible statusText", () => {

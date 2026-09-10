@@ -19,12 +19,20 @@
  * direction. When web gains it, add the name there and both labs pick it
  * up together.
  *
- * **No pulse.** The artifact animates its dot only on the `run` state,
- * which means "a turn is in flight". This pill reports the CONNECTION
- * state, where "connected" is a resting state, not activity — a pulsing
- * dot there would animate forever and claim work that is not happening.
- * The turn-running indicator is a separate element and can carry the
- * pulse when it lands.
+ * **Still no pulse, now for a different reason (T351).** The artifact
+ * animates its dot only on the `run` state, which means "a turn is in
+ * flight". T350 shipped this pill against the CONNECTION state, where
+ * "connected" is a resting state and a pulsing dot would have animated
+ * forever claiming work that was not happening. T351's session app bar
+ * changed that: `features/transcript/header-model.ts` gives the pill the
+ * SESSION's own state, so its `Working` pill really does mean a turn is
+ * running, and a pulse there would be honest. It is still not drawn,
+ * deliberately — the dot plus the word already carry the state without
+ * colour or motion (plan.md §10.5), an indefinite animation over a
+ * multi-minute turn is a real battery and attention cost, and a reduced-
+ * motion path would have to switch it off anyway, at which point the
+ * static rendering has to be the correct one regardless. A later task
+ * may add the pulse; nothing here depends on its absence.
  */
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";

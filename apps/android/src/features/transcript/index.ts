@@ -11,10 +11,16 @@
 export { TranscriptHeader } from "./header";
 export type { TranscriptHeaderProps } from "./header";
 export {
+  SESSION_PILL_STATES,
   buildTranscriptHeaderViewModel,
+  deriveCwdBasename,
   type TranscriptHeaderInput,
   type TranscriptHeaderViewModel,
 } from "./header-model";
+// T351: the app bar's working-directory read — see `use-agent-cwd.ts`'s
+// module doc for why the pure half lives in `header-model.ts` instead.
+export { useAgentCwd } from "./use-agent-cwd";
+export type { AgentSnapshotSource } from "./use-agent-cwd";
 
 export { TranscriptStatusStrip } from "./status-strip";
 export type { TranscriptStatusStripProps } from "./status-strip";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useWindowDimensions } from "react-native";
 
 import { timeline as coreTimeline } from "@picompanion/frontend-core";
@@ -34,12 +34,17 @@ import {
   createTranscriptMessageBatcher,
   fireTranscriptStatusHaptic,
   selectRecoveredTurnsForSession,
+  useAgentCwd,
   useAttachmentImageResolver,
   type AwaitingConfirmationTurn,
   type TranscriptStatus,
 } from "../../../../../features/transcript";
 import { buildDaemonHttpOrigin } from "../../../../../features/connect/daemon-connection-store.js";
 import { deriveSessionRouteStatus } from "../../../../../app-shell/session-route-model";
+import {
+  pressSessionList,
+  pressSessionLive,
+} from "../../../../../app-shell/session-nav-actions-model";
 import {
   buildSessionTranscriptEntries,
   type SessionTranscriptEntry,
@@ -56,6 +61,7 @@ import {
 import { Banner } from "../../../../../ui/primitives";
 import { useAppCore } from "../../../../core-context";
 import {
+  resolveAgentSnapshotClient,
   resolveAttachmentDownloadClient,
   resolveEditorTextClient,
   resolveQueueModeClient,
@@ -705,6 +711,20 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * `app-shell/navigation-shell.tsx` is enough. `SessionSheetExtensions`
  * (T32S12, above) joins it there for the identical reason.
  *
+ * **T351 mount.** The `header` slot is still `TranscriptHeader` alone,
+ * but that component is now the redesign's S7 app bar (see its own doc
+ * comment). Three things this route supplies that it could not supply
+ * itself: `onOpenSessions`/`onOpenLive`, because only a route has a
+ * router — both go through `../../../../../app-shell/
+ * session-nav-actions-model.ts`'s `pressSessionList`/`pressSessionLive`,
+ * the same `destinationHref` conversion every other push in this app
+ * uses; and `cwd`, read by `useAgentCwd` off
+ * `resolveAgentSnapshotClient(core.connection)` — the seventh
+ * `resolve*Client` narrowing of the same live `DaemonClient` the six
+ * below already read. With no connection the resolver hands back
+ * `undefined`, the hook never issues a request, and the bar draws no
+ * subtitle rather than a placeholder path.
+ *
  * **T350 (the redesign) moved Files and Terminal off this screen.**
  * The paragraph below records what T79 did and why, because the gap it
  * closed is still real and the fix is still live — only its LOCATION
@@ -865,6 +885,24 @@ export default function SessionRoute() {
   });
   const [composerContentMinHeight, setComposerContentMinHeight] = useState(0);
 
+  // T351: the app bar's two marks and its mono subtitle. The router is
+  // read here rather than inside `TranscriptHeader` so that component
+  // stays router-free and its contract can be pinned without
+  // `expo-router` in its import graph, the same split `./live.tsx`
+  // already uses for `LiveScreen`. Both pushes go through
+  // `session-nav-actions-model.ts`'s `destinationHref` conversion, never
+  // a hand-built path.
+  const router = useRouter();
+  const openSessions = useCallback(
+    () => pressSessionList(router, serverId ?? ""),
+    [router, serverId],
+  );
+  const openLive = useCallback(
+    () => pressSessionLive(router, serverId ?? "", agentId ?? ""),
+    [router, serverId, agentId],
+  );
+  const cwd = useAgentCwd(resolveAgentSnapshotClient(core.connection), agentId ?? "");
+
   return (
     <>
       <CompactSessionShell
@@ -874,7 +912,10 @@ export default function SessionRoute() {
           <TranscriptHeader
             hostLabel={serverId ?? ""}
             sessionTitle={agentId ?? ""}
+            cwd={cwd}
             status={status}
+            onOpenSessions={openSessions}
+            onOpenLive={openLive}
           />
         }
         statusStrip={<TranscriptStatusStrip status={status} />}

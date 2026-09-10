@@ -54,6 +54,16 @@ export function buildSessionTerminalId(agentId: string): string {
 }
 
 /**
+ * Navigates back out to this host's session list (T351) — the session
+ * app bar's `☰` mark. Same `destinationHref` conversion as the three
+ * below; `sessionList` has been a registered navigation intent since
+ * T24, so nothing new was needed in `frontend-core` for this one.
+ */
+export function pressSessionList(router: SessionNavRouter, serverId: string): void {
+  router.push(destinationHref({ type: "sessionList", serverId }));
+}
+
+/**
  * Navigates to this session's Live screen (T350) — its running
  * subagents, workflow progress and context usage, and the way in to
  * Files and Terminal. Same `destinationHref` conversion as the two

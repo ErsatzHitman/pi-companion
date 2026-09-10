@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  resolveAgentSnapshotClient,
   resolveAttachmentDownloadClient,
   resolveEditorTextClient,
   resolveQueueModeClient,
@@ -71,6 +72,10 @@ function createCountingFakeDaemonClient() {
     }),
     respondToEditorText: vi.fn(async (agentId: string, requestId: string, text: string) => {
       calls.push(["respondToEditorText", agentId, requestId, text]);
+    }),
+    fetchAgent: vi.fn(async (agentId: string) => {
+      calls.push(["fetchAgent", agentId]);
+      return { agent: { cwd: "/home/akshat/code/pi-companion" } };
     }),
   };
 }
@@ -310,5 +315,45 @@ describe("resolveTranscribeClient and resolveQueueModeClient read the SAME under
     const transcribeClient = resolveTranscribeClient(connection);
     const queueModeClient = resolveQueueModeClient(connection);
     expect(transcribeClient).toBe(queueModeClient as unknown as typeof transcribeClient);
+  });
+});
+
+describe("resolveAgentSnapshotClient", () => {
+  it("returns the exact live client reference unchanged — never a wrapper or a clone", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveAgentSnapshotClient(connectionWithClient(fakeClient));
+    expect(resolved).toBe(fakeClient as unknown as typeof resolved);
+  });
+
+  it("a fetchAgent call on the resolved client reaches the real counting fake and the snapshot's cwd round-trips", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveAgentSnapshotClient(connectionWithClient(fakeClient));
+
+    const result = await resolved!.fetchAgent!("agt_t351_cwd");
+
+    expect(fakeClient.fetchAgent).toHaveBeenCalledTimes(1);
+    expect(fakeClient.calls).toEqual([["fetchAgent", "agt_t351_cwd"]]);
+    expect(result?.agent.cwd).toBe("/home/akshat/code/pi-companion");
+  });
+
+  it("resolves the SAME object every other resolver on this connection resolves — one client, seven ports", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const connection = connectionWithClient(fakeClient);
+
+    expect(resolveAgentSnapshotClient(connection) as unknown).toBe(
+      resolveQueueModeClient(connection) as unknown,
+    );
+  });
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveAgentSnapshotClient(connection)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveAgentSnapshotClient(connection)).toBeUndefined();
   });
 });

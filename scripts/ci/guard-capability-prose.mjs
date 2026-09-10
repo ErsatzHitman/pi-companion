@@ -2417,6 +2417,28 @@ export const CAPABILITIES = [
       /running subagents? (?:are|is) only ever visible (?:in|above) the (?:pinned area|composer)/i,
     ],
   },
+  {
+    // T351: the session screen's app bar. `features/transcript/
+    // use-agent-cwd.ts`'s `useAgentCwd` is the first Android read of the
+    // daemon's own agent-snapshot `cwd`, which the bar draws as its mono
+    // subtitle, and `app-shell/session-nav-actions-model.ts`'s
+    // `pressSessionList` is the bar's other new push. Before this, the
+    // header showed a title and a host label, navigated nowhere, and
+    // nothing in this app had ever asked the daemon which directory a
+    // session was working in. An OR-across-members pair rather than
+    // T168's same-file AND-group, for the same reason the entry above
+    // gives: the two names are declared in two different files, each
+    // uniquely, and either one existing means the capability is real.
+    // The phrases are worded in T351's own voice, never lifted from the
+    // header's own prose narrating what it used to be.
+    name: "The session app bar reaches Sessions and Live and names the session's directory (useAgentCwd / pressSessionList)",
+    methodNames: ["useAgentCwd", "pressSessionList"],
+    denyingPhrases: [
+      /(?:the )?session (?:header|app bar) navigates nowhere/i,
+      /nothing (?:on android |in this app )?reads (?:the |an )?agent snapshot's (?:own )?working directory/i,
+      /(?:the )?session's working directory is never (?:shown|displayed) (?:on|in) (?:the )?(?:transcript|session) (?:screen|header)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

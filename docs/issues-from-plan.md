@@ -607,6 +607,7 @@ that recomputation has to be domain-specific:
 | T348   | Re-sync expo-linking's audit range after upstream narrowed it                                                        | phase-9   | ci               | P9-U   | T44A3                                                                 |
 | T349   | The S7 icon set had no vector renderer to draw it                                                                    | phase-9   | android          | P9-U   | T345                                                                  |
 | T350   | A session's running work had no screen, and Files/Terminal crowded the transcript                                    | phase-9   | android          | P9-U   | T349, T79, T339                                                       |
+| T351   | The session screen's header showed a title and a host, navigated nowhere, and never named the directory              | phase-9   | android          | P9-U   | T350, T349, T132                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -648,8 +649,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**559 tasks** (distinct IDs counted directly from the table above), recounted at T350 with
-`grep`/`sort -u` over the table's own rows — one past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**560 tasks** (distinct IDs counted directly from the table above), recounted at T351 with
+`grep`/`sort -u` over the table's own rows — one past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17286,3 +17287,71 @@ comment.
 - [x] The running mark animates from `motion.duration` and goes static under reduced motion
 - [x] A `CAPABILITIES` entry was registered and proven to fire
 - [x] `icons.tsx`'s falsified sentence is corrected in the same commit, and a `CAPABILITIES` entry proven to fire
+
+#### T351 — The session screen's header showed a title and a host, navigated nowhere, and never named the directory
+
+`labels: phase-9, area: android` · `depends-on: T350, T349, T132`
+
+The session screen's header was a `Section` with the session title, the host label under it,
+and a `Chip` (T33A1). Three things were wrong with it once the redesign existed. It was not the
+artifact's bar. It carried no way to get anywhere: the session list you came from and the Live
+screen T350 had just built were both a back gesture and a row hunt away. And the one piece of
+identity a user reading a transcript actually needs — which project this session is working in
+— was the one piece it did not show, because every session on a host shares the host and only
+the working directory distinguishes them.
+
+`header.tsx` is now `ScreenBar` + `StatusPill`, the two pieces T350 built for exactly this, and
+owns no `StyleSheet` of its own — a second copy of the bar's look here is how four screens
+drift apart. `☰` opens this host's session list, `⧉` opens this session's Live screen, both as
+callbacks the route supplies, so the component keeps `expo-router` out of its import graph and
+its contract stays pinnable, the same split `live-screen.tsx` already uses.
+
+**The pill kept `transcript-header-status-chip`.** It moved from a `Chip` onto the `StatusPill`
+that replaced it, deliberately, so the flows and contracts that find the status by that id
+still find it — this redesign's testID-continuity rule.
+
+**Two model decisions, both recorded in `header-model.ts`'s own header rather than left
+implicit:**
+
+- `subtitle` changed meaning, from the host label to the working directory's basename. The host
+  is not dropped: it stays in `accessibilityLabel`, which is the sentence TalkBack actually
+  reads, so nothing a screen-reader user had was taken away to make room.
+- The pill has its own tone table rather than borrowing the status strip's. They report
+  different things and must be allowed to disagree: the strip describes the CONNECTION, where a
+  live socket is green and good news, while the bar's pill answers "what is this session doing",
+  where a healthy idle session is the artifact's neutral `idle` pill and not a green one that
+  makes every screenshot look busy. Every one of the six statuses gets its own word, no two
+  alike, and the dot is withheld from exactly the two resting states.
+
+**Where the directory comes from.** `AgentSnapshotPayloadSchema` has carried `cwd` all along and
+nothing on Android had ever read it. `use-agent-cwd.ts`'s `useAgentCwd` does, through
+`resolveAgentSnapshotClient` — the seventh narrow port off the one live `DaemonClient` that file
+already resolves six others from, added following the six existing resolvers exactly and proven
+by the same counting-fake shape, including that it resolves the identical object
+`resolveQueueModeClient` does. With no connection the resolver returns `undefined`, the hook
+issues no request, and the bar draws no subtitle at all — an unknown directory must not be
+labelled with a guess. `deriveCwdBasename` is the pure half and splits on both separators,
+because the daemon reports whatever ITS host uses and this app cannot tell which by looking at
+its own platform.
+
+`StatusPill`'s "No pulse" paragraph was corrected in the same commit rather than left to rot:
+its stated reason (the pill reports the connection, where "connected" is a resting state) stopped
+being true the moment this bar handed it the session's own state. The pulse is still not drawn,
+now for reasons that are actually about the pulse — an indefinite animation over a multi-minute
+turn, and a reduced-motion path that would have to switch it off anyway.
+
+A `CAPABILITIES` entry ("The session app bar reaches Sessions and Live and names the session's
+directory") was registered in the same change and watched firing against a scratchpad-backed copy
+of `docs/legacy-retirement.md` before being trusted, then restored with `git status --porcelain`
+clean for that file.
+
+- [x] The session header is the redesign's bar, built from the shared `ScreenBar` and `StatusPill`
+- [x] The status readout keeps `transcript-header-status-chip`, on the pill that replaced the chip
+- [x] Both bar marks navigate through `destinationHref`, never a hand-built path
+- [x] The bar is router-free; the route supplies both callbacks
+- [x] The subtitle is the session's real working directory, read from the daemon's own snapshot
+- [x] No connection means no subtitle, never a placeholder path
+- [x] Every status has a distinct pill word, so colour is never the only signal
+- [x] `header-model.ts` gained no React Native import, so all of it is behaviourally tested
+- [x] `StatusPill`'s falsified reasoning is corrected in the same commit
+- [x] A `CAPABILITIES` entry was registered and proven to fire

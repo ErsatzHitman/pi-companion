@@ -84,7 +84,14 @@ describe("SessionRoute source", () => {
   it("no longer mounts SessionNavActions: Files and Terminal live on the Live route since T350", () => {
     const code = readCode();
     expect(code).not.toMatch(/SessionNavActions/);
-    expect(code).not.toMatch(/session-nav-actions/);
+    // The two controls' own testIDs, which is what a flow finds them
+    // by. Narrowed from a bare `session-nav-actions` match by T351:
+    // this route now imports `session-nav-actions-model.ts` for the app
+    // bar's two pushes, which is that module doing its ordinary job and
+    // not the mount this case exists to forbid.
+    expect(code).not.toMatch(/session-nav-actions-files/);
+    expect(code).not.toMatch(/session-nav-actions-terminal/);
+    expect(code).not.toMatch(/from "[^"]*app-shell\/session-nav-actions"/);
   });
 
   it("fills composer with Composer from features/composer, given a turnService and turnRunning", () => {
@@ -482,9 +489,9 @@ describe("SessionRoute source", () => {
   // that SessionRoute actually calls it and actually passes the result
   // to Composer, never a fixed `undefined`. ------------------------------
 
-  it("T132/T282/T284/T292/T293: imports resolveAttachmentDownloadClient/resolveEditorTextClient/resolveQueueModeClient/resolveSlashCommandsClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
+  it("T132/T282/T284/T292/T293/T351: imports resolveAgentSnapshotClient/resolveAttachmentDownloadClient/resolveEditorTextClient/resolveQueueModeClient/resolveSlashCommandsClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
     expect(readCode()).toMatch(
-      /import \{\s*resolveAttachmentDownloadClient,\s*resolveEditorTextClient,\s*resolveQueueModeClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+      /import \{\s*resolveAgentSnapshotClient,\s*resolveAttachmentDownloadClient,\s*resolveEditorTextClient,\s*resolveQueueModeClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
     );
   });
 
@@ -769,5 +776,32 @@ describe("SessionRoute bounds the composer slot beside a drawing pinned area (T3
     expect(code).toMatch(/onMinHeightChange=\{setComposerContentMinHeight\}/);
     expect(code).toMatch(/composerContentMinHeight=\{composerContentMinHeight\}/);
     expect(code).toMatch(/composerMaxHeight=\{composerMaxHeight\}/);
+  });
+});
+
+describe("SessionRoute supplies the S7 app bar what only a route can (T351)", () => {
+  it("passes both bar marks as callbacks, so TranscriptHeader itself stays router-free", () => {
+    const code = readCode();
+    expect(code).toMatch(/<TranscriptHeader[\s\S]*?onOpenSessions=\{openSessions\}/);
+    expect(code).toMatch(/<TranscriptHeader[\s\S]*?onOpenLive=\{openLive\}/);
+  });
+
+  it("routes both marks through session-nav-actions-model's destinationHref conversion, never a hand-built path", () => {
+    const code = readCode();
+    expect(code).toMatch(/pressSessionList\(router, serverId \?\? ""\)/);
+    expect(code).toMatch(/pressSessionLive\(router, serverId \?\? "", agentId \?\? ""\)/);
+    expect(code).not.toMatch(/router\.push\("\//);
+  });
+
+  it("feeds the bar's subtitle from the daemon's own agent snapshot, off the same live client every other resolver reads", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /const cwd = useAgentCwd\(resolveAgentSnapshotClient\(core\.connection\), agentId \?\? ""\);/,
+    );
+    expect(code).toMatch(/<TranscriptHeader[\s\S]*?cwd=\{cwd\}/);
+  });
+
+  it("never hardcodes a working directory into the bar", () => {
+    expect(readCode()).not.toMatch(/cwd="[^"]/);
   });
 });

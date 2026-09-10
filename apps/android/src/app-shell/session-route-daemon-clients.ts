@@ -46,6 +46,18 @@
  * already narrows four times above satisfies this fifth port as-is
  * too, with no adapter.
  *
+ * **T351 adds `resolveAgentSnapshotClient` below**, the same pattern a
+ * seventh time: the session app bar's mono subtitle is the session's
+ * working directory, which only the daemon's own agent snapshot knows
+ * (`AgentSnapshotPayloadSchema`'s `cwd`, `packages/protocol/src/
+ * messages.ts`). `../features/transcript`'s `useAgentCwd` wants an
+ * `AgentSnapshotSource` (`{ fetchAgent?(agentId): Promise<{ agent: {
+ * cwd? } } | null> }`), and the real `DaemonClient.fetchAgent(agentId,
+ * requestId?)` overload (`packages/client/src/daemon-client.ts`)
+ * resolves a payload that is a strict superset of that shape — so the
+ * one live `DaemonClient` instance this file already narrows six times
+ * above satisfies this seventh port as-is too, with no adapter.
+ *
  * **T293 adds `resolveEditorTextClient` below**, the same pattern a
  * sixth time: `Composer.tsx`'s `editorTextClient` prop wants a
  * `DaemonEditorTextSource` (`../features/composer`'s
@@ -80,7 +92,7 @@ import type {
   DaemonSlashCommandSource,
   DaemonTurnStatusSource,
 } from "../features/composer";
-import type { AttachmentDownloadTokenClient } from "../features/transcript";
+import type { AgentSnapshotSource, AttachmentDownloadTokenClient } from "../features/transcript";
 import type { VoiceTranscriptionClient } from "../features/voice";
 
 /**
@@ -201,6 +213,29 @@ export function resolveSlashCommandsClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | DaemonSlashCommandSource
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T351: same fresh-read contract as the six functions above, cast to
+ * `AgentSnapshotSource` instead — the seventh narrow port this one live
+ * `DaemonClient` instance satisfies (the real `fetchAgent(agentId,
+ * requestId?)`, see that method's own doc comment in
+ * `packages/client/src/daemon-client.ts`). `undefined` (never `null`)
+ * with no active lifecycle or no live client yet, matching every sibling
+ * resolver above — `useAgentCwd` then never issues a request
+ * (`use-agent-cwd.ts`'s "no client yet" seam) and the session app bar
+ * draws no working-directory subtitle, which is the truthful state
+ * rather than a placeholder path.
+ */
+export function resolveAgentSnapshotClient(
+  connection: SessionRouteConnectionSource,
+): AgentSnapshotSource | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | AgentSnapshotSource
       | null
       | undefined) ?? undefined
   );
