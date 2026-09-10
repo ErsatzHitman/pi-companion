@@ -22,8 +22,8 @@ export interface SectionProps {
    * or the heading — those are the primitive's contract.
    */
   style?: StyleProp<ViewStyle>;
-  /** Forwarded to the wrapping View (T343: `Composer.tsx` measures its section to reserve the prompt bar's height). */
-  onLayout?: (event: LayoutChangeEvent) => void;
+  /** Layout of the heading text alone (T344: `Composer.tsx` sums it with its prompt bar to reserve their height). */
+  onTitleLayout?: (event: LayoutChangeEvent) => void;
 }
 
 /**
@@ -34,12 +34,12 @@ export interface SectionProps {
  * heading still reads standalone (plan.md §10.5 "screen-reader role and
  * state").
  */
-export function Section({ title, children, testId, style, onLayout }: SectionProps) {
+export function Section({ title, children, testId, style, onTitleLayout }: SectionProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   return (
-    <View style={[styles.section, style]} testID={testId} onLayout={onLayout}>
-      <Text accessibilityRole="header" style={styles.title}>
+    <View style={[styles.section, style]} testID={testId}>
+      <Text accessibilityRole="header" style={styles.title} onLayout={onTitleLayout}>
         {title}
       </Text>
       {children}

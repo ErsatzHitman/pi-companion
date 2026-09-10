@@ -132,10 +132,14 @@ export interface ComposerLayoutContract {
    * worth reserving is the prompt bar's.
    *
    * T343 made that reservation literal: `Composer.tsx` measures its
-   * section and its scrolling controls and applies the difference —
-   * heading, gaps and prompt bar — as the root's `minHeight`
-   * (`composer-min-height-model.ts`), so a shrinkable pinned area above
-   * gives way before the prompt bar does (run 34493338438).
+   * heading and its prompt bar and applies their sum, plus the section's
+   * gaps, as the root's `minHeight` (`composer-min-height-model.ts`), so
+   * a shrinkable pinned area above gives way before the prompt bar does
+   * (run 34493338438). (CORRECTED at T344: this said it "measures its
+   * section and its scrolling controls and applies the difference" — the
+   * two readings arrive separately, and a fresh section paired with a
+   * stale squeezed scroll view froze the composer at full height in run
+   * 34497459568.)
    */
   reservesOwnHeight: true;
   /**

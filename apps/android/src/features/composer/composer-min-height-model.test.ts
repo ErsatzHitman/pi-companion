@@ -2,25 +2,30 @@ import { describe, expect, it } from "vitest";
 
 import { resolveComposerMinHeight } from "./composer-min-height-model";
 
-describe("resolveComposerMinHeight (T343)", () => {
-  it("is the section height less the scrolling controls: heading, gaps and prompt bar", () => {
-    expect(resolveComposerMinHeight({ sectionHeight: 1020, controlsHeight: 561 }, 0)).toBe(459);
+describe("resolveComposerMinHeight (T343, corrected at T344)", () => {
+  it("is heading + prompt bar + two section gaps: the parts of the composer that never scroll", () => {
+    expect(resolveComposerMinHeight({ titleHeight: 54, promptBarHeight: 341, gap: 32 })).toBe(459);
   });
 
-  it("tracks a new reading while the controls still have height, up or down", () => {
-    expect(resolveComposerMinHeight({ sectionHeight: 1100, controlsHeight: 561 }, 459)).toBe(539);
-    expect(resolveComposerMinHeight({ sectionHeight: 900, controlsHeight: 561 }, 539)).toBe(339);
+  it("has no floor until both the heading and the prompt bar have laid out", () => {
+    expect(resolveComposerMinHeight({ titleHeight: 0, promptBarHeight: 341, gap: 32 })).toBe(0);
+    expect(resolveComposerMinHeight({ titleHeight: 54, promptBarHeight: 0, gap: 32 })).toBe(0);
+    expect(
+      resolveComposerMinHeight({ titleHeight: Number.NaN, promptBarHeight: 341, gap: 32 }),
+    ).toBe(0);
   });
 
-  it("keeps the previous floor once the controls have been squeezed to nothing — the difference would then be the prompt bar giving way", () => {
-    expect(resolveComposerMinHeight({ sectionHeight: 84, controlsHeight: 0 }, 459)).toBe(459);
+  it("tolerates a missing gap rather than poisoning the sum", () => {
+    expect(
+      resolveComposerMinHeight({ titleHeight: 54, promptBarHeight: 341, gap: Number.NaN }),
+    ).toBe(395);
   });
 
-  it("keeps the previous floor before either view has laid out, or on a nonsensical reading", () => {
-    expect(resolveComposerMinHeight({ sectionHeight: 0, controlsHeight: 0 }, 0)).toBe(0);
-    expect(resolveComposerMinHeight({ sectionHeight: Number.NaN, controlsHeight: 10 }, 12)).toBe(
-      12,
-    );
-    expect(resolveComposerMinHeight({ sectionHeight: 10, controlsHeight: 20 }, 12)).toBe(12);
+  it("T344: never reads a squeezed scroll view — the floor cannot exceed the natural heights it sums (run 34497459568's failure mode)", () => {
+    // The section was 1041 tall and the controls stale at 5; a difference
+    // would have said 1036. A sum of two unshrinkable views cannot.
+    expect(
+      resolveComposerMinHeight({ titleHeight: 54, promptBarHeight: 341, gap: 32 }),
+    ).toBeLessThan(1000);
   });
 });

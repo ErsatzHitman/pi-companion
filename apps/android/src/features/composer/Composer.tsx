@@ -1310,31 +1310,37 @@ export function Composer({
   const composerTestId = testId ?? "composer";
 
   // T343: the root never shrinks below its un-scrolling chrome (heading,
-  // gaps, prompt bar), measured from the section and its controls — see
-  // `composer-min-height-model.ts`. Without this, a shrinkable pinned
-  // area above plus the keyboard below squeezed the whole composer to its
-  // heading (Maestro run 34493338438: `composer-send` not found).
-  const sectionHeightRef = useRef(0);
-  const controlsHeightRef = useRef(0);
+  // gaps, prompt bar) — see `composer-min-height-model.ts`. Without this,
+  // a shrinkable pinned area above plus the keyboard below squeezed the
+  // whole composer to its heading (Maestro run 34493338438:
+  // `composer-send` not found). T344: measured as the SUM of the heading's
+  // and the prompt bar's own layouts — two views that never shrink — not
+  // as the section less its scroll view, whose two readings could pair a
+  // fresh full section with a stale squeezed scroll view and freeze the
+  // composer at full height (run 34497459568).
+  const titleHeightRef = useRef(0);
+  const promptBarHeightRef = useRef(0);
   const [minHeight, setMinHeight] = useState(0);
+  const sectionGap = theme.spacing[3];
   const remeasureMinHeight = useCallback(() => {
-    setMinHeight((previous) =>
-      resolveComposerMinHeight(
-        { sectionHeight: sectionHeightRef.current, controlsHeight: controlsHeightRef.current },
-        previous,
-      ),
+    setMinHeight(
+      resolveComposerMinHeight({
+        titleHeight: titleHeightRef.current,
+        promptBarHeight: promptBarHeightRef.current,
+        gap: sectionGap,
+      }),
     );
-  }, []);
-  const handleSectionLayout = useCallback(
+  }, [sectionGap]);
+  const handleTitleLayout = useCallback(
     (event: LayoutChangeEvent) => {
-      sectionHeightRef.current = event.nativeEvent.layout.height;
+      titleHeightRef.current = event.nativeEvent.layout.height;
       remeasureMinHeight();
     },
     [remeasureMinHeight],
   );
-  const handleControlsLayout = useCallback(
+  const handlePromptBarLayout = useCallback(
     (event: LayoutChangeEvent) => {
-      controlsHeightRef.current = event.nativeEvent.layout.height;
+      promptBarHeightRef.current = event.nativeEvent.layout.height;
       remeasureMinHeight();
     },
     [remeasureMinHeight],
@@ -1346,7 +1352,7 @@ export function Composer({
         title={COMPOSER_ACCESSIBILITY_LABEL}
         testId={composerTestId}
         style={styles.section}
-        onLayout={handleSectionLayout}
+        onTitleLayout={handleTitleLayout}
       >
         {/* T338: everything but the prompt bar scrolls; see the module doc's
             "What this component *does* control" paragraph. */}
@@ -1354,7 +1360,6 @@ export function Composer({
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          onLayout={handleControlsLayout}
           testID={`${composerTestId}-controls`}
         >
           {state.entries.length > 0 ? (
@@ -1546,20 +1551,23 @@ export function Composer({
             testId={`${composerTestId}-commands-picker`}
           />
         </ScrollView>
-        <PromptBar
-          label={COMPOSER_INPUT_LABEL}
-          placeholder={placeholder ?? "Message"}
-          value={state.draft}
-          canSend={
-            canSubmitDraft(state.draft) &&
-            !state.turnRunning &&
-            !attachmentsHavePendingUploads(attachmentsState)
-          }
-          queuedCount={pendingCount(state)}
-          onValueChange={handleValueChange}
-          onSend={handleSend}
-          testId={composerTestId}
-        />
+        {/* T344: measured for the root's minHeight; never shrinks itself. */}
+        <View onLayout={handlePromptBarLayout}>
+          <PromptBar
+            label={COMPOSER_INPUT_LABEL}
+            placeholder={placeholder ?? "Message"}
+            value={state.draft}
+            canSend={
+              canSubmitDraft(state.draft) &&
+              !state.turnRunning &&
+              !attachmentsHavePendingUploads(attachmentsState)
+            }
+            queuedCount={pendingCount(state)}
+            onValueChange={handleValueChange}
+            onSend={handleSend}
+            testId={composerTestId}
+          />
+        </View>
       </Section>
     </View>
   );

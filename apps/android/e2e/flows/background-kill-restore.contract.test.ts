@@ -152,7 +152,7 @@ describe("background-kill-restore.yaml anchors exist in source", () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
       expect(code).toMatch(/const composerTestId = testId \?\? "composer";/);
       expect(code).toMatch(
-        /<Section\s+title=\{COMPOSER_ACCESSIBILITY_LABEL\}\s+testId=\{composerTestId\}(?:\s+style=\{styles\.section\})?(?:\s+onLayout=\{handleSectionLayout\})?\s*>/, // T338: multi-line, with the shrinkable-section style,
+        /<Section\s+title=\{COMPOSER_ACCESSIBILITY_LABEL\}\s+testId=\{composerTestId\}(?:\s+style=\{styles\.section\})?(?:\s+onTitleLayout=\{handleTitleLayout\})?\s*>/, // T338: multi-line, with the shrinkable-section style,
       );
     });
 

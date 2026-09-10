@@ -1,5 +1,5 @@
 /**
- * T343 — the height the composer must never be shrunk below.
+ * T343/T344 — the height the composer must never be shrunk below.
  *
  * T338 made the composer shrinkable (`flexShrink: 1`) so the keyboard
  * inset could reach it, scrolling its controls and keeping the prompt bar
@@ -18,22 +18,29 @@
  * live-extension slot becomes shrinkable too, so the pinned area gives
  * way before the prompt bar does.
  *
- * The measurement is `sectionHeight - controlsHeight`: the composer's
- * `Section` less its scrolling `ScrollView`. Inside the section only the
- * scroll view shrinks (`flexShrink: 1`; the heading and `PromptBar` keep
- * React Native's default of 0), so while the scroll view still has any
- * height the difference is exactly the un-scrolling chrome. Once the
- * scroll view has been squeezed to nothing the difference stops meaning
- * that — the next thing to give is the prompt bar itself — so a reading
- * with a zero-height scroll view keeps the previous answer instead of
- * lowering the floor. `Composer.tsx` feeds this from `onLayout` on both
- * views and applies the result as the root's `minHeight`.
+ * The measurement is a SUM of the two views that never shrink — the
+ * `Section`'s heading and the `PromptBar` (both keep React Native's
+ * default `flexShrink: 0`, so their `onLayout` height is their natural
+ * height whatever the shell is doing) — plus the section's two gaps.
+ *
+ * (CORRECTED at T344: T343 measured this as a DIFFERENCE instead — the
+ * section's height less its scrolling `ScrollView`'s — and Maestro run
+ * 34497459568 showed the flaw: the two `onLayout` readings arrive as
+ * separate events, and after the keyboard closed the section's new full
+ * height paired with the scroll view's stale, squeezed height, so the
+ * floor came out as the whole section. From then on the composer could
+ * not shrink at all, and with the keyboard closed the pinned area took
+ * every pixel of overflow, clipping the loop panel's sections that T342
+ * had just uncovered. A sum of two natural heights has no such pair: a
+ * stale reading can only make the floor briefly low, never too high.)
  */
 export interface ComposerMeasuredHeights {
-  /** The `Section` wrapping heading, controls and prompt bar. */
-  sectionHeight: number;
-  /** The scrolling controls `ScrollView` inside it. */
-  controlsHeight: number;
+  /** The `Section`'s heading text. */
+  titleHeight: number;
+  /** The `PromptBar` (input and send button). */
+  promptBarHeight: number;
+  /** The section's `gap` — applied twice: heading→controls and controls→prompt bar. */
+  gap: number;
 }
 
 function isPositiveFinite(value: number): boolean {
@@ -41,17 +48,13 @@ function isPositiveFinite(value: number): boolean {
 }
 
 /**
- * The composer root's `minHeight`, given the latest layout of its section
- * and controls and the previously resolved value. See the module doc for
- * why a zero-height controls view returns `previous` unchanged.
+ * The composer root's `minHeight`: heading + prompt bar + two gaps, or
+ * `0` (no floor) until both views have reported a height.
  */
-export function resolveComposerMinHeight(
-  measured: ComposerMeasuredHeights,
-  previous: number,
-): number {
-  if (!isPositiveFinite(measured.sectionHeight) || !isPositiveFinite(measured.controlsHeight)) {
-    return previous;
+export function resolveComposerMinHeight(measured: ComposerMeasuredHeights): number {
+  if (!isPositiveFinite(measured.titleHeight) || !isPositiveFinite(measured.promptBarHeight)) {
+    return 0;
   }
-  const chrome = measured.sectionHeight - measured.controlsHeight;
-  return chrome > 0 ? chrome : previous;
+  const gap = isPositiveFinite(measured.gap) ? measured.gap : 0;
+  return measured.titleHeight + measured.promptBarHeight + gap * 2;
 }

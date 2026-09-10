@@ -600,6 +600,7 @@ that recomputation has to be domain-specific:
 | T341   | A confirm dialog reached the approvals sheet as unsupported, with no Approve or Deny                                 | phase-9   | android          | P9-U   | T340, T33B5, T334                                                     |
 | T342   | The pinned area's fixed cap hid the loop panel's sections below the fold                                             | phase-9   | android          | P9-U   | T339, T34A4, T338                                                     |
 | T343   | With the keyboard up, the pinned area squeezed the composer down to its heading                                      | phase-9   | android          | P9-U   | T342, T338, T329                                                      |
+| T344   | The composer's measured floor paired stale readings and froze it at full height                                      | phase-9   | android          | P9-U   | T343                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -641,8 +642,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**552 tasks** (distinct IDs counted directly from the table above), recounted at T343 with
-`grep`/`sort -u` over the table's own rows — one past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**553 tasks** (distinct IDs counted directly from the table above), recounted at T344 with
+`grep`/`sort -u` over the table's own rows — one past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16934,3 +16935,38 @@ restored with a clean status.
 - [x] The composer never shrinks below its heading, gaps and prompt bar, measured at runtime
 - [x] The pinned area is shrinkable and scrolls what it is given
 - [ ] A dispatch in which `extension-sheets` sends its final prompt and reaches the form (tracked with T334's last box)
+
+#### T344 — The composer's measured floor paired stale readings and froze it at full height
+
+`labels: phase-9, area: android` · `depends-on: T343`
+
+Maestro run 34497459568 at `06a16e3` (T343): CI green, every other job green,
+`notification-approval` green; `extension-sheets` regressed to `assertVisible:
+pi-panel-loop-loop-sections`, the step T342 had just turned green. The hierarchy, keyboard
+closed: pinned area 607px (down from 854 one run earlier), holding the roster card and the loop
+panel clipped 113px in; `compact-shell-composer` 1106px — its full natural height, not shrunk by
+a pixel — with `composer-controls` at its full 584px. T343 had made the pinned slot shrinkable
+so it would give way with the keyboard up; with the keyboard closed the shell now had 247px of
+overflow to split between two shrinkable slots, and the composer took none of it. Its floor was
+wrong: T343 measured the floor as the `Section`'s height less its controls `ScrollView`'s,
+from two `onLayout` events that arrive separately. After the keyboard closed the section's
+fresh full height (1041) paired with the scroll view's stale, squeezed height (single digits
+while the keyboard was up), the difference came out as essentially the whole section, and the
+composer could no longer shrink at all — the same overflow T343 had been written to split.
+
+`resolveComposerMinHeight` now SUMS two heights that never change under pressure — the
+`Section` heading's and the `PromptBar`'s own `onLayout` (both keep React Native's default
+`flexShrink: 0`, so each reports its natural height whatever the shell is doing) — plus two
+section gaps (`theme.spacing[3]`), and returns `0` (no floor) until both have reported. A stale
+reading can only make the floor briefly low, never too high. `Section` swaps T343's `onLayout`
+for `onTitleLayout` on its heading; `Composer.tsx` wraps `PromptBar` in a measuring `View`,
+drops the scroll-view measurement, and keeps the root `minHeight`. The model test covers the
+sum, the no-floor state and a missing gap, and pins that the floor cannot reach run
+34497459568's figure; `composer-accessibility.test.ts`'s T343 pin becomes a T343/T344 pin that
+also rejects any `onLayout` on the `ScrollView`; both e2e `Section`-tag pins follow the prop
+rename; the model's and `composer-focus-model.ts`'s docs carry `CORRECTED at T344` markers. The
+`CAPABILITIES` entry keyed on `resolveComposerMinHeight` is unchanged.
+
+- [x] The floor is a sum of natural heights; no reading can raise it above heading + prompt bar + gaps
+- [x] With the keyboard closed the composer shrinks its controls again and the pinned area keeps its cap
+- [ ] A dispatch in which `extension-sheets` is green end to end (tracked with T334's last box)

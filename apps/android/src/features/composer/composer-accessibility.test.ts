@@ -135,19 +135,25 @@ describe("Composer.tsx", () => {
     expect(scrollBody).toMatch(/<SlashCommandPicker/);
   });
 
-  it("T343: reserves the prompt bar's height — the root's minHeight is resolveComposerMinHeight over onLayout readings of the Section and the controls ScrollView", () => {
+  it("T343/T344: reserves the prompt bar's height — the root's minHeight is resolveComposerMinHeight over the heading's and the prompt bar's own onLayout, never a section-minus-scroll-view difference", () => {
     // Maestro run 34493338438: a shrinkable pinned area above and the
-    // keyboard below squeezed the composer to its heading alone.
+    // keyboard below squeezed the composer to its heading. Run
+    // 34497459568: T343's difference of two readings paired a fresh full
+    // section with a stale squeezed scroll view and froze the composer at
+    // full height, so the sum below is of two views that never shrink.
     expect(code).toMatch(
       /import \{ resolveComposerMinHeight \} from "\.\/composer-min-height-model";/,
     );
     expect(code).toMatch(
-      /setMinHeight\(\(previous\) =>\s*resolveComposerMinHeight\(\s*\{ sectionHeight: sectionHeightRef\.current, controlsHeight: controlsHeightRef\.current \},\s*previous,\s*\),?\s*\)/,
+      /setMinHeight\(\s*resolveComposerMinHeight\(\{\s*titleHeight: titleHeightRef\.current,\s*promptBarHeight: promptBarHeightRef\.current,\s*gap: sectionGap,\s*\}\),?\s*\)/,
     );
-    expect(code).toMatch(/<Section[^>]*onLayout=\{handleSectionLayout\}/);
+    expect(code).toMatch(/const sectionGap = theme\.spacing\[3\];/);
+    expect(code).toMatch(/<Section[^>]*onTitleLayout=\{handleTitleLayout\}/);
+    expect(code).toMatch(/<View onLayout=\{handlePromptBarLayout\}>\s*<PromptBar/);
+    expect(code).not.toMatch(/sectionHeightRef|controlsHeightRef/);
     const scrollOpen = code.indexOf("<ScrollView");
     const scrollTagEnd = code.indexOf(">", scrollOpen);
-    expect(code.slice(scrollOpen, scrollTagEnd)).toMatch(/onLayout=\{handleControlsLayout\}/);
+    expect(code.slice(scrollOpen, scrollTagEnd)).not.toMatch(/onLayout=/);
   });
 
   // T75: `onSubmit` is no longer called directly from `handleSend` — it
