@@ -1,5 +1,12 @@
 import { useMemo, type ReactNode } from "react";
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
 import { asFontWeight } from "../theme/native-style-helpers";
 import { useTheme } from "../theme/theme-context";
@@ -15,6 +22,8 @@ export interface SectionProps {
    * or the heading — those are the primitive's contract.
    */
   style?: StyleProp<ViewStyle>;
+  /** Forwarded to the wrapping View (T343: `Composer.tsx` measures its section to reserve the prompt bar's height). */
+  onLayout?: (event: LayoutChangeEvent) => void;
 }
 
 /**
@@ -25,11 +34,11 @@ export interface SectionProps {
  * heading still reads standalone (plan.md §10.5 "screen-reader role and
  * state").
  */
-export function Section({ title, children, testId, style }: SectionProps) {
+export function Section({ title, children, testId, style, onLayout }: SectionProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   return (
-    <View style={[styles.section, style]} testID={testId}>
+    <View style={[styles.section, style]} testID={testId} onLayout={onLayout}>
       <Text accessibilityRole="header" style={styles.title}>
         {title}
       </Text>

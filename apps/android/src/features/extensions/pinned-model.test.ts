@@ -182,9 +182,9 @@ describe("PinnedLiveExtensionArea applies the window-relative cap (T342)", () =>
     expect(code).toMatch(/createStyles\(theme, maxHeight\), \[theme, maxHeight\]/);
   });
 
-  it("applies that cap to both the wrapper and the ScrollView, never the constant directly", () => {
-    expect(code).toMatch(/wrapper: \{\s*maxHeight,?\s*\}/);
-    expect(code).toMatch(/scroll: \{\s*maxHeight,?\s*\}/);
+  it("applies that cap to both the wrapper and the ScrollView, never the constant directly, and (T343) lets both shrink below it", () => {
+    expect(code).toMatch(/wrapper: \{ maxHeight, flexShrink: 1, minHeight: 0 \}/);
+    expect(code).toMatch(/scroll: \{ maxHeight, flexShrink: 1 \}/);
     expect(code).not.toMatch(/maxHeight: PINNED_AREA_MAX_HEIGHT_DP/);
   });
 });

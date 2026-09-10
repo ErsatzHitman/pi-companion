@@ -599,6 +599,7 @@ that recomputation has to be domain-specific:
 | T340   | A portaled sheet laid out under the keyboard and was pruned from the accessibility tree                              | phase-9   | android          | P9-U   | T339, T329, T32S6                                                     |
 | T341   | A confirm dialog reached the approvals sheet as unsupported, with no Approve or Deny                                 | phase-9   | android          | P9-U   | T340, T33B5, T334                                                     |
 | T342   | The pinned area's fixed cap hid the loop panel's sections below the fold                                             | phase-9   | android          | P9-U   | T339, T34A4, T338                                                     |
+| T343   | With the keyboard up, the pinned area squeezed the composer down to its heading                                      | phase-9   | android          | P9-U   | T342, T338, T329                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -640,8 +641,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**551 tasks** (distinct IDs counted directly from the table above), recounted at T342 with
-`grep`/`sort -u` over the table's own rows — two past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**552 tasks** (distinct IDs counted directly from the table above), recounted at T343 with
+`grep`/`sort -u` over the table's own rows — one past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16895,3 +16896,41 @@ watched firing the same way as T341's.
 - [x] Two pinned cards of the flow's size are fully visible without scrolling the area on a phone-sized window
 - [x] The cap is window-relative, so a short window keeps transcript and composer room
 - [ ] A dispatch in which `extension-sheets` reaches its panel-section and form assertions (tracked with T334's last box)
+
+#### T343 — With the keyboard up, the pinned area squeezed the composer down to its heading
+
+`labels: phase-9, area: android` · `depends-on: T342, T338, T329`
+
+Maestro run 34493338438 at `b4e03d7` (T341/T342): CI green, shards 1/2/3/5, smoke and build
+green; `notification-approval` green end to end for the first time (deny, second request,
+approve); `extension-sheets` green through the roster, the row action, the panel and its
+sections, then failed the flow's final send — `tapOn: composer-send`, "Element not found" —
+after tapping `composer-input` and typing "Raise the form". The hierarchy: the pinned area at
+855px (roster card and loop panel, T342's cap), the keyboard up, and `compact-shell-composer`
+1415→1499px: 84px, of which `composer-root` is 19px — the "Message composer" heading and
+nothing else. T338 made the composer shrinkable so the keyboard inset could reach it, which is
+right while the composer is the only shrinkable slot; the pinned slot could not shrink at all,
+so the whole overflow landed on the composer, and nothing bounded how far it could go.
+
+Two changes, both mechanical. `compact-shell.tsx`'s live-extension slot becomes shrinkable
+(`flexShrink: 1, minHeight: 0`) like the composer slot, and
+`pinned-live-extension-area.tsx`'s wrapper and `ScrollView` do too, so a squeezed area scrolls
+whatever it is given. And the composer reserves its un-scrolling chrome:
+`composer-min-height-model.ts`'s `resolveComposerMinHeight` takes the `Section`'s height less
+its controls `ScrollView`'s (inside the section only the scroll view shrinks; heading and
+`PromptBar` keep React Native's default `flexShrink: 0`, so while the scroll view has any height
+the difference is exactly heading, gaps and prompt bar), keeping the previous floor once the
+scroll view has been squeezed to zero — at that point the difference would be the prompt bar
+itself giving way. `Composer.tsx` feeds it from `onLayout` on both views (`Section` gains an
+`onLayout` prop) and applies the result as the root's `minHeight`. With both slots shrinkable,
+flexbox splits the overflow between them until the composer reaches its floor and the pinned
+area absorbs the rest. Four model tests; the T338 pin and both e2e `Section`-tag pins are
+widened to the new props; a T343 pin in `composer-accessibility.test.ts` and one in
+`compact-shell.test.ts`; `composer-focus-model.ts`'s `reservesOwnHeight` doc records that the
+reservation is now literal. A `CAPABILITIES` entry keyed on `resolveComposerMinHeight` was
+registered and watched firing on a scratchpad-backed copy of `docs/legacy-retirement.md`, then
+restored with a clean status.
+
+- [x] The composer never shrinks below its heading, gaps and prompt bar, measured at runtime
+- [x] The pinned area is shrinkable and scrolls what it is given
+- [ ] A dispatch in which `extension-sheets` sends its final prompt and reaches the form (tracked with T334's last box)

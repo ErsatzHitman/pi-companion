@@ -60,6 +60,17 @@ describe("CompactSessionShell source", () => {
     expect(code).toMatch(/liveExtension\s*!==\s*null/);
   });
 
+  it("T343: the live-extension and composer slots are both shrinkable, so a pinned area gives way to the keyboard before the composer's prompt bar does", () => {
+    const styleBlock = (name: string) => {
+      const start = code.indexOf(`${name}: {`);
+      expect(start).toBeGreaterThan(-1);
+      return code.slice(start, code.indexOf("}", start));
+    };
+    expect(styleBlock("liveExtension")).toMatch(/flexShrink:\s*1/);
+    expect(styleBlock("liveExtension")).toMatch(/minHeight:\s*0/);
+    expect(styleBlock("composer")).toMatch(/flexShrink:\s*1/);
+  });
+
   it('contains no raw hex colour literal (plan.md §10 "no raw hex" rule)', () => {
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });

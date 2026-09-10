@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -49,6 +57,7 @@ import {
   type PickedAttachmentFile,
 } from "./attachment-source-port";
 import { runCapturePress } from "./attachment-capture-model";
+import { resolveComposerMinHeight } from "./composer-min-height-model";
 import { ComposerIconAction } from "./composer-icon-action";
 import { type DaemonEditorTextSource, wireEditorTextResponder } from "./editor-text-model";
 import { createInMemoryStructuredStorage, createSystemClock } from "./in-memory-outbox-runtime";
@@ -1300,15 +1309,52 @@ export function Composer({
 
   const composerTestId = testId ?? "composer";
 
+  // T343: the root never shrinks below its un-scrolling chrome (heading,
+  // gaps, prompt bar), measured from the section and its controls — see
+  // `composer-min-height-model.ts`. Without this, a shrinkable pinned
+  // area above plus the keyboard below squeezed the whole composer to its
+  // heading (Maestro run 34493338438: `composer-send` not found).
+  const sectionHeightRef = useRef(0);
+  const controlsHeightRef = useRef(0);
+  const [minHeight, setMinHeight] = useState(0);
+  const remeasureMinHeight = useCallback(() => {
+    setMinHeight((previous) =>
+      resolveComposerMinHeight(
+        { sectionHeight: sectionHeightRef.current, controlsHeight: controlsHeightRef.current },
+        previous,
+      ),
+    );
+  }, []);
+  const handleSectionLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      sectionHeightRef.current = event.nativeEvent.layout.height;
+      remeasureMinHeight();
+    },
+    [remeasureMinHeight],
+  );
+  const handleControlsLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      controlsHeightRef.current = event.nativeEvent.layout.height;
+      remeasureMinHeight();
+    },
+    [remeasureMinHeight],
+  );
+
   return (
-    <View style={styles.root} testID={`${composerTestId}-root`}>
-      <Section title={COMPOSER_ACCESSIBILITY_LABEL} testId={composerTestId} style={styles.section}>
+    <View style={[styles.root, { minHeight }]} testID={`${composerTestId}-root`}>
+      <Section
+        title={COMPOSER_ACCESSIBILITY_LABEL}
+        testId={composerTestId}
+        style={styles.section}
+        onLayout={handleSectionLayout}
+      >
         {/* T338: everything but the prompt bar scrolls; see the module doc's
             "What this component *does* control" paragraph. */}
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          onLayout={handleControlsLayout}
           testID={`${composerTestId}-controls`}
         >
           {state.entries.length > 0 ? (

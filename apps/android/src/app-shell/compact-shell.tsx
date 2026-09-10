@@ -110,6 +110,17 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       flex: 1,
     },
     liveExtension: {
+      // T343: shrinkable, like the composer slot below, so that with the
+      // keyboard up the pinned area gives way before the composer's prompt
+      // bar does. Maestro run 34493338438 (`extension-sheets`, two pinned
+      // cards, keyboard open) left 84px for the composer -- its heading and
+      // nothing else -- because this slot could not shrink at all while
+      // the composer could shrink without limit. `Composer.tsx` now also
+      // reserves its prompt bar's height (T343), and
+      // `pinned-live-extension-area.tsx` scrolls whatever it is squeezed
+      // to.
+      flexShrink: 1,
+      minHeight: 0,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.colors.line,
       backgroundColor: theme.colors.canvas,

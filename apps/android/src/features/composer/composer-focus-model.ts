@@ -130,6 +130,12 @@ export interface ComposerLayoutContract {
    * shrinks". An un-shrinkable container is exactly what pushed the send
    * button under the keyboard in Maestro run 34470287372; the height
    * worth reserving is the prompt bar's.
+   *
+   * T343 made that reservation literal: `Composer.tsx` measures its
+   * section and its scrolling controls and applies the difference —
+   * heading, gaps and prompt bar — as the root's `minHeight`
+   * (`composer-min-height-model.ts`), so a shrinkable pinned area above
+   * gives way before the prompt bar does (run 34493338438).
    */
   reservesOwnHeight: true;
   /**

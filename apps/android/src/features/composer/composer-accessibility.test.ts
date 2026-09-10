@@ -115,7 +115,8 @@ describe("Composer.tsx", () => {
     expect(code).toMatch(/root:\s*\{\s*flexShrink:\s*1,\s*minHeight:\s*0\s*\}/);
     expect(code).toMatch(/section:\s*\{\s*flexShrink:\s*1,\s*minHeight:\s*0\s*\}/);
     expect(code).toMatch(/scroll:\s*\{\s*flexGrow:\s*0,\s*flexShrink:\s*1\s*\}/);
-    expect(code).toMatch(/<View style=\{styles\.root\}/);
+    // T343 adds the measured minHeight to the root's static style.
+    expect(code).toMatch(/<View style=\{\[styles\.root, \{ minHeight \}\]\}/);
     expect(code).toMatch(/<Section[^>]*style=\{styles\.section\}/);
     const scrollOpen = code.indexOf("<ScrollView");
     const scrollClose = code.indexOf("</ScrollView>");
@@ -132,6 +133,21 @@ describe("Composer.tsx", () => {
     expect(scrollBody).toMatch(/<QueueModePicker/);
     expect(scrollBody).toMatch(/<ModelThinkingPicker/);
     expect(scrollBody).toMatch(/<SlashCommandPicker/);
+  });
+
+  it("T343: reserves the prompt bar's height — the root's minHeight is resolveComposerMinHeight over onLayout readings of the Section and the controls ScrollView", () => {
+    // Maestro run 34493338438: a shrinkable pinned area above and the
+    // keyboard below squeezed the composer to its heading alone.
+    expect(code).toMatch(
+      /import \{ resolveComposerMinHeight \} from "\.\/composer-min-height-model";/,
+    );
+    expect(code).toMatch(
+      /setMinHeight\(\(previous\) =>\s*resolveComposerMinHeight\(\s*\{ sectionHeight: sectionHeightRef\.current, controlsHeight: controlsHeightRef\.current \},\s*previous,\s*\),?\s*\)/,
+    );
+    expect(code).toMatch(/<Section[^>]*onLayout=\{handleSectionLayout\}/);
+    const scrollOpen = code.indexOf("<ScrollView");
+    const scrollTagEnd = code.indexOf(">", scrollOpen);
+    expect(code.slice(scrollOpen, scrollTagEnd)).toMatch(/onLayout=\{handleControlsLayout\}/);
   });
 
   // T75: `onSubmit` is no longer called directly from `handleSend` — it

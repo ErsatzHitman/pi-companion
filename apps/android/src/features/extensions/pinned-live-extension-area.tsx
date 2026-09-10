@@ -151,12 +151,12 @@ export function PinnedLiveExtensionArea({
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"], maxHeight: number) {
   return StyleSheet.create({
-    wrapper: {
-      maxHeight,
-    },
-    scroll: {
-      maxHeight,
-    },
+    // T343: shrinkable as well as capped, so the shell can hand this
+    // area less than its cap when the keyboard is up and the composer's
+    // reserved height needs the room; the ScrollView scrolls whatever is
+    // left.
+    wrapper: { maxHeight, flexShrink: 1, minHeight: 0 },
+    scroll: { maxHeight, flexShrink: 1 },
     content: {
       gap: theme.spacing[2],
       padding: theme.spacing[2],

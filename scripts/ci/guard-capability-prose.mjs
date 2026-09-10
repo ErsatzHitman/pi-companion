@@ -2326,6 +2326,23 @@ export const CAPABILITIES = [
       /(?:the )?pinned area(?:'s)? (?:height )?cap (?:ignores|does not follow|doesn't follow|never follows|is independent of) (?:the )?(?:window|screen|display) (?:height|size)/i,
     ],
   },
+  {
+    // T343: the composer reserves a measured minimum height -- its
+    // heading, gaps and prompt bar -- so nothing above it can squeeze the
+    // prompt bar away (`composer-min-height-model.ts`'s
+    // `resolveComposerMinHeight`, applied by `Composer.tsx` as the root's
+    // minHeight). Until Maestro run 34493338438 a shrinkable pinned area
+    // plus the keyboard reduced the composer to its heading. Worded in
+    // T343's own voice, not lifted from the model's or the shell's
+    // narration of the pre-fix state.
+    name: "The composer reserves its prompt bar's measured height (resolveComposerMinHeight)",
+    methodNames: ["resolveComposerMinHeight"],
+    denyingPhrases: [
+      /(?:the )?composer (?:has|reserves|guarantees|keeps) no minimum height/i,
+      /(?:the )?prompt bar can (?:still )?be (?:crushed|squeezed|shrunk|pushed) (?:to nothing|out of view|to zero|away)/i,
+      /nothing (?:stops|prevents|keeps) (?:the )?(?:pinned area|live[- ]extension area|keyboard) from (?:crushing|squeezing|collapsing) (?:the )?composer/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
