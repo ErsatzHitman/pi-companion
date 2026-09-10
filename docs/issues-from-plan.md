@@ -603,6 +603,7 @@ that recomputation has to be domain-specific:
 | T344   | The composer's measured floor paired stale readings and froze it at full height                                      | phase-9   | android          | P9-U   | T343                                                                  |
 | T345   | S7 foundations: JetBrains Mono on Android and the Pi role colours                                                    | phase-9   | android          | P9-U   | T13C, T13B                                                            |
 | T346   | The composer slot took half the shell, hiding a pinned panel's sections                                              | phase-9   | android          | P9-U   | T344, T343, T342                                                      |
+| T347   | A blocked submit button could never show why it was blocked                                                          | phase-9   | android          | P9-U   | T346, T34B2                                                           |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -644,8 +645,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**555 tasks** (distinct IDs counted directly from the table above), recounted at T346 with
-`grep`/`sort -u` over the table's own rows — one past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**556 tasks** (distinct IDs counted directly from the table above), recounted at T347 with
+`grep`/`sort -u` over the table's own rows — one past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17053,3 +17054,38 @@ slot is unbounded would still be true of the missing one.
 - [x] The shell applies both to the composer slot, and the route resolves the cap from the live window height and the live pinned-area visibility
 - [x] A `CAPABILITIES` entry covers both names as one same-file group, proven able to fire and restored to exit 0
 - [ ] A dispatch in which shard-4's `extension-sheets` reaches `pi-panel-loop-loop-section-.*` and still sends from the composer with both cards pinned
+
+#### T347 — A blocked submit button could never show why it was blocked
+
+`labels: phase-9, area: android` · `depends-on: T346, T34B2`
+
+T346 got shard-4's `extension-sheets` as far as the form. Maestro run `34518287677` then
+failed one step later, on `assertVisible text: "Fix 1 field before submitting."`, and the
+hierarchy dump names the cause exactly: `pi-form-ask-user-confirm-action-submit` was
+`enabled: "false"`, and no error text appeared anywhere in the open sheet. Maestro reports a
+tap on a disabled node as COMPLETED, which is why the step that actually taps passed and the
+assertion after it did not.
+
+The two halves of this renderer were written against different designs and never met.
+`form.tsx` answers a press on the submit action by running `resolveFormSubmitGate`, and when
+the gate refuses it sets the per-field errors and the `"Fix N field(s) before submitting."`
+summary and returns without dispatching — press-to-reveal, exactly as that file's own header
+comment describes. `buildFormActionsModel`, meanwhile, set
+`disabled: pending || !gate.allowed`, so the button was inert in precisely the case the press
+gate exists to explain. A disabled `Button` never fires `onPress`, so neither the field errors
+nor the summary could ever render — unreachable code on one side, and a `blocked` flag no view
+ever read on the other.
+
+`disabled` now means one thing: a dispatch for this action is already in flight. Validation
+travels through `blocked`, and a blocked action stays pressable on purpose. That is the better
+of the two designs as well as the reachable one: a submit button that is merely inert says
+something is wrong without ever saying what, and gives the user no way to ask. The model's own
+doc comment, which had asserted "either way the button must not be pressable", is corrected in
+place rather than deleted, so the next reader can see which half was wrong.
+
+Android-only: `apps/web`'s form renderer has no submit gate at all — it leans on native
+`required` inputs — so nothing there carries this shape (checked, not assumed).
+
+- [x] A primary action blocked by an unmet required field is `blocked: true` and `disabled: false`
+- [x] `disabled` is `true` only while a dispatch is pending, whether or not the gate also blocks
+- [ ] A dispatch in which shard-4's `extension-sheets` reaches the end of the form: the summary line, then the filled field, then the accepted submit

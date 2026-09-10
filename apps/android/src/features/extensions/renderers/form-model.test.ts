@@ -391,7 +391,7 @@ describe("buildFormActionsModel: pending, success, and failure are each visible 
     expect(models[0]!.label).toBe("Send answer");
   });
 
-  it("marks a submit action blocked (and disabled) while a required field is unmet, distinct from cancel", () => {
+  it("T347: marks a submit action blocked while a required field is unmet, but leaves it PRESSABLE so the press can name the fields, distinct from cancel", () => {
     const emptyValues = { name: "" };
     const models = buildFormActionsModel(
       [submitAction, cancelAction],
@@ -403,9 +403,37 @@ describe("buildFormActionsModel: pending, success, and failure are each visible 
     const submitModel = models.find((m) => m.id === "submit")!;
     const cancelModel = models.find((m) => m.id === "cancel")!;
     expect(submitModel.blocked).toBe(true);
-    expect(submitModel.disabled).toBe(true);
+    // Before T347 this was `true`, which made `form.tsx`'s own submit
+    // gate unreachable: a disabled Button never fires `onPress`, so the
+    // per-field errors and the "Fix 1 field before submitting." summary
+    // that press is supposed to reveal could never appear. Maestro run
+    // 34518287677 dumped the real node as `enabled: "false"`.
+    expect(submitModel.disabled).toBe(false);
     expect(cancelModel.blocked).toBe(false);
     expect(cancelModel.disabled).toBe(false);
+  });
+
+  it("T347: `disabled` now means an in-flight dispatch and nothing else", () => {
+    const emptyValues = { name: "" };
+    const blockedAndPending = buildFormActionsModel(
+      [submitAction],
+      fields,
+      emptyValues,
+      () => pendingState(target),
+      undefined,
+    )[0]!;
+    expect(blockedAndPending.blocked).toBe(true);
+    expect(blockedAndPending.disabled).toBe(true);
+
+    const validAndPending = buildFormActionsModel(
+      [submitAction],
+      fields,
+      { name: "ada" },
+      () => pendingState(target),
+      undefined,
+    )[0]!;
+    expect(validAndPending.blocked).toBe(false);
+    expect(validAndPending.disabled).toBe(true);
   });
 });
 

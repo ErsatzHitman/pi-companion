@@ -214,7 +214,12 @@ export function formActionFeedbackText(state: extensions.ExtensionActionState): 
 }
 
 export interface PiUiFormActionModel extends PiUiActionButtonModel {
-  /** `true` while this action's dispatch is gated shut by `resolveFormSubmitGate`. */
+  /**
+   * `true` while this action's dispatch is gated shut by
+   * `resolveFormSubmitGate`. Distinct from `disabled` (T347): a blocked
+   * action is still pressable, and pressing it is what surfaces the
+   * per-field errors and the summary line.
+   */
   blocked: boolean;
 }
 
@@ -226,11 +231,30 @@ export interface PiUiFormActionModel extends PiUiActionButtonModel {
  * signal `PiUiFormPayloadSchema` carries about which action is "the"
  * submit button (mirrored from the web renderer's identical rule).
  *
- * `disabled` covers both "a dispatch for this action is already
- * in-flight" and "this action is currently blocked by validation" —
- * either way the button must not be pressable, but only the second case
- * additionally surfaces `errorSummary` via `blocked`, so the .tsx view
- * can show a validation banner without also claiming a stuck spinner.
+ * `disabled` means one thing only: a dispatch for this action is already
+ * in-flight. Validation is reported through `blocked` instead, and a
+ * blocked action stays PRESSABLE on purpose.
+ *
+ * (CORRECTED at T347: this said `disabled` covered validation too --
+ * "either way the button must not be pressable" -- and the model set
+ * `disabled: pending || !gate.allowed` accordingly. That made
+ * `form.tsx`'s own submit gate unreachable code: the view answers a press
+ * on a blocked action by setting the per-field errors and the
+ * "Fix N field(s) before submitting." summary and returning without
+ * dispatching, but a disabled `Button` never fires `onPress`, so neither
+ * ever appeared. The two halves were written against different designs
+ * and never met -- nothing read `blocked` either. Maestro run
+ * 34518287677 caught it: shard-4's `extension-sheets` tapped
+ * `pi-form-ask-user-confirm-action-submit` with the required field empty
+ * and the hierarchy dump came back `enabled: "false"` with no summary
+ * anywhere in the sheet. Maestro reports a tap on a disabled node as
+ * COMPLETED, which is why every earlier run failed one step later
+ * instead of here.)
+ *
+ * Press-to-reveal is the design `form.tsx`'s own header describes, and it
+ * is the better of the two: a submit button that is merely inert states
+ * that something is wrong without ever saying what, and the user has no
+ * way to ask. Pressing it names the fields.
  */
 export function buildFormActionsModel(
   actions: readonly PiUiAction[] | undefined,
@@ -250,7 +274,7 @@ export function buildFormActionsModel(
       id: action.id,
       label,
       kind: BUTTON_KIND[action.variant ?? "secondary"],
-      disabled: pending || !gate.allowed,
+      disabled: pending,
       blocked: !gate.allowed,
       action,
       feedback: feedbackText

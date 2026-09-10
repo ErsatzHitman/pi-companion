@@ -751,8 +751,10 @@ describe("SessionRoute bounds the composer slot beside a drawing pinned area (T3
     // The visibility answer comes from the same store SessionLiveExtension
     // reads, through the registry barrel's own re-export.
     expect(code).toMatch(/resolvePinnedAreaVisibility,/);
+    // Tolerant of oxfmt's own wrapping: this call is over the line budget
+    // and the formatter breaks its arguments across lines.
     expect(code).toMatch(
-      /const \{ elements: liveExtensionElements \} = usePiUiElements\(core\.piUiSession\.store, agentId \?\? ""\);/,
+      /const \{ elements: liveExtensionElements \} = usePiUiElements\(\s*core\.piUiSession\.store,\s*agentId \?\? "",?\s*\);/,
     );
   });
 
