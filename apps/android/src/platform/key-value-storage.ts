@@ -2,6 +2,8 @@ import * as SecureStore from "expo-secure-store";
 
 import type { KeyValueStorage } from "@picompanion/frontend-core";
 
+import { encodeSecureStoreKey } from "./secure-store-key";
+
 /**
  * `KeyValueStorage` backed by Expo SecureStore (T32S3, plan.md §7.3,
  * §12.1). `SessionsScreen`'s cold-start restore (T32B3) and open-session
@@ -38,6 +40,19 @@ import type { KeyValueStorage } from "@picompanion/frontend-core";
  * LIMITATION" note) — `key-value-storage.test.ts` checks the file's
  * source text instead, the same pattern `secure-storage.test.ts` already
  * established.
+ *
+ * **T331: every caller key is encoded before it reaches SecureStore.**
+ * SecureStore accepts only `[A-Za-z0-9._-]` in a key and throws on
+ * anything else, and this adapter used to hand keys through verbatim --
+ * so `credential-store.ts`'s `picompanion:host-profile:<endpoint>` (three
+ * colons) rejected on the very first real connect, which is what left
+ * every connect-form Maestro flow in run 34454596535 stuck on the connect
+ * screen. `setItem`/`getItem`/`removeItem` now go through
+ * `./secure-store-key.ts`'s `encodeSecureStoreKey` for the PHYSICAL key;
+ * the companion index keeps the LOGICAL keys, so `keys(prefix)` still
+ * filters on what callers wrote and `clear()` re-encodes each one to
+ * delete it. `INDEX_KEY` itself is a private constant already inside the
+ * alphabet and is used as-is.
  */
 const INDEX_KEY = "__picompanion_kv_index__";
 
@@ -61,17 +76,17 @@ async function writeIndex(keys: readonly string[]): Promise<void> {
 export function createExpoKeyValueStorage(): KeyValueStorage {
   return {
     async getItem(key) {
-      return SecureStore.getItemAsync(key);
+      return SecureStore.getItemAsync(encodeSecureStoreKey(key));
     },
     async setItem(key, value) {
-      await SecureStore.setItemAsync(key, value);
+      await SecureStore.setItemAsync(encodeSecureStoreKey(key), value);
       const index = await readIndex();
       if (!index.includes(key)) {
         await writeIndex([...index, key]);
       }
     },
     async removeItem(key) {
-      await SecureStore.deleteItemAsync(key);
+      await SecureStore.deleteItemAsync(encodeSecureStoreKey(key));
       const index = await readIndex();
       const next = index.filter((existing) => existing !== key);
       if (next.length !== index.length) {
@@ -80,7 +95,7 @@ export function createExpoKeyValueStorage(): KeyValueStorage {
     },
     async clear() {
       const index = await readIndex();
-      await Promise.all(index.map((key) => SecureStore.deleteItemAsync(key)));
+      await Promise.all(index.map((key) => SecureStore.deleteItemAsync(encodeSecureStoreKey(key))));
       await SecureStore.deleteItemAsync(INDEX_KEY);
     },
     async keys(prefix) {

@@ -125,6 +125,16 @@ describe("Expo Router root contains only real routes (or a named exception)", ()
     "./h/[serverId]/devices.tsx",
     "./h/[serverId]/session/[agentId]/index.tsx",
     "./h/[serverId]/session/[agentId]/files/[...path].tsx",
+    // T331: the catch-all's own root. Expo Router's `*path` wildcard
+    // needs one or more segments, so `/files` with nothing after it fell
+    // through to `+not-found` (run 34454596535); this `index` sibling
+    // re-exports the same screen -- see its own doc comment.
+    "./h/[serverId]/session/[agentId]/files/index.tsx",
+    // T331: the catch-all's own root. Expo Router's `*path` wildcard
+    // needs one or more segments, so `/files` with nothing after it fell
+    // through to `+not-found` (run 34454596535); this `index` sibling
+    // re-exports the same screen -- see its own doc comment.
+    "./h/[serverId]/session/[agentId]/files/index.tsx",
     "./h/[serverId]/session/[agentId]/terminal/[terminalId].tsx",
   ]);
 

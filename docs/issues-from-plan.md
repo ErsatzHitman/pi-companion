@@ -587,6 +587,7 @@ that recomputation has to be domain-specific:
 | T328   | The flows typed `ws://undefined`: Maestro never saw the harness's DAEMON\_\* variables                               | phase-9   | tooling          | P9-U   | T327, T321, T320                                                      |
 | T329   | The first tap after typing dismissed the keyboard, the composer sat under it, and an ANR dialog outlived its setting | phase-9   | android/tooling  | P9-U   | T328, T327                                                            |
 | T330   | A release-variant build could not open any `ws://` socket, and the smoke job's EAS quota ran out                     | phase-9   | android/ci       | P9-U   | T329, T43B2b                                                          |
+| T331   | Every storage key with a colon or slash was rejected on device, and the files root had no route                      | phase-9   | android          | P9-U   | T330, T32A8, T37E9                                                    |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -628,8 +629,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**539 tasks** (distinct IDs counted directly from the table above), recounted at T330 with
-`grep`/`sort -u` over the table's own rows — one past the **538** at T329, four past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**540 tasks** (distinct IDs counted directly from the table above), recounted at T331 with
+`grep`/`sort -u` over the table's own rows — one past the **539** at T330, five past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -15159,6 +15160,8 @@ over half an hour — the first EAS build this repository has ever performed.
       had already made false
 - [ ] A real dispatch gets past `Build development APK on EAS` — this closes T310's own last
       open criterion too, and is the first honest test of everything downstream of it
+      (Moot since T318/T330: the step no longer exists; `build-development-apk` assembles on
+      the runner and succeeded in run 34454596535 at `4b73669`, which is what this box was for.)
       (the EAS build itself, then `reactivecircus/android-emulator-runner`'s KVM support,
       which this workflow's header has always disclosed as unverified)
 
@@ -15230,9 +15233,10 @@ version mismatch between the action's copy and npx's.
       the dropped-`needs` mutation while this one does
 - [x] Ambiguous inheritance (two distinct profiles) and a `needs` cycle both resolve to "no
       profile" rather than a guess or a hang
-- [ ] A real dispatch: `build-development-apk` succeeds once and all five shards install the
+- [x] A real dispatch: `build-development-apk` succeeds once and all five shards install the
       shared artifact, with the run id recorded — this also closes T310's and T311's last
       open criteria
+      (Run 34454596535 at `4b73669` — see T331.)
 
 #### T313 — `eas build --wait` fails without ever saying why, and the CI log kept the secret
 
@@ -15281,6 +15285,8 @@ be guessed at; the next dispatch is what will say.
       open rather than marked done on the strength of the step merely existing: a step guarded
       by `if: failure()` that has never once run is exactly the untested-infrastructure shape
       T310 was filed for
+      (Moot since T330: no job in `android-maestro-e2e.yml` runs an EAS build any more, so this
+      explainer has nothing left to explain there; left open rather than ticked.)
 - [x] The underlying `production-apk` build failure (build `4610d322-4cc8-435b-9efb-60b327c78011`)
       is diagnosed and filed as its own task — this entry is about the missing diagnosis, not
       about that build. Diagnosed and fixed as **T314**: that build died in `Bundle JavaScript`
@@ -15497,9 +15503,10 @@ still unverified, unchanged by this task and still disclosed in the workflow hea
       real tree still evaluates all 11 pairings — run, not inferred
 - [x] Ambiguity between a same-named profile and variant is proven to resolve to "skip", and
       removing `APP_VARIANT` from the builder is proven to make the fan-out unpairable
-- [ ] A real dispatch: `build-development-apk` produces an installable APK and the five shards
+- [x] A real dispatch: `build-development-apk` produces an installable APK and the five shards
       install it, with the run id recorded. This also closes T310's, T311's and T312's last open
       criteria
+      (Run 34454596535 at `4b73669` — see T331.)
 
 #### T316 — The local Expo module has never had a compileSdk, and nothing could have noticed
 
@@ -15624,9 +15631,10 @@ consumers, and that no step hardcodes a profile again.
       `available device profiles (66)` and `resolved device profile: pixel_7`. `pixel_8` is
       genuinely absent from that catalog, which confirms the diagnosis rather than merely
       working around it, and the emulator then reached `Boot completed in 358363 ms`
-- [ ] A real dispatch boots the emulator, installs the APK, and runs this shard's flows, with
+- [x] A real dispatch boots the emulator, installs the APK, and runs this shard's flows, with
       the run id recorded — this is the criterion T310, T311, T312 and T315 are all still
       waiting on, since every one of them reduces to "the shards actually run"
+      (Run 34454596535 at `4b73669`, every shard — see T331.)
 
 #### T318 — No emulator job had a timeout, so a hung flow would run for six hours
 
@@ -15779,7 +15787,8 @@ reported as the no-op it is with instructions to delete rather than fix it.
       no-op `set`, with a mutation proof for each of the two real historical defects
 - [x] `guard-app-id-package-pairing` still evaluates all 11 pairings, pinned by a test against
       the real committed workflow so the next workflow edit cannot silently reduce it
-- [ ] A real dispatch runs the flows themselves
+- [x] A real dispatch runs the flows themselves
+      (Run 34454596535 at `4b73669`: all ten flows run; four fail on the two app defects T331 fixes.)
 
 #### T321 — The daemon stop command never worked, and Maestro's driver never had time to start
 
@@ -16110,7 +16119,8 @@ in milliseconds and on every push, if any of the three ever returns.
       the block is gone now that neither package is installed (T326)
 - [x] The exclusion is verified against the real autolinking resolver, not assumed
 - [x] The app is confirmed to contain no `use dom` component
-- [ ] A dispatch where the app survives native module registration and renders its first screen
+- [x] A dispatch where the app survives native module registration and renders its first screen
+      (Run 34454596535 at `4b73669`: every flow renders its first screen; `smoke`, `composer-inputs`, `offline-cache-outbox`, `background-kill-restore` and `accessibility-audit` pass outright.)
 - [x] Whether `expo-asset@57.0.15` is the next such crash, answered by that dispatch — it was;
       fixed at the source under T307/T326
 
@@ -16287,8 +16297,9 @@ port`), and the real validation message ends with exactly that port. The hierarc
       dialog; one already on screen when it is set stays there, and run 34444464068 lost
       `packaged-app-smoke` and both of shard-4's flows to exactly that. T329 dismisses it.)
 - [x] The accessibility flow's placeholder assertion matches the real message
-- [ ] A dispatch in which a flow reaches `"Connected via direct connection"` — the first time a
+- [x] A dispatch in which a flow reaches `"Connected via direct connection"` — the first time a
       Maestro flow will have exercised a live daemon connection
+      (Run 34454596535 at `4b73669` — see T331.)
 
 #### T329 — The first tap after typing dismissed the keyboard, the composer sat under it, and an ANR dialog outlived its setting
 
@@ -16361,8 +16372,9 @@ Widening is a decision for its own task, measured the way T246 and T295 measured
 - [x] Both Maestro jobs dismiss a system error dialog already on screen, through one shared
       `prepareDevice`
 - [x] `COMPOSER_LAYOUT_CONTRACT`'s `consumesKeyboardInset` prose describes what actually holds
-- [ ] A dispatch in which a connect-form flow reaches `"Connected via direct connection"` and a
+- [x] A dispatch in which a connect-form flow reaches `"Connected via direct connection"` and a
       session-screen flow taps `composer-send`
+      (Run 34454596535 at `4b73669`: `background-kill-restore` taps `composer-send` and passes; every connect-form flow reaches the status text — see T331.)
 
 #### T330 — A release-variant build could not open any `ws://` socket, and the smoke job's EAS quota ran out
 
@@ -16428,5 +16440,63 @@ recorded for `apps/android/e2e/`.
       registered in `app.config.ts`
 - [x] Both form screens shrink their scroll viewport by the live keyboard inset
 - [x] `packaged-app-smoke` builds on the runner and pairs its package through `APP_VARIANT`
-- [ ] A dispatch in which a connect-form flow reaches `"Connected via direct connection"` — the
+- [x] A dispatch in which a connect-form flow reaches `"Connected via direct connection"` — the
       first with a socket that can actually open
+      (Run 34454596535 at `4b73669`, T331: every connect-form flow reached it; the two defects that run found next are T331's.)
+
+#### T331 — Every storage key with a colon or slash was rejected on device, and the files root had no route
+
+`labels: phase-9, area: android` · `depends-on: T330, T32A8, T37E9`
+
+Run 34454596535 (at `4b73669`, T330) was the first dispatch with a socket that could open, and
+it went green on `packaged-app-smoke` (the first time that job has ever run its flow), `shard-3`,
+`background-kill-restore` and `accessibility-audit`. Every connect-form flow reached `"Connected
+via direct connection"` and then stalled on the connect screen; `files-and-terminal` landed on
+`+not-found`. Two app defects, both older than every Maestro run.
+
+**1. `expo-secure-store` rejects any key outside `[A-Za-z0-9._-]`, and both storage adapters
+passed caller keys through untouched.** `key-value-storage.ts` (the app's "plain"
+`KeyValueStorage`) and `secure-storage.ts` (credentials) are both SecureStore-backed, and
+SecureStore's `ensureValidKey` throws `Invalid key provided to SecureStore` for a colon or a
+slash. The first key a real connect writes is `credential-store.ts`'s
+`picompanion:host-profile:10.0.2.2:38251`, so `saveHostProfile` rejected before
+`connection-shell.tsx`'s `router.replace` ever ran — the flows' hierarchies showed the status
+strip's "Connected via direct connection" beside "No paired host yet" and the untouched form,
+with no `sessions-screen-*` node. The rejection is silent in a release build (an unhandled
+rejection inside a press handler; nothing reaches logcat). `sessions/last-opened-session-id`
+and `picompanion:secure:host-profile:<id>:password` would have failed the same way one step
+later; the two keys that had worked on device, `picompanion.onboarding.v1` and
+`picompanion.settings.v1`, are the two that use only dots. `apps/android/src/platform/
+secure-store-key.ts` (pure, executed under vitest) now encodes every code unit outside
+`[A-Za-z0-9.-]` as `_` plus two hex digits and escapes a literal `_` as `_5F`, so the mapping is
+injective and `decodeSecureStoreKey` inverts it; both adapters encode the PHYSICAL key while
+`key-value-storage.ts`'s companion index keeps the LOGICAL keys, so `keys(prefix)` and `clear()`
+are unchanged for callers. A key already inside the alphabet and underscore-free encodes to
+itself, which keeps the two dot-only keys readable on an install that wrote them before T331.
+`secure-store-key.test.ts` pins `SECURE_STORE_KEY_PATTERN` against the installed package's real
+`SecureStore.js` source, encodes every real key the app writes, and proves the exact key the run
+rejected now lands inside the alphabet.
+
+**2. `/h/:serverId/session/:agentId/files` matched no route.** `files/[...path].tsx` was the
+only route file in its directory, and Expo Router's forked matcher compiles a `*path` wildcard
+to `(.*\/)` — one or more segments, never zero — so the files ROOT (`files-and-terminal.yaml`'s
+deep link, and equally the app's own `navigationIntentToPath({ type: "sessionFiles", path: [] })`)
+fell through to `+not-found.tsx`. `files/index.tsx` now re-exports the catch-all's default,
+the documented Expo Router shape for a wildcard's own root; `router-root.test.ts`'s allowlist
+gains the file, and `files/index.test.ts` pins the re-export and reads the wildcard regex out of
+the installed `expo-router` so an SDK that starts matching zero segments retires this file's
+reason for being visibly.
+
+Also: `cold-start-restore.yaml`'s "nothing navigates here today" note (already false since
+T32A8) carries a `CORRECTED (T331)` marker naming the real blocker; a `CAPABILITIES` entry for
+`encodeSecureStoreKey` was registered and watched firing against a scratchpad-restored
+`docs/legacy-retirement.md` before being trusted. Eight open ledger boxes that this run
+satisfied (T310–T312, T315, T317, T323, T328, T329, T330) are ticked with the run id; T310's
+and T313's EAS-shaped boxes are marked moot instead, since T318/T330 removed the step they
+describe.
+
+- [x] Both storage adapters encode keys; the encoder is pure, tested, and pinned to
+      `expo-secure-store`'s real validation regex
+- [x] `files/index.tsx` gives the catch-all its root; `router-root.test.ts` knows the file
+- [ ] A dispatch in which a connect-form flow arrives at `sessions-screen-*` and
+      `files-and-terminal` reaches `files-screen-e2e-host-e2e-files-agent`

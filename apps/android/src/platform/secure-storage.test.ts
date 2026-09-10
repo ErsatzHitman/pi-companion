@@ -31,20 +31,32 @@ describe("createExpoSecureStorage", () => {
     expect(readCode()).toMatch(/export function createExpoSecureStorage\(/);
   });
 
-  it("delegates getSecret to SecureStore.getItemAsync", () => {
-    expect(readCode()).toMatch(/getSecret\(key\)\s*\{\s*return SecureStore\.getItemAsync\(key\);/);
-  });
-
-  it("delegates setSecret to SecureStore.setItemAsync", () => {
+  // T331: every key is encoded into SecureStore's alphabet first
+  // (`./secure-store-key.ts`); the credential-store's colon-bearing keys
+  // were being rejected outright before that (run 34454596535).
+  it("T331: delegates getSecret to SecureStore.getItemAsync under the encoded key", () => {
     expect(readCode()).toMatch(
-      /setSecret\(key, value\)\s*\{\s*await SecureStore\.setItemAsync\(key, value\);/,
+      /getSecret\(key\)\s*\{\s*return SecureStore\.getItemAsync\(encodeSecureStoreKey\(key\)\);/,
     );
   });
 
-  it("delegates removeSecret to SecureStore.deleteItemAsync", () => {
+  it("T331: delegates setSecret to SecureStore.setItemAsync under the encoded key", () => {
     expect(readCode()).toMatch(
-      /removeSecret\(key\)\s*\{\s*await SecureStore\.deleteItemAsync\(key\);/,
+      /setSecret\(key, value\)\s*\{\s*await SecureStore\.setItemAsync\(encodeSecureStoreKey\(key\), value\);/,
     );
+  });
+
+  it("T331: delegates removeSecret to SecureStore.deleteItemAsync under the encoded key", () => {
+    expect(readCode()).toMatch(
+      /removeSecret\(key\)\s*\{\s*await SecureStore\.deleteItemAsync\(encodeSecureStoreKey\(key\)\);/,
+    );
+  });
+
+  it("T331: imports the encoder from the pure secure-store-key module, and never passes a raw key to SecureStore", () => {
+    const code = readCode();
+    expect(code).toMatch(/import \{ encodeSecureStoreKey \} from "\.\/secure-store-key";/);
+    const bareKeyCalls = code.match(/SecureStore\.\w+Async\(key\b/g) ?? [];
+    expect(bareKeyCalls).toEqual([]);
   });
 
   it("delegates isAvailable to SecureStore.isAvailableAsync", () => {

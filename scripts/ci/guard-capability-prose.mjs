@@ -2212,6 +2212,25 @@ export const CAPABILITIES = [
       /no (?:hook|component|code) (?:in this app )?(?:reads|listens to|subscribes to) the keyboard(?:'s)? height/i,
     ],
   },
+  {
+    // T331: both Expo storage adapters (`apps/android/src/platform/
+    // key-value-storage.ts`, `secure-storage.ts`) encode every caller key
+    // into SecureStore's `[A-Za-z0-9._-]` alphabet through
+    // `secure-store-key.ts` before the native call, because a
+    // colon-bearing host-profile key was being rejected on the first real
+    // connect (run 34454596535). Worded in T331's own voice -- none of
+    // these phrases is lifted from the adapters' doc comments (which
+    // narrate the pre-fix state) or from `secure-store-key.ts`'s own
+    // measurement narrative, so a reflow of any of them cannot trip this.
+    name: "Expo storage adapters encode every key into SecureStore's alphabet (encodeSecureStoreKey)",
+    methodNames: ["encodeSecureStoreKey"],
+    denyingPhrases: [
+      /(?:storage |caller )?keys? (?:are|is|get|gets) (?:passed|handed|forwarded|written) (?:straight )?(?:to|into|through to) securestore (?:verbatim|unencoded|as-is|untouched)/i,
+      /no (?:adapter|module|code|layer) (?:in this app )?(?:encodes|escapes|sanitises|sanitizes|rewrites) (?:a |the |storage |caller )?keys? (?:for|before|ahead of) securestore/i,
+      /a (?:storage |profile )?key (?:containing|with|holding) a (?:colon|slash) (?:cannot|can't|will never|never) (?:be )?(?:saved|stored|persisted|written)/i,
+      /securestore (?:still )?rejects (?:the|every|any|each) host[- ]profile key/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

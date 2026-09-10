@@ -94,8 +94,12 @@ tags:
 - assertVisible:
     text: "Connected.*"
 
-# --- Blocked on gap (1) above: nothing navigates here today. Once it
-# does, this assertion is the arrival at `/h/:serverId/sessions`.
+# --- CORRECTED (T331): this said "Blocked on gap (1) above: nothing
+# navigates here today". Gap (1) was closed by T32A8 (see the header), and
+# run 34454596535 showed the navigation blocked one line EARLIER instead:
+# `saveHostProfile` threw on a colon-bearing SecureStore key, so
+# `router.replace` never ran (`../src/platform/secure-store-key.ts`).
+# This assertion is the arrival at `/h/:serverId/sessions`.
 - assertVisible:
     id: "sessions-screen-.*"
 

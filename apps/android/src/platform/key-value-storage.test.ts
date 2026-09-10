@@ -27,27 +27,44 @@ describe("createExpoKeyValueStorage", () => {
     expect(readCode()).toMatch(/export function createExpoKeyValueStorage\(/);
   });
 
-  it("delegates getItem to SecureStore.getItemAsync", () => {
-    expect(readCode()).toMatch(/getItem\(key\)\s*\{\s*return SecureStore\.getItemAsync\(key\);/);
+  // T331: the PHYSICAL key SecureStore sees is `encodeSecureStoreKey(key)`
+  // (`./secure-store-key.ts`); the LOGICAL key is what the index records.
+  // Run 34454596535 found the unencoded form rejecting `credential-store.ts`'s
+  // colon-bearing profile key on the first real connect.
+  it("T331: delegates getItem to SecureStore.getItemAsync under the encoded key", () => {
+    expect(readCode()).toMatch(
+      /getItem\(key\)\s*\{\s*return SecureStore\.getItemAsync\(encodeSecureStoreKey\(key\)\);/,
+    );
   });
 
-  it("delegates setItem to SecureStore.setItemAsync and updates the key index", () => {
+  it("T331: delegates setItem to SecureStore.setItemAsync under the encoded key and indexes the logical one", () => {
     expect(readCode()).toMatch(
-      /setItem\(key, value\)\s*\{\s*await SecureStore\.setItemAsync\(key, value\);/,
+      /setItem\(key, value\)\s*\{\s*await SecureStore\.setItemAsync\(encodeSecureStoreKey\(key\), value\);/,
     );
     expect(readCode()).toMatch(/writeIndex\(\[\.\.\.index, key\]\)/);
   });
 
-  it("delegates removeItem to SecureStore.deleteItemAsync and prunes the key index", () => {
+  it("T331: delegates removeItem to SecureStore.deleteItemAsync under the encoded key and prunes the logical one", () => {
     expect(readCode()).toMatch(
-      /removeItem\(key\)\s*\{\s*await SecureStore\.deleteItemAsync\(key\);/,
+      /removeItem\(key\)\s*\{\s*await SecureStore\.deleteItemAsync\(encodeSecureStoreKey\(key\)\);/,
     );
     expect(readCode()).toMatch(/next = index\.filter\(\(existing\) => existing !== key\)/);
   });
 
-  it("clear() deletes every indexed key plus the index itself", () => {
-    expect(readCode()).toMatch(/index\.map\(\(key\) => SecureStore\.deleteItemAsync\(key\)\)/);
+  it("T331: clear() deletes every indexed key (re-encoded) plus the index itself", () => {
+    expect(readCode()).toMatch(
+      /index\.map\(\(key\) => SecureStore\.deleteItemAsync\(encodeSecureStoreKey\(key\)\)\)/,
+    );
     expect(readCode()).toMatch(/await SecureStore\.deleteItemAsync\(INDEX_KEY\);/);
+  });
+
+  it("T331: imports the encoder from the pure secure-store-key module, and never passes a raw caller key to SecureStore", () => {
+    const code = readCode();
+    expect(code).toMatch(/import \{ encodeSecureStoreKey \} from "\.\/secure-store-key";/);
+    // Every SecureStore call that takes a caller key must wrap it; the only
+    // bare identifier allowed is the module's own in-alphabet INDEX_KEY.
+    const bareKeyCalls = code.match(/SecureStore\.\w+Async\(key\b/g) ?? [];
+    expect(bareKeyCalls).toEqual([]);
   });
 
   it("keys(prefix) filters the index by prefix when given", () => {
