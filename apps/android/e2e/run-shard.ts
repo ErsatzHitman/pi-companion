@@ -35,6 +35,7 @@
  * the `adb install` around it, nothing more.
  */
 import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,6 +50,43 @@ function run(command: string, argv: string[]): Promise<number> {
     child.once("error", reject);
     child.once("exit", (code) => resolve(code ?? 1));
   });
+}
+
+function capture(command: string, argv: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    const child = spawn(command, argv, { cwd: REPO_ROOT, shell: false });
+    let out = "";
+    child.stdout?.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.once("error", (error) => resolve(`<failed to run ${command}: ${String(error)}>`));
+    child.once("close", () => resolve(out));
+  });
+}
+
+/**
+ * T322: dumps the device log for a flow that failed, into the directory the
+ * workflow uploads as an artifact.
+ *
+ * Maestro already writes its own screenshots and view hierarchy under
+ * `~/.maestro/tests/<timestamp>/`, and those survive the job because the
+ * Maestro CLI runs on the RUNNER, not on the device. `adb logcat` does not:
+ * `reactivecircus/android-emulator-runner` kills the emulator the moment its
+ * `script:` returns, so a device log can only be captured from inside this
+ * process. Without it, a flow that fails because the app crashed on launch
+ * is indistinguishable from one that fails because a selector is wrong —
+ * which is exactly the ambiguity run 34420667467's
+ * `Assertion is false: id: connect-onboarding is visible` left behind.
+ */
+async function captureDeviceLog(flow: string, outDir: string): Promise<void> {
+  const log = await capture("adb", ["logcat", "-d", "-v", "time", "-t", "3000"]);
+  const file = path.join(outDir, `logcat-${flow}.txt`);
+  try {
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(file, log, "utf8");
+    console.log(`[run-shard] wrote device log for ${flow}: ${file}`);
+  } catch (error) {
+    console.error(`[run-shard] could not write ${file}:`, error);
+  }
 }
 
 async function main(): Promise<void> {
@@ -81,9 +119,12 @@ async function main(): Promise<void> {
   let firstFailure = 0;
   const results: { flow: string; exitCode: number }[] = [];
 
+  const debugDir = path.join(process.env["RUNNER_TEMP"] ?? REPO_ROOT, "maestro-debug");
+
   for (const flow of flows) {
     console.log(`::group::flow: ${flow}`);
     const exitCode = await run("npx", ["tsx", RUN_FLOW, flow]);
+    if (exitCode !== 0) await captureDeviceLog(flow, debugDir);
     console.log("::endgroup::");
     results.push({ flow, exitCode });
     if (exitCode !== 0 && firstFailure === 0) firstFailure = exitCode;

@@ -578,6 +578,7 @@ that recomputation has to be domain-specific:
 | T319   | The emulator action runs its script under dash, and both scripts opened with a bashism        | phase-9   | tooling          | P9-U   | T317, T318, T37F                                                      |
 | T320   | The emulator action runs each script LINE as its own shell, so the shard loop could not exist | phase-9   | tooling          | P9-U   | T319, T312, T37F                                                      |
 | T321   | The daemon stop command never worked, and Maestro's driver never had time to start            | phase-9   | tooling          | P9-U   | T320, T37D, T37F                                                      |
+| T322   | A failing Maestro flow threw away every piece of evidence about why                           | phase-9   | tooling          | P9-U   | T321, T320, T37F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15719,4 +15720,57 @@ room for a slow boot on top.
 - [x] Maestro is given a driver-startup budget a cold CI emulator can meet, overridable
 - [x] `apps/android/e2e/harness` tests all pass, and the env assertion no longer forbids a new
       tuning variable while still pinning the three address vars exactly
-- [ ] A dispatch where a flow gets past driver startup and reports a real assertion result
+- [x] A dispatch where a flow gets past driver startup and reports a real assertion result:
+      run `34420667467`, shard-1. `Running on test` / `Launch app ... COMPLETED` / `FAILED` /
+      `Assertion is false: id: connect-onboarding is visible`. The daemon also stopped
+      gracefully and the job ended with the step rather than hanging to its bound, which is
+      the other half of this task confirmed on a real run
+
+#### T322 — A failing Maestro flow threw away every piece of evidence about why
+
+`labels: phase-9, area: tooling` · `depends-on: T321, T320, T37F`
+
+Run `34420667467` produced this repository's first real product-level E2E result. Both T321
+fixes held: `stopped /tmp/picompanion-maestro-home-BiBVYq/.paseo 3741 Daemon stopped gracefully`
+— no orphans, and the job ended when the step did instead of hanging to its bound — and
+Maestro's driver came up, so the app installed, launched, and ran flow steps:
+
+```
+Running on test
+ > Flow pairing — direct host connect, and the relay entry point's honest state
+Launch app "${APP_ID}" with clear state and clear keychain... COMPLETED
+ FAILED
+Assertion is false: id: connect-onboarding is visible
+```
+
+And there the trail stopped. Maestro named its own debug directory in the log
+(`/home/runner/.maestro/tests/2026-09-10_004228`, screenshots plus the full view hierarchy) and
+nothing uploaded it, so it died with the runner. `connect-onboarding` is a real testId —
+`apps/android/src/app/connect.tsx` passes it to `OnboardingGate` — and with `clearState: true`
+there is no saved profile, so `IndexRoute` redirects to `/connect`, which is where that gate
+lives. The assertion is therefore correct in principle, and whether it failed because the app
+crashed on launch, because the gate was still resolving persisted state, or because the release
+build renders something else entirely, was **unanswerable from the log**.
+
+That ambiguity is the defect this closes, and it is the same shape as T313 one layer in: an
+expensive remote failure that reports what happened but not why.
+
+Two sources of evidence, and they need different handling because they live in different
+places. Maestro's own artifacts are written by the CLI on the RUNNER, so they outlive the
+emulator and an ordinary `if: failure()` upload step reaches them. `adb logcat` does not:
+`reactivecircus/android-emulator-runner` kills the emulator the moment its `script:` returns, so
+a device log can only be captured from inside the script — `run-shard.ts` now dumps one per
+FAILING flow (not per flow, to keep a green run's artifacts empty) into `$RUNNER_TEMP/maestro-
+debug`, which the same upload step collects.
+
+`if-no-files-found: warn` rather than `error`: a shard that fails before Maestro ever runs —
+the exit-224 emulator crash seen twice now — legitimately has no debug output, and turning
+that into a second failure would bury the first.
+
+- [x] Maestro's screenshots and view hierarchy are uploaded per shard on failure
+- [x] A device log is captured for each failing flow, from inside the script, before the
+      emulator is killed
+- [x] `packaged-app-smoke` gets the same treatment, not just the shard matrix
+- [x] A green run uploads nothing, and a shard that dies before Maestro warns rather than fails
+- [ ] The `connect-onboarding` assertion is diagnosed from real artifacts and either the app or
+      the flow is fixed
