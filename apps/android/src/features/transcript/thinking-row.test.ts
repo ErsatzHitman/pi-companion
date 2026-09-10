@@ -41,8 +41,24 @@ describe("thinking-row.tsx: composes ThinkingSection from the model's mapping, n
     expect(readCode()).toMatch(/body=\{bodyFor\(entry\)\}/);
   });
 
-  it("passes the ticked durationLabel through", () => {
-    expect(readCode()).toMatch(/durationLabel=\{durationLabel\}/);
+  it("T357: passes the ticked durationLabel through, and the headline the model builds", () => {
+    const code = readCode();
+    expect(code).toMatch(/durationLabel=\{label\}/);
+    expect(code).toMatch(/headline=\{thinkingHeadline\(live, elapsedMs\)\}/);
+  });
+
+  it("T357: keeps the announced label richer than the head's two words", () => {
+    // The head has room for "Thinking"; a screen reader gets the
+    // reasoning preview `summaryFor` builds. Both flip on `live`.
+    const code = readCode();
+    expect(code).toMatch(/summary=\{summaryFor\(entry, live\)\}/);
+  });
+
+  it("T357: empties the mono readout once settled, so the duration is stated once", () => {
+    // The headline carries "Thought for N seconds" from that point on.
+    // Freezing the mono label as well would print the same number
+    // twice, rounded two different ways.
+    expect(readCode()).toMatch(/return \{ label: "", elapsedMs: frozenMsRef\.current \};/);
   });
 });
 
@@ -59,19 +75,26 @@ describe("thinking-row.tsx: live shimmer treatment", () => {
     expect(readCode()).toMatch(/shouldAnimateShimmer\(live, reduceMotion\)/);
   });
 
-  it("only renders the live caption while `live` is true — reduced motion changes whether it animates, never whether it exists", () => {
-    expect(readCode()).toMatch(/\{live \? \(/);
-    expect(readCode()).toMatch(/Still thinking/);
-  });
-
-  it("drives the shimmer from react-native-reanimated's interpolateColor/withRepeat, not a CSS-only or one-shot effect", () => {
+  // T357 moved the shimmer itself into `../../ui/recipes/
+  // ThinkingSection.tsx`, where the design puts the treatment (on the
+  // head's own words, not on a second caption beneath the
+  // disclosure). The three cases that pinned the Reanimated mechanism
+  // moved with it, to `ThinkingSection.test.ts`; what stays here is
+  // the part that is still this row's decision — computing the gate
+  // and handing it over.
+  //
+  // CORRECTED (T357): one of those cases asserted this file renders a
+  // visible "Still thinking" caption. It did, and no longer does: the
+  // head reads the literal word "Thinking", so the state still
+  // survives with the animation off — the requirement the caption
+  // existed to satisfy.
+  it("T357: hands the recipe the computed gate, never the raw live flag", () => {
     const code = readCode();
-    expect(code).toMatch(/from "react-native-reanimated"/);
-    expect(code).toMatch(/interpolateColor\(/);
-    expect(code).toMatch(/withRepeat\(/);
+    expect(code).toMatch(/shimmer=\{shouldAnimateShimmer\(live, reduceMotion\)\}/);
+    expect(code).not.toMatch(/shimmer=\{live\}/);
   });
 
-  it("resets the shared value instead of leaving a stale loop running when the gate turns off", () => {
-    expect(readCode()).toMatch(/if \(!animate\) \{\s*shimmer\.value = 0;/);
+  it("T357: no longer renders a second caption beneath the disclosure", () => {
+    expect(readCode()).not.toMatch(/Still thinking/);
   });
 });

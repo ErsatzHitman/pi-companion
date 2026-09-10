@@ -98,6 +98,28 @@ export function shouldAnimateShimmer(live: boolean, reduceMotion: boolean): bool
   return live && !reduceMotion;
 }
 
+/**
+ * The disclosure head's own visible words (T357) — `HANDOFF.md`
+ * §7.2's "shimmering 'Thinking' that becomes 'Thought for N seconds'".
+ *
+ * Separate from `summaryFor` above, which stays the ANNOUNCED label
+ * and keeps its preview of the reasoning: a screen reader benefits
+ * from "Thought: the user wants the ring to open a menu…" where the
+ * head only has room for two words. Both change with `live`, so the
+ * seen state and the heard state still move together.
+ *
+ * `elapsedMs` is `null` for an entry that was already settled the
+ * first time this client saw it — there is no duration to report,
+ * and inventing one from the entry's timestamp would report how long
+ * ago it happened rather than how long it took.
+ */
+export function thinkingHeadline(live: boolean, elapsedMs: number | null): string {
+  if (live) return "Thinking";
+  if (elapsedMs === null) return "Thought";
+  const seconds = Math.max(0, Math.round(elapsedMs / 1000));
+  return `Thought for ${seconds} ${seconds === 1 ? "second" : "seconds"}`;
+}
+
 export interface TranscriptThinkingRowProps {
   entry: ThinkingTranscriptEntry;
   /** `true` while this entry is the one currently receiving live

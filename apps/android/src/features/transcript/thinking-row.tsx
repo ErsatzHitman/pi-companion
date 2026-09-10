@@ -15,32 +15,25 @@
  * the state" true: the same entry announces "Thinking: …" while live and
  * "Thought: …" once settled.
  *
- * **Live shimmer**: `ThinkingSection` (android) has no `live`/shimmer
- * prop — unlike its web counterpart, which shimmers the summary text
- * itself via CSS `background-clip: text` (docs/beautiful-ui-reference.md
- * signature trait 3). React Native has no equivalent for clipping a
- * gradient to arbitrary text, and this task must not fork or edit the
- * shared recipe to add one. This instead follows the RN precedent this
- * codebase already established for exactly this treatment —
- * `../../ui/recipes/StreamingMessage.tsx`'s live caption ("Pi is still
- * responding"), which shimmers via `interpolateColor` between `ink-3`
- * and `ink` over a linear cycle, gated by `reduceMotion` — and renders a
- * second, visible "Still thinking" caption beneath the disclosure while
- * `live` is true. Unlike web's `pc-visually-hidden` announcement, this
- * caption is visible text (RN has no cheap CSS-only visually-hidden
- * primitive here), which only strengthens the "never colour/animation
- * alone" requirement.
+ * **Live shimmer (CORRECTED at T357).** This doc used to say
+ * "`ThinkingSection` (android) has no `live`/shimmer prop" and that
+ * "this task must not fork or edit the shared recipe to add one",
+ * which is why this row rendered a second visible "Still thinking"
+ * caption beneath the disclosure. Both statements were true when
+ * written and T357 changed the recipe: it takes `live` now and
+ * shimmers the head's own words, which is where `HANDOFF.md` §7.2
+ * puts the treatment. The extra caption is gone rather than kept
+ * beside it — the head reads the literal word "Thinking", so the
+ * state survives with the animation off, which is the requirement the
+ * caption existed to satisfy. `shouldAnimateShimmer` still lives in
+ * the model and is still what gates it, unchanged.
+ *
+ * **T357 also splits the head's words from the announced label.**
+ * `thinkingHeadline` gives the head two words and a duration;
+ * `summaryFor` keeps the reasoning preview a screen reader benefits
+ * from. Both flip on `live`, so seen and heard state move together.
  */
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import Animated, {
-  Easing,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
 import type { timeline } from "@picompanion/frontend-core";
 
 import { ThinkingSection } from "../../ui/recipes";
@@ -52,26 +45,13 @@ import {
   isThinkingEntry,
   shouldAnimateShimmer,
   summaryFor,
+  thinkingHeadline,
   type ThinkingTranscriptEntry,
   type TranscriptThinkingRowProps,
 } from "./thinking-row-model";
 
 export type { ThinkingTranscriptEntry, TranscriptThinkingRowProps } from "./thinking-row-model";
 export { isThinkingEntry } from "./thinking-row-model";
-
-/**
- * Beautiful UI's shimmer-gradient text, RN equivalent (see this file's
- * doc comment and `StreamingMessage.tsx`'s identical constant/citation):
- * docs/beautiful-ui-reference.md's "1.4s linear" has no corresponding
- * named token in `@picompanion/design-tokens` (its `motion.duration`
- * table tops out at `entrance` = 600ms), so — exactly as the existing,
- * already-landed `StreamingMessage` recipe does for the same treatment —
- * this stays a named, cited local constant rather than an unexplained
- * literal. Every *gate* on whether it runs at all (`shouldAnimateShimmer`)
- * and its easing curve still come from shared tokens/logic, never a
- * hardcoded animation decision.
- */
-const SHIMMER_DURATION_MS = 1400;
 
 /**
  * Ticks a live "Ns"/"Nm Ss" elapsed readout for as long as `live` stays
@@ -83,7 +63,10 @@ const SHIMMER_DURATION_MS = 1400;
  * `formatElapsedDuration`, the pure formatting it delegates to, is what
  * `thinking-row-model.test.ts` proves.
  */
-function useElapsedLabel(timestamp: string, live: boolean): string {
+function useElapsedLabel(
+  timestamp: string,
+  live: boolean,
+): { label: string; elapsedMs: number | null } {
   const startMs = useMemo(() => Date.parse(timestamp), [timestamp]);
   const wasLiveRef = useRef(false);
   const frozenMsRef = useRef<number | null>(null);
@@ -100,61 +83,33 @@ function useElapsedLabel(timestamp: string, live: boolean): string {
   if (live) {
     wasLiveRef.current = true;
     frozenMsRef.current = null;
-    return formatElapsedDuration(Date.now() - startMs);
+    const elapsedMs = Date.now() - startMs;
+    return { label: formatElapsedDuration(elapsedMs), elapsedMs };
   }
   if (wasLiveRef.current && frozenMsRef.current === null) {
     frozenMsRef.current = Date.now() - startMs;
   }
-  return frozenMsRef.current === null ? "" : formatElapsedDuration(frozenMsRef.current);
+  // T357: the settled row shows its duration in the headline's own
+  // words, so the mono readout is emptied rather than frozen — the
+  // same number twice, rounded two different ways, is how the two
+  // disagree.
+  return { label: "", elapsedMs: frozenMsRef.current };
 }
 
 function TranscriptThinkingRowImpl({ entry, live, testId }: TranscriptThinkingRowProps) {
-  const { theme, reduceMotion } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
-  const durationLabel = useElapsedLabel(entry.timestamp, live);
-  const animate = shouldAnimateShimmer(live, reduceMotion);
-
-  const shimmer = useSharedValue(0);
-  useEffect(() => {
-    if (!animate) {
-      shimmer.value = 0;
-      return;
-    }
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: SHIMMER_DURATION_MS, easing: Easing.linear }),
-      -1,
-      true,
-    );
-  }, [animate, shimmer]);
-  const shimmerStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(shimmer.value, [0, 1], [theme.colors["ink-3"], theme.colors.ink]),
-  }));
+  const { reduceMotion } = useTheme();
+  const { label, elapsedMs } = useElapsedLabel(entry.timestamp, live);
 
   return (
-    <View style={styles.wrapper}>
-      <ThinkingSection
-        summary={summaryFor(entry, live)}
-        body={bodyFor(entry)}
-        durationLabel={durationLabel}
-        testId={testId}
-      />
-      {live ? (
-        <Animated.Text style={[styles.liveCaption, animate ? shimmerStyle : null]}>
-          Still thinking
-        </Animated.Text>
-      ) : null}
-    </View>
+    <ThinkingSection
+      headline={thinkingHeadline(live, elapsedMs)}
+      summary={summaryFor(entry, live)}
+      body={bodyFor(entry)}
+      durationLabel={label}
+      shimmer={shouldAnimateShimmer(live, reduceMotion)}
+      testId={testId}
+    />
   );
-}
-
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
-  return StyleSheet.create({
-    wrapper: { gap: theme.spacing[1] },
-    liveCaption: {
-      color: theme.colors["ink-3"],
-      fontSize: theme.typography.variant.caption.fontSize,
-    },
-  });
 }
 
 export const TranscriptThinkingRow = memo(TranscriptThinkingRowImpl, areThinkingRowPropsEqual);

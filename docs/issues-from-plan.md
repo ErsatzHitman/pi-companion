@@ -613,6 +613,7 @@ that recomputation has to be domain-specific:
 | T354   | No control on the phone could switch a session between Build and Plan, or turn auto-compaction on                    | phase-9   | android          | P9-U   | T353, T39B, T132                                                      |
 | T355   | The composer's queued prompts were flat rows, not the blocks every other element on the screen is                    | phase-9   | android          | P9-U   | T354, T338, T346                                                      |
 | T356   | The transcript drew four different container shapes where the design draws one, and cited a wrong font               | phase-9   | android          | P9-U   | T355, T345                                                            |
+| T357   | The thinking row's head was a rotated text glyph, and a caption beneath it was doing the shimmer's job               | phase-9   | android          | P9-U   | T356, T345                                                            |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -654,8 +655,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**565 tasks** (distinct IDs counted directly from the table above), recounted at T356 with
-`grep`/`sort -u` over the table's own rows — one past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**566 tasks** (distinct IDs counted directly from the table above), recounted at T357 with
+`grep`/`sort -u` over the table's own rows — one past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17704,3 +17705,63 @@ No `CAPABILITIES` entry: nothing here reaches the wire.
 - [x] The streaming caret is 2px, with the artifact's missing phase stated rather than faked
 - [x] `RoleAffordance` describes the cue that exists now, with a historical marker on the one it replaced
 - [x] The four wrong "Geist Mono" citations are corrected; the frozen reference document is untouched
+
+#### T357 — The thinking row's head was a rotated text glyph, and a caption beneath it was doing the shimmer's job
+
+`labels: phase-9, area: android` · `depends-on: T356, T345`
+
+`HANDOFF.md` §7.2 describes the reasoning block's head as a filled sparkle, shimmering words that
+read "Thinking" and then "Thought for N seconds", a mono elapsed readout, and a chevron. Android
+had a rotated `›` text glyph for the chevron, no sparkle at all, a fixed summary string for the
+words, and — because the recipe had no way to say "still running" — a second visible caption
+rendered underneath the disclosure by `features/transcript/thinking-row.tsx`.
+
+**The chevron and the sparkle are real vector paths now.** `ui/primitives/vector-icons.tsx`
+already carried the artifact's own `d` attributes for both. A rotated single-guillemet is a
+different drawing at a different weight on every OEM font fallback, and at rest it pointed the
+wrong way for a disclosure that opens downward — the rotation was compensating for the glyph
+rather than expressing the state.
+
+**The shimmer moved onto the head's own words, and the caption is gone rather than kept beside
+it.** The caption existed for a reason worth preserving: with reduced motion on, an animation-only
+signal says nothing, so the state had to survive in text. It still does, and more directly — the
+head now reads the literal word "Thinking". Deleting a visible state cue is the kind of change
+that quietly regresses accessibility, so `thinkingHeadline` is proven by execution against exactly
+that: live reads "Thinking" whatever the elapsed value, and the settled forms are pinned including
+the singular "1 second", the round-not-truncate boundary, and a negative elapsed clamping to zero
+rather than announcing "-3 seconds".
+
+**The recipe takes `shimmer`, not `live`.** Naming it for the treatment rather than the state is
+deliberate: `shouldAnimateShimmer(live, reduceMotion)` is the tested gate and it lives in
+`features/transcript/thinking-row-model.ts`, where a `ui/` recipe may not reach. Handing the
+recipe the raw flag would have made it re-derive the reduced-motion decision from its own
+`useTheme()`, which is a second copy of a rule that already has one owner. A test pins that the
+row passes the computed gate and never `shimmer={live}`.
+
+**The duration is stated once.** While live, the head says "Thinking" and the mono readout ticks;
+once settled the head says "Thought for N seconds" and `useElapsedLabel` returns an empty label
+instead of freezing the old one. Two readouts of the same interval, one rounded by
+`formatElapsedDuration` and one by `thinkingHeadline`, would have disagreed on the boundary and
+looked like a bug in whichever the reader trusted less.
+
+**Three pins MOVED to `ui/recipes/ThinkingSection.test.ts` rather than being widened or deleted.**
+`thinking-row.test.ts` held the Reanimated mechanism proofs — that the loop is a real repeating
+`interpolateColor`/`withRepeat` and that the shared value is reset rather than left running — for
+code that now lives in the recipe. Weakening them to match whatever the row still says would have
+left them passing while proving nothing, and deleting them would have dropped the only proof the
+shimmer is not a one-shot. They are the same assertions at the new address, with the reset case
+re-anchored to `shimmerEnabled`. The fourth pin, for the deleted "Still thinking" caption, is
+inverted into a `not.toMatch` so the caption cannot come back silently alongside the headline.
+
+`dev/recipe-lab.tsx` passes the shared fixture's one string to both `headline` and `summary`, with
+a comment saying why: `packages/frontend-core`'s `recipe-lab.ts` fixture is read by web as well,
+and adding an Android-only field to it to make a lab screen tidier is not worth the coupling.
+
+No `CAPABILITIES` entry: nothing here reaches the wire.
+
+- [x] The head is a filled sparkle, shimmering words, a mono duration and a stroked chevron, all from the artifact's own paths
+- [x] "Thinking" / "Thought for N seconds" is proven by execution, including the singular, the rounding boundary and a negative clamp
+- [x] The state survives with the animation off, so the deleted caption's requirement is still met
+- [x] The reduced-motion gate keeps one owner; the recipe takes the decision, not the inputs
+- [x] The duration appears once, in one rounding
+- [x] The three mechanism pins moved to the recipe's own contract test rather than being widened or dropped

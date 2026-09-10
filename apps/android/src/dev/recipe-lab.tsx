@@ -75,6 +75,15 @@ export function RecipeLab() {
           {thinkingSectionLabCases.map((thinkingCase) => (
             <ThinkingSection
               key={thinkingCase.id}
+              // T357 split the head's own words from the announced
+              // label. The shared fixture carries one string, already
+              // headline-shaped ("Thought for 4s"), and both apps render
+              // the same cases from it — so the lab passes it to both
+              // rather than adding an Android-only field to a fixture
+              // web also reads. The real row
+              // (`features/transcript/thinking-row.tsx`) builds the two
+              // separately, from `thinkingHeadline` and `summaryFor`.
+              headline={thinkingCase.summary}
               summary={thinkingCase.summary}
               body={thinkingCase.body}
               durationLabel={thinkingCase.durationLabel}

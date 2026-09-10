@@ -14,6 +14,7 @@ import {
   isThinkingEntry,
   shouldAnimateShimmer,
   summaryFor,
+  thinkingHeadline,
   truncate,
   type ThinkingTranscriptEntry,
   type TranscriptThinkingRowProps,
@@ -226,6 +227,43 @@ describe("areThinkingRowPropsEqual: same comparator fields as message-row-model'
     ).toBe(false);
     expect(areThinkingRowPropsEqual(base, props({ live: true }))).toBe(false);
     expect(areThinkingRowPropsEqual(base, props({ testId: "other" }))).toBe(false);
+  });
+});
+
+describe("thinkingHeadline (T357): the head's own two-or-so words", () => {
+  it('reads the literal word "Thinking" while reasoning is still arriving', () => {
+    // This is what lets the shimmer be decoration rather than the only
+    // signal: with reduced motion on and the animation off, the state
+    // is still there in text. It replaced a separate "Still thinking"
+    // caption the row used to render beneath the disclosure.
+    expect(thinkingHeadline(true, 4200)).toBe("Thinking");
+    expect(thinkingHeadline(true, null)).toBe("Thinking");
+  });
+
+  it("states the duration in words once settled", () => {
+    expect(thinkingHeadline(false, 4200)).toBe("Thought for 4 seconds");
+    expect(thinkingHeadline(false, 61_000)).toBe("Thought for 61 seconds");
+  });
+
+  it("says second, singular, for exactly one", () => {
+    expect(thinkingHeadline(false, 1000)).toBe("Thought for 1 second");
+    expect(thinkingHeadline(false, 1400)).toBe("Thought for 1 second");
+  });
+
+  it("rounds rather than truncates, and never announces a negative or fractional count", () => {
+    expect(thinkingHeadline(false, 1500)).toBe("Thought for 2 seconds");
+    expect(thinkingHeadline(false, 400)).toBe("Thought for 0 seconds");
+    // A clock that moved backwards between mount and settle would
+    // otherwise read "Thought for -3 seconds".
+    expect(thinkingHeadline(false, -3000)).toBe("Thought for 0 seconds");
+  });
+
+  it('falls back to a bare "Thought" when this client never saw the turn run', () => {
+    // `useElapsedLabel` reports `null` for an entry that was already
+    // settled on first observation — there is no honest duration to
+    // state, and inventing one from the timestamp would measure the
+    // wrong interval.
+    expect(thinkingHeadline(false, null)).toBe("Thought");
   });
 });
 
