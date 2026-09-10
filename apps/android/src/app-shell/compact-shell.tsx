@@ -81,6 +81,10 @@ export function CompactSessionShell({
           {liveExtension}
         </View>
       ) : null}
+      {/* T338: shrinkable (see `createStyles`), so a composer taller than
+       * what is left under the keyboard is squeezed to fit and scrolls its
+       * own controls, instead of overflowing the shell and pushing its
+       * prompt bar off screen. */}
       <View style={styles.composer} testID="compact-shell-composer">
         {composer}
       </View>
@@ -111,6 +115,17 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       backgroundColor: theme.colors.canvas,
     },
     composer: {
+      // T338: `flexShrink: 1` is what lets the keyboard inset above
+      // actually reach the composer. Every slot here defaults to
+      // `flexShrink: 0`, so until this the composer kept its full content
+      // height, the transcript (the only `flex: 1` slot) went to zero, and
+      // whatever did not fit -- the prompt bar, last in the composer --
+      // was drawn under the keyboard and pruned from the accessibility
+      // tree (Maestro run 34470287372, both shard-4 flows: `composer-send`
+      // not found after typing). `Composer.tsx` scrolls its own controls
+      // and pins the prompt bar, so shrinking it is safe.
+      flexShrink: 1,
+      minHeight: 0,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.colors.line,
       backgroundColor: theme.colors.surface,

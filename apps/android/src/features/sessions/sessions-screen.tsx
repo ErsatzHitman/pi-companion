@@ -169,6 +169,18 @@ export interface SessionsScreenProps {
   onSessionCreated?: (session: SessionSummary) => void;
   /** Fires once opening a session resolves — this screen never navigates on its own; see module doc. */
   onSessionOpened?: (result: SessionOpenResult) => void;
+  /**
+   * T337: whether the daemon connection this screen's `sessionService`
+   * reads through is up right now. While `false`, the cold-start restore
+   * effect waits (it re-runs the moment this flips to `true`) instead of
+   * opening the last session against an idle store and surfacing "Not
+   * connected to a daemon" in the open-error banner — Maestro run
+   * 34470287372's `cold-start-restore`, where `AppCoreProvider`'s own
+   * reconnect landed a moment after this screen mounted. Optional:
+   * absent (every older caller, and the tests) means "assume connected",
+   * which is exactly the pre-T337 behaviour.
+   */
+  connected?: boolean;
 }
 
 const DEFAULT_STATE: SessionListState = { kind: "ready", sessions: [] };
@@ -182,6 +194,7 @@ export function SessionsScreen({
   network,
   onSessionCreated,
   onSessionOpened,
+  connected,
 }: SessionsScreenProps) {
   const { theme } = useTheme();
   const keyboardInset = useKeyboardInset();
@@ -260,9 +273,12 @@ export function SessionsScreen({
   // Runs once sessionService/keyValueStorage are available and only while
   // nothing else has already started an open (a route that passes an
   // explicit initial session, or a tap that beat this effect to it, both
-  // leave openState past "idle" by the time this runs).
+  // leave openState past "idle" by the time this runs). T337: and only
+  // while `connected` is not `false` -- see that prop's doc; the effect
+  // re-runs when it flips, and the "idle" guard still holds then.
   useEffect(() => {
     if (!sessionService || !keyValueStorage) return;
+    if (connected === false) return;
     if (openStateRef.current.status !== "idle") return;
     let cancelled = false;
     void readLastOpenedSessionId(keyValueStorage).then((sessionId) => {
@@ -279,10 +295,10 @@ export function SessionsScreen({
     return () => {
       cancelled = true;
     };
-    // Deliberately just these two: re-running on every openState change
+    // Deliberately just these three: re-running on every openState change
     // would re-attempt a restore mid-open. See the "idle" guard above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionService, keyValueStorage]);
+  }, [sessionService, keyValueStorage, connected]);
 
   // T32B3: reconcile the open session when a socket stays open but goes
   // silent (plan.md §7.4 "Liveness") — `createSessionResumeController`

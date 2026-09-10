@@ -210,3 +210,24 @@ describe("SessionsScreen source: T32B6 network sync / connection path / stalenes
     );
   });
 });
+
+describe("SessionsScreen source: T337 the cold-start restore waits for the connection", () => {
+  const code = readScreenSource();
+
+  it("takes an optional connected prop, absent meaning the pre-T337 'assume connected' behaviour", () => {
+    expect(code).toMatch(/connected\?: boolean;/);
+    expect(code).toMatch(/onSessionOpened,\s*connected,\s*\}: SessionsScreenProps\)/);
+  });
+
+  it("the restore effect returns early while connected === false and re-runs when it flips (connected is in its deps)", () => {
+    const effect = code.slice(
+      code.indexOf("if (!sessionService || !keyValueStorage) return;"),
+      code.indexOf("}, [sessionService, keyValueStorage, connected]);"),
+    );
+    expect(effect.length).toBeGreaterThan(0);
+    expect(effect).toMatch(/if \(connected === false\) return;/);
+    expect(effect).toMatch(/readLastOpenedSessionId\(keyValueStorage\)/);
+    // The `false` check is strict on purpose: an absent prop must not gate anything.
+    expect(effect).not.toMatch(/if \(!connected\) return;/);
+  });
+});

@@ -158,6 +158,14 @@ tags:
 # reconciled it against the daemon) until that reconcile lands — see
 # `../e2e/flows/cold-start-restore-model.test.ts` for this exact
 # transition proven against real values.
+# CORRECTED (T337, run 34470287372): between those two steps nothing
+# used to reconnect the stored profile, so this screen came back on an
+# idle connection with an empty list and a "Not connected to a daemon"
+# banner in `-open-error`. `core-context.tsx` now fires
+# `reconnectColdStartProfile` (`cold-start-reconnect.ts`) once the
+# profile read settles, and the sessions route fetches the list -- and
+# the restore effect runs -- only once the connection phase is
+# "connected". The row below is that fetch's result.
 - assertNotVisible:
     id: "connect-onboarding"
 - assertVisible:

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Linking, StyleSheet, Text, View } from "react-native";
+import { Image, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -537,11 +537,27 @@ function voiceOutcomeDisplay(
  * §9.3's "use Portal rather than a detached Modal" is warning against
  * (also not owned by this task; see this task's report).
  *
- * What this component *does* control, and does here: its root container
- * (below) never shrinks (`flexShrink: 0`), so it cannot be compressed
- * out of view to make room for a sheet or the IME — the
+ * What this component *does* control, and does here: `PromptBar` — the
+ * input and the send button — sits last inside the `Section`, OUTSIDE
+ * the `ScrollView` every other control lives in, and the root, the
+ * `Section` and that `ScrollView` all shrink (`flexShrink: 1`) while
+ * `PromptBar` keeps its intrinsic height. So when the shell hands this
+ * component less height than its controls want (the queue-mode and
+ * model pickers alone outgrow a phone with the keyboard open), the
+ * pickers scroll and the prompt bar stays put above the IME — the
  * `reservesOwnHeight` half of `composer-focus-model.ts`'s
- * `COMPOSER_LAYOUT_CONTRACT`. The other half, `consumesKeyboardInset`,
+ * `COMPOSER_LAYOUT_CONTRACT`, which is about the prompt bar, not the
+ * controls above it. (CORRECTED at T338: this said the root container
+ * "never shrinks (`flexShrink: 0`), so it cannot be compressed out of
+ * view". Maestro run 34470287372 measured the opposite outcome on a
+ * real session: the un-shrinkable root overflowed the keyboard-shrunk
+ * shell, and `composer-send` was the part pushed off screen — pruned
+ * from the accessibility tree on both shard-4 flows, right after the
+ * prompt had been typed.) The `ScrollView` takes
+ * `keyboardShouldPersistTaps="handled"` for T329's reason: a default
+ * ScrollView spends the first tap after typing on dismissing the
+ * keyboard and never delivers it to the control underneath. The other
+ * half, `consumesKeyboardInset`,
  * is the session shell's own doing: `app-shell/compact-shell.tsx` pads
  * its bottom by the live keyboard height (`app-shell/keyboard-inset.ts`,
  * T329), so this component ends above the IME rather than under it.
@@ -1286,195 +1302,204 @@ export function Composer({
 
   return (
     <View style={styles.root} testID={`${composerTestId}-root`}>
-      <Section title={COMPOSER_ACCESSIBILITY_LABEL} testId={composerTestId}>
-        {state.entries.length > 0 ? (
-          <View
-            style={styles.entries}
-            accessibilityRole="none"
-            accessibilityLiveRegion="polite"
-            testID={`${composerTestId}-entries`}
-          >
-            {state.entries.map((entry) => (
-              <ComposerEntryRow
-                key={entry.id}
-                entry={entry}
-                onRetry={handleRetry}
-                testId={`${composerTestId}-entry-${entry.id}`}
-              />
-            ))}
+      <Section title={COMPOSER_ACCESSIBILITY_LABEL} testId={composerTestId} style={styles.section}>
+        {/* T338: everything but the prompt bar scrolls; see the module doc's
+            "What this component *does* control" paragraph. */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          testID={`${composerTestId}-controls`}
+        >
+          {state.entries.length > 0 ? (
+            <View
+              style={styles.entries}
+              accessibilityRole="none"
+              accessibilityLiveRegion="polite"
+              testID={`${composerTestId}-entries`}
+            >
+              {state.entries.map((entry) => (
+                <ComposerEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  onRetry={handleRetry}
+                  testId={`${composerTestId}-entry-${entry.id}`}
+                />
+              ))}
+            </View>
+          ) : null}
+          {attachmentsState.entries.length > 0 ? (
+            <View
+              style={styles.entries}
+              accessibilityLiveRegion="polite"
+              testID={`${composerTestId}-attachments`}
+            >
+              {attachmentsState.entries.map((attachment) => (
+                <StagedAttachmentRow
+                  key={attachment.id}
+                  attachment={attachment}
+                  onRemove={handleRemoveAttachment}
+                  testId={`${composerTestId}-attachment-${attachment.id}`}
+                />
+              ))}
+            </View>
+          ) : null}
+          <View style={styles.actionsRow}>
+            <ComposerIconAction
+              glyph={"\u{1F3A4}"}
+              accessibleName={MIC_ACTION_LABEL}
+              onPress={handleMicPress}
+              testId={`${composerTestId}-mic`}
+            />
+            <ComposerIconAction
+              glyph={"\u{1F4CE}"}
+              accessibleName={ATTACH_ACTION_LABEL}
+              onPress={handleAttachPress}
+              testId={`${composerTestId}-attach`}
+            />
+            <ComposerIconAction
+              glyph={"\u{1F4F7}"}
+              accessibleName={CAPTURE_ACTION_LABEL}
+              onPress={handleCapturePress}
+              testId={`${composerTestId}-capture`}
+            />
+            <ComposerIconAction
+              glyph={"/"}
+              accessibleName={SLASH_COMMANDS_ACTION_LABEL}
+              onPress={handleOpenSlashCommands}
+              testId={`${composerTestId}-commands`}
+            />
+            <Text style={styles.attachmentLimits} testID={`${composerTestId}-attachment-limits`}>
+              {describeAttachmentLimits(limits)}
+            </Text>
           </View>
-        ) : null}
-        {attachmentsState.entries.length > 0 ? (
-          <View
-            style={styles.entries}
-            accessibilityLiveRegion="polite"
-            testID={`${composerTestId}-attachments`}
-          >
-            {attachmentsState.entries.map((attachment) => (
-              <StagedAttachmentRow
-                key={attachment.id}
-                attachment={attachment}
-                onRemove={handleRemoveAttachment}
-                testId={`${composerTestId}-attachment-${attachment.id}`}
-              />
-            ))}
-          </View>
-        ) : null}
-        <View style={styles.actionsRow}>
-          <ComposerIconAction
-            glyph={"\u{1F3A4}"}
-            accessibleName={MIC_ACTION_LABEL}
-            onPress={handleMicPress}
-            testId={`${composerTestId}-mic`}
+          <ModelThinkingPicker
+            state={modelThinkingState}
+            onSelectModel={handleSelectModel}
+            onSelectThinking={handleSelectThinking}
+            testId={`${composerTestId}-model-thinking`}
           />
-          <ComposerIconAction
-            glyph={"\u{1F4CE}"}
-            accessibleName={ATTACH_ACTION_LABEL}
-            onPress={handleAttachPress}
-            testId={`${composerTestId}-attach`}
+          <QueueModePicker
+            state={queueModesState}
+            onSelectSteeringMode={handleSelectSteeringMode}
+            onSelectFollowUpMode={handleSelectFollowUpMode}
+            testId={`${composerTestId}-queue-mode`}
           />
-          <ComposerIconAction
-            glyph={"\u{1F4F7}"}
-            accessibleName={CAPTURE_ACTION_LABEL}
-            onPress={handleCapturePress}
-            testId={`${composerTestId}-capture`}
-          />
-          <ComposerIconAction
-            glyph={"/"}
-            accessibleName={SLASH_COMMANDS_ACTION_LABEL}
-            onPress={handleOpenSlashCommands}
-            testId={`${composerTestId}-commands`}
-          />
-          <Text style={styles.attachmentLimits} testID={`${composerTestId}-attachment-limits`}>
-            {describeAttachmentLimits(limits)}
-          </Text>
-        </View>
-        <ModelThinkingPicker
-          state={modelThinkingState}
-          onSelectModel={handleSelectModel}
-          onSelectThinking={handleSelectThinking}
-          testId={`${composerTestId}-model-thinking`}
-        />
-        <QueueModePicker
-          state={queueModesState}
-          onSelectSteeringMode={handleSelectSteeringMode}
-          onSelectFollowUpMode={handleSelectFollowUpMode}
-          testId={`${composerTestId}-queue-mode`}
-        />
-        <TurnStatusBanner state={turnStatusState} testId={`${composerTestId}-turn-status`} />
-        {attachmentPermissionState !== null ? (
-          <PermissionRecoveryNotice
-            kind="photos"
-            state={attachmentPermissionState}
-            onRequest={handleRequestAttachmentPermission}
-            onOpenSettings={openSystemSettings}
-            onDismiss={handleDismissAttachmentNotice}
-            testId={`${composerTestId}-attachment-permission-notice`}
-          />
-        ) : null}
-        {micPermissionState !== null ? (
-          <PermissionRecoveryNotice
-            kind="microphone"
-            state={micPermissionState}
-            onRequest={handleRequestMicPermission}
-            onOpenSettings={openSystemSettings}
-            onDismiss={handleDismissMicNotice}
-            testId={`${composerTestId}-mic-permission-notice`}
-          />
-        ) : null}
-        {capturePermissionState !== null ? (
-          <PermissionRecoveryNotice
-            kind="photo-capture"
-            state={capturePermissionState}
-            onRequest={handleRequestCapturePermission}
-            onOpenSettings={openSystemSettings}
-            onDismiss={handleDismissCaptureNotice}
-            testId={`${composerTestId}-capture-permission-notice`}
-          />
-        ) : null}
-        {/* T70: a value of the voice-entry kind — this row is the only
+          <TurnStatusBanner state={turnStatusState} testId={`${composerTestId}-turn-status`} />
+          {attachmentPermissionState !== null ? (
+            <PermissionRecoveryNotice
+              kind="photos"
+              state={attachmentPermissionState}
+              onRequest={handleRequestAttachmentPermission}
+              onOpenSettings={openSystemSettings}
+              onDismiss={handleDismissAttachmentNotice}
+              testId={`${composerTestId}-attachment-permission-notice`}
+            />
+          ) : null}
+          {micPermissionState !== null ? (
+            <PermissionRecoveryNotice
+              kind="microphone"
+              state={micPermissionState}
+              onRequest={handleRequestMicPermission}
+              onOpenSettings={openSystemSettings}
+              onDismiss={handleDismissMicNotice}
+              testId={`${composerTestId}-mic-permission-notice`}
+            />
+          ) : null}
+          {capturePermissionState !== null ? (
+            <PermissionRecoveryNotice
+              kind="photo-capture"
+              state={capturePermissionState}
+              onRequest={handleRequestCapturePermission}
+              onOpenSettings={openSystemSettings}
+              onDismiss={handleDismissCaptureNotice}
+              testId={`${composerTestId}-capture-permission-notice`}
+            />
+          ) : null}
+          {/* T70: a value of the voice-entry kind — this row is the only
             place a capture-in-progress or its outcome ever becomes
             visible, so it renders whenever there is anything to say and
             stays gone otherwise (no clutter on an app that never
             presses the mic). */}
-        {voiceStatusDisplay !== null ? (
-          <View style={styles.turnControlsRow} testID={`${composerTestId}-voice-status`}>
-            {voiceStatusDisplay.kind === "indicator" ? (
-              <VoiceCaptureIndicator
-                status={voiceStatusDisplay.status}
-                testId={`${composerTestId}-voice-status-indicator`}
-              />
-            ) : (
-              <StatusIndicator
-                label="Voice"
-                tone={voiceStatusDisplay.tone}
-                statusText={voiceStatusDisplay.text}
-                testId={`${composerTestId}-voice-status-indicator`}
-              />
-            )}
-            {voiceState.status === "recording" ? (
-              <Button
-                kind="danger"
-                label="Cancel recording"
-                onPress={handleVoiceCancel}
-                testId={`${composerTestId}-voice-cancel`}
-              />
-            ) : null}
-          </View>
-        ) : null}
-        {state.turnRunning ? (
-          <>
-            <View
-              style={styles.queueStatusRow}
-              testID={`${composerTestId}-queue-status`}
-              accessibilityLiveRegion="polite"
-              accessibilityLabel={describeQueueStatus(state)}
-            >
-              <StatusIndicator
-                label="Queue"
-                tone={queueDepth(state).total > 0 ? "info" : "neutral"}
-                statusText={queueDepthLabel(queueDepth(state))}
-                testId={`${composerTestId}-queue-depth`}
-              />
-              <Select
-                label={QUEUE_MODE_LABEL}
-                options={DISPATCH_MODE_OPTIONS}
-                value={state.mode}
-                onValueChange={(value) => handleModeChange(value as QueueDispatchMode)}
-                testId={`${composerTestId}-queue-mode`}
-              />
+          {voiceStatusDisplay !== null ? (
+            <View style={styles.turnControlsRow} testID={`${composerTestId}-voice-status`}>
+              {voiceStatusDisplay.kind === "indicator" ? (
+                <VoiceCaptureIndicator
+                  status={voiceStatusDisplay.status}
+                  testId={`${composerTestId}-voice-status-indicator`}
+                />
+              ) : (
+                <StatusIndicator
+                  label="Voice"
+                  tone={voiceStatusDisplay.tone}
+                  statusText={voiceStatusDisplay.text}
+                  testId={`${composerTestId}-voice-status-indicator`}
+                />
+              )}
+              {voiceState.status === "recording" ? (
+                <Button
+                  kind="danger"
+                  label="Cancel recording"
+                  onPress={handleVoiceCancel}
+                  testId={`${composerTestId}-voice-cancel`}
+                />
+              ) : null}
             </View>
-            <View style={styles.turnControlsRow} testID={`${composerTestId}-turn-controls`}>
-              <Button
-                kind="secondary"
-                label={STEER_ACTION_LABEL}
-                disabled={!canSteerDraft(state)}
-                onPress={handleSteer}
-                testId={`${composerTestId}-steer`}
-              />
-              <Button
-                kind="secondary"
-                label={FOLLOW_UP_ACTION_LABEL}
-                disabled={!canFollowUpDraft(state)}
-                onPress={handleFollowUp}
-                testId={`${composerTestId}-follow-up`}
-              />
-              <Button
-                kind="danger"
-                label={ABORT_ACTION_LABEL}
-                disabled={!canAbort(state)}
-                onPress={handleAbort}
-                testId={`${composerTestId}-abort`}
-              />
-            </View>
-          </>
-        ) : null}
-        <SlashCommandPicker
-          state={slashCommandsState}
-          onSelect={handleSelectSlashCommand}
-          onDismiss={handleDismissSlashCommands}
-          testId={`${composerTestId}-commands-picker`}
-        />
+          ) : null}
+          {state.turnRunning ? (
+            <>
+              <View
+                style={styles.queueStatusRow}
+                testID={`${composerTestId}-queue-status`}
+                accessibilityLiveRegion="polite"
+                accessibilityLabel={describeQueueStatus(state)}
+              >
+                <StatusIndicator
+                  label="Queue"
+                  tone={queueDepth(state).total > 0 ? "info" : "neutral"}
+                  statusText={queueDepthLabel(queueDepth(state))}
+                  testId={`${composerTestId}-queue-depth`}
+                />
+                <Select
+                  label={QUEUE_MODE_LABEL}
+                  options={DISPATCH_MODE_OPTIONS}
+                  value={state.mode}
+                  onValueChange={(value) => handleModeChange(value as QueueDispatchMode)}
+                  testId={`${composerTestId}-queue-mode`}
+                />
+              </View>
+              <View style={styles.turnControlsRow} testID={`${composerTestId}-turn-controls`}>
+                <Button
+                  kind="secondary"
+                  label={STEER_ACTION_LABEL}
+                  disabled={!canSteerDraft(state)}
+                  onPress={handleSteer}
+                  testId={`${composerTestId}-steer`}
+                />
+                <Button
+                  kind="secondary"
+                  label={FOLLOW_UP_ACTION_LABEL}
+                  disabled={!canFollowUpDraft(state)}
+                  onPress={handleFollowUp}
+                  testId={`${composerTestId}-follow-up`}
+                />
+                <Button
+                  kind="danger"
+                  label={ABORT_ACTION_LABEL}
+                  disabled={!canAbort(state)}
+                  onPress={handleAbort}
+                  testId={`${composerTestId}-abort`}
+                />
+              </View>
+            </>
+          ) : null}
+          <SlashCommandPicker
+            state={slashCommandsState}
+            onSelect={handleSelectSlashCommand}
+            onDismiss={handleDismissSlashCommands}
+            testId={`${composerTestId}-commands-picker`}
+          />
+        </ScrollView>
         <PromptBar
           label={COMPOSER_INPUT_LABEL}
           placeholder={placeholder ?? "Message"}
@@ -1648,7 +1673,12 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     // T33B4 / plan.md §9.3: never shrink to make room for a sheet or the
     // IME — see `composer-focus-model.ts`'s `COMPOSER_LAYOUT_CONTRACT`
     // (`reservesOwnHeight`) and this file's doc comment.
-    root: { flexShrink: 0 },
+    // T338: root, section and scroll all give way; the prompt bar (outside
+    // the ScrollView, default `flexShrink: 0`) does not.
+    root: { flexShrink: 1, minHeight: 0 },
+    section: { flexShrink: 1, minHeight: 0 },
+    scroll: { flexGrow: 0, flexShrink: 1 },
+    scrollContent: { gap: theme.spacing[3] },
     entries: { gap: theme.spacing[2], marginBottom: theme.spacing[2] },
     entryRow: {
       flexDirection: "row",

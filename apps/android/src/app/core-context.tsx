@@ -10,6 +10,7 @@ import {
 import { usePathname, useRouter } from "expo-router";
 
 import { listHostProfiles, type HostProfileRecord } from "../features/connect/credential-store.js";
+import { reconnectColdStartProfile } from "../app-shell/cold-start-reconnect";
 import { createAppCore, type AppCore } from "../app-shell/core";
 import type { ResumeSignalTarget } from "../app-shell/resume-signals";
 
@@ -143,6 +144,27 @@ export function AppCoreProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [core]);
+
+  // T337: the automatic half of the seam `host-profile-reconnect.ts`'s
+  // header filed at T66 (T32S14 closed the user-driven half, the connect
+  // form's "existing profile" submit). Once the read above has settled
+  // on a stored profile, reconnect it -- through `AppCore.
+  // reconnectHostProfile` and `connection.adoptLifecycle`, the same two
+  // calls `connection-shell.tsx`'s `handleReconnect` makes -- so the
+  // session list `h/index.tsx` redirects to, and the last-opened session
+  // `sessions-screen.tsx` restores, have a live connection to read
+  // through. Fired, never awaited: the router is NOT gated on it (a dead
+  // host must not turn a cold start into a blank screen for a whole
+  // connect timeout), and `reconnectColdStartProfile` itself steps aside
+  // if a user-driven attempt starts first. Maestro run 34470287372's
+  // `cold-start-restore` is the measurement: relaunch, idle store, empty
+  // list, "Not connected to a daemon" banner. See
+  // `../app-shell/cold-start-reconnect.ts`.
+  useEffect(() => {
+    const profile = coldStart.profile;
+    if (!coldStart.resolved || !profile) return;
+    void reconnectColdStartProfile(core, profile);
+  }, [core, coldStart.resolved, coldStart.profile]);
 
   // T32S15: closes the other half of the gap `../app/share.tsx`'s own doc
   // comment named against this task by name — "nothing yet *navigates to*

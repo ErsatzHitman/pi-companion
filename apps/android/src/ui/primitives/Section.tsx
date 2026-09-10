@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { asFontWeight } from "../theme/native-style-helpers";
 import { useTheme } from "../theme/theme-context";
@@ -8,6 +8,13 @@ export interface SectionProps {
   title: string;
   children: ReactNode;
   testId?: string;
+  /**
+   * Extra container style, merged after the primitive's own (T338:
+   * `Composer.tsx` makes its section shrinkable so the scrolling controls
+   * inside it give way to the pinned prompt bar). Never replaces `gap`
+   * or the heading — those are the primitive's contract.
+   */
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
@@ -18,11 +25,11 @@ export interface SectionProps {
  * heading still reads standalone (plan.md §10.5 "screen-reader role and
  * state").
  */
-export function Section({ title, children, testId }: SectionProps) {
+export function Section({ title, children, testId, style }: SectionProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   return (
-    <View style={styles.section} testID={testId}>
+    <View style={[styles.section, style]} testID={testId}>
       <Text accessibilityRole="header" style={styles.title}>
         {title}
       </Text>

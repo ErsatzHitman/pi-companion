@@ -593,6 +593,8 @@ that recomputation has to be domain-specific:
 | T334   | The isolated daemon had no `pi` to run and no directory a flow could name as a session's cwd                         | phase-9   | tooling          | P9-U   | T333, T37D                                                            |
 | T335   | Pi UI bridge events were keyed by Pi's own session id, which no client ever looked up                                | phase-9   | server           | P9-U   | T334, T34A                                                            |
 | T336   | Tapping a session row loaded the session and stayed on the list                                                      | phase-9   | android          | P9-U   | T335, T32S12                                                          |
+| T337   | A cold start landed on an idle connection: nothing reconnected the saved host                                        | phase-9   | android          | P9-U   | T336, T66, T32S14                                                     |
+| T338   | The composer outgrew the keyboard-shrunk shell and pushed its own send button off screen                             | phase-9   | android          | P9-U   | T337, T329, T33B4                                                     |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -634,8 +636,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**545 tasks** (distinct IDs counted directly from the table above), recounted at T336 with
-`grep`/`sort -u` over the table's own rows — four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**547 tasks** (distinct IDs counted directly from the table above), recounted at T338 with
+`grep`/`sort -u` over the table's own rows — two past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16682,3 +16684,73 @@ it; restoring the copy returned exit 0 with a clean `git status`).
 
 - [x] `onSessionOpened` navigates to the session route; the route test pins it
 - [x] The flows expect the session screen after the tap, and the guard entry fires
+
+#### T337 — A cold start landed on an idle connection: nothing reconnected the saved host
+
+`labels: phase-9, area: android` · `depends-on: T336, T66, T32S14`
+
+Maestro run 34470287372 at `87c8036` (the first dispatch after T333–T336) got `cold-start-restore`
+through create, row tap and `session-transcript`, then failed the post-relaunch row assertion. The
+screenshot and hierarchy say why: the sessions screen came back with `Connection: Unknown`, an
+`-open-error` banner reading "Not connected to a daemon", and "No sessions yet". `app/index.tsx`
+has redirected a cold start to the stored profile's list since T32S3, and `sessions-screen.tsx` has
+restored the last-opened session since T32B3, but nothing ever reconnected the profile both assume
+is live — the exact seam `host-profile-reconnect.ts`'s header filed at T66 ("no code anywhere calls
+`AppCore.connection.connect()`/`adoptLifecycle()` automatically for any saved profile"), of which
+T32S14 closed only the user-driven half. So the route's mount-time `refreshSessions()` rejected,
+the restore effect banner-ed the same rejection, and nothing retried: the network sync only fires
+on a path switch or an offline → online transition, and a relaunch is neither.
+
+`app-shell/cold-start-reconnect.ts`'s `reconnectColdStartProfile` is the automatic half: the same
+three calls `connection-shell.tsx`'s `handleReconnect` makes (`loadHostProfileSecrets`,
+`AppCore.reconnectHostProfile`, `connection.adoptLifecycle(lifecycle, path, profile)`), plus the two
+guards only an automatic caller needs — it runs only while the store is still `idle`, and it
+disposes the lifecycle it opened if a user-driven attempt started meanwhile, rather than tearing
+that generation down. A failure is returned, never thrown, and adopts nothing. `AppCoreProvider`
+fires it once its cold-start profile read settles and does not gate the router on it (a dead host
+must not turn a cold start into a blank screen for a connect timeout). The sessions route now keys
+its list fetch on `useConnectionStatus(core.connection).phase === "connected"` and passes
+`connected=` to `SessionsScreen`, whose restore effect waits for it (absent means the pre-T337
+behaviour, so no other caller changes). `cold-start-reconnect.test.ts` covers all six outcomes
+against fake store/secrets/reconnect seams plus the provider wiring as a source pin; the route
+and screen tests pin their halves; `host-profile-reconnect.ts`'s T66 seam narration and the flow's
+header carry `CORRECTED at T337` markers. A `CAPABILITIES` entry keyed on
+`reconnectColdStartProfile` was registered and watched firing on a scratchpad-backed copy of
+`docs/legacy-retirement.md`, then restored with a clean status.
+
+- [x] A cold start with a stored profile reconnects it before the list is fetched or the last session restored
+- [x] The reconnect steps aside for a user-driven attempt, before and after its own attempt
+- [ ] A dispatch in which shard-2's `cold-start-restore` is green (tracked with T334's last box)
+
+#### T338 — The composer outgrew the keyboard-shrunk shell and pushed its own send button off screen
+
+`labels: phase-9, area: android` · `depends-on: T337, T329, T33B4`
+
+Run 34470287372's two shard-4 flows both reached the real session screen, tapped `composer-input`,
+typed their prompt, and then failed `tapOn: composer-send` with "Element not found". The
+screenshot shows the composer's heading, icon row, attachment limits, model/thinking line and both
+queue-mode pickers filling everything under the header, the keyboard open beneath — and no input
+or send button anywhere. T329 made the shell pad its bottom by the keyboard inset, but every shell
+slot defaults to `flexShrink: 0` and T33B4 had pinned the composer root to `flexShrink: 0` on
+purpose ("never shrinks, so it cannot be compressed out of view"). With the shell shrunk, the
+un-shrinkable composer kept its full content height, the transcript (the only `flex: 1` slot) went
+to zero, and the part that overflowed was the last thing in the composer: the prompt bar, drawn
+under the IME and pruned from the accessibility tree. `background-kill-restore` never saw this
+because its deep-linked fake-host screen has no header or nav actions to eat the space.
+
+The fix inverts T33B4's pin at the right granularity: what must never shrink is the prompt bar,
+not the composer. `Composer.tsx` now renders every control except `PromptBar` inside a
+`ScrollView` (`keyboardShouldPersistTaps="handled"`, T329's lesson), and its root, its `Section`
+(which gains an optional `style` prop) and that `ScrollView` all take `flexShrink: 1`;
+`compact-shell.tsx`'s composer slot does too. When the shell hands the composer less height than
+its controls want, the pickers scroll and the prompt bar stays put above the keyboard.
+`composer-accessibility.test.ts`'s T33B4 pin is replaced by a T338 pin (shrink styles, `PromptBar`
+after and outside the `ScrollView`, the three pickers inside it, the persist-taps prop);
+`Composer.tsx`'s module doc and `composer-focus-model.ts`'s `reservesOwnHeight` doc carry
+`CORRECTED at T338` markers. No `CAPABILITIES` entry: the capability is a layout, not a named
+symbol, and a token invented for it would be T172's "token that outlives the capability" shape;
+the source pin is the check.
+
+- [x] The composer's controls scroll and its prompt bar stays visible when the shell is shorter than the composer's content
+- [x] The T33B4 pin is replaced, not deleted, and every doc that stated it is corrected in place
+- [ ] A dispatch in which shard-4's `notification-approval` and `extension-sheets` reach their post-send assertions (tracked with T334's last box)

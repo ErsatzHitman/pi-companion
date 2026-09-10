@@ -106,9 +106,32 @@ describe("Composer.tsx", () => {
     expect(reactNativeImportLine).not.toMatch(/\bModal\b/);
   });
 
-  it("T33B4: the root container never shrinks (flexShrink: 0), so it cannot be compressed out of view by a sheet or the IME (plan.md §9.3)", () => {
-    expect(code).toMatch(/root:\s*\{\s*flexShrink:\s*0\s*\}/);
+  // CORRECTED at T338: this pinned "the root container never shrinks
+  // (flexShrink: 0)". Maestro run 34470287372 showed that an
+  // un-shrinkable root overflows the keyboard-shrunk shell and it is the
+  // PROMPT BAR that gets pushed under the IME. What must never shrink is
+  // the prompt bar; everything above it scrolls.
+  it("T338: root, Section and ScrollView shrink (flexShrink: 1) while PromptBar sits outside and after the ScrollView, so the prompt bar stays above the IME and the controls scroll (plan.md §9.3)", () => {
+    expect(code).toMatch(/root:\s*\{\s*flexShrink:\s*1,\s*minHeight:\s*0\s*\}/);
+    expect(code).toMatch(/section:\s*\{\s*flexShrink:\s*1,\s*minHeight:\s*0\s*\}/);
+    expect(code).toMatch(/scroll:\s*\{\s*flexGrow:\s*0,\s*flexShrink:\s*1\s*\}/);
     expect(code).toMatch(/<View style=\{styles\.root\}/);
+    expect(code).toMatch(/<Section[^>]*style=\{styles\.section\}/);
+    const scrollOpen = code.indexOf("<ScrollView");
+    const scrollClose = code.indexOf("</ScrollView>");
+    const promptBar = code.indexOf("<PromptBar");
+    expect(scrollOpen).toBeGreaterThan(-1);
+    expect(scrollClose).toBeGreaterThan(scrollOpen);
+    expect(promptBar).toBeGreaterThan(scrollClose);
+    const scrollBody = code.slice(scrollOpen, scrollClose);
+    // T329's lesson, applied here: the first tap after typing must reach
+    // the control, not be spent dismissing the keyboard.
+    expect(scrollBody).toMatch(/keyboardShouldPersistTaps="handled"/);
+    // The pickers -- the controls that outgrow the keyboard-shrunk shell
+    // -- are inside the scrolling half, never beside the prompt bar.
+    expect(scrollBody).toMatch(/<QueueModePicker/);
+    expect(scrollBody).toMatch(/<ModelThinkingPicker/);
+    expect(scrollBody).toMatch(/<SlashCommandPicker/);
   });
 
   // T75: `onSubmit` is no longer called directly from `handleSend` — it

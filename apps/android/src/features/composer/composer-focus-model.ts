@@ -121,7 +121,16 @@ export function resolveFocusOwner(state: ComposerFocusState): FocusOwner {
 
 /** The layout contract `Composer.tsx`'s root container builds to (plan.md §9.3 "the composer must ... remain visible above the IME", read together with §9.2's "bottom composer"). */
 export interface ComposerLayoutContract {
-  /** The composer's own container never shrinks to make room for a sheet or the IME — it reserves its own height instead. */
+  /**
+   * The composer's prompt bar — its input and send button — never shrinks
+   * to make room for a sheet or the IME: it reserves its own height, and
+   * the controls above it scroll instead.
+   *
+   * CORRECTED at T338: this said "the composer's own container never
+   * shrinks". An un-shrinkable container is exactly what pushed the send
+   * button under the keyboard in Maestro run 34470287372; the height
+   * worth reserving is the prompt bar's.
+   */
   reservesOwnHeight: true;
   /**
    * The keyboard inset is consumed by the layout, not ignored: the

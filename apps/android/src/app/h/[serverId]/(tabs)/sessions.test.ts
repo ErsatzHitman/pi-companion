@@ -96,9 +96,20 @@ describe("SessionsRoute source", () => {
     const code = readCode();
     expect(code).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/features\/sessions\/sessions-model\.js"/);
     expect(code).toMatch(
-      /useEffect\(\(\) => \{\s*let cancelled = false;\s*core\.sessionService\s*\.refreshSessions\(\)\s*\.then\(\(window\) => \{\s*if \(cancelled\) return;\s*setListState\(\(current\) => applySessionListWindow\(current, window\)\);\s*\}\)/,
+      /useEffect\(\(\) => \{\s*if \(phase !== \"connected\"\) return;\s*let cancelled = false;\s*core\.sessionService\s*\.refreshSessions\(\)\s*\.then\(\(window\) => \{\s*if \(cancelled\) return;\s*setListState\(\(current\) => applySessionListWindow\(current, window\)\);\s*\}\)/,
     );
-    expect(code).toMatch(/}, \[core\.sessionService\]\);/);
+    expect(code).toMatch(/}, \[core\.sessionService, phase\]\);/);
+  });
+
+  it("T337: reads the connection phase from useConnectionStatus(core.connection), fetches only while connected, and hands connected= to the screen so its restore waits too", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /import \{ useConnectionStatus \} from "\.\.\/\.\.\/\.\.\/\.\.\/features\/connect";/,
+    );
+    expect(code).toMatch(/const \{ phase \} = useConnectionStatus\(core\.connection\);/);
+    expect(code).toMatch(/connected=\{phase === "connected"\}/);
+    // The old shape -- a fetch keyed on nothing but the service -- must be gone.
+    expect(code).not.toMatch(/}, \[core\.sessionService\]\);/);
   });
 
   it("fences the fetch-on-mount effect with a cancelled flag so an abandoned fetch cannot clobber newer state", () => {

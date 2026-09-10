@@ -20,6 +20,14 @@
  * existing modules unchanged; this one is specifically for *reconnecting
  * something already saved*.
  *
+ * (CORRECTED at T337: the section below narrates the seam as it stood at
+ * T66, and is kept as that record. T32S14 gave this module its
+ * user-driven caller -- `connection-shell.tsx`'s "existing profile"
+ * submit -- and T337 its automatic one: `app-shell/cold-start-reconnect.
+ * ts`'s `reconnectColdStartProfile`, fired by `app/core-context.tsx`'s
+ * `AppCoreProvider` once its cold-start profile read settles, after
+ * Maestro run 34470287372 measured a relaunch landing on an idle store.)
+ *
  * ## Where this plugs in (and the seam this task files)
  *
  * Nothing in `apps/android/src/app/` or `app-shell/` calls this module

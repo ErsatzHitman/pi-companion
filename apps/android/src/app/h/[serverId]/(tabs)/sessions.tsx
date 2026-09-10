@@ -10,6 +10,7 @@ import {
 import { applySessionListWindow } from "../../../../features/sessions/sessions-model.js";
 import { appendCreatedSession } from "../../../../app-shell/session-list-append";
 import { destinationHref } from "../../../../app-shell/top-level-destinations";
+import { useConnectionStatus } from "../../../../features/connect";
 import { useAppCore } from "../../../core-context";
 
 const INITIAL_SESSION_LIST_STATE: SessionListState = { kind: "ready", sessions: [] };
@@ -94,6 +95,24 @@ const INITIAL_SESSION_LIST_STATE: SessionListState = { kind: "ready", sessions: 
  * `cancelled` flag, the same shape `AppCoreProvider`'s own cold-start
  * effect uses (`app/core-context.tsx`) -- a slow, abandoned fetch can
  * never clobber a newer one's state.
+ *
+ * **T337 (Maestro run 34470287372)**: that fetch, and `SessionsScreen`'s
+ * cold-start restore effect, now wait for the daemon connection. On a
+ * cold start `AppCoreProvider` reconnects the stored profile on its own
+ * (`app-shell/cold-start-reconnect.ts`), but that lands a moment AFTER
+ * this route mounts -- so a mount-time fetch rejected with "Not
+ * connected to a daemon", the restore effect banner-ed the same text,
+ * and nothing ever re-fetched: the network sync only fires on a
+ * Wi-Fi/cellular switch or an offline -> online transition, and a
+ * relaunch is neither. The effect below is keyed on
+ * `useConnectionStatus(core.connection).phase` and runs only while it is
+ * `"connected"` (so it re-runs when the reconnect lands, and on any
+ * later reconnect), and `connected={phase === "connected"}` tells the
+ * screen to hold its restore until then. (CORRECTED (T337): the
+ * paragraph above said the fetch fires once on mount, that a rejection
+ * is silently ignored, and that the network sync is what retries. The
+ * first two are no longer how this route behaves; the third was never
+ * true of a relaunch.)
  */
 export default function SessionsRoute() {
   const { serverId } = useLocalSearchParams<{ serverId: string }>();
@@ -112,7 +131,9 @@ export default function SessionsRoute() {
     },
     [router, serverId],
   );
+  const { phase } = useConnectionStatus(core.connection);
   useEffect(() => {
+    if (phase !== "connected") return;
     let cancelled = false;
     core.sessionService
       .refreshSessions()
@@ -121,14 +142,13 @@ export default function SessionsRoute() {
         setListState((current) => applySessionListWindow(current, window));
       })
       .catch(() => {
-        // No active connection yet, or the fetch failed -- see this
-        // route's own doc comment: SessionListNetworkSync's
-        // online-transition resync is what retries.
+        // The fetch failed against a live connection -- see this route's
+        // own doc comment (T337): the next phase change re-runs it.
       });
     return () => {
       cancelled = true;
     };
-  }, [core.sessionService]);
+  }, [core.sessionService, phase]);
   return (
     <SessionsScreen
       serverId={serverId}
@@ -136,6 +156,7 @@ export default function SessionsRoute() {
       sessionService={core.sessionService}
       keyValueStorage={core.keyValueStorage}
       network={core.network}
+      connected={phase === "connected"}
       onSessionCreated={handleSessionCreated}
       onSessionOpened={handleSessionOpened}
     />

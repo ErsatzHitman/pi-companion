@@ -2252,6 +2252,26 @@ export const CAPABILITIES = [
       /the sessions (?:route|screen) (?:never|does not|doesn't) (?:call|invoke|wire|pass) `?onSessionOpened`?/i,
     ],
   },
+  {
+    // T337: a cold start reconnects the saved host profile on its own
+    // (`apps/android/src/app-shell/cold-start-reconnect.ts`'s
+    // `reconnectColdStartProfile`, fired by `app/core-context.tsx`'s
+    // `AppCoreProvider` once its profile read settles). Until Maestro run
+    // 34470287372 nothing did, so a relaunch landed on an idle connection
+    // and `host-profile-reconnect.ts`'s T66 header said as much. Worded in
+    // T337's own voice -- none of these phrases is lifted from that header
+    // (now behind a `CORRECTED at T337` marker), from
+    // `cold-start-restore.yaml`'s narrative, or from the module's own doc
+    // comment, so a reflow of any of them cannot trip this.
+    name: "Cold start reconnects the saved host profile automatically (reconnectColdStartProfile)",
+    methodNames: ["reconnectColdStartProfile"],
+    denyingPhrases: [
+      /(?:nothing|no code|no effect|no module) (?:in the app |in this app )?(?:reconnects|re-connects|revives) (?:the |a )?(?:saved|stored) (?:host )?(?:profile|connection|host) (?:on|at|after|across) (?:a |every |each )?(?:cold start|relaunch|process death|app launch)/i,
+      /(?:a |every |each )?(?:cold start|relaunch) (?:still )?(?:never|does not|doesn't|cannot|can't) (?:reconnect|re-connect)s? (?:to )?(?:the |a )?(?:saved|stored) (?:host|profile|daemon)/i,
+      /the (?:saved|stored) (?:host )?profile is (?:never|not) reconnected (?:automatically|on its own|without (?:a |the )?user)/i,
+      /only (?:a |the )?(?:user|manual) (?:submit|tap|action) (?:on the connect form )?(?:ever )?reconnects (?:a |the )?(?:saved|stored) (?:host )?profile/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
