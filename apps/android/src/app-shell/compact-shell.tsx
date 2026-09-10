@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 
 import { useTheme } from "../ui/theme/theme-context";
 import type { CompactShellSlots } from "./compact-shell-slots";
+import { useKeyboardInset } from "./keyboard-inset";
 
 export type { CompactShellSlots } from "./compact-shell-slots";
 export { COMPACT_SHELL_SLOT_ORDER } from "./compact-shell-slots";
@@ -53,9 +54,14 @@ export function CompactSessionShell({
 }: CompactShellSlots) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  // T329: under edge-to-edge the window never resizes around the IME, so
+  // the shell pads its own bottom by the keyboard's height — that is what
+  // keeps the composer "visible above the IME" (plan.md §9.3). See
+  // `./keyboard-inset.ts` for the measurement this rests on.
+  const keyboardInset = useKeyboardInset();
 
   return (
-    <View style={styles.shell} testID="compact-shell">
+    <View style={[styles.shell, { paddingBottom: keyboardInset }]} testID="compact-shell">
       <View style={styles.header} testID="compact-shell-header">
         {header}
       </View>

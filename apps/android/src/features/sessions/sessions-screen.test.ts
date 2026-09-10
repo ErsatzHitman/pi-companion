@@ -193,6 +193,10 @@ describe("SessionsScreen source: T32B6 network sync / connection path / stalenes
     );
   });
 
+  it("T329: the screen's ScrollView delivers a tap that follows typing to the create form's submit, not to dismissing the keyboard", () => {
+    expect(readScreenCode()).toMatch(/<ScrollView[^>]*keyboardShouldPersistTaps="handled"/);
+  });
+
   it("renders T37B's staleness sentence as a warning Banner, text not colour alone, gated on listStaleness rather than a second boolean", () => {
     expect(code).toMatch(
       /\{listStaleness \? \([\s\S]*?<Banner tone="warning" message=\{listStaleness\.text\} testId=\{`\$\{testId\}-list-stale`\} \/>/,

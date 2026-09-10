@@ -2194,6 +2194,24 @@ export const CAPABILITIES = [
       /only (?:an? )?(?:emulator|maestro) (?:run|dispatch) (?:can|could|will) (?:reveal|discover|find) (?:an? )?(?:autolinked )?(?:native )?module from (?:the wrong|another|a different) (?:expo )?sdk/i,
     ],
   },
+  {
+    // T329: the session shell pads its own bottom by the live keyboard
+    // height (`apps/android/src/app-shell/keyboard-inset.ts`), because
+    // under edge-to-edge the window is never resized around the IME and
+    // the composer otherwise sits underneath the keyboard. Worded in
+    // T329's own voice — none of these phrases is lifted from the two
+    // `CORRECTED at T329` sites in `Composer.tsx` and
+    // `composer-focus-model.ts`, nor from `keyboard-inset.ts`'s own
+    // measurement narrative, so a reflow of any of them cannot trip this.
+    name: "Session shell pads itself by the live keyboard inset (useKeyboardInset)",
+    methodNames: ["useKeyboardInset"],
+    denyingPhrases: [
+      /the (?:session )?shell (?:does not|doesn't|never) (?:pad|inset|offset)s? (?:itself|its bottom|its own bottom) (?:for|by|around|against) the (?:keyboard|ime)/i,
+      /nothing (?:in the app |in this app )?keeps the composer (?:visible )?above the (?:keyboard|ime)/i,
+      /the composer (?:is|gets|ends up|stays) (?:drawn|rendered|left|laid out) (?:under|underneath|beneath) the (?:keyboard|ime)/i,
+      /no (?:hook|component|code) (?:in this app )?(?:reads|listens to|subscribes to) the keyboard(?:'s)? height/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

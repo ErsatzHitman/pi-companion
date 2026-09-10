@@ -242,7 +242,16 @@ export function ConnectionShell() {
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.container}
+      // T329: a ScrollView's default `keyboardShouldPersistTaps="never"`
+      // spends the first tap after typing on dismissing the keyboard and
+      // never delivers it to the button underneath. Run 34444464068 showed
+      // exactly that on every connect-form flow: address typed, "Add host"
+      // tapped, keyboard gone, form untouched, no connection attempted.
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.title}>Pi Companion</Text>
       <View style={styles.statusStrip}>
         <View style={[styles.statusDot, statusDotStyle(styles, phase)]} />

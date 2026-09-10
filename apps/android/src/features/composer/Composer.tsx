@@ -542,11 +542,17 @@ function voiceOutcomeDisplay(
  * out of view to make room for a sheet or the IME — the
  * `reservesOwnHeight` half of `composer-focus-model.ts`'s
  * `COMPOSER_LAYOUT_CONTRACT`. The other half, `consumesKeyboardInset`,
- * is Android's own `windowSoftInputMode="adjustResize"` resizing the
- * window around the IME rather than drawing under it — real on-screen
- * non-overlap with the IME, and real focus retention through a live
- * `Modal`/`Portal` sheet, remain for T37 (Maestro) and T59 (real
- * device) to prove; this component does not claim either.
+ * is the session shell's own doing: `app-shell/compact-shell.tsx` pads
+ * its bottom by the live keyboard height (`app-shell/keyboard-inset.ts`,
+ * T329), so this component ends above the IME rather than under it.
+ * (CORRECTED at T329: this said that half "is Android's own
+ * `windowSoftInputMode="adjustResize"` resizing the window around the
+ * IME rather than drawing under it". Under edge-to-edge the window is
+ * never resized around the IME; Maestro run 34444464068 found this
+ * component's input and send button underneath the keyboard on every
+ * session-screen flow.) Real focus retention through a live
+ * `Modal`/`Portal` sheet remains for T59 (real device) to prove; this
+ * component does not claim it.
  */
 export function Composer({
   onSubmit,

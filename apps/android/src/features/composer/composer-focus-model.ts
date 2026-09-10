@@ -124,10 +124,18 @@ export interface ComposerLayoutContract {
   /** The composer's own container never shrinks to make room for a sheet or the IME — it reserves its own height instead. */
   reservesOwnHeight: true;
   /**
-   * The composer relies on the OS resizing the window around the IME
-   * (Android's `windowSoftInputMode="adjustResize"`) rather than being
-   * drawn underneath it — i.e. the keyboard inset is consumed by the
-   * layout, not ignored.
+   * The keyboard inset is consumed by the layout, not ignored: the
+   * session shell (`app-shell/compact-shell.tsx`) pads its own bottom by
+   * the live keyboard height from `app-shell/keyboard-inset.ts`, so the
+   * composer is never drawn underneath the IME.
+   *
+   * CORRECTED at T329: this said the composer "relies on the OS resizing
+   * the window around the IME (Android's `windowSoftInputMode=
+   * "adjustResize"`)". Under edge-to-edge, mandatory for this app's target
+   * SDK, the window is never resized around the IME; run 34444464068
+   * measured the composer's input and send button under the keyboard on
+   * every session-screen flow, which is why the shell now consumes the
+   * inset itself.
    */
   consumesKeyboardInset: true;
   /** The composer is never itself rendered inside a detached `Modal` (see `composer-accessibility.test.ts`'s "no <Modal>" check), so it can never be pushed into a separate native window that competes with an open sheet's window for the IME. */

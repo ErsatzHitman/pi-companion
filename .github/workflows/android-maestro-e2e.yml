@@ -624,17 +624,17 @@ jobs:
           # 30-minute cycle (23m of Gradle assembly sits in front of it).
           emulator-boot-timeout: 1200
           # T320 -- see the note on `maestro-e2e`'s script above. Each line
-          # here is independently executable on purpose: they are three whole
+          # here is independently executable on purpose: they are two whole
           # commands, not one construct split across lines, and no
           # variable or `set` option is expected to survive between them.
-          # T328: the `hide_error_dialogs` line is what `run-shard.ts` does
-          # for the shards after `adb install`, for the reason its comment
-          # gives (a launcher ANR dialog covered shard-1's app on run
-          # 34442086730); this job runs `run-flow.ts` directly, so it sets
-          # it here.
+          # T329: `prepare-device.ts` is the same install + error-dialog
+          # handling `run-shard.ts` gives the shards, as one command --
+          # `adb install`, `hide_error_dialogs`, and dismissal of any ANR
+          # dialog already on screen (the one T328's setting alone could
+          # not touch, which cost this job run 34444464068). This job runs
+          # `run-flow.ts` directly, so it runs the preparation directly too.
           script: |
-            adb install -r "${{ steps.artifact.outputs.apk_path }}"
-            adb shell settings put global hide_error_dialogs 1
+            npx tsx apps/android/e2e/prepare-device.ts "${{ steps.artifact.outputs.apk_path }}"
             APP_ID=sh.picompanion npx tsx apps/android/e2e/run-flow.ts smoke
 
       # T322 -- see the identical step in `maestro-e2e` above.

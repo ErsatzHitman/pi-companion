@@ -32,36 +32,24 @@
  * the command `apps/android/maestro/README.md` documents — flow-name
  * resolution, ephemeral daemon endpoints, the 6767 refusal and the daemon
  * exit policy all stay in that file and its harness. This is the loop and
- * the `adb install` around it, nothing more.
+ * the device preparation around it (`./harness/device-prep.ts`, T329),
+ * nothing more.
  */
-import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { adbDeviceCommands, captureCommand, runCommand } from "./harness/adb.js";
+import { prepareDevice } from "./harness/device-prep.js";
 import { loadShardConfig, resolveShardFlows } from "./harness/shard-plan.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const RUN_FLOW = path.join(REPO_ROOT, "apps", "android", "e2e", "run-flow.ts");
 
-function run(command: string, argv: string[]): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, argv, { stdio: "inherit", cwd: REPO_ROOT, shell: false });
-    child.once("error", reject);
-    child.once("exit", (code) => resolve(code ?? 1));
-  });
-}
-
-function capture(command: string, argv: string[]): Promise<string> {
-  return new Promise((resolve) => {
-    const child = spawn(command, argv, { cwd: REPO_ROOT, shell: false });
-    let out = "";
-    child.stdout?.on("data", (chunk: Buffer) => (out += chunk.toString()));
-    child.stderr?.on("data", (chunk: Buffer) => (out += chunk.toString()));
-    child.once("error", (error) => resolve(`<failed to run ${command}: ${String(error)}>`));
-    child.once("close", () => resolve(out));
-  });
-}
+// T329: both helpers moved to ./harness/adb.ts so `prepare-device.ts` can
+// share them; this file's behaviour is unchanged.
+const run = (command: string, argv: string[]) => runCommand(command, argv, REPO_ROOT);
+const capture = (command: string, argv: string[]) => captureCommand(command, argv, REPO_ROOT);
 
 /**
  * T322: dumps the device log for a flow that failed, into the directory the
@@ -104,34 +92,15 @@ async function main(): Promise<void> {
   const flows = resolveShardFlows(loadShardConfig(), shardName);
   console.log(`[run-shard] ${shardName}: ${flows.length} flow(s) — ${flows.join(", ")}`);
 
-  const installExit = await run("adb", ["install", "-r", apkPath]);
-  if (installExit !== 0) {
-    console.error(`[run-shard] adb install failed with exit code ${installExit}: ${apkPath}`);
-    process.exitCode = installExit;
+  // T329: install, hide new system error dialogs, and dismiss any already
+  // on screen — the same `prepareDevice` `packaged-app-smoke` runs through
+  // `prepare-device.ts`, so the two jobs cannot drift apart. Its doc
+  // comment carries the history (T328's `hide_error_dialogs` alone, and
+  // why run 34444464068 showed that was not enough).
+  const prepExit = await prepareDevice(apkPath, adbDeviceCommands(REPO_ROOT));
+  if (prepExit !== 0) {
+    process.exitCode = prepExit;
     return;
-  }
-
-  // T328: suppress the system's "isn't responding" / "has stopped" dialogs.
-  // Run 34442086730's shard-1 lost both of its flows at their FIRST
-  // assertion: the hierarchy held nothing but "Quickstep isn't responding",
-  // "Close app", "Wait" — the launcher ANR'd on a freshly booted runner and
-  // its dialog sat over the app Maestro had just launched. The setting is
-  // what Firebase Test Lab and the Android CTS harness set for the same
-  // reason; a crash still fails the flow through logcat (T322), it just no
-  // longer fails a DIFFERENT flow through a modal that outlives the crash.
-  // Non-fatal: an old image without the setting should not stop the shard.
-  const hideDialogsExit = await run("adb", [
-    "shell",
-    "settings",
-    "put",
-    "global",
-    "hide_error_dialogs",
-    "1",
-  ]);
-  if (hideDialogsExit !== 0) {
-    console.warn(
-      `[run-shard] could not set hide_error_dialogs (exit ${hideDialogsExit}); continuing`,
-    );
   }
 
   // Every flow runs even after one fails, so a single dispatch reports every

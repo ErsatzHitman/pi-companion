@@ -425,7 +425,14 @@ export function SessionsScreen({
   }, [listState]);
 
   return (
-    <ScrollView style={styles.container} testID={testId}>
+    <ScrollView
+      style={styles.container}
+      testID={testId}
+      // T329: same reason as `connection-shell.tsx`'s ScrollView — the
+      // create-session form's submit is tapped straight after typing, and
+      // the default `"never"` would spend that tap dismissing the keyboard.
+      keyboardShouldPersistTaps="handled"
+    >
       <CreateSessionForm
         state={createState}
         onCwdChange={(cwd) =>

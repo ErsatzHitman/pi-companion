@@ -220,6 +220,15 @@ describe("ConnectionShell source", () => {
     expect(readCode()).toMatch(/onPaired=\{\(result\) => void handlePaired\(result\)\}/);
   });
 
+  it("T329: the form's ScrollView delivers a tap that follows typing to the button, not to dismissing the keyboard", () => {
+    // Comment-stripped, so the explanatory comment beside the prop cannot
+    // satisfy this on its own.
+    const code = readCode()
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    expect(code).toMatch(/<ScrollView[^>]*keyboardShouldPersistTaps="handled"/);
+  });
+
   it("never logs a host, port, token, or pairing URL — no logger/console call anywhere in this file", () => {
     expect(readCode()).not.toMatch(/console\.(log|info|warn|error|debug)/);
     expect(readCode()).not.toMatch(/\blogger\b/i);

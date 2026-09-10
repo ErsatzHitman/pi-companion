@@ -64,6 +64,13 @@ describe("CompactSessionShell source", () => {
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
+  it("T329: pads its own bottom by the live keyboard inset, since edge-to-edge never resizes the window around the IME", () => {
+    expect(code).toMatch(/const keyboardInset = useKeyboardInset\(\);/);
+    expect(code).toMatch(
+      /<View style=\{\[styles\.shell, \{ paddingBottom: keyboardInset \}\]\} testID="compact-shell">/,
+    );
+  });
+
   it("resolves every colour through useTheme()", () => {
     expect(code).toMatch(/useTheme\(\)/);
     expect(code).toMatch(/theme\.colors\./);

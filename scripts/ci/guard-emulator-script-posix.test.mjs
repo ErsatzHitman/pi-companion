@@ -151,9 +151,11 @@ test("the real tree: both emulator scripts exist and neither uses a bashism", ()
 test("MUTATION PROOF: restoring `set -euo pipefail` to the real workflow turns it red", () => {
   const path = ".github/workflows/android-maestro-e2e.yml";
   const real = readFileSync(path, "utf8");
+  // T329: anchored on the first line of `packaged-app-smoke`'s script,
+  // which is now `prepare-device.ts` (it used to be `adb install -r`).
   const mutated = real.replace(
-    "            adb install -r",
-    "            set -euo pipefail\n            adb install -r",
+    "            npx tsx apps/android/e2e/prepare-device.ts",
+    "            set -euo pipefail\n            npx tsx apps/android/e2e/prepare-device.ts",
   );
   assert.notEqual(mutated, real, "the mutation must actually change the file");
 
