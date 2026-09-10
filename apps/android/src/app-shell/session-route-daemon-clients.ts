@@ -59,6 +59,17 @@
  * so the one live instance this file already narrows eight times above
  * satisfies this ninth port as-is too, with no adapter.
  *
+ * **T354 adds `resolveSessionControlsClient` below**, the same pattern a
+ * tenth time, for the Build/Plan mode control and the auto-compaction
+ * switch the context-ring menu grew in the same task.
+ * `DaemonSessionControlsSource` (`../features/composer/
+ * session-controls-model.ts`) names its five methods identically to
+ * `DaemonClient`'s real `fetchAgent`, `listProviderModes`,
+ * `setAgentMode`, `getAutoCompaction` and `setAutoCompaction` — checked
+ * against that file rather than taken from a brief — so the one live
+ * instance this file already narrows nine times above satisfies this
+ * tenth port as-is too, with no adapter.
+ *
  * **T352 adds `resolveAgentUsageClient` below**, the same pattern an
  * eighth time: the Live screen's Context card needs this session's
  * token usage, and the daemon delivers it as `lastUsage` on the whole
@@ -118,6 +129,7 @@ import type {
   DaemonEditorTextSource,
   DaemonModelThinkingSource,
   DaemonQueueModeSource,
+  DaemonSessionControlsSource,
   DaemonSlashCommandSource,
   DaemonTurnStatusSource,
 } from "../features/composer";
@@ -337,6 +349,30 @@ export function resolveEditorTextClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | DaemonEditorTextSource
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T354: same fresh-read contract as the nine functions above, cast to
+ * `DaemonSessionControlsSource` instead — the tenth narrow port this
+ * one live `DaemonClient` instance satisfies (the real `fetchAgent`,
+ * `listProviderModes`, `setAgentMode`, `getAutoCompaction` and
+ * `setAutoCompaction`; see `../features/composer/session-controls-model.ts`'s
+ * own module doc for how those five names were established against the
+ * real client). `undefined` (never `null`) with no active lifecycle or
+ * no live client yet, matching every sibling resolver above —
+ * `SessionControlsPicker` then renders its truthful "Connect to a
+ * daemon…" state rather than a mode segment pair and a switch that can
+ * only fail.
+ */
+export function resolveSessionControlsClient(
+  connection: SessionRouteConnectionSource,
+): DaemonSessionControlsSource | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | DaemonSessionControlsSource
       | null
       | undefined) ?? undefined
   );

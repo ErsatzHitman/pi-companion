@@ -69,6 +69,12 @@ import {
   type DaemonModelThinkingSource,
 } from "./model-thinking-model";
 import { ContextRing } from "./ContextRing";
+import {
+  INITIAL_SESSION_CONTROLS_STATE,
+  createSessionControlsController,
+  type DaemonSessionControlsSource,
+} from "./session-controls-model";
+import { SessionControlsPicker } from "./SessionControlsPicker";
 import { ModelThinkingPicker } from "./ModelThinkingPicker";
 import { PromptControlsMenu } from "./PromptControlsMenu";
 import { PermissionRecoveryNotice } from "./PermissionRecoveryNotice";
@@ -388,6 +394,22 @@ export interface ComposerProps {
    */
   modelThinkingClient?: DaemonModelThinkingSource;
   /**
+   * T354: Build/Plan mode and auto-compaction transport, mirrors
+   * `packages/client/src/daemon-client.ts`'s real `fetchAgent`/
+   * `listProviderModes`/`setAgentMode`/`getAutoCompaction`/
+   * `setAutoCompaction` — see `session-controls-model.ts`'s module doc
+   * for why one port carries both settings. Wired from the first
+   * commit that added it: the production session route
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`) passes
+   * `resolveSessionControlsClient(core.connection)`, the tenth narrow
+   * port off the same live `DaemonClient` every sibling client prop
+   * here already came from. Omitted — a lab mount, a test harness, or
+   * a route with no live connection — renders `SessionControlsPicker`'s
+   * truthful "Connect to a daemon…" state rather than a mode segment
+   * pair and a switch that can only fail.
+   */
+  sessionControlsClient?: DaemonSessionControlsSource;
+  /**
    * The newest token usage the daemon has reported for this session
    * (T353), from `features/telemetry`'s `createContextUsageSignal`.
    * Feeds the prompt bar's context ring and the readout inside the
@@ -621,6 +643,7 @@ export function Composer({
   clock: clockProp,
   sessionId,
   modelThinkingClient,
+  sessionControlsClient,
   usage,
   queueModeClient,
   turnStatusClient,
@@ -689,6 +712,46 @@ export function Composer({
         .then(() => setModelThinkingState(modelThinkingController.getState()));
     },
     [modelThinkingController],
+  );
+
+  // --- T354: Build/Plan mode and auto-compaction -------------------------
+  // Same one-controller-per-(client, agentId)-identity shape as
+  // `modelThinkingController` above. Both settings live behind one
+  // controller because they load from the same snapshot and are drawn
+  // in the same panel — see `session-controls-model.ts`'s module doc.
+  const sessionControlsController = useMemo(
+    () =>
+      createSessionControlsController({
+        agentId: resolvedSessionId,
+        client: sessionControlsClient,
+      }),
+    [sessionControlsClient, resolvedSessionId],
+  );
+  const [sessionControlsState, setSessionControlsState] = useState(INITIAL_SESSION_CONTROLS_STATE);
+  useEffect(() => {
+    let cancelled = false;
+    void sessionControlsController.load().then(() => {
+      if (!cancelled) setSessionControlsState(sessionControlsController.getState());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionControlsController]);
+  const handleSelectMode = useCallback(
+    (modeId: string) => {
+      void sessionControlsController
+        .setMode(modeId)
+        .then(() => setSessionControlsState(sessionControlsController.getState()));
+    },
+    [sessionControlsController],
+  );
+  const handleSetAutoCompaction = useCallback(
+    (enabled: boolean) => {
+      void sessionControlsController
+        .setAutoCompaction(enabled)
+        .then(() => setSessionControlsState(sessionControlsController.getState()));
+    },
+    [sessionControlsController],
   );
 
   // --- T39C: session-wide steer/follow-up queue mode ----------------------
@@ -1613,6 +1676,15 @@ export function Composer({
           open={controlsMenuOpen}
           onClose={handleCloseControlsMenu}
           usage={usage}
+          autoCompaction={sessionControlsState.autoCompaction ?? undefined}
+          modeControl={
+            <SessionControlsPicker
+              state={sessionControlsState}
+              onSelectMode={handleSelectMode}
+              onSetAutoCompaction={handleSetAutoCompaction}
+              testId={`${composerTestId}-session-controls`}
+            />
+          }
           modelControl={
             <ModelThinkingPicker
               state={modelThinkingState}

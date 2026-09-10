@@ -6,6 +6,7 @@ import {
   resolveAttachmentDownloadClient,
   resolveEditorTextClient,
   resolveQueueModeClient,
+  resolveSessionControlsClient,
   resolveSlashCommandsClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
@@ -76,7 +77,36 @@ function createCountingFakeDaemonClient() {
     }),
     fetchAgent: vi.fn(async (agentId: string) => {
       calls.push(["fetchAgent", agentId]);
-      return { agent: { cwd: "/home/akshat/code/pi-companion" } };
+      return {
+        agent: {
+          cwd: "/home/akshat/code/pi-companion",
+          provider: "pi",
+          currentModeId: "build",
+          availableModes: [
+            { id: "build", label: "Build" },
+            { id: "plan", label: "Plan" },
+          ],
+        },
+      };
+    }),
+    // T354: the four remaining `DaemonSessionControlsSource` members.
+    // `fetchAgent` above is shared with `AgentSnapshotSource`, which is
+    // the point — one client, many narrow ports.
+    listProviderModes: vi.fn(async (provider: string) => {
+      calls.push(["listProviderModes", provider]);
+      return { modes: [{ id: "build", label: "Build" }], error: null };
+    }),
+    setAgentMode: vi.fn(async (agentId: string, modeId: string) => {
+      calls.push(["setAgentMode", agentId, modeId]);
+      return null;
+    }),
+    getAutoCompaction: vi.fn(async (agentId: string) => {
+      calls.push(["getAutoCompaction", agentId]);
+      return true;
+    }),
+    setAutoCompaction: vi.fn(async (agentId: string, enabled: boolean) => {
+      calls.push(["setAutoCompaction", agentId, enabled]);
+      return null;
     }),
   };
 }
@@ -397,5 +427,67 @@ describe("resolveAgentUsageClient", () => {
       getActiveLifecycle: () => ({ getDaemonClient: () => null }),
     };
     expect(resolveAgentUsageClient(connection)).toBeUndefined();
+  });
+});
+
+describe("resolveSessionControlsClient", () => {
+  it("returns the exact live client reference unchanged — never a wrapper or a clone", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionControlsClient(connectionWithClient(fakeClient));
+    expect(resolved).toBe(fakeClient as unknown as typeof resolved);
+  });
+
+  it("a mode change on the resolved client reaches the real counting fake, with the exact ids given", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionControlsClient(connectionWithClient(fakeClient));
+
+    await resolved!.setAgentMode!("agt_t354", "plan");
+
+    expect(fakeClient.setAgentMode).toHaveBeenCalledTimes(1);
+    expect(fakeClient.calls).toEqual([["setAgentMode", "agt_t354", "plan"]]);
+  });
+
+  it("both auto-compaction methods on the resolved client reach the fake, read and write", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionControlsClient(connectionWithClient(fakeClient));
+
+    await resolved!.setAutoCompaction!("agt_t354", true);
+    const enabled = await resolved!.getAutoCompaction!("agt_t354");
+
+    expect(enabled).toBe(true);
+    expect(fakeClient.calls).toEqual([
+      ["setAutoCompaction", "agt_t354", true],
+      ["getAutoCompaction", "agt_t354"],
+    ]);
+  });
+
+  it("the provider-level mode lookup reaches the fake with the provider it was given", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionControlsClient(connectionWithClient(fakeClient));
+
+    await resolved!.listProviderModes!("pi");
+
+    expect(fakeClient.calls).toEqual([["listProviderModes", "pi"]]);
+  });
+
+  it("resolves the SAME object every other resolver on this connection resolves — one client, ten ports", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const connection = connectionWithClient(fakeClient);
+
+    expect(resolveSessionControlsClient(connection) as unknown).toBe(
+      resolveAgentSnapshotClient(connection) as unknown,
+    );
+  });
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveSessionControlsClient(connection)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveSessionControlsClient(connection)).toBeUndefined();
   });
 });

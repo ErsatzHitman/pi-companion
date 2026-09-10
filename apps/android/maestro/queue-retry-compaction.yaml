@@ -91,6 +91,18 @@ tags:
 - assertVisible:
     id: "composer-controls-menu"
 
+# --- MODE / AUTO-COMPACTION (T354): the same story one group up. This
+# --- route resolves `sessionControlsClient` off the same
+# --- `AppCore.connection`, so with no live daemon it is `undefined` and
+# --- the picker renders its truthful "no-client" sentence rather than
+# --- Build/Plan segments and a switch that could only fail.
+- assertVisible:
+    id: "composer-session-controls"
+- assertVisible:
+    id: "composer-session-controls-unavailable"
+- assertVisible:
+    text: "Connect to a daemon to change the mode or auto-compaction."
+
 # --- QUEUE MODE: this route resolves `queueModeClient` off
 # --- `AppCore.connection` (T132), and this harness has no live daemon,
 # --- so it resolves to `undefined` and the picker renders its truthful

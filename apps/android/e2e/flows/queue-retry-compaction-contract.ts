@@ -67,6 +67,23 @@ export const QUEUE_RETRY_COMPACTION_FLOW = {
    */
   controlsMenu: "composer-controls-menu",
 
+  /**
+   * T354: `SessionControlsPicker`'s testId at its `Composer.tsx` mount
+   * (`${composerTestId}-session-controls`) — the menu's MODE group,
+   * holding the Build/Plan segments and the auto-compaction switch.
+   */
+  sessionControlsRoot: "composer-session-controls",
+  sessionControlsUnavailable: "composer-session-controls-unavailable",
+
+  /**
+   * `describeSessionControlsUnavailable("no-client")` — the exact
+   * sentence `SessionControlsPicker` renders when the controller has no
+   * client at all, which is today's real shape at this route
+   * (`supportsSessionControls(undefined) === false`, so no `load()` is
+   * even attempted).
+   */
+  sessionControlsUnavailableText: "Connect to a daemon to change the mode or auto-compaction.",
+
   /** `QueueModePicker`'s default testId, applied at its `Composer.tsx` mount (`${composerTestId}-queue-mode`). */
   queueModePickerRoot: "composer-queue-mode",
   queueModePickerUnavailable: "composer-queue-mode-unavailable",

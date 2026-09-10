@@ -178,6 +178,31 @@ export type { ContextRingProps } from "./ContextRing";
 export { PromptControlsMenu } from "./PromptControlsMenu";
 export type { PromptControlsMenuProps } from "./PromptControlsMenu";
 
+// T354: the Build/Plan mode control and the auto-compaction switch the
+// context-ring menu's MODE and CONTEXT groups mount. See
+// `session-controls-model.ts`'s module doc for why one controller owns
+// both settings.
+export {
+  INITIAL_SESSION_CONTROLS_STATE,
+  createSessionControlsController,
+  currentModeLabel,
+  describeAutoCompaction,
+  describeSessionControlsUnavailable,
+  supportsSessionControls,
+} from "./session-controls-model";
+export type {
+  DaemonSessionControlsSource,
+  SessionControlsAgentSnapshot,
+  SessionControlsAvailability,
+  SessionControlsController,
+  SessionControlsControllerDeps,
+  SessionControlsNotice,
+  SessionControlsState,
+  SessionModeOption,
+} from "./session-controls-model";
+export { SessionControlsPicker } from "./SessionControlsPicker";
+export type { SessionControlsPickerProps } from "./SessionControlsPicker";
+
 // --- T39C: session-wide steer/follow-up queue mode ------------------------
 export {
   INITIAL_QUEUE_MODES_STATE,

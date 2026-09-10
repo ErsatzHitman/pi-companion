@@ -462,7 +462,7 @@ describe("SessionRoute source", () => {
     // the same reasoning `handleSubmit`/`turnRunning`'s cases above use.
     const code = readCode();
     expect(code).toMatch(
-      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+modelThinkingClient=\{modelThinkingClient\}\s+usage=\{usage\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+onMinHeightChange=\{setComposerContentMinHeight\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
+      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+modelThinkingClient=\{modelThinkingClient\}\s+sessionControlsClient=\{sessionControlsClient\}\s+usage=\{usage\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+onMinHeightChange=\{setComposerContentMinHeight\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
     );
   });
 
@@ -489,9 +489,15 @@ describe("SessionRoute source", () => {
   // that SessionRoute actually calls it and actually passes the result
   // to Composer, never a fixed `undefined`. ------------------------------
 
-  it("T132/T282/T284/T292/T293/T351/T352/T353: imports resolveAgentSnapshotClient/resolveAgentUsageClient/resolveModelThinkingClient/resolveAttachmentDownloadClient/resolveEditorTextClient/resolveQueueModeClient/resolveSlashCommandsClient/resolveTranscribeClient/resolveTurnStatusClient from ../../../../../app-shell/session-route-daemon-clients", () => {
+  it("T132/T282/T284/T292/T293/T351/T352/T353/T354: imports all ten resolvers from ../../../../../app-shell/session-route-daemon-clients", () => {
     expect(readCode()).toMatch(
-      /import \{\s*resolveAgentSnapshotClient,\s*resolveAgentUsageClient,\s*resolveAttachmentDownloadClient,\s*resolveEditorTextClient,\s*resolveModelThinkingClient,\s*resolveQueueModeClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+      /import \{\s*resolveAgentSnapshotClient,\s*resolveAgentUsageClient,\s*resolveAttachmentDownloadClient,\s*resolveEditorTextClient,\s*resolveModelThinkingClient,\s*resolveQueueModeClient,\s*resolveSessionControlsClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+    );
+  });
+
+  it("T354: derives sessionControlsClient from the same core.connection, never a hard-coded literal", () => {
+    expect(readCode()).toMatch(
+      /const sessionControlsClient = resolveSessionControlsClient\(core\.connection\);/,
     );
   });
 

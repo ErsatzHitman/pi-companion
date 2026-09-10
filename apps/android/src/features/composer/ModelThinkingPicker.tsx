@@ -37,9 +37,17 @@
  * Whenever `state.availability !== "ready"` this renders
  * `state.unavailableReason`'s own truthful sentence instead of an
  * enabled `Select` pair — CLAUDE.md's "the failure mode this wave keeps
- * shipping". No Android route wires a live, capable client into this
- * feature yet (see `model-thinking-model.ts`'s module doc), so
- * `"no-client"` is today's only real-build shape.
+ * shipping". The production session route wires a live, capable client
+ * into this feature since T353 (`app-shell/session-route-daemon-clients.ts`'s
+ * `resolveModelThinkingClient`), so `"ready"` is a real shape on a
+ * connected build; `"no-client"` is what a lab mount, a test harness,
+ * or a disconnected build still gets.
+ *
+ * CORRECTED (T353, recorded here at T354): this said "No Android route
+ * wires a live, capable client into this feature yet ... so
+ * `"no-client"` is today's only real-build shape." Both clauses were
+ * true when written and T353's resolver falsified them; that commit
+ * corrected the two sibling doc comments and missed this one.
  */
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";

@@ -2505,6 +2505,51 @@ export const CAPABILITIES = [
       /changing the model (?:is|remains) impossible from (?:the )?android/i,
     ],
   },
+  {
+    // T354: the Build/Plan mode control.
+    // `features/composer/session-controls-model.ts`'s
+    // `createSessionControlsController` is the first thing on Android
+    // to call the daemon's `setAgentMode` at all, and
+    // `SessionControlsPicker` is the segment pair drawing it inside the
+    // context-ring menu. Before it, `AgentSnapshotPayload` carried
+    // `currentModeId`/`availableModes` and nothing on the phone read
+    // either, so a session could only ever run in whatever mode it was
+    // started in. An OR-across-members pair, not T168's same-file
+    // AND-group: the two names are declared in two different files,
+    // each uniquely, and either existing means the capability is real.
+    // The phrases are worded in T354's own voice and deliberately avoid
+    // `PromptControlsMenu.tsx`'s own CORRECTED narration of the pre-fix
+    // state, which this same commit wrote and which carries a
+    // historical-quotation marker of its own.
+    name: "Android switches a session between Build and Plan mode (createSessionControlsController / SessionControlsPicker)",
+    methodNames: ["createSessionControlsController", "SessionControlsPicker"],
+    denyingPhrases: [
+      /(?:nothing|no control) (?:on android |in this app )?switches (?:a |the )?session's (?:agent )?mode/i,
+      /(?:the )?build\/plan (?:toggle|switch|choice) (?:is|remains) (?:web|apps\/web)[- ]only/i,
+      /(?:a |the )?session runs in whatever mode it was started in/i,
+    ],
+  },
+  {
+    // T354: the auto-compaction switch, registered separately from the
+    // mode control above even though one controller owns both. They are
+    // two different daemon settings on two different wire methods, and
+    // a shared token would let either one's arrival satisfy the other's
+    // phrase protection. `setAutoCompaction`/`getAutoCompaction` are the
+    // real `DaemonClient` methods; `describeAutoCompaction` is the one
+    // uniquely-declared name this feature adds for them, so it is the
+    // member rather than either wire name (both of which are declared in
+    // `packages/client` regardless of whether any UI reaches them — the
+    // "token that outlives the capability" trap T215 names). The phrases
+    // avoid this feature's own "Auto-compaction: unknown" copy, which is
+    // a real product state, not a claim about what the app can do.
+    name: "Android turns a session's auto-compaction on and off (describeAutoCompaction)",
+    methodNames: ["describeAutoCompaction"],
+    denyingPhrases: [
+      /(?:nothing|no control) (?:on android |in this app )?turns auto[- ]compaction (?:on or off|on and off)/i,
+      /auto[- ]compaction cannot be changed from (?:the )?(?:phone|android|composer)/i,
+      /(?:the )?auto[- ]compaction (?:setting|switch) (?:is|remains) (?:web|apps\/web)[- ]only/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

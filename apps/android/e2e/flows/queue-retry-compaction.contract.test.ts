@@ -3,6 +3,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { describeQueueModesUnavailable } from "../../src/features/composer/queue-mode-model.js";
+import {
+  INITIAL_SESSION_CONTROLS_STATE,
+  describeSessionControlsUnavailable,
+} from "../../src/features/composer/session-controls-model.js";
 import { QUEUE_RETRY_COMPACTION_FLOW } from "./queue-retry-compaction-contract.js";
 import { PRODUCTION_DAEMON_PORT } from "../harness/production-daemon-port.js";
 import { parseMaestroSteps } from "./maestro-yaml.js";
@@ -188,6 +192,45 @@ describe("queue-retry-compaction.yaml anchors exist in source", () => {
       expect(composer).toMatch(/testId=\{`\$\{composerTestId\}-controls-menu`\}/);
       expect(QUEUE_RETRY_COMPACTION_FLOW.contextRing).toBe("composer-context-ring");
       expect(QUEUE_RETRY_COMPACTION_FLOW.controlsMenu).toBe("composer-controls-menu");
+    });
+
+    // T354 added the Build/Plan mode control and the auto-compaction
+    // switch to the same menu. They land in the same "no client is
+    // wired at this route" shape every other control in this flow is
+    // in, so these three cases pin the same three things: the tap
+    // ordering, the exact sentence, and the real mount's testId.
+    it("T354: asserts the session-controls picker only after the ring has opened the menu", () => {
+      const ringIndex = steps.findIndex(
+        (step) => step.kind === "tapOn" && step.id === QUEUE_RETRY_COMPACTION_FLOW.contextRing,
+      );
+      const pickerIndex = steps.findIndex(
+        (step) => step.id === QUEUE_RETRY_COMPACTION_FLOW.sessionControlsRoot,
+      );
+      expect(
+        pickerIndex,
+        `queue-retry-compaction.yaml should assertVisible id="${QUEUE_RETRY_COMPACTION_FLOW.sessionControlsRoot}"`,
+      ).toBeGreaterThanOrEqual(0);
+      expect(pickerIndex).toBeGreaterThan(ringIndex);
+    });
+
+    it("T354: asserts the session-controls unavailable sentence, exactly as the model spells it", () => {
+      const assertedTexts = steps
+        .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
+        .map((step) => step.text as string);
+      expect(assertedTexts).toContain(describeSessionControlsUnavailable("no-client"));
+      expect(QUEUE_RETRY_COMPACTION_FLOW.sessionControlsUnavailableText).toBe(
+        describeSessionControlsUnavailable("no-client"),
+      );
+      // The controller reaches that state with no `load()` attempted at
+      // all, which is why the flow can assert the sentence immediately
+      // after opening the menu rather than waiting on a round trip.
+      expect(INITIAL_SESSION_CONTROLS_STATE.availability).toBe("no-client");
+    });
+
+    it("T354: the picker carries the id this flow names, at its real Composer.tsx mount", () => {
+      const composer = readComponentCode(COMPOSER_TSX, "Composer");
+      expect(composer).toMatch(/testId=\{`\$\{composerTestId\}-session-controls`\}/);
+      expect(QUEUE_RETRY_COMPACTION_FLOW.sessionControlsRoot).toBe("composer-session-controls");
     });
 
     it('asserts describeQueueModesUnavailable("no-client")\'s real copy, exactly', () => {

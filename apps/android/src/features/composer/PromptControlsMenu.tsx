@@ -29,13 +29,20 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
  *
  * **The rows are slots, not implementations.** Model/effort and queue
  * mode already have working controls (`ModelThinkingPicker`,
- * `QueueModePicker`) that this task MOVED here rather than rebuilt —
- * they keep their own testIDs, including `composer-queue-mode`, so
- * every flow and contract that names one still finds it. Build/Plan and
- * the auto-compaction switch are not yet built; this menu renders
- * whatever nodes it is given and says nothing about controls that do
- * not exist, so adding them later is adding a prop, not restructuring
- * a panel.
+ * `QueueModePicker`) that T353 MOVED here rather than rebuilt — they
+ * keep their own testIDs, including `composer-queue-mode`, so every
+ * flow and contract that names one still finds it. T354 filled the
+ * `modeControl` slot the same way, with `SessionControlsPicker`
+ * (Build/Plan segments plus the auto-compaction switch), by passing a
+ * prop rather than restructuring this panel — which is the property
+ * the slot shape was for.
+ *
+ * CORRECTED (T354): this said "Build/Plan and the auto-compaction
+ * switch are not yet built". True when written, and this task
+ * falsified it. What survives unchanged is the seam: this menu still
+ * renders whatever nodes it is given and says nothing about a control
+ * it was not given, so a lab mount passing no `modeControl` still gets
+ * no MODE group at all.
  *
  * The context readout it DOES own, because it is the ring's own
  * reading and belongs next to the thing that opened the menu — and it

@@ -69,6 +69,7 @@ import {
   resolveEditorTextClient,
   resolveModelThinkingClient,
   resolveQueueModeClient,
+  resolveSessionControlsClient,
   resolveSlashCommandsClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
@@ -726,6 +727,16 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * passed one, and `ModelThinkingPicker` could therefore only ever
  * render its truthful "Connect to a daemon…" state on a real build.
  *
+ * **T354 mount.** One more prop for `Composer`, off the same live
+ * `DaemonClient`: `sessionControlsClient`, through
+ * `resolveSessionControlsClient` — the tenth `resolve*Client`
+ * narrowing on this route. It fills the context-ring menu's MODE group
+ * with real Build/Plan segments and its CONTEXT group with a real
+ * auto-compaction switch, both of which reach the daemon
+ * (`setAgentMode`, `setAutoCompaction`). With no connection the
+ * resolver hands back `undefined` and the picker renders its truthful
+ * "Connect to a daemon…" state instead.
+ *
  * **T351 mount.** The `header` slot is still `TranscriptHeader` alone,
  * but that component is now the redesign's S7 app bar (see its own doc
  * comment). Three things this route supplies that it could not supply
@@ -924,6 +935,10 @@ export default function SessionRoute() {
   // passed one, so `ModelThinkingPicker` could only ever render its
   // "Connect to a daemon…" state on a real build.
   const modelThinkingClient = resolveModelThinkingClient(core.connection);
+  // T354: identical fresh-read cast, off the same live DaemonClient, for
+  // the context-ring menu's Build/Plan segments and its auto-compaction
+  // switch — see resolveSessionControlsClient's own doc comment.
+  const sessionControlsClient = resolveSessionControlsClient(core.connection);
   const usageClient = resolveAgentUsageClient(core.connection);
   const [usage, setUsage] = useState<AgentUsage | null>(null);
   useEffect(() => {
@@ -965,6 +980,7 @@ export default function SessionRoute() {
             slashCommandsClient={slashCommandsClient}
             editorTextClient={editorTextClient}
             modelThinkingClient={modelThinkingClient}
+            sessionControlsClient={sessionControlsClient}
             usage={usage}
             attachmentSource={attachmentSource}
             cameraCapture={cameraCapture}

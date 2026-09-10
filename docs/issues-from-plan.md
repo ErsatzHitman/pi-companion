@@ -610,6 +610,7 @@ that recomputation has to be domain-specific:
 | T351   | The session screen's header showed a title and a host, navigated nowhere, and never named the directory              | phase-9   | android          | P9-U   | T350, T349, T132                                                      |
 | T352   | A context window could fill to 100% with nothing on the phone saying so                                              | phase-9   | android          | P9-U   | T350, T351, T29C1                                                     |
 | T353   | The composer's controls sat above the prompt bar, and the model picker had never been handed a client                | phase-9   | android          | P9-U   | T352, T39B, T132                                                      |
+| T354   | No control on the phone could switch a session between Build and Plan, or turn auto-compaction on                    | phase-9   | android          | P9-U   | T353, T39B, T132                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -651,8 +652,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**562 tasks** (distinct IDs counted directly from the table above), recounted at T353 with
-`grep`/`sort -u` over the table's own rows — one past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**563 tasks** (distinct IDs counted directly from the table above), recounted at T354 with
+`grep`/`sort -u` over the table's own rows — one past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17499,3 +17500,81 @@ clean for that file.
 - [x] An unreported window draws no arc and says so in words
 - [x] Every number the ring draws is behaviourally tested; nothing in the model imports React Native
 - [x] Both `CAPABILITIES` entries were registered and proven to fire
+
+#### T354 — No control on the phone could switch a session between Build and Plan, or turn auto-compaction on
+
+`labels: phase-9, area: android` · `depends-on: T353, T39B, T132`
+
+T353 built the menu the context ring opens and left its MODE group empty, because nothing existed
+to put in it. This fills it, and fills the CONTEXT group's other half at the same time.
+
+**Two settings, one controller, and that is a decision rather than a shortcut.** Build/Plan mode
+and auto-compaction are different daemon settings on different wire methods, but they load from
+the same agent snapshot and are drawn in the same panel. Two controllers would have meant two
+`fetchAgent` round trips for one panel and two independent availability states for something that
+is either usable or not. `createSessionControlsController` owns both, in the same plain-closure
+shape `createModelThinkingController` established: `getState()`/`load()`/`setMode()`/
+`setAutoCompaction()`, a `REQUIRED_METHODS` array behind `supportsSessionControls`, a
+`describeSessionControlsUnavailable` that names why rather than saying something went wrong, and
+an `INITIAL_SESSION_CONTROLS_STATE` a caller can render before anything has loaded.
+
+**The mode list comes from the snapshot first.** `AgentSnapshotPayloadSchema` already carries
+`availableModes` beside `currentModeId`, so `load()` uses what it has just fetched and only falls
+back to `listProviderModes(provider)` when the snapshot carries none — one round trip in the
+common case, with the fallback there because `availableModes` is optional in the schema and a
+provider reporting modes only at the provider level is a shape it permits. A failed fallback
+leaves the panel usable and says why (`modesError`), rather than silently showing no modes.
+
+**`autoCompaction` is `boolean | null`, and the third state is the point.** `null` means nobody
+has a truthful answer yet: no client, a load in flight, or a daemon that refused the read. It is
+not `false`. Those two differ by whether a long session survives its context window, which makes
+a guessed default the exact kind of confident-and-wrong a switch must never be. The view draws no
+switch at all in that state — a switch has to pick a position and both positions are a claim —
+and renders `describeAutoCompaction(null)`'s "Auto-compaction: unknown" instead. Every write is
+followed by a read-back rather than an optimistic local update, and a refused read-back returns
+the control to unknown rather than to the value that was requested.
+
+**Segments, not a `Select`, for mode.** Mode is the one control in this menu whose value is in
+being readable at a glance while the alternative is one tap away; the artifact draws Build and
+Plan as adjacent pills with the active one accent-tinted. They are `accessibilityRole="radio"`
+inside a `radiogroup` with `accessibilityState.selected`, so the tint is never the only signal,
+and the pill keeps the artifact's tight 9.5px footprint while `hitSlop` carries the 48dp reach —
+the same split `ui/primitives/Chip.tsx`'s removable variant uses. The segment count comes from
+`state.modes`, so a provider with three modes gets three pills rather than a truncated pair;
+nothing in the view hardcodes the strings "Build" or "Plan", and a test asserts that.
+
+`resolveSessionControlsClient` is the tenth narrow port off the one live `DaemonClient` the
+session route already reads nine others from, proven by the same counting-fake shape as the nine
+before it — the fake's `fetchAgent` is literally shared with `AgentSnapshotSource`'s case in that
+file, which is the property the narrow-port convention exists for.
+
+One stale comment from the previous wave was corrected here under `CLAUDE.md`'s T124 rule:
+`ModelThinkingPicker.tsx` still said no Android route wires a live client into that feature, which
+T353's own resolver falsified — that commit corrected the two sibling doc comments and missed this
+third one. `PromptControlsMenu.tsx`'s "Build/Plan and the auto-compaction switch are not yet
+built" was falsified by this commit and corrected in it. Both carry a quoted historical marker.
+
+Two `CAPABILITIES` entries were registered — the mode control and the compaction switch kept
+separate, because they are two wire capabilities and a shared token would let either one's
+arrival satisfy the other's phrase protection — and each was watched firing against a
+scratchpad-backed copy of `docs/legacy-retirement.md`, then restored with `git status --porcelain`
+clean for that file. The compaction entry's member is `describeAutoCompaction` rather than
+`setAutoCompaction`/`getAutoCompaction`: those two are declared in `packages/client` whether or
+not any UI ever reaches them, which is the "token that outlives the capability" trap `CLAUDE.md`'s
+T215 section names.
+
+`queue-retry-compaction.yaml` gained the mode/compaction assertions in the same commit, in the
+same "no client is wired at this route, so only the truthful unavailable sentence is reachable"
+shape every other control in that flow is asserted in, with three contract cases pinning the tap
+ordering, the exact sentence, and the real mount's testID.
+
+- [x] Build/Plan mode reaches `setAgentMode` from a control on the phone
+- [x] Auto-compaction reaches `setAutoCompaction`/`getAutoCompaction` from a switch on the phone
+- [x] Both mount in the context-ring menu's MODE and CONTEXT groups, by passing a prop, not restructuring the panel
+- [x] `autoCompaction === null` renders as unknown, never as off
+- [x] Every write is read back from the daemon rather than assumed
+- [x] The segments come from the provider's own mode list; no view hardcodes Build or Plan
+- [x] The session route passes `sessionControlsClient` off the same live `DaemonClient`
+- [x] The two stale comments (T353's missed third, and this menu's own) are corrected with historical markers
+- [x] Both `CAPABILITIES` entries were registered and proven to fire
+- [x] The Maestro flow and its contract were updated in the same commit
