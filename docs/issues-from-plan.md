@@ -14609,16 +14609,29 @@ disagree is a real EAS build or an on-device launch.
 Read T307 before choosing the fix. The two share a cause, and bumping this pin down without
 answering T307's question may simply move the inconsistency rather than remove it.
 
-- [ ] `npx expo install --check`, run from `apps/android`, reports nothing for
-      `expo-secure-store`
-- [ ] The chosen version is justified against `apps/android`'s own `expo`'s
-      `bundledNativeModules.json`, quoted, not against the root's
-- [ ] `package-lock.json` is regenerated and the resolved version recorded — say whether it
-      resolves at the root or nested under `apps/android`, since today it is the root
-- [ ] `npm audit`'s advisory set is unchanged, or the delta is explained (T291's own bump
-      moved the baseline and this one can too)
-- [ ] A real EAS build, or an explicit statement that no build was run and the native half
-      is therefore unverified — do not report a green local suite as evidence here
+- [x] `npx expo install --check`, run from `apps/android`, reports nothing for
+      `expo-secure-store`. Its only remaining line names `@types/react`, asking for
+      `~19.1.10` against the installed `19.2.18` — a different package, out of scope here
+- [x] The chosen version is justified against `apps/android`'s own `expo`'s
+      `bundledNativeModules.json`, quoted, not against the root's: that file's entry for this
+      package is `~15.0.8`, read from `apps/android/node_modules/expo/bundledNativeModules.json`
+      where `expo` is `54.0.37`
+- [x] `package-lock.json` is regenerated and the resolved version recorded. It now resolves
+      **nested**, at `apps/android/node_modules/expo-secure-store@15.0.8`, where it previously
+      resolved at the ROOT as `expo-secure-store@57.0.3`. Compared semantically rather than by
+      `git diff` (`.gitattributes` marks the lockfile `-diff`): exactly three entries changed
+      — the declared range, the removed root install, and the added nested one
+- [x] `npm audit`'s advisory set is unchanged: `run-guard-audit-baseline.mjs` reports the same
+      36 packages, all covered by the documented baseline
+- [x] A real EAS build, or an explicit statement that no build was run: **the native half is
+      verified by a real Gradle assemble and a real device launch, not by a local suite.**
+      `build-development-apk` has assembled this app on the runner five consecutive times, and
+      run `34420667467` installed and launched the APK on a booted emulator. What that run also
+      shows is that launching is not the same as working — every flow fails at the first
+      assertion after launch (see T322). This re-pin was made BECAUSE that is the failure this
+      task's own text predicted ("the first thing that can disagree is a real EAS build or an
+      on-device launch"); whether it is the cause is not yet established, and is deliberately
+      not claimed here
 
 #### T307 — Explain, or remove, the hoisted root `expo@57` no workspace asks for
 
@@ -14663,6 +14676,43 @@ SDK-agnostic native module — do not tighten it reflexively. If it stays, this 
 deliverable is a written explanation of why the root `expo` is harmless plus something that
 would notice if it stopped being harmless, which is a legitimate outcome. What is not
 acceptable is leaving the tree with two SDK majors and no record of which is intended.
+
+**ANSWERED at T306's fix (measured, and it disproves this task's own leading hypothesis).**
+This section guessed that `packages/expo-two-way-audio`'s `peerDependencies: expo: "*"` was the
+likely mechanism, and that fixing T306 might remove the root `expo` by itself. Both are wrong.
+T306's re-pin landed, `expo-secure-store` moved to a nested `15.0.8`, and the root `expo@57.0.18`
+did not move. `npm explain expo@57.0.18` gives the real chain, and it starts inside SDK 54's own
+`expo`:
+
+```
+expo@57.0.18 peer
+  peer expo@"*" from @expo/cli@57.0.20
+  peer expo@"*" from @expo/dom-webview@57.0.1
+    peerOptional @expo/dom-webview@"*" from expo@54.0.37
+```
+
+`expo@54.0.37` declares an UNBOUNDED optional peer on `@expo/dom-webview`, so npm installed the
+newest one (57.0.1), which peer-requires `expo@"*"`, which npm satisfied by installing a whole
+SDK-57 Expo tree at the root — `expo@57.0.18`, `@expo/cli@57.0.20`, `expo-constants@57.0.16`,
+`expo-font@57.0.2`, `expo-asset@57.0.15`. `expo-two-way-audio` is not involved.
+
+The consequence is worse than "an unused hoist", which is how this task framed it. Measured
+physically, five of `apps/android`'s own dependencies are installed ONLY at the root
+— `expo-audio`, `expo-document-picker`, `expo-image-picker`, `expo-linking`, `expo-status-bar`
+— so their `require("expo")` resolves to the SDK-57 copy while the app's own code resolves the
+nested SDK-54 one. The same split exists for `expo-constants` (root 57.0.16 vs nested 18.0.14)
+and `expo-font` (root 57.0.2 vs nested 14.0.12). **A single Metro bundle therefore contains two
+Expo runtimes.**
+
+A root `overrides: { "expo": "54.0.37" }` was tried and REJECTED: npm left the tree unchanged,
+because the SDK-57 `expo` arrives through auto-installed peers rather than a resolvable
+dependency edge, which `overrides` does not reach. Recorded so the next attempt does not repeat
+it. Pinning `@expo/dom-webview` itself is the untried lever.
+
+This is now a live suspect for the blank first screen every flow of run `34420667467` hit (see
+T322) — two Expo runtimes is exactly the shape that breaks native module registration — but
+it is a SUSPECT, not a diagnosis. T322's artifacts are what will settle it, and no fix is being
+made here on the strength of the theory alone.
 
 - [ ] State which manifest actually causes the root `expo@57`, proven by re-resolving (a
       lockfile read plus a clean install), not by reasoning from the ranges alone

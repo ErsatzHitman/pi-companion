@@ -294,6 +294,28 @@ locked, rmdir` failure mode directly (Windows holds a file handle open slightly 
   of this paragraph's own prior corrections exists because a restated count went stale the moment
   the next member landed.
 
+  **A seventh member was added on 2026-09-10, and it is the OTHER failure mode this section
+  names, not the timeout one:** `src/executable-resolution/executable-resolution.test.ts`. CI's
+  `server-tests (windows-latest)` went red at `2b2bfe7` with `1 failed | 3414 passed` and **zero
+  assertion failures** — this paragraph's signature — on an `EBUSY: resource busy or locked,
+  unlink` of a `claude.exe` inside its own `paseo-executable-test-*` temp directory.
+
+  That commit touched only `apps/android/e2e`, `.github/workflows` and `docs`, so it was not a
+  regression. Measured from the file's own source rather than assumed, it carries the shape in
+  the same form `terminal-activity-route.test.ts` does, which is the member this section already
+  credits with the `EBUSY` mode: a real `mkdtempSync(os.tmpdir(), ...)` directory, a real
+  executable inside it (`copyFileSync(process.execPath, claude)` — an actual copy of node.exe),
+  a `findExecutable` call that really SPAWNS it, and a closing recursive `rmSync`. The delete
+  races the still-exiting process, and Windows holds the handle.
+
+  **The decisive measurement is different in kind from the previous six, and saying so matters.**
+  Every earlier member was justified by a thin timeout margin found by running it alone. Run
+  alone on this machine this file takes **1.66s** for 29 tests — there is no margin problem at
+  all. What makes it a member is not slowness but that its failure mode is an OS file-handle race
+  which can only occur under concurrency, so running it alone removes the contention itself in
+  exactly the way this paragraph argues for. No timeout was raised, for the reason already given
+  about the other six.
+
 ## Wave-end and merge-gate verification MUST run against committed content (T93)
 
 An orphaned uncommitted fix has twice concealed the true state of `main`: at P5-W22 it
