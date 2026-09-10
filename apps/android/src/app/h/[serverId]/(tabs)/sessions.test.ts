@@ -72,6 +72,23 @@ describe("SessionsRoute source", () => {
     expect(readCode()).toMatch(/appendCreatedSession\(current, session\)/);
   });
 
+  // T336 (Maestro run 34462826449): this route used to omit
+  // `onSessionOpened`, so a tapped row loaded the session and stayed on
+  // the list -- nothing in the app navigated to
+  // `/h/:serverId/session/:agentId` from a tap.
+  it('T336: navigates to the opened session via router.push(destinationHref({ type: "session" })) on onSessionOpened', () => {
+    expect(readCode()).toMatch(/import \{ useLocalSearchParams, useRouter \} from "expo-router";/);
+    expect(readCode()).toMatch(
+      /import \{ destinationHref \} from "\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/top-level-destinations";/,
+    );
+    expect(readCode()).toMatch(/onSessionOpened=\{handleSessionOpened\}/);
+    expect(readCode()).toMatch(
+      /router\.push\(\s*destinationHref\(\{ type: "session", serverId: serverId \?\? "", agentId: result\.session\.id \}\),?\s*\);/,
+    );
+    // `push`, never `replace`: Android back from a session must return here.
+    expect(readCode()).not.toMatch(/router\.replace\(/);
+  });
+
   // T32S13 (P5-W19): this route used to never call
   // `sessionService.refreshSessions()` at all, so a returning user only
   // ever saw sessions created in this process.

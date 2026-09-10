@@ -43,6 +43,15 @@ tags:
 #      `appendCreatedSession`), so a session created through this flow's
 #      "New session" form does appear as a tappable row.
 #
+# CORRECTED (T336): the paragraph below said this flow's pass was "still
+# a claim rather than a fact" because "nothing in this repository has run
+# it", and that `sessions.tsx` "still does not fetch the existing list on
+# mount". Both went stale: `android-maestro-e2e.yml` dispatches this flow
+# on every push (T320), run 34462826449 reached the "New session" form
+# and failed on the very next line (see the T334/T336 notes beside the
+# steps), and the sessions route now calls `refreshSessions()` on mount,
+# which is what repopulates the list after the relaunch below. The
+# original text is kept for the record:
 # STILL UNVERIFIED, and the reason this flow's pass is still a claim
 # rather than a fact: nothing in this repository has run it. There is no
 # emulator, device, or Maestro binary in these waves, so
@@ -106,19 +115,31 @@ tags:
 
 # --- Create a session, then open it — the tap that
 # `sessions-screen.tsx`'s `handleOpenSession` persists as
-# `sessions/last-opened-session-id` (blocked on gap (2) above: the row
-# this taps on never appears without it).
+# `sessions/last-opened-session-id`. The cwd is `${FLOW_CWD}`, the
+# host-side directory `run-flow.ts` mints for this run
+# (`../e2e/harness/flow-cwd.ts`, T334): run 34462826449 typed a `/tmp/...`
+# path nothing had created here, and the daemon refused the session with
+# the `sessions-screen-*-create-error` banner ("Working directory does
+# not exist"). The provider is the scripted `pi` that `run-flow.ts`
+# provisions into the isolated home (`../e2e/harness/scripted-pi.mjs`,
+# T334) -- the daemon-side code path a real Pi takes, minus the model
+# credentials.
 - tapOn:
     id: "sessions-screen-.*-create-cwd"
-- inputText: "/tmp/picompanion-cold-start-restore"
+- inputText: "${FLOW_CWD}"
 - tapOn:
     id: "sessions-screen-.*-create-submit"
 - tapOn:
     id: "sessions-screen-.*-row-.*"
+# --- CORRECTED (T336): this asserted the row and the absence of the
+# open-error banner after the tap -- i.e. that the app stayed on the
+# list, which is what it did until T336. `app/h/[serverId]/(tabs)/
+# sessions.tsx`'s `handleSessionOpened` now pushes
+# `/h/:serverId/session/:agentId` once the open resolves, so the stable
+# state after the tap is the session screen's own transcript root
+# (`session/[agentId]/index.tsx`, testId "session-transcript").
 - assertVisible:
-    id: "sessions-screen-.*-row-.*"
-- assertNotVisible:
-    id: "sessions-screen-.*-open-error"
+    id: "session-transcript"
 
 # --- The cold start: end the process entirely (not a mere backgrounding
 # — `stopApp` kills it) and relaunch *without* `clearState`, so every

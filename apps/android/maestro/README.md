@@ -104,6 +104,26 @@ Maestro — `10.0.2.2:<port>`, the AVD's fixed alias for the host machine's loop
 never `localhost` or a hardcoded number). A flow that needs to reach the daemon should read
 those vars rather than typing an address in.
 
+### The daemon's `pi` is scripted (T334)
+
+The isolated daemon has no real `pi` on its PATH and no model credentials, and it never will
+here. Before starting it, `run-flow.ts` writes the daemon's own config file into the fresh
+`PASEO_HOME` (`../e2e/harness/scripted-pi-provision.ts`), pointing `agents.providers.pi.command`
+at `../e2e/harness/scripted-pi.mjs` — a plain-JavaScript stand-in that speaks the Pi JSONL RPC
+the daemon's provider already uses. The daemon resolves, spawns, probes and drives it exactly
+as it would a real `pi`; only the model is missing. Each flow gets one scenario
+(`scenarioForFlow`): `notification-approval` gets `approval` (a prompt raises two `confirm`
+dialogs in turn, which the daemon's Pi provider maps to `agent_permission_request`),
+`extension-sheets` gets `extension-sheets` (a prompt raises a pinned roster and a pinned panel; a
+prompt containing the word "form" raises a pinned form), and every other flow gets `echo` (each
+prompt is a one-message turn). A flow drives it through the real composer — type a prompt, tap
+send — never through a side channel the app does not have.
+
+`run-flow.ts` also mints one host-side working directory per run (`../e2e/harness/flow-cwd.ts`)
+and hands it to the flow as `${FLOW_CWD}`: the daemon refuses a session whose `cwd` does not
+exist on the host, and the emulator cannot create one there. A flow that creates a session types
+`${FLOW_CWD}` into the "New session" form — never a literal path; `flow-cwd.test.ts` fails on one.
+
 ## Flow independence
 
 Every flow gets its own port and its own `PASEO_HOME` (a fresh `mkdtemp` directory,
@@ -133,6 +153,10 @@ on state an earlier flow — or an earlier run of itself — happened to leave b
 - Clean up anything the flow creates outside the app itself (e.g. a paired-host record on the
   daemon) by relying on the daemon's own fresh, throwaway home directory — never by adding
   teardown steps to the _next_ flow.
+- Never type a literal working directory into the "New session" form; use `${FLOW_CWD}`. Never
+  assume a real `pi`: the provider is the scripted one above, and only its three scenarios
+  exist — add a scenario to `scripted-pi.mjs` (and a test) before a flow depends on new
+  behaviour from it.
 
 ## Files here
 

@@ -243,6 +243,23 @@ interface PiRpcAgentSessionOptions {
   runtimeSession: PiRuntimeSession;
   config: AgentSessionConfig;
   initialState: PiSessionState;
+  /**
+   * T335: the DAEMON's agent id (`AgentLaunchContext.agentId`, the same
+   * value `agent-manager.ts`'s `buildLaunchContext` exports to the process
+   * as `PASEO_AGENT_ID`). Every Pi UI bridge event this session emits
+   * (`pi_ui_state`/`pi_ui_delta`, the durable `pi_ui_snapshot` timeline
+   * item) and every inbound `pi.ui.action.request` lookup is keyed by it.
+   * It used to be keyed by Pi's OWN `sessionId` from `get_state`, while
+   * both clients' element stores (`packages/frontend-core/src/extensions/
+   * state.ts`'s `ingestEvent`) key by the event's `agentId` and every
+   * screen looks elements up by the daemon's agent id -- so with a real
+   * Pi process no element ever rendered, and `session.ts`'s
+   * `pi.ui.action.request` handler resolved targets against an empty
+   * entry. `FakePi` pins `sessionId: "pi-session-1"`, which is why no
+   * unit test noticed. Optional only for callers that construct a session
+   * without a launch context (tests); production always passes it.
+   */
+  agentId?: string;
   capabilities: AgentCapabilityFlags;
   currentModeId?: string | null;
   cleanup?: () => void;
@@ -1342,6 +1359,8 @@ export class PiRpcAgentSession implements AgentSession {
   private lastInterruptedTurnId: string | null = null;
   private interruptedTerminalError: { turnId: string; error: string } | null = null;
   private readonly uiStateStore: PiUiStateStore;
+  /** T335: see `PiRpcAgentSessionOptions.agentId`. */
+  private readonly uiBridgeAgentId: string | undefined;
   private readonly uiDecoder: PiUiDecoder;
   private readonly uiActionRouter: PiUiActionRouter;
   // Expose for external action routing (used to satisfy noUnusedLocals)
@@ -1357,6 +1376,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.config = options.config;
     this.state = options.initialState;
     this.capabilities = options.capabilities;
+    this.uiBridgeAgentId = options.agentId;
     this.provider = PI_PROVIDER;
     this.currentModeId = options.currentModeId ?? null;
     this.cleanup = options.cleanup;
@@ -1384,7 +1404,9 @@ export class PiRpcAgentSession implements AgentSession {
     );
     this.uiDecoder = new PiUiDecoder({
       onOp: (op) => {
-        const agentId = this.state.sessionId;
+        // T335: the daemon's agent id, never Pi's own session id -- see
+        // `PiRpcAgentSessionOptions.agentId`.
+        const agentId = this.uiBridgeAgentId ?? this.state.sessionId;
         switch (op.kind) {
           case "set":
             this.uiStateStore.applySet(agentId, op.el, op.agentSeq);
@@ -3060,6 +3082,7 @@ export class PiRpcAgentClient implements AgentClient {
         runtimeSession,
         config,
         initialState,
+        agentId: launchContext?.agentId,
         capabilities: capabilitiesForSession(mcpConfig !== null),
         cleanup: combineCleanup([mcpConfig?.cleanup, paseoExtension?.cleanup]),
         extensionTimeoutMs: this.providerParams.extensionTimeoutMs,
@@ -3124,6 +3147,7 @@ export class PiRpcAgentClient implements AgentClient {
         runtimeSession,
         config: resumeConfig.config,
         initialState,
+        agentId: launchContext?.agentId,
         capabilities: capabilitiesForSession(mcpConfig !== null),
         cleanup: combineCleanup([mcpConfig?.cleanup, paseoExtension?.cleanup]),
         extensionTimeoutMs: this.providerParams.extensionTimeoutMs,

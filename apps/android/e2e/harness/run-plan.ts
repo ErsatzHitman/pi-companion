@@ -25,6 +25,12 @@
  * `--env` flag to inject the correct identifier for that specific run:
  * `maestro test -e APP_ID=com.example.android flow.yaml`"), confirmed
  * before this shipped rather than assumed.
+ *
+ * T334 — `flowCwd`, when given, travels the same way as `-e FLOW_CWD=`:
+ * the host-side working directory `flow-cwd.ts` minted for this run, which
+ * a flow types into the "New session" form as `${FLOW_CWD}` (the daemon
+ * refuses a `cwd` that does not exist on the host). Optional so every
+ * caller that predates it builds a byte-identical plan.
  */
 import { assertNotProductionDaemonPort } from "./production-daemon-port.js";
 import type { IsolatedDaemonEndpoint } from "./daemon-endpoint.js";
@@ -81,6 +87,7 @@ export function buildRunPlan(
   flowPath: string,
   endpoint: IsolatedDaemonEndpoint,
   appId: string = DEFAULT_APP_ID,
+  flowCwd?: string,
 ): RunPlan {
   // Re-checked here, not just trusted from the caller: this is the last
   // point before the port and home directory turn into a command line, so
@@ -137,12 +144,16 @@ export function buildRunPlan(
         `DAEMON_PORT=${emulatorPort ?? ""}`,
         "-e",
         `DAEMON_ADDRESS=${endpoint.emulatorAddress}`,
+        // T334: the per-run working directory, as a flow variable for the
+        // same reason as the DAEMON_* trio above.
+        ...(flowCwd === undefined ? [] : ["-e", `FLOW_CWD=${flowCwd}`]),
         flowPath,
       ],
       env: {
         DAEMON_HOST: emulatorHost ?? "",
         DAEMON_PORT: emulatorPort ?? "",
         DAEMON_ADDRESS: endpoint.emulatorAddress,
+        ...(flowCwd === undefined ? {} : { FLOW_CWD: flowCwd }),
         // T321: Maestro installs its own driver APK on the device and waits
         // for it to answer on a local port. Its default budget is far too
         // short for a cold CI emulator: every flow of Maestro run

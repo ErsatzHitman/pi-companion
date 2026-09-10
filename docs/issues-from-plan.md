@@ -589,6 +589,10 @@ that recomputation has to be domain-specific:
 | T330   | A release-variant build could not open any `ws://` socket, and the smoke job's EAS quota ran out                     | phase-9   | android/ci       | P9-U   | T329, T43B2b                                                          |
 | T331   | Every storage key with a colon or slash was rejected on device, and the files root had no route                      | phase-9   | android          | P9-U   | T330, T32A8, T37E9                                                    |
 | T332   | Five flows asserted the transient connected status text the navigation now replaces first                            | phase-9   | android/tooling  | P9-U   | T331, T37E1                                                           |
+| T333   | Every request the Android client sent threw `Property 'crypto' doesn't exist` under Hermes                           | phase-9   | client           | P9-U   | T332, T62                                                             |
+| T334   | The isolated daemon had no `pi` to run and no directory a flow could name as a session's cwd                         | phase-9   | tooling          | P9-U   | T333, T37D                                                            |
+| T335   | Pi UI bridge events were keyed by Pi's own session id, which no client ever looked up                                | phase-9   | server           | P9-U   | T334, T34A                                                            |
+| T336   | Tapping a session row loaded the session and stayed on the list                                                      | phase-9   | android          | P9-U   | T335, T32S12                                                          |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -630,8 +634,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**541 tasks** (distinct IDs counted directly from the table above), recounted at T332 with
-`grep`/`sort -u` over the table's own rows — one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**545 tasks** (distinct IDs counted directly from the table above), recounted at T336 with
+`grep`/`sort -u` over the table's own rows — four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16547,5 +16551,134 @@ of the way.
       arrival, and `pairing`'s relay check runs before its connect
 - [x] The three contracts carry `sessionsScreenArrival`; their tests pin it and forbid the
       transient text
-- [ ] A dispatch in which `pairing` passes and `files-and-terminal` reaches
-      `files-screen-e2e-host-e2e-files-agent`
+- [x] A dispatch in which `pairing` passes and `files-and-terminal` reaches
+      `files-screen-e2e-host-e2e-files-agent` (run 34462826449 at `c9a5012`: shard-1
+      (`pairing`, `network-switch`) and shard-5 (`files-and-terminal`, `accessibility-audit`)
+      both green, alongside shard-3, `background-kill-restore` and `packaged-app-smoke`; only
+      shard-2's `cold-start-restore` and shard-4 stayed red — see T333–T336)
+
+#### T333 — Every request the Android client sent threw `Property 'crypto' doesn't exist` under Hermes
+
+`labels: phase-9, area: client` · `depends-on: T332, T62`
+
+Run 34462826449 (at `c9a5012`, T332) was the first dispatch in which `cold-start-restore`
+reached the "New session" form and submitted it. The submit failed inside the app, not the
+daemon: the `sessions-screen-*-create-error` banner read `Property 'crypto' doesn't exist`.
+`packages/client/src/daemon-client.ts` minted every request id, message id and subscription id
+with the bare global's UUID call, and React Native's Hermes has no `crypto` global at all —
+Expo 54's `expo/src/winter/runtime.native.ts` installs `TextDecoder`, `URL`, `URLSearchParams`
+and `structuredClone`, not `crypto`, and `expo-crypto` is not a dependency. So every
+`create_agent_request`, `send_agent_message` and subscription the Android app ever sent threw
+before reaching the socket; only the connect handshake (which mints no id) had ever worked, which
+is why every earlier dispatch got exactly as far as the sessions screen and no further.
+
+The client already had `safeRandomId()` in `daemon-client-transport-utils.ts` (a UUID when the
+global exists, a time-plus-random string otherwise). `createRequestId`, `sendAgentMessage`'s
+message id, the one-shot checkout-diff subscription id and the general subscription id now all
+use it; request ids are opaque `z.string()` on the wire, so the fallback is a valid id everywhere
+a UUID was. `daemon-client.test.ts` gains two behavioural cases that stub the `crypto` global to
+`undefined` and prove a `createAgent` and a `sendAgentMessage` still complete, plus a source pin
+that no bare UUID call remains.
+
+- [x] No bare `crypto` UUID call in `daemon-client.ts`; every id goes through `safeRandomId`
+- [x] Client tests prove create-agent and send-message work with no `crypto` global at all
+
+#### T334 — The isolated daemon had no `pi` to run and no directory a flow could name as a session's cwd
+
+`labels: phase-9, area: tooling` · `depends-on: T333, T37D`
+
+Behind T333's client error sat two harness gaps the same run made visible. The daemon
+`run-flow.ts` starts has no `pi` on its PATH — a real Pi would also need model credentials the
+throwaway home never holds — so `notification-approval` and `extension-sheets` could never see a
+permission request or a roster element, and no flow could open a session at all. And
+`cold-start-restore` typed `/tmp/picompanion-cold-start-restore` into the form: a host path
+nothing had created, which the daemon refuses ("Working directory does not exist") — and a
+hardcoded path breaks the README's flow-independence rule besides.
+
+Two harness pieces, both provisioned only into this run's own temp directories:
+
+- `apps/android/e2e/harness/scripted-pi.mjs` — a plain-JavaScript stand-in for `pi` that speaks
+  the daemon's Pi JSONL RPC (`cli-runtime.ts`/`jsonl-rpc-process.ts`). It answers every startup
+  RPC the provider makes, acks a prompt before its events the way a real Pi does, and per
+  scenario (`PICOMPANION_SCRIPTED_PI_SCENARIO`) runs an `echo` turn, raises two `confirm`
+  `extension_ui_request`s in turn (`approval`; the second only after the first is answered, 1.5 s
+  later so Maestro sees the sheet close), or raises PIUI `set` notifies for the pinned roster and
+  panel, and for a pinned form on a prompt containing "form" (`extension-sheets`; the form last
+  because `form.tsx` always opens a `Sheet`). `/pi_ui_event` prompts are acked with
+  `agentInvoked: false`. `createScriptedPi` is driven in-process by `scripted-pi.test.ts`, which
+  also spawns the file once as a child.
+- `scripted-pi-provision.ts` writes the daemon's own config file into the fresh `PASEO_HOME`
+  with `agents.providers.pi.command = [process.execPath, scripted-pi.mjs]` and the scenario in
+  `env` — the daemon's existing provider-override mechanism, so its availability check, spawn and
+  session start all run the code a real `pi` would. `assertThrowawayHome` refuses any home that
+  is not a `daemon-endpoint.ts` throwaway. `flow-cwd.ts` mints one host-side working directory
+  per run; `run-plan.ts` passes it as `-e FLOW_CWD=` (optional, so every existing plan is
+  byte-identical); `run-flow.ts` does both before starting the daemon.
+
+The three flows now create a session in `${FLOW_CWD}`, open it (T336), and drive the stub through
+the real composer. `notification-approval` types one prompt and answers the two dialogs (Deny,
+then Approve); `extension-sheets` prompts for the roster and panel, asserts both, then prompts for
+the form; `cold-start-restore` opens its session and asserts the transcript before the kill.
+Their headers' stale KNOWN BLOCKER / Gap B items carry `CORRECTED (T334)` markers, as do the
+green `composer-inputs.yaml`'s fresh-install paragraph and the two READMEs. `flow-cwd.test.ts`
+fails on any flow that types a literal path where `${FLOW_CWD}` belongs.
+
+Not registered in `guard-capability-prose.mjs`, and why: everything T334 ships lives under
+`apps/android/e2e/harness/`, which `isShippedSourcePath` does not admit (it takes
+`<pkg-or-app>/src/`, `scripts/ci` and `apps/<name>/app.config.ts`), so an entry keyed on
+`provisionScriptedPi` would be the inert "check that cannot fail" shape `CLAUDE.md`'s T124
+section warns about. Widening that predicate to `apps/*/e2e` is its own decision, left open here;
+the falsified prose was found and corrected by hand instead (the T124 grep).
+
+- [x] The scripted `pi`, its provisioning and `FLOW_CWD` are unit-tested without a device
+- [x] The three flows create, open and drive a session; no flow types a literal cwd
+- [ ] A dispatch in which shard-2 (`cold-start-restore`) and shard-4 (`notification-approval`,
+      `extension-sheets`) are green
+
+#### T335 — Pi UI bridge events were keyed by Pi's own session id, which no client ever looked up
+
+`labels: phase-9, area: server` · `depends-on: T334, T34A`
+
+Writing T334's `extension-sheets` scenario against the daemon's own code found that the roster
+would never have rendered even with a real Pi. `PiRpcAgentSession`'s ui-bridge decoder emitted
+every `pi_ui_state`/`pi_ui_delta` (and the durable `pi_ui_snapshot` timeline item) under
+`this.state.sessionId` — Pi's OWN session id from `get_state` — while both clients' element
+stores key by the event's `agentId` and every screen looks elements up by the daemon's agent id
+(`AgentLaunchContext.agentId`, the same value `agent-manager.ts` exports to the process as
+`PASEO_AGENT_ID`). `session.ts`'s `pi.ui.action.request` handler resolved targets against the
+same wrong key. `FakePi` pins `sessionId: "pi-session-1"`, so no unit test ever saw the two ids
+differ.
+
+`PiRpcAgentSessionOptions` gains a documented `agentId`; both construction sites pass
+`launchContext?.agentId`; the decoder keys by it, falling back to Pi's session id only for a
+caller with no launch context (tests). `agent.test.ts` gains a case that creates a session with a
+launch-context id and proves the emitted delta carries it and `resolveActionTarget` finds the
+element under it, plus a mutation-proof case for the fallback.
+
+- [x] Every Pi UI bridge event is keyed by the daemon's agent id when a launch context exists
+- [x] Tests make Pi's session id and the daemon's agent id differ and assert the right one wins
+
+#### T336 — Tapping a session row loaded the session and stayed on the list
+
+`labels: phase-9, area: android` · `depends-on: T335, T32S12`
+
+`app/h/[serverId]/(tabs)/sessions.tsx` passed `SessionsScreen` `state` and `onSessionCreated`
+(T32S12) but never `onSessionOpened`, so a tapped row ran `handleOpenSession` — fetch the agent,
+load its timeline, persist `sessions/last-opened-session-id` — and then nothing: no route in the
+app ever reached `/h/:serverId/session/:agentId` from a tap, the one screen `SessionApprovals`,
+`SessionLiveExtension` and the live composer mount on. Three flow headers said as much
+("no in-app path from a fresh install to an open session screen"), and `cold-start-restore`
+asserted the row after the tap — pinning the defect.
+
+`handleSessionOpened` now pushes `destinationHref({ type: "session", serverId, agentId })` —
+the same intent `app/share.tsx` resolves to and the session route's own header names; `push`,
+not `replace`, so Android back returns to the list. The cold-start restore effect deliberately
+does not call it, so a relaunch still lands on the list. `sessions.test.ts` pins the wiring and
+forbids `router.replace` there. `cold-start-restore.yaml` asserts `session-transcript` after the
+tap (`CORRECTED (T336)`); the other two flows rely on the same hop. A `CAPABILITIES` entry keyed
+on `handleSessionOpened` was registered and watched firing (a sentence in its own wording
+appended to a scratchpad-backed copy of `docs/legacy-retirement.md` made the guard exit 1 naming
+it; restoring the copy returned exit 0 with a clean `git status`).
+
+- [x] `onSessionOpened` navigates to the session route; the route test pins it
+- [x] The flows expect the session screen after the tap, and the guard entry fires

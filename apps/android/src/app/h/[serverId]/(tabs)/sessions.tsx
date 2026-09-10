@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
   SessionsScreen,
   type SessionListState,
+  type SessionOpenResult,
   type SessionSummary,
 } from "../../../../features/sessions";
 import { applySessionListWindow } from "../../../../features/sessions/sessions-model.js";
 import { appendCreatedSession } from "../../../../app-shell/session-list-append";
+import { destinationHref } from "../../../../app-shell/top-level-destinations";
 import { useAppCore } from "../../../core-context";
 
 const INITIAL_SESSION_LIST_STATE: SessionListState = { kind: "ready", sessions: [] };
@@ -58,6 +60,20 @@ const INITIAL_SESSION_LIST_STATE: SessionListState = { kind: "ready", sessions: 
  * updates a row already present — see that module's doc comment for
  * why).
  *
+ * **T336 mount, Maestro run 34462826449's finding**: `onSessionOpened`
+ * used to be omitted too, so tapping a row ran `SessionsScreen`'s
+ * `handleOpenSession` (fetch the agent, load its timeline, persist
+ * `sessions/last-opened-session-id`) and then stayed on the list -- no
+ * route in the app ever reached `/h/:serverId/session/:agentId` from a
+ * tap. `handleSessionOpened` below is that navigation: `router.push` to
+ * `destinationHref({ type: "session", serverId, agentId })`, the same
+ * intent `app/share.tsx` resolves a shared file to and
+ * `session/[agentId]/index.tsx`'s own header names as its path. `push`,
+ * not `replace`: Android back from a session returns to this list.
+ * `SessionsScreen`'s cold-start restore effect deliberately does NOT call
+ * `onSessionOpened` (it restores the last-opened session's cached state
+ * in place, `stale` until reconciled), so a relaunch still lands here.
+ *
  * **T32S13 mount (P5-W19)**: the "not a session *list fetch*" gap this
  * comment used to disclose is closed. On mount, this route now calls
  * `core.sessionService.refreshSessions()` once and folds the result into
@@ -82,10 +98,20 @@ const INITIAL_SESSION_LIST_STATE: SessionListState = { kind: "ready", sessions: 
 export default function SessionsRoute() {
   const { serverId } = useLocalSearchParams<{ serverId: string }>();
   const core = useAppCore();
+  const router = useRouter();
   const [listState, setListState] = useState<SessionListState>(INITIAL_SESSION_LIST_STATE);
   const handleSessionCreated = useCallback((session: SessionSummary) => {
     setListState((current) => appendCreatedSession(current, session));
   }, []);
+  // T336: see the header comment.
+  const handleSessionOpened = useCallback(
+    (result: SessionOpenResult) => {
+      router.push(
+        destinationHref({ type: "session", serverId: serverId ?? "", agentId: result.session.id }),
+      );
+    },
+    [router, serverId],
+  );
   useEffect(() => {
     let cancelled = false;
     core.sessionService
@@ -111,6 +137,7 @@ export default function SessionsRoute() {
       keyValueStorage={core.keyValueStorage}
       network={core.network}
       onSessionCreated={handleSessionCreated}
+      onSessionOpened={handleSessionOpened}
     />
   );
 }

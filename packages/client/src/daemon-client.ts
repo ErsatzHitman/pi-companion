@@ -136,6 +136,7 @@ import {
   type DaemonTransportFactory,
   type WebSocketFactory,
 } from "./daemon-client-transport.js";
+import { safeRandomId } from "./daemon-client-transport-utils.js";
 import { DaemonClientRuntimeMetrics } from "./daemon-client-runtime-metrics.js";
 import {
   normalizeListProviderModelsPayload,
@@ -3140,7 +3141,7 @@ export class DaemonClient {
     options?: SendMessageOptions,
   ): Promise<void> {
     const requestId = this.createRequestId();
-    const messageId = options?.messageId ?? crypto.randomUUID();
+    const messageId = options?.messageId ?? safeRandomId();
     const message = SessionInboundMessageSchema.parse({
       type: "send_agent_message_request",
       requestId,
@@ -3976,7 +3977,7 @@ export class DaemonClient {
     compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean },
     requestId?: string,
   ): Promise<CheckoutDiffPayload> {
-    const oneShotSubscriptionId = `oneshot-checkout-diff:${crypto.randomUUID()}`;
+    const oneShotSubscriptionId = `oneshot-checkout-diff:${safeRandomId()}`;
     try {
       const payload = await this.subscribeCheckoutDiff(cwd, compare, {
         subscriptionId: oneShotSubscriptionId,
@@ -4003,7 +4004,7 @@ export class DaemonClient {
     compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean },
     options?: { subscriptionId?: string; requestId?: string },
   ): Promise<SubscribeCheckoutDiffPayload> {
-    const subscriptionId = options?.subscriptionId ?? crypto.randomUUID();
+    const subscriptionId = options?.subscriptionId ?? safeRandomId();
     const normalizedCompare = this.normalizeCheckoutDiffCompare(compare);
     const previousSubscription = this.checkoutDiffSubscriptions.get(subscriptionId) ?? null;
     this.checkoutDiffSubscriptions.set(subscriptionId, {
@@ -5852,8 +5853,16 @@ export class DaemonClient {
   // Internals
   // ============================================================================
 
+  // T333: `safeRandomId()`, never the bare `crypto` global's UUID call. React
+  // Native's Hermes has no `crypto` global at all (Expo 54 installs
+  // TextDecoder/URL/structuredClone in `expo/src/winter`, not `crypto`), so
+  // the bare call threw `Property 'crypto' doesn't exist` on EVERY request
+  // the Android app sent -- Maestro run 34462826449 surfaced it in the
+  // create-session form's error banner. Request ids are opaque `z.string()`
+  // on the wire (`packages/protocol/src/messages.ts`), so the helper's
+  // time-plus-random fallback is a valid id everywhere a UUID was.
   private createRequestId(requestId?: string): string {
-    return requestId ?? crypto.randomUUID();
+    return requestId ?? safeRandomId();
   }
 
   getLastServerInfoMessage(): ServerInfoStatusPayload | null {

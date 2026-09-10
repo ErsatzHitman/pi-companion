@@ -6677,3 +6677,93 @@ test("getAutoCompaction rejects when the daemon reports no error but no known va
 
   await expect(enabledPromise).rejects.toThrow("Daemon could not determine auto-compaction state");
 });
+
+// T333: React Native's Hermes has no `crypto` global (Expo 54's
+// `expo/src/winter` installs TextDecoder/URL/structuredClone, never
+// `crypto`), and four sites in daemon-client.ts called the bare global.
+// Every request the Android app sent threw `Property 'crypto' doesn't
+// exist` -- Maestro run 34462826449 surfaced it in the create-session
+// form's error banner. These cases stub the global out entirely, the
+// way Hermes presents it, and drive the two request paths that failed.
+test("T333: a create_agent_request still gets a request id with no `crypto` global at all", async () => {
+  vi.stubGlobal("crypto", undefined);
+  expect(typeof globalThis.crypto).toBe("undefined");
+
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "no_crypto_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const createPromise = client.createAgent({ provider: "pi", cwd: "/tmp/project" });
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]) as {
+    type: string;
+    requestId: string;
+  };
+  expect(request.type).toBe("create_agent_request");
+  expect(typeof request.requestId).toBe("string");
+  expect(request.requestId.length).toBeGreaterThan(0);
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "status",
+      payload: {
+        status: "agent_create_failed",
+        requestId: request.requestId,
+        error: "unit test: not created",
+      },
+    }),
+  );
+  await expect(createPromise).rejects.toThrow("unit test: not created");
+});
+
+test("T333: sendAgentMessage still mints a messageId with no `crypto` global at all", async () => {
+  vi.stubGlobal("crypto", undefined);
+
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "no_crypto_message_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const sendPromise = client.sendAgentMessage("agt_1", "hello");
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]) as {
+    type: string;
+    requestId: string;
+    messageId?: string;
+  };
+  expect(request.type).toBe("send_agent_message_request");
+  expect(typeof request.requestId).toBe("string");
+  expect(typeof request.messageId).toBe("string");
+  expect(request.messageId?.length ?? 0).toBeGreaterThan(0);
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "send_agent_message_response",
+      payload: { requestId: request.requestId, agentId: "agt_1", accepted: true, error: null },
+    }),
+  );
+  await expect(sendPromise).resolves.toBeUndefined();
+});
+
+test("T333 source pin: daemon-client.ts never calls the bare crypto global's UUID method again", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./daemon-client.ts", import.meta.url), "utf8");
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  expect(code).not.toMatch(/\bcrypto\.randomUUID\(/);
+  expect(code).toMatch(/import \{ safeRandomId \} from "\.\/daemon-client-transport-utils\.js";/);
+});

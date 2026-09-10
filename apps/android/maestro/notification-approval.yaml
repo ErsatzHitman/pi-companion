@@ -52,13 +52,13 @@ tags:
 # `index.test.ts`) — this is real progress from T32S7 that this flow
 # exercises below as far as it can. But reaching it and getting a real
 # `agent_permission_request` to answer needs, in order:
-#   1. A path from a fresh install past `/connect` at all. `ConnectForm`'s
-#      successful submit only calls `DaemonConnectionStore.connect()`
-#      (`../src/features/connect/connection-shell.tsx`'s `handleSubmit`);
-#      nothing calls `credential-store.ts`'s `saveHostProfile` and
-#      nothing navigates to `/h/:serverId/sessions` — the same gap (1)
-#      `cold-start-restore.yaml`'s header comment already discloses in
-#      detail. Not this task's `Owns` grant to fix.
+#   1. CORRECTED (T336): this item said a fresh install had no path past
+#      `/connect` at all -- that "nothing calls `credential-store.ts`'s
+#      `saveHostProfile` and nothing navigates to `/h/:serverId/sessions`".
+#      T32A8 wired both, T331 made the profile save succeed on a device,
+#      and T336 added the last hop: `app/h/[serverId]/(tabs)/sessions.tsx`'s
+#      `handleSessionOpened` pushes `/h/:serverId/session/:agentId` when
+#      a session row is tapped. The steps below walk that whole path.
 #   2. CLOSED by T32S12 — see `cold-start-restore.yaml`'s own "CLOSED by
 #      T32S12" note for the exact wiring. This paragraph used to say
 #      `app/h/[serverId]/(tabs)/sessions.tsx` passed `SessionsScreen` no
@@ -66,44 +66,38 @@ tags:
 #      session row exists to open. Not this task's `Owns` grant either
 #      way — recorded here only because item (3) below still blocks this
 #      flow regardless.
-#   3. **New to this flow, beyond what T37E2 found**: even with a
-#      session open, nothing in the app can cause the daemon to send a
-#      real `agent_permission_request` at all. `SessionRoute` wires its
-#      `Composer` to a fixed `NO_OP_TURN_SERVICE` with `turnRunning={false}`
-#      (`../src/app/h/[serverId]/session/[agentId]/index.tsx`'s own doc
-#      comment: "there is no live daemon this wave to run a real turn
-#      against") — there is no live-turn path to submit a prompt an
-#      agent could act on. And even once one exists, a real permission
-#      request needs a real agent provider actually running
-#      (`packages/server/src/server/daemon-e2e/agent-configs.ts`'s
-#      `pi` provider config) with real credentials this harness's
-#      isolated, `--no-relay` daemon never provisions (`../e2e/harness/
-#      run-plan.ts`) — the same reasoning `pairing.yaml`'s header gives
-#      for why relay pairing has nothing to pair *through* here, applied
-#      to turns instead of connections. This is a live-agent-turn gap,
-#      not a device gap: a real emulator would not change it. Closing
-#      it is a live-turn task's `Owns` grant plus, ultimately, T59's
-#      real-device/real-credentials proof — not this flow's.
+#   3. CORRECTED (T334): this item said "even with a session open,
+#      nothing in the app can cause the daemon to send a real
+#      `agent_permission_request` at all", because the composer was wired
+#      to a no-op turn service and because a real permission request
+#      "needs a real agent provider actually running ... with real
+#      credentials this harness's isolated, `--no-relay` daemon never
+#      provisions". Two things changed. T32S13 (P5-W19) replaced the
+#      composer's stand-in with `useAppCore().createTurnService(agentId)`,
+#      so a typed prompt is a real `send_agent_message`. And `run-flow.ts`
+#      now provisions a scripted `pi` (`../e2e/harness/scripted-pi.mjs`,
+#      scenario `approval` for this flow) into the isolated home's
+#      config.json (`../e2e/harness/scripted-pi-provision.ts`): on the
+#      first prompt it raises a `confirm` `extension_ui_request`, which
+#      the daemon's own Pi provider maps to `agent_permission_request`
+#      exactly as it would for a real extension, and once that one is
+#      answered a second follows. What stays true: no real model runs
+#      here, so T59's real-device/real-credentials proof is still its own.
 #
 # ## What this flow actually proves
 #
-# Steps 1-7 below (through "Connected via direct connection") are the
-# same real, already-wired onboarding + direct-pairing path
-# `pairing.yaml` proves, reused here rather than re-derived, since
-# `notification-approval.yaml` needs the identical prefix before its own
-# scenario can begin. They are expected to pass once a device is
-# available and are not blocked by Gap B.
-#
-# Steps 8+ are written against the intended design — `SessionApprovals`
-# already renders `ApprovalsHost`'s `Sheet` (testId
-# "approvals-dialog") with an `ApprovalForm` (testId
-# "approvals-dialog-form", Approve/Deny buttons at
-# "approvals-dialog-form-approve"/"-deny") the moment `agent_permission_
-# request` reaches the wired `PermissionsController` — and will start
-# passing once whichever task closes Gap B item 3 lands a live-turn path
-# with a real provider. They must not be deleted or "fixed" to route
-# around the gap; see `cold-start-restore.yaml` for the identical
-# precedent this flow follows.
+# CORRECTED (T334): this section said the steps after the connect "will
+# start passing once whichever task closes Gap B item 3 lands a live-turn
+# path with a real provider". They run now, against the scripted provider
+# described in item 3: the connect lands on the sessions screen
+# (T331/T332), the flow creates a session in `${FLOW_CWD}` and opens it
+# (T336), types a prompt, and the two `confirm` dialogs the scripted `pi`
+# raises arrive as real `agent_permission_request` messages through the
+# daemon's own Pi provider. `SessionApprovals`' sheet, Deny, then Approve,
+# are the real round trip: `sendPermissionAnswer` -> `respondToPermission`
+# -> `extension_ui_response` back to the stub, which raises the second
+# dialog only after the first is answered. Gap A (the OS notification) is
+# untouched and still has no steps.
 #
 # `clearState`/`clearKeychain` make this flow independent and repeatable
 # (../README.md's "Flow independence"): it pairs its own host and never
@@ -141,21 +135,35 @@ tags:
 # navigation replaces that status text before Maestro can sample it (run
 # 34459631677); the arrival below is the stable state.
 
-# ---------------------------------------------------------------------
-# Everything below is written against the intended design and is BLOCKED
-# by Gap B above (items 1-3) — see this file's header comment. It is
-# not this task's `Owns` grant to unblock, and it is left in rather than
-# deleted so the next task that closes Gap B has an exact, already-
-# reviewed scenario to run instead of writing one from scratch.
-# ---------------------------------------------------------------------
-
-# --- Reach the session screen (blocked on Gap B items 1-2) and let a
-# real agent_permission_request arrive from the daemon (blocked on Gap B
-# item 3 — needs a live turn + a real provider, neither available here).
+# --- The arrival (T332), then the session: create one in `${FLOW_CWD}`
+# (the host-side directory `run-flow.ts` mints per run -- see
+# `../e2e/harness/flow-cwd.ts`, T334), open it, and land on the session
+# screen -- T336's `handleSessionOpened` is the navigation and
+# `session-transcript` its stable end state.
+# CORRECTED (T334): the banner that stood here said everything below was
+# "BLOCKED by Gap B above (items 1-3)"; see the header's corrected items.
 - assertVisible:
     id: "sessions-screen-.*"
 - tapOn:
+    id: "sessions-screen-.*-create-cwd"
+- inputText: "${FLOW_CWD}"
+- tapOn:
+    id: "sessions-screen-.*-create-submit"
+- tapOn:
     id: "sessions-screen-.*-row-.*"
+- assertVisible:
+    id: "session-transcript"
+
+# --- Ask for the approval: a prompt through the real composer
+# (`composer-input`/`composer-send`, the same ids ../composer-inputs.yaml
+# drives) reaches the scripted `pi` as a `prompt` RPC, and its `approval`
+# scenario answers with a `confirm` `extension_ui_request`. The wording is
+# free: the scenario reacts to any prompt.
+- tapOn:
+    id: "composer-input"
+- inputText: "Please run the scripted approval"
+- tapOn:
+    id: "composer-send"
 
 # --- The approval sheet: SessionApprovals' ApprovalsContainer renders
 # ApprovalsHost's Sheet under the fixed testId "approvals-dialog" the
@@ -178,7 +186,9 @@ tags:
     id: "approvals-dialog"
 
 # --- A second request, this time Approve: exercises the other half of
-# T36B's binary action pair through the identical real round trip.
+# T36B's binary action pair through the identical real round trip. The
+# scripted `pi` raises it about 1.5 s after the deny reaches it, so the
+# sheet is observably gone in between (the `assertNotVisible` above).
 - assertVisible:
     id: "approvals-dialog"
 - tapOn:

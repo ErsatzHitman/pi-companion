@@ -150,6 +150,44 @@ describe("buildRunPlan", () => {
     ]);
   });
 
+  it("T334: a flowCwd becomes the -e FLOW_CWD flow variable (and env copy), placed before the flow path", () => {
+    // Run 34462826449: `cold-start-restore` typed a host path nothing had
+    // created into the "New session" form and the daemon refused the
+    // session. The harness now mints the directory and hands it to the
+    // flow as `${FLOW_CWD}`, through `-e` like every other variable a
+    // flow reads (T328).
+    const plan = buildRunPlan(
+      "cold-start-restore",
+      "/repo/apps/android/maestro/cold-start-restore.yaml",
+      SAFE_ENDPOINT,
+      undefined,
+      "/tmp/picompanion-maestro-cwd-cold-start-restore-XYZ",
+    );
+    expect(plan.maestro.argv).toEqual([
+      "test",
+      "-e",
+      `APP_ID=${DEFAULT_APP_ID}`,
+      "-e",
+      "DAEMON_HOST=10.0.2.2",
+      "-e",
+      "DAEMON_PORT=54321",
+      "-e",
+      "DAEMON_ADDRESS=10.0.2.2:54321",
+      "-e",
+      "FLOW_CWD=/tmp/picompanion-maestro-cwd-cold-start-restore-XYZ",
+      "/repo/apps/android/maestro/cold-start-restore.yaml",
+    ]);
+    expect(plan.maestro.env["FLOW_CWD"]).toBe(
+      "/tmp/picompanion-maestro-cwd-cold-start-restore-XYZ",
+    );
+  });
+
+  it("T334: without a flowCwd the plan is unchanged -- no FLOW_CWD flag, no FLOW_CWD env", () => {
+    const plan = buildRunPlan("smoke", "/repo/apps/android/maestro/smoke.yaml", SAFE_ENDPOINT);
+    expect(plan.maestro.argv.some((arg) => arg.startsWith("FLOW_CWD="))).toBe(false);
+    expect("FLOW_CWD" in plan.maestro.env).toBe(false);
+  });
+
   it("refuses to build a plan whose endpoint names the production port", () => {
     const productionEndpoint: IsolatedDaemonEndpoint = {
       ...SAFE_ENDPOINT,

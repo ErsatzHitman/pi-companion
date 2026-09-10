@@ -152,6 +152,12 @@ tags:
 #
 # ## Reaching the composer without pairing
 #
+# CORRECTED (T336): the paragraph below describes a gap that is closed --
+# the connect now saves the profile and navigates (T32A8/T331), and the
+# sessions route pushes the session screen when a row is tapped (T336),
+# so ../cold-start-restore.yaml walks the button-driven path end to end.
+# This flow keeps its `openLink` entry regardless: it needs no daemon at
+# all, and the deep link is the cheapest way to the composer.
 # `cold-start-restore.yaml` (T37E2) already disclosed a real production
 # gap: a successful `ConnectForm` submission never calls `saveHostProfile`
 # and never navigates away from `/connect`, so there is today no in-app,

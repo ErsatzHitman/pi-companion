@@ -2231,6 +2231,27 @@ export const CAPABILITIES = [
       /securestore (?:still )?rejects (?:the|every|any|each) host[- ]profile key/i,
     ],
   },
+  {
+    // T336: the sessions route navigates to the session a tapped row opens
+    // (`apps/android/src/app/h/[serverId]/(tabs)/sessions.tsx`'s
+    // `handleSessionOpened`: `router.push` of `destinationHref({ type:
+    // "session" })`). Until Maestro run 34462826449 the route passed no
+    // `onSessionOpened` at all, so a tap loaded the session and left the
+    // list on screen, and three flow headers said so. Worded in T336's own
+    // voice -- none of these phrases is lifted from the `CORRECTED (T336)`
+    // sites in `cold-start-restore.yaml`, `notification-approval.yaml`,
+    // `extension-sheets.yaml` or `composer-inputs.yaml`, nor from the
+    // route's own header narrative, so a reflow of any of them cannot trip
+    // this.
+    name: "Sessions route navigates to the opened session (handleSessionOpened)",
+    methodNames: ["handleSessionOpened"],
+    denyingPhrases: [
+      /(?:nothing|no code|no route|no screen) (?:in the app |in this app )?(?:navigates|routes|pushes|moves) (?:the user )?(?:to|into|onto) (?:an? |the )?(?:open(?:ed)? )?session (?:screen|route)/i,
+      /tapping a (?:session )?row (?:only )?(?:loads|opens|fetches) (?:the|a) session (?:and|but) (?:stays|remains|leaves the user) on the (?:sessions )?list/i,
+      /no in-app path (?:exists )?(?:from (?:a )?fresh install )?to an open (?:`?\/h\/:serverId\/session\/:agentId`? )?(?:session )?screen/i,
+      /the sessions (?:route|screen) (?:never|does not|doesn't) (?:call|invoke|wire|pass) `?onSessionOpened`?/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

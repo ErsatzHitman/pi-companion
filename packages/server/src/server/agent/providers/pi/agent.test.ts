@@ -2443,3 +2443,85 @@ describe("transformPiModels", () => {
     ]);
   });
 });
+
+// T335: the Pi UI bridge used to key its element store -- and therefore the
+// `agentId` on every `pi_ui_state`/`pi_ui_delta` it emits -- by Pi's OWN
+// `sessionId` from `get_state`, while both clients' element stores key by
+// that event field and every screen looks elements up by the DAEMON's agent
+// id. `FakePi` pins `sessionId: "pi-session-1"`, so nothing here ever saw
+// the two ids differ. These cases make them differ on purpose.
+describe("T335: Pi UI bridge events carry the daemon's agent id", () => {
+  const PIUI_SET = `PIUI ${JSON.stringify({
+    v: 1,
+    op: "set",
+    el: {
+      id: "fleet",
+      ns: "subagents",
+      kind: "roster",
+      placement: "pinned",
+      title: "Subagent fleet",
+      payload: { kind: "roster", rows: [{ id: "job-1", label: "research", state: "running" }] },
+    },
+  })}`;
+
+  test("a session created with a launch-context agentId emits pi_ui_delta under THAT id, not Pi's sessionId", async () => {
+    const pi = new FakePi();
+    const client = createClient(pi);
+    const session = (await client.createSession(createConfig(), {
+      agentId: "agt_daemon_side_id",
+    })) as PiRpcAgentSession;
+    const events = new SessionEvents(session);
+    const fakeSession = pi.latestSession();
+    expect(fakeSession.state.sessionId).toBe("pi-session-1");
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "piui-1",
+      method: "notify",
+      message: PIUI_SET,
+    });
+
+    const delta = events
+      .allEvents()
+      .find(
+        (event): event is Extract<AgentStreamEvent, { type: "pi_ui_delta" }> =>
+          event.type === "pi_ui_delta",
+      );
+    expect(delta).toBeDefined();
+    expect(delta?.agentId).toBe("agt_daemon_side_id");
+    expect(delta?.agentId).not.toBe(fakeSession.state.sessionId);
+    expect(delta?.delta).toMatchObject({ op: "upsert", element: { id: "fleet", ns: "subagents" } });
+
+    // The store the daemon's `pi.ui.action.request` handler resolves targets
+    // against is keyed the same way, so an action addressed by daemon agent
+    // id now finds the element.
+    const resolution = session
+      .getUiBridgeStateStore()
+      .resolveActionTarget("agt_daemon_side_id", { elementId: "fleet", actionId: "open" });
+    expect(resolution.ok).toBe(true);
+
+    await session.close();
+  });
+
+  test("MUTATION PROOF: without a launch-context agentId the key falls back to Pi's sessionId (the pre-T335 behaviour, kept for callers that pass no context)", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "piui-2",
+      method: "notify",
+      message: PIUI_SET,
+    });
+
+    const delta = events
+      .allEvents()
+      .find(
+        (event): event is Extract<AgentStreamEvent, { type: "pi_ui_delta" }> =>
+          event.type === "pi_ui_delta",
+      );
+    expect(delta?.agentId).toBe("pi-session-1");
+
+    await session.close();
+  });
+});

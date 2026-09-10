@@ -23,6 +23,15 @@
  * caller except `packaged-app-smoke`, which sets it to `sh.picompanion`)
  * and passes it through to `buildRunPlan`, whose default leaves every
  * other caller — `maestro-e2e` included — behaviorally unchanged.
+ *
+ * T334 does two more things before the daemon starts, both after Maestro
+ * run 34462826449 showed the isolated daemon had no `pi` to run and no
+ * directory a flow could name as a session's `cwd`: it provisions the
+ * scripted `pi` stand-in into the fresh home's `config.json`
+ * (`harness/scripted-pi-provision.ts` -> `harness/scripted-pi.mjs`,
+ * scenario chosen per flow) and mints a per-run working directory the
+ * flow receives as `${FLOW_CWD}` (`harness/flow-cwd.ts`). Neither touches
+ * anything outside this run's own temp directories.
  */
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -33,6 +42,8 @@ import { resolveIsolatedDaemonEndpoint } from "./harness/daemon-endpoint.js";
 import { buildRunPlan } from "./harness/run-plan.js";
 import { PRODUCTION_DAEMON_PORT } from "./harness/production-daemon-port.js";
 import { combineRunExitCode, daemonFailedToBoot } from "./harness/daemon-exit-policy.js";
+import { createFlowCwd } from "./harness/flow-cwd.js";
+import { provisionScriptedPi } from "./harness/scripted-pi-provision.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const PASEO_BIN = path.join(REPO_ROOT, "packages", "cli", "bin", "paseo");
@@ -68,10 +79,17 @@ async function main(): Promise<void> {
   const flowPath = registry.resolveFlowPath(flowName);
 
   const endpoint = await resolveIsolatedDaemonEndpoint();
-  const plan = buildRunPlan(flowName, flowPath, endpoint, process.env["APP_ID"]);
+  // T334: both go into this run's own temp directories, never anywhere else.
+  const scriptedPi = await provisionScriptedPi(endpoint.paseoHome, flowName);
+  const flowCwd = await createFlowCwd(flowName);
+  const plan = buildRunPlan(flowName, flowPath, endpoint, process.env["APP_ID"], flowCwd);
 
   console.log(`[run-flow] flow: ${plan.flowName} (${plan.flowPath})`);
   console.log(`[run-flow] isolated daemon home: ${plan.daemon.home}`);
+  console.log(
+    `[run-flow] scripted pi provisioned: ${scriptedPi.configPath} (scenario ${scriptedPi.scenario})`,
+  );
+  console.log(`[run-flow] flow working directory (FLOW_CWD): ${flowCwd}`);
   console.log(
     `[run-flow] isolated daemon listen: ${plan.daemon.listenAddress} (never ${PRODUCTION_DAEMON_PORT})`,
   );
