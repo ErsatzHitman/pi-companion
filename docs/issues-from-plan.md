@@ -604,6 +604,7 @@ that recomputation has to be domain-specific:
 | T345   | S7 foundations: JetBrains Mono on Android and the Pi role colours                                                    | phase-9   | android          | P9-U   | T13C, T13B                                                            |
 | T346   | The composer slot took half the shell, hiding a pinned panel's sections                                              | phase-9   | android          | P9-U   | T344, T343, T342                                                      |
 | T347   | A blocked submit button could never show why it was blocked                                                          | phase-9   | android          | P9-U   | T346, T34B2                                                           |
+| T348   | Re-sync expo-linking's audit range after upstream narrowed it                                                        | phase-9   | ci               | P9-U   | T44A3                                                                 |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -645,8 +646,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**556 tasks** (distinct IDs counted directly from the table above), recounted at T347 with
-`grep`/`sort -u` over the table's own rows — one past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**557 tasks** (distinct IDs counted directly from the table above), recounted at T348 with
+`grep`/`sort -u` over the table's own rows — one past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17089,3 +17090,37 @@ Android-only: `apps/web`'s form renderer has no submit gate at all — it leans 
 - [x] A primary action blocked by an unmet required field is `blocked: true` and `disabled: false`
 - [x] `disabled` is `true` only while a dispatch is pending, whether or not the gate also blocks
 - [ ] A dispatch in which shard-4's `extension-sheets` reaches the end of the form: the summary line, then the filled field, then the accepted submit
+
+#### T348 — Re-sync expo-linking's audit range after upstream narrowed it
+
+`labels: phase-9, area: ci` · `depends-on: T44A3`
+
+`guard / npm audit findings stay inside the documented baseline` went red at `be5bf36`, and
+would have gone red on any commit: the change is registry-side, not tree-side. Upstream
+re-published the `expo-linking` advisory with its trailing arm
+`58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260908-e343e6e` removed. The guard reported
+the entry twice in one run — once as an unbaselined advisory (the new, shorter range) and once
+as a stale baseline entry (the old range no longer matching) — which is the signature of a
+re-published range rather than a new finding.
+
+This is the third re-sync of this one entry, after P9-P (which grew that arm, open-ended) and
+P9-T (which gave it an upper bound). The rule the entry's own comment already states decides it:
+a NARROWING is the safe direction and needs no owner; only a widening that begins to cover the
+installed version is a new acceptance. This is that narrowing carried to its end.
+
+Exposure was measured, not assumed, the same way both earlier re-syncs were: the installed
+`expo-linking` is `8.0.12`, inside the untouched `2.2.2 - 55.0.0-canary-20260223-05214f1` arm
+before and after. The removed arm only ever covered 58.x canaries this repository does not
+resolve. `docs/security-and-version-drift.md` needs no change — it names the package in its
+Android-owner list but never quotes the range, and the reported package count is unmoved at 35.
+
+Left undone on purpose: the guard also NOTES that the `expo-audio` entry is now stale (the
+installed `1.1.1` is below its lowest arm, so npm audit no longer reports it). That is a note,
+not a failure, and pruning it pulls in that document's counted prose ("35", "28 are the
+Expo/React Native toolchain"), which is a separate change carrying its own risk of leaving a
+stale figure behind — the exact shape `CLAUDE.md`'s T217 section warns about. It belongs to a
+task that owns that document.
+
+- [x] The baseline entry matches the range npm audit reports today, and the guard exits 0
+- [x] The narrowing is shown not to change this repository's exposure, from the installed version
+- [x] The stale `expo-audio` note is recorded rather than silently pruned

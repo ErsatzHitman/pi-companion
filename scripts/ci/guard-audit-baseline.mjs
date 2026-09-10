@@ -433,16 +433,17 @@ export const AUDIT_BASELINE = [
   {
     package: "expo-linking",
     severity: "moderate",
-    // Range re-synced TWICE, at the P9-P and P9-T merge gates. Both re-syncs
-    // moved only this entry's trailing arm, and neither changed exposure.
+    // Range re-synced THREE times, at the P9-P, P9-T and T348 merge gates. All
+    // three moved only this entry's trailing arm, and none changed exposure.
     //
     // At P9-P upstream advisory data GREW that arm, as open-ended
     // `>=58.0.0-canary-20260806-8c2d007`. At P9-T it was NARROWED to
     // `58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260908-e343e6e`, i.e.
-    // upstream published a fixed version and gave the arm an upper bound. Each
-    // time, the entry reported simultaneously as an unbaselined advisory (new
-    // range) and as a stale entry (old range no longer matched), which is the
-    // signature of a re-published range rather than a new finding.
+    // upstream published a fixed version and gave the arm an upper bound. At
+    // T348 the arm was REMOVED outright -- the narrowing carried to its end.
+    // Each time, the entry reported simultaneously as an unbaselined advisory
+    // (new range) and as a stale entry (old range no longer matched), which is
+    // the signature of a re-published range rather than a new finding.
     //
     // Measured rather than assumed, both times: the installed version is
     // 8.0.12, already inside the pre-existing
@@ -459,7 +460,7 @@ export const AUDIT_BASELINE = [
     // version, that is a new acceptance and needs the owner, not a range
     // edit.
     range:
-      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260908-e343e6e",
+      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },

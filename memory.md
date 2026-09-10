@@ -661,3 +661,28 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   sibling split tasks (T31B1/B3/B4/B6, T31C-adjacent) whose fixes have not landed on this branch;
   none is a regression introduced here (this branch's only change is the doc comment). No code
   change was needed or made; reported `done` on the verification, not a product fix.
+
+## Android verification gates (learned the expensive way, 2026-09-10, T346/T347)
+
+- **`npx vitest run apps/android/src/...` is NOT the CI gate.** CI runs
+  `npm test --workspace=@picompanion/android`, which also covers `apps/android/e2e/flows/*.contract.test.ts`.
+  T346 added a prop to the route's `<Composer .../>`; THREE tests pin that attribute list verbatim
+  (`src/app/h/[serverId]/session/[agentId]/index.test.ts` plus the `background-kill-restore` and
+  `composer-inputs` contract tests). A `src/`-scoped run saw one of the three and CI caught the other two.
+  Before pushing anything under `apps/android`, run the workspace script, not a path subset.
+- **Run `oxfmt` BEFORE the final test pass, never after.** T346's own new source-regex test passed, then
+  `oxfmt` reflowed the `usePiUiElements(` call it pinned across three lines, and the un-re-run test went
+  red on CI. Source-regex pins are formatter-sensitive by construction; write them tolerant of wrapping
+  (`\s*` between arguments) and re-run after formatting.
+- **Maestro reports a tap on a DISABLED node as COMPLETED.** So a flow fails at the *assertion after* the
+  tap, not at the tap, and the tap step looks fine in the log. When an assertVisible fails right after a
+  tapOn, read the hierarchy dump's `enabled` attribute on the tapped node before suspecting the assertion.
+  This is how T347 was found: `pi-form-ask-user-confirm-action-submit` was `enabled: "false"`, which made
+  `form.tsx`'s press-to-reveal validation gate unreachable code.
+- **Reading a Maestro hierarchy dump is the fastest way to settle a layout argument.** Artifacts are at
+  `.maestro/tests/<ts>/<flow>/screen-hierarchy/step-NNN-*.json` inside the shard artifact
+  (`gh run download <run-id> -D <dir>`); every node carries `bounds`, `enabled`, `clickable`. T346 was
+  diagnosed from bounds arithmetic alone (composer slot 1106px of a 2138px shell), which beat three
+  competing theories about flexbox shrink behaviour.
+- **A node entirely outside its scroll viewport is PRUNED from the hierarchy, not reported zero-height.**
+  So "id not visible" can mean "clipped below the fold", not "never rendered". Check the parent's bounds.
