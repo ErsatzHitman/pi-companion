@@ -30,6 +30,13 @@ import {
   countDiffLines,
   parseUnifiedDiffLines,
 } from "../extensions/renderers/diff-model";
+// Imported from the model module directly, never through
+// `../../ui/recipes`'s barrel: that barrel re-exports `.tsx` files,
+// and pulling React Native into this module would make it
+// unloadable under this workspace's plain `vitest` setup — the
+// whole reason the logic lives in an RN-free model in the first
+// place.
+import { toneForDiffKind, type DiffLineInput } from "../../ui/recipes/diff-lines-model";
 
 export type ToolCallTranscriptEntry = Extract<timeline.TranscriptEntry, { kind: "tool-call" }>;
 
@@ -237,6 +244,62 @@ export function diffLinesFor(tool: tools.EditToolCallViewModel): DiffLinesModel 
 
 /** The compact "N files, M matches[, truncated]" meta line, or
  * `undefined` when the call carries neither count. */
+/**
+ * The same bounded slice `diffLinesFor` returns, classified into the
+ * redesign's own `.dl add|rem|ctx` bands (T358).
+ *
+ * Built on top of `diffLinesFor` rather than beside it so there is one
+ * cap and one truncation notice: two independent bounds on the same
+ * diff would eventually disagree, and the notice would then be
+ * describing a slice the reader is not looking at.
+ *
+ * `hunk` and `meta` lines are dropped rather than given a tone.
+ * `@@ -1,4 +1,6 @@` and `--- a/Button.tsx` both begin with a marker
+ * character, and colouring a file path as a deletion is worse than not
+ * showing the header at all — `DiffSummary` above the list already
+ * names the file and the counts.
+ */
+export function diffLineInputsFor(tool: tools.EditToolCallViewModel): DiffLineInput[] {
+  const model = diffLinesFor(tool);
+  if (model === undefined) {
+    return [];
+  }
+  const inputs: DiffLineInput[] = [];
+  parseUnifiedDiffLines(model.text).forEach((line, index) => {
+    const tone = toneForDiffKind(line.kind);
+    if (tone === null) return;
+    inputs.push({
+      key: String(index),
+      tone,
+      marker: line.marker === "" ? " " : line.marker,
+      content: line.content,
+    });
+  });
+  return inputs;
+}
+
+/** How many matched lines a search card shows before it stops. */
+export const SEARCH_MATCH_LINE_CAP = 20;
+
+/**
+ * The matched lines a search card highlights, bounded (T358).
+ *
+ * A grep result arrives as one blob of text in `content`; the redesign
+ * draws each line separately so the query can be marked inside it
+ * (`mark.hit`). Blank lines are dropped — a highlighted empty row is
+ * just a gap the reader has to account for — and the whole list is
+ * capped, because `truncateBody`'s 4000-character bound still allows
+ * hundreds of lines and this list sits inside a transcript that is
+ * already scrolling.
+ */
+export function searchMatchLines(content: string, cap: number = SEARCH_MATCH_LINE_CAP): string[] {
+  return content
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .slice(0, cap);
+}
+
 export function searchCountsLine(tool: tools.SearchToolCallViewModel): string | undefined {
   const parts = [
     tool.numFiles !== undefined ? `${tool.numFiles} files` : null,

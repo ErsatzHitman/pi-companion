@@ -8,6 +8,26 @@ export { CodeListing } from "./CodeListing";
 export type { CodeListingProps } from "./CodeListing";
 export { CommandSearch } from "./CommandSearch";
 export type { CommandSearchItem, CommandSearchProps } from "./CommandSearch";
+export { DiffLines, MatchedLine } from "./DiffLines";
+export type { DiffLinesProps, MatchedLineProps } from "./DiffLines";
+export {
+  DIFF_LINE_PADDING_HORIZONTAL,
+  DIFF_LINE_RADIUS,
+  changedSpans,
+  diffLineAnnouncement,
+  diffLineInk,
+  diffLineSurface,
+  highlightHits,
+  pairChangedLines,
+  toneForDiffKind,
+} from "./diff-lines-model";
+export type {
+  DiffLineInput,
+  DiffLineItem,
+  DiffLineSpan,
+  DiffLineTone,
+  HitSpan,
+} from "./diff-lines-model";
 export { DiffSummary } from "./DiffSummary";
 export type { DiffSummaryProps } from "./DiffSummary";
 export { PixelLoader } from "./PixelLoader";

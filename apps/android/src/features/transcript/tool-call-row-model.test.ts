@@ -12,7 +12,9 @@ import {
   areToolCallRowPropsEqual,
   boundedRedactedSummary,
   cardKindFor,
+  SEARCH_MATCH_LINE_CAP,
   diffCounts,
+  diffLineInputsFor,
   diffLinesFor,
   filterToolCallEntries,
   formatToolDuration,
@@ -23,6 +25,7 @@ import {
   redactValue,
   resolvedEdits,
   searchCountsLine,
+  searchMatchLines,
   statusTextFor,
   truncateBody,
   unrecognizedToolMeta,
@@ -409,5 +412,85 @@ describe("areToolCallRowPropsEqual", () => {
         { entry: { ...entry, tool: { ...entry.tool, status: "failed" } } },
       ),
     ).toBe(false);
+  });
+});
+
+function editToolWith(unifiedDiff?: string): tools.EditToolCallViewModel {
+  return {
+    family: "edit",
+    callId: "call-358",
+    toolName: "edit",
+    status: "completed",
+    displayName: "Edited Button.tsx",
+    updateCount: 1,
+    filePath: "/synthetic/Button.tsx",
+    isMultiEdit: false,
+    ...(unifiedDiff === undefined ? {} : { unifiedDiff }),
+  };
+}
+
+describe("diffLineInputsFor: the .dl bands come from the same bounded slice (T358)", () => {
+  it("classifies each line into the artifact's own three tones", () => {
+    const tool = editToolWith(
+      [
+        "@@ -1,3 +1,3 @@",
+        " const styles = {",
+        "-  primary: blue,",
+        "+  primary: accent,",
+        " };",
+      ].join("\n"),
+    );
+    expect(diffLineInputsFor(tool).map((line) => [line.tone, line.marker])).toEqual([
+      ["ctx", " "],
+      ["rem", "-"],
+      ["add", "+"],
+      ["ctx", " "],
+    ]);
+  });
+
+  it("drops the hunk and file headers rather than colouring them", () => {
+    const tool = editToolWith(
+      ["diff --git a/x.ts b/x.ts", "--- a/x.ts", "+++ b/x.ts", "@@ -1 +1 @@", "+one"].join("\n"),
+    );
+    expect(diffLineInputsFor(tool)).toEqual([
+      { key: "4", tone: "add", marker: "+", content: "one" },
+    ]);
+  });
+
+  it("never exceeds the one cap diffLinesFor already applies", () => {
+    const tool = editToolWith(Array.from({ length: DIFF_LINE_CAP + 40 }, () => "+x").join("\n"));
+    expect(diffLineInputsFor(tool)).toHaveLength(DIFF_LINE_CAP);
+    // Same bound, one owner: a second cap here would eventually
+    // disagree with the truncation notice the card renders beside it.
+    expect(diffLinesFor(tool)?.visibleLines).toBe(DIFF_LINE_CAP);
+  });
+
+  it("returns an empty list, not undefined, when the call carries no diff at all", () => {
+    expect(diffLineInputsFor(editToolWith())).toEqual([]);
+  });
+});
+
+describe("searchMatchLines: what a search card highlights (T358)", () => {
+  it("splits the blob into lines and drops the blank ones", () => {
+    expect(searchMatchLines("a.ts:1: hit\n\nb.ts:2: hit\n")).toEqual([
+      "a.ts:1: hit",
+      "b.ts:2: hit",
+    ]);
+  });
+
+  it("trims trailing whitespace so a CRLF payload does not draw a ragged band", () => {
+    expect(searchMatchLines("one   \r\ntwo\t\n")).toEqual(["one", "two"]);
+  });
+
+  it("caps the list, because truncateBody's character bound still allows hundreds of lines", () => {
+    const many = Array.from({ length: SEARCH_MATCH_LINE_CAP + 25 }, (_, i) => `line ${i}`).join(
+      "\n",
+    );
+    expect(searchMatchLines(many)).toHaveLength(SEARCH_MATCH_LINE_CAP);
+    expect(searchMatchLines(many, 3)).toEqual(["line 0", "line 1", "line 2"]);
+  });
+
+  it("returns nothing for content that is only whitespace", () => {
+    expect(searchMatchLines("\n \n\t\n")).toEqual([]);
   });
 });

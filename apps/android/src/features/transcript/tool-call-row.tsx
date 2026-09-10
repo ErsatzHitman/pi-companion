@@ -26,6 +26,16 @@
  * avoid. `StatusIndicator` above still spells the status out in words,
  * so none of this is colour alone (plan.md §10.5).
  *
+ * **T358: the edit and search cards draw the redesign's own bands.** An
+ * edit's diff was a `CodeBlock` of plain mono text with a `diff`
+ * language tag that this app has no highlighter for, so nothing was
+ * actually coloured; it is now `DiffLines`, which draws §7.2's
+ * `.dl add|rem|ctx` bands and inverts the words that changed. A
+ * search's matched lines were the same undifferentiated blob; they are
+ * now `MatchedLine`, which marks the query itself on
+ * `accent-highlight`. Both keep every signal in text as well as in
+ * colour — see those two components' own doc comments.
+ *
  * §11.6's governing rule: "Never fail the transcript because a plugin
  * returns a new tool detail shape." Every family this file does not
  * explicitly branch on — `tool.family === "generic"`, which is exactly
@@ -42,7 +52,14 @@ import type { tools } from "@picompanion/frontend-core";
 
 import { Card, CodeBlock, Link, RecordList, StatusIndicator } from "../../ui/primitives";
 import { blockOutline, blockSurface, type BlockKind } from "../../ui/theme/block-shape";
-import { CodeListing, DiffSummary, WorkflowSteps } from "../../ui/recipes";
+import {
+  CodeListing,
+  DiffLines,
+  DiffSummary,
+  MatchedLine,
+  WorkflowSteps,
+  pairChangedLines,
+} from "../../ui/recipes";
 import type { WorkflowStepItem } from "../../ui/recipes";
 import { useTheme } from "../../ui/theme/theme-context";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
@@ -50,12 +67,14 @@ import {
   STATUS_TONE,
   areToolCallRowPropsEqual,
   diffCounts,
+  diffLineInputsFor,
   diffLinesFor,
   formatToolDuration,
   genericInputSummary,
   genericResultSummary,
   isKnownToolCall,
   searchCountsLine,
+  searchMatchLines,
   statusTextFor,
   truncateBody,
   unrecognizedToolMeta,
@@ -115,6 +134,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontSize: theme.typography.variant.caption.fontSize,
     },
     body: { gap: theme.spacing[2] },
+    matches: { gap: 1 },
     meta: {
       color: theme.colors["ink-2"],
       fontSize: theme.typography.variant.bodySmall.fontSize,
@@ -200,16 +220,17 @@ function EditBody({
 }) {
   const { added, removed } = diffCounts(tool);
   const diffLines = diffLinesFor(tool);
+  const bands = pairChangedLines(diffLineInputsFor(tool));
   return (
     <View style={styles.body}>
       <DiffSummary path={tool.filePath} added={added} removed={removed} modified={0} />
       {tool.isMultiEdit ? (
         <Text style={styles.meta}>{`${tool.edits?.length ?? 0} edits in this file`}</Text>
       ) : null}
-      {diffLines ? (
-        <CodeBlock
-          code={diffLines.text}
-          language="diff"
+      {bands.length > 0 ? (
+        <DiffLines
+          lines={bands}
+          accessibleName={`${tool.filePath} changed lines`}
           testId={testId ? `${testId}-diff` : undefined}
         />
       ) : null}
@@ -222,6 +243,7 @@ function EditBody({
 
 function SearchBody({ tool, styles }: { tool: tools.SearchToolCallViewModel; styles: Styles }) {
   const countsLine = searchCountsLine(tool);
+  const matchLines = tool.content ? searchMatchLines(truncateBody(tool.content)) : [];
   const fileRows = tool.filePaths?.slice(0, MAX_LIST_ROWS).map((path, index) => ({
     id: `${index}-${path}`,
     cells: { path },
@@ -248,8 +270,12 @@ function SearchBody({ tool, styles }: { tool: tools.SearchToolCallViewModel; sty
           columns={[{ key: "path", header: "File" }]}
           rows={fileRows}
         />
-      ) : tool.content ? (
-        <CodeBlock code={truncateBody(tool.content)} language="text" />
+      ) : matchLines.length > 0 ? (
+        <View style={styles.matches} accessibilityRole="none" accessibilityLabel="Matching lines">
+          {matchLines.map((line, index) => (
+            <MatchedLine key={index} text={line} query={tool.query} />
+          ))}
+        </View>
       ) : null}
       {countsLine ? <Text style={styles.meta}>{countsLine}</Text> : null}
       {tool.truncated ? <Text style={styles.meta}>Results truncated</Text> : null}

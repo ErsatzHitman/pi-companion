@@ -614,6 +614,7 @@ that recomputation has to be domain-specific:
 | T355   | The composer's queued prompts were flat rows, not the blocks every other element on the screen is                    | phase-9   | android          | P9-U   | T354, T338, T346                                                      |
 | T356   | The transcript drew four different container shapes where the design draws one, and cited a wrong font               | phase-9   | android          | P9-U   | T355, T345                                                            |
 | T357   | The thinking row's head was a rotated text glyph, and a caption beneath it was doing the shimmer's job               | phase-9   | android          | P9-U   | T356, T345                                                            |
+| T358   | A diff was undifferentiated mono text and a search result never said where it matched                                | phase-9   | android          | P9-U   | T356                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -655,8 +656,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**566 tasks** (distinct IDs counted directly from the table above), recounted at T357 with
-`grep`/`sort -u` over the table's own rows — one past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**567 tasks** (distinct IDs counted directly from the table above), recounted at T358 with
+`grep`/`sort -u` over the table's own rows — one past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17765,3 +17766,66 @@ No `CAPABILITIES` entry: nothing here reaches the wire.
 - [x] The reduced-motion gate keeps one owner; the recipe takes the decision, not the inputs
 - [x] The duration appears once, in one rounding
 - [x] The three mechanism pins moved to the recipe's own contract test rather than being widened or dropped
+
+#### T358 — A diff was undifferentiated mono text and a search result never said where it matched
+
+`labels: phase-9, area: android` · `depends-on: T356`
+
+`HANDOFF.md` §7.2 gives the transcript two coloured code surfaces: diff lines as
+`.dl add|rem|ctx` bands — radius 5, `padding: 0 6px`, a 12% wash of the tone with the changed
+words inside drawn inverted (`.inv`) — and `mark.hit`, which draws a search query on
+`accent-highlight` inside the line it matched. Android had neither where it mattered. An edit
+tool call rendered its diff as a `CodeBlock` tagged `language="diff"`, and this app ships no
+highlighter for that tag, so the result was undifferentiated mono text with `+` and `-` at the
+start of some lines. A search call rendered its matched lines the same way, so a result said
+that it matched and never where.
+
+**One drawing of the band, not a fourth private one.** The extension `diff` renderer already
+had per-line colour — a flex row with a fixed 12dp marker column and a fill from
+`theme.colors.code.diffAdded*` — which is exactly the situation T356 resolved for `.blk`: a
+shape the design gives once, drawn separately by each caller. The geometry, the tone table and
+the inversion now live in `ui/recipes/diff-lines-model.ts` and `ui/recipes/DiffLines.tsx`, and
+each caller keeps only the mapping from ITS own model onto a tone.
+
+**The 12% wash is `green-tint`/`red-tint`, and the two points of difference are deliberate.**
+`@picompanion/design-tokens` already owns those roles for exactly this job, at 14% in the dark
+theme and as contrast-checked near-white solids in the light one. Writing a 12% overlay into a
+component would put a product colour outside the token package and would silently lose the
+light theme, which does not use alpha overlays at all. `mark.hit`'s 24% accent, by contrast, is
+`accent-highlight` exactly.
+
+**The inverted span is derived, and the derivation is allowed to be a heuristic.** Nothing on
+the wire says which words inside a removed line were replaced — a unified diff is
+line-granular — so `changedSpans` trims the common prefix and suffix of a paired removal and
+addition and inverts what is left. `pairChangedLines` only pairs a single removal immediately
+followed by a single addition: a run of three removals and three additions has no honest
+one-to-one reading, and guessing there would produce confident, wrong emphasis. The whole thing
+is decoration and is stated as such, because the marker, the fill and the accessible label all
+carry add-versus-remove without it.
+
+**Colour is still never the only signal.** Each band keeps its literal `+`/`-`/` ` marker as
+visible text and is one `accessible` group labelled "Added: …" / "Removed: …" / "Context: …"
+from `diffLineAnnouncement`. The inverted span and the search hit are both inside their row's
+group and announce nothing of their own — a per-span announcement would chop an identifier in
+half and say "highlighted" in the middle of it.
+
+**One cap, not two.** `diffLineInputsFor` is built on top of `diffLinesFor` rather than beside
+it, so the bands and the "Showing first N of M" notice beneath them can never describe different
+slices. `searchMatchLines` adds the cap that `truncateBody` alone does not give: 4000 characters
+still allows several hundred lines, inside a transcript that is already scrolling.
+
+One source-regex pin was re-anchored rather than widened or deleted. `tool-call-row.test.ts`
+pinned `code={diffLines.text}` to prove the card draws the BOUNDED slice and never the raw
+diff. That claim is unchanged; only the element carrying it moved, so the pin now reads
+`pairChangedLines(diffLineInputsFor(tool))` plus a `not.toMatch` on the raw `unifiedDiff` field,
+with the execution-level proof of the bound in the model's own test.
+
+No `CAPABILITIES` entry: nothing here reaches the wire.
+
+- [x] `.dl add|rem|ctx` with the artifact's radius and padding, from one shared recipe used by both callers
+- [x] `.inv` on the changed words, derived from an adjacent pair and never guessed across a longer run
+- [x] `mark.hit` draws the query on `accent-highlight` inside the line it matched
+- [x] Every fill and ink is a token role; no product colour is written in a component
+- [x] Marker text and a spoken "Added"/"Removed"/"Context" mean the wash is never the only signal
+- [x] One cap owns the diff slice, and the search list gains the line cap it was missing
+- [x] The moved pin was re-anchored to the same claim, not weakened

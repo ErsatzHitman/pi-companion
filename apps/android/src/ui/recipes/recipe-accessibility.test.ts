@@ -44,6 +44,9 @@ const RECIPE_FILES = [
   // T350: the redesign's running mark, drawn as the artifact's 3x3
   // staggered grid rather than a spinner.
   "PixelLoader",
+  // T358: the redesign's diff bands, and the search hit that
+  // shares their treatment.
+  "DiffLines",
 ];
 
 function readRecipeSource(name: string): string {
@@ -103,6 +106,42 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
     const code = readRecipeCode("PixelLoader");
     expect(code).toMatch(/animate=\{!reduceMotion\}/);
     expect(code).toMatch(/if \(!animate\) \{\s*opacity\.value = 1;/);
+  });
+});
+
+describe("DiffLines: colour is never the only signal (T358)", () => {
+  it("names each band in words, from the model's own table", () => {
+    const code = readRecipeCode("DiffLines");
+    expect(code).toMatch(/diffLineAnnouncement\(line\.tone\)/);
+    expect(code).toMatch(/accessible\b/);
+  });
+
+  it("keeps the +/- marker as visible text, not only as a colour", () => {
+    const code = readRecipeCode("DiffLines");
+    expect(code).toMatch(/\{line\.marker\}/);
+  });
+
+  it("announces a whole line rather than one fragment per inverted span", () => {
+    // A per-span announcement would chop an identifier in half and say
+    // "highlighted" in the middle of it.
+    const code = readRecipeCode("DiffLines");
+    expect(code).toMatch(/const plain = line\.spans\.map\(\(span\) => span\.text\)\.join\(""\);/);
+    expect(code).toMatch(/accessibilityLabel=\{`\$\{diffLineAnnouncement\(line\.tone\)\}/);
+  });
+
+  it("reads every fill and every ink from a token key the model returns", () => {
+    const code = readRecipeCode("DiffLines");
+    expect(code).toMatch(/theme\.colors\[diffLineInk\(line\.tone\)\]/);
+    expect(code).toMatch(/theme\.colors\[surface\]/);
+    expect(code).toMatch(/theme\.colors\["accent-highlight"\]/);
+  });
+
+  it("branches on the unfilled context band rather than inventing a third fill", () => {
+    expect(readRecipeCode("DiffLines")).toMatch(/surface === null \? null :/);
+  });
+
+  it("animates nothing, so it needs no reduced-motion gate", () => {
+    expect(readRecipeCode("DiffLines")).not.toMatch(/react-native-reanimated/);
   });
 });
 

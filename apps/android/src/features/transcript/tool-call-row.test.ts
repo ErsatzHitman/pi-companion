@@ -58,8 +58,20 @@ describe("tool-call-row.tsx: tool status is wired as visible text, not colour al
 });
 
 describe("tool-call-row.tsx: T33A5 edit-diff rendering uses the bounded, counted model", () => {
-  it("renders the CodeBlock's code from diffLines.text (the bounded slice), not the raw diff", () => {
-    expect(readCode()).toMatch(/code=\{diffLines\.text\}/);
+  // CORRECTED (T358): this pinned `code={diffLines.text}` on a
+  // `CodeBlock`. That was true, and T358 replaced the block with the
+  // redesign's own `.dl` bands. The claim the pin existed to protect —
+  // that what is drawn is the BOUNDED slice and never the raw diff —
+  // is unchanged and is re-anchored below rather than dropped:
+  // `diffLineInputsFor` is built on `diffLinesFor`, so there is still
+  // exactly one cap, and `tool-call-row-model.test.ts` proves it holds
+  // by execution.
+  it("draws the bounded slice, not the raw diff", () => {
+    const source = readCode();
+    expect(source).toMatch(/const bands = pairChangedLines\(diffLineInputsFor\(tool\)\);/);
+    expect(source).toMatch(/<DiffLines\s+lines=\{bands\}/);
+    // The raw field the cap exists to keep off the screen.
+    expect(source).not.toMatch(/\{tool\.unifiedDiff\}/);
   });
 
   it("renders DiffSummary's mono tabular figures from diffCounts(tool)", () => {

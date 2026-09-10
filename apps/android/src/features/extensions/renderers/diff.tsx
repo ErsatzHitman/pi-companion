@@ -25,42 +25,53 @@
  * keeps its literal `+`/`-` marker as visible text (mirroring
  * `DiffSummary`'s own "never colour alone" note), and the whole row is one
  * `accessible` TalkBack group naming "Added"/"Removed" in words, not tone.
+ * Both of those now live in `ui/recipes/DiffLines.tsx` rather than in
+ * this file (T358); the guarantee is unchanged and is proven by
+ * `diffLineAnnouncement` in that recipe's own model.
  * On-device announcement is unverified here (no emulator in this
  * workspace) and belongs to the T37 Maestro flows.
  */
 import { useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text } from "react-native";
 
 import { Card } from "../../../ui/primitives";
-import { DiffSummary } from "../../../ui/recipes";
+import { DiffLines, DiffSummary, pairChangedLines } from "../../../ui/recipes";
+import type { DiffLineInput } from "../../../ui/recipes";
 import { asFontWeight } from "../../../ui/theme/native-style-helpers";
 import { useTheme } from "../../../ui/theme/theme-context";
 import type { PiUiElementRendererProps } from "../registry";
 import { ElementActionsRow } from "./element-actions";
 import { buildDiffRenderModel, type PiUiDiffLineModel } from "./diff-model";
 
-type Styles = ReturnType<typeof createStyles>;
-
 /** Height cap that keeps a long changed-line list scrollable within its own region rather than the whole screen. */
 const DIFF_SCROLL_MAX_HEIGHT = 320;
 
-function DiffLineRow({ line, styles }: { line: PiUiDiffLineModel; styles: Styles }) {
-  const added = line.kind === "add";
-  return (
-    <View
-      style={[styles.line, added ? styles.lineAdded : styles.lineRemoved]}
-      accessible
-      accessibilityLabel={`${added ? "Added" : "Removed"}: ${line.content}`}
-      testID={`diff-line-${line.key}`}
-    >
-      <Text style={[styles.marker, added ? styles.markerAdded : styles.markerRemoved]}>
-        {line.marker}
-      </Text>
-      <Text style={styles.content} numberOfLines={4}>
-        {line.content}
-      </Text>
-    </View>
-  );
+/**
+ * T358: the changed lines are the redesign's own `.dl` bands.
+ *
+ * This file used to draw them itself — a flex row, a fixed 12dp marker
+ * column, and a background from `theme.colors.code.diffAdded*`. That
+ * was a fourth private drawing of a shape §7.2 gives once, exactly the
+ * situation T356 resolved for `.blk`, so the geometry, the tone
+ * mapping and the changed-word inversion now come from
+ * `ui/recipes/DiffLines.tsx` and this file only maps its own model onto
+ * that recipe's input.
+ *
+ * `pairChangedLines` still finds inverted spans here even though this
+ * renderer is COMPACT and mounts no context lines: a removal and the
+ * addition that replaced it stay adjacent after the context between
+ * them is filtered out, which is exactly the pair it looks for. What is
+ * lost is the ability to tell an adjacent-by-filtering pair from an
+ * adjacent-in-the-file one — a heuristic misfiring inside a heuristic,
+ * and still only decoration, per that model's own doc comment.
+ */
+function toDiffLineInputs(lines: readonly PiUiDiffLineModel[]): DiffLineInput[] {
+  return lines.map((line) => ({
+    key: String(line.key),
+    tone: line.kind === "add" ? ("add" as const) : ("rem" as const),
+    marker: line.marker,
+    content: line.content,
+  }));
 }
 
 export function DiffRenderer({
@@ -88,14 +99,12 @@ export function DiffRenderer({
       />
       {model.truncatedNotice ? <Text style={styles.notice}>{model.truncatedNotice}</Text> : null}
       {model.visibleChangeLines.length > 0 ? (
-        <ScrollView
-          style={styles.scroll}
-          accessibilityLabel={`${model.title} changed lines`}
-          testID={`${testId}-scroll`}
-        >
-          {model.visibleChangeLines.map((line) => (
-            <DiffLineRow key={line.key} line={line} styles={styles} />
-          ))}
+        <ScrollView style={styles.scroll} testID={`${testId}-scroll`}>
+          <DiffLines
+            lines={pairChangedLines(toDiffLineInputs(model.visibleChangeLines))}
+            accessibleName={`${model.title} changed lines`}
+            testId="diff-line"
+          />
         </ScrollView>
       ) : (
         <Text style={styles.empty}>{model.emptyText}</Text>
@@ -128,28 +137,6 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       borderWidth: 1,
       borderColor: theme.colors.code.codeBorder,
       borderRadius: theme.radii.control,
-    },
-    line: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: theme.spacing[2],
-      paddingHorizontal: theme.spacing[2],
-      paddingVertical: theme.spacing[1],
-    },
-    lineAdded: { backgroundColor: theme.colors.code.diffAddedBackground },
-    lineRemoved: { backgroundColor: theme.colors.code.diffRemovedBackground },
-    marker: {
-      width: 12,
-      fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: theme.typography.variant.code.fontSize,
-    },
-    markerAdded: { color: theme.colors.code.diffAddedForeground },
-    markerRemoved: { color: theme.colors.code.diffRemovedForeground },
-    content: {
-      flex: 1,
-      color: theme.colors.code.codeForeground,
-      fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: theme.typography.variant.code.fontSize,
     },
     empty: {
       color: theme.colors["ink-3"],
