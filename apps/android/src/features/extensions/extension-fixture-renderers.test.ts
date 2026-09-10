@@ -125,6 +125,21 @@ vi.mock("react-native-reanimated", () => {
   };
 });
 
+// T349: `ui/primitives/index.ts` now also exports `VectorIcon`
+// (`vector-icons.tsx`), whose `react-native-svg` import carries the same
+// unparseable-by-plain-vitest source every `react-native` package in this
+// file's chain does. Stood in for exactly like the two mocks above, and
+// for the same reason: nothing here renders, so an inert stand-in is
+// enough for an import-only test. Enumerated, not generic -- the members
+// are the ones `vector-icons.tsx` actually imports today, so adding a new
+// SVG element there is a deliberate two-file change, not a silent one.
+vi.mock("react-native-svg", () => {
+  function Stub(): null {
+    return null;
+  }
+  return { default: Stub, Circle: Stub, Path: Stub, Rect: Stub };
+});
+
 const renderers = await import("./renderers/index.js");
 
 /** Every kind this test needs a real component identity for — the nine leaf kinds plus `panel`, spanning all twelve §11.7 fixtures. */

@@ -49,3 +49,5 @@ export { Toast, ToastRegion } from "./Toast";
 export type { StatusTone as ToastTone, ToastProps } from "./Toast";
 export { Toggle } from "./Toggle";
 export type { ToggleProps } from "./Toggle";
+export { VectorIcon } from "./vector-icons";
+export type { VectorIconName, VectorIconProps } from "./vector-icons";

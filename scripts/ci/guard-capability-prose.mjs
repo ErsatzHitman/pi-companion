@@ -2368,6 +2368,32 @@ export const CAPABILITIES = [
       /(?:the )?shell cannot bound (?:the )?composer slot/i,
     ],
   },
+  {
+    // T349: `apps/android/src/ui/primitives/vector-icons.tsx`'s
+    // `VectorIcon` draws the S7 design's stroked paths with a real
+    // `react-native-svg` renderer, at the artifact's own per-icon stroke
+    // weights. Before it, this app had no vector renderer at all and
+    // `./icons.tsx` said so in its own header -- which is exactly the
+    // prose this entry protects against coming back, in that file or any
+    // other. A single bare-string member is enough: `VectorIcon` is a
+    // newly-coined name declared in exactly one shipped file, measured
+    // against the real tree before this entry was written, so neither
+    // T168's same-file AND-group nor T169's shape-anchored `RegExp` is
+    // needed. The phrases are worded in T349's own voice and deliberately
+    // NOT lifted from `icons.tsx`'s own `CORRECTED (T349)` narration --
+    // that narration quotes the false sentence verbatim and is exempt via
+    // `HISTORICAL_QUOTE_MARKERS`, but a phrase copied from it would
+    // depend on that exemption surviving a future reflow, the collision
+    // T215 resolved by rephrasing rather than by adding an exclusion.
+    name: "Android draws the S7 icons as real vector paths (VectorIcon)",
+    methodNames: ["VectorIcon"],
+    denyingPhrases: [
+      /(?:react native|this app|android) has no (?:bundled |real )?(?:svg|vector) renderer/i,
+      /no `?react-native-svg`? (?:dependency|install|package) (?:exists|is present|here)/i,
+      /every icon (?:here |on android )?is (?:only |just )?a (?:unicode |font )?glyph/i,
+      /(?:cannot|can(?:'|’)t) draw (?:a |the )?(?:stroked )?(?:vector )?paths? (?:on android|here)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

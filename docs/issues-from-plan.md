@@ -605,6 +605,7 @@ that recomputation has to be domain-specific:
 | T346   | The composer slot took half the shell, hiding a pinned panel's sections                                              | phase-9   | android          | P9-U   | T344, T343, T342                                                      |
 | T347   | A blocked submit button could never show why it was blocked                                                          | phase-9   | android          | P9-U   | T346, T34B2                                                           |
 | T348   | Re-sync expo-linking's audit range after upstream narrowed it                                                        | phase-9   | ci               | P9-U   | T44A3                                                                 |
+| T349   | The S7 icon set had no vector renderer to draw it                                                                    | phase-9   | android          | P9-U   | T345                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -646,8 +647,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**557 tasks** (distinct IDs counted directly from the table above), recounted at T348 with
-`grep`/`sort -u` over the table's own rows — one past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**558 tasks** (distinct IDs counted directly from the table above), recounted at T349 with
+`grep`/`sort -u` over the table's own rows — one past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17126,3 +17127,79 @@ task that owns that document.
 - [x] The baseline entry matches the range npm audit reports today, and the guard exits 0
 - [x] The narrowing is shown not to change this repository's exposure, from the installed version
 - [x] The stale `expo-audio` note is recorded rather than silently pruned
+
+#### T349 — The S7 icon set had no vector renderer to draw it
+
+`labels: phase-9, area: android` · `depends-on: T345`
+
+The S7 redesign specifies its prompt-bar and transcript affordances as stroked SVG paths with
+per-icon stroke weights that differ and are not interchangeable — a plus at 2.2, a microphone at
+2, a send arrow at 2.4, a chevron at 2.2, a tick at 2.6, a search glass at 2, and one filled
+sparkle. This app could draw none of them. `ui/primitives/icons.tsx` is four Unicode glyphs
+mirroring the web primitive layer's `IconName` union, and its own header said why: "React Native
+has no bundled SVG renderer here (no `react-native-svg` dependency)". Rendering the design's
+paths as font glyphs would have been a different drawing at a different weight on every OEM font
+fallback.
+
+`react-native-svg@15.12.1` — the pin `expo`'s own `bundledNativeModules.json` gives for this
+app's SDK — was installed by the owner and had sat uncommitted since T345, deliberately, because
+nothing imported it. This is the first commit that does, so the install lands here rather than as
+a stray dependency change.
+
+`ui/primitives/vector-icons.tsx`'s `VectorIcon` is that renderer: one 24×24 `Svg` per icon, the
+artifact's own `d` attributes and stroke widths verbatim, colour supplied by the caller as an
+already-resolved token value (never a literal — `plan.md` §10.2), and every drawing hidden from
+assistive tech so the accessible name stays on the pressable that hosts it (§10.5). It is a
+SECOND set beside `icons.tsx`, not a replacement: those four glyphs exist to mirror the web
+union one-for-one, every caller of them still wants a glyph, and swapping them would have made
+this a cross-platform primitive change rather than an Android drawing change.
+
+The pin that matters here is not React behaviour but the drawing. `vector-icons.test.ts` asserts
+each `d` string and each stroke weight against the artifact's own values, because a typo in a
+path is invisible to a typecheck, to a lint, and to every other test in this app.
+
+`icons.tsx`'s header sentence was falsified by this commit and is corrected in it (T124), with
+the false claim quoted and marked so the correction reads as history. A `CAPABILITIES` entry
+("Android draws the S7 icons as real vector paths (VectorIcon)") was registered in the same
+change and watched firing before being trusted: a sentence in this entry's own wording — never
+lifted from `icons.tsx`'s own `CORRECTED` narration, which a future comment reflow could
+otherwise weld into a collision — appended to a scratchpad-backed copy of
+`docs/legacy-retirement.md` made `run-guard-capability-prose.mjs` exit 1 naming exactly this
+capability; restoring the file from that copy (never `git checkout --`) returned it to exit 0
+with `git status --porcelain` empty for it.
+
+One measurement worth recording, because it cost a confusing minute: `run-guard-capability-
+prose.mjs` enumerates its scan set with `git ls-files`, so a brand-new UNTRACKED source file is
+invisible to it and its capability reads as un-shipped. `git add` the new file before trusting a
+firing proof — the same staging requirement `guard-secret-scan`'s own count test already has.
+
+Exporting from the barrel has a cost this commit pays up front rather than deferring: eight
+test files across `app-shell/`, `app/` and `features/extensions/` reach `ui/primitives/index.ts`
+through a real import chain and already stand in for `react-native` and
+`react-native-reanimated`, whose entry points this workspace's plain `vitest` cannot parse.
+`react-native-svg` is the third package of that kind, so each of the eight gained the same
+enumerated, inert `vi.mock` the other two already have — `SyntaxError: Unexpected token 'typeof'`
+is what those eight report without it. The cost is not avoidable by importing the module
+directly instead of through the barrel: every renderer under `features/extensions/renderers/`
+already imports `ui/primitives` and `ui/recipes`, so the moment the prompt bar or the thinking
+row draws a vector path, the same eight files reach `react-native-svg` anyway.
+
+`npx vitest run apps/android/src/...` would NOT have caught this. CI runs
+`npm test --workspace=@picompanion/android`, which is the command that reported all eight; a
+`src/`-scoped run only sees whichever of them the path happens to include.
+
+`VectorIcon` is exported from `ui/primitives/index.ts`, which keeps it inside the import graph
+`scripts/ci/orphan-modules.mjs` walks (the orphan ceiling is at its committed value and this
+commit does not move it), and it is deliberately absent from
+`testing.primitiveLabManifest`: that manifest is asserted by BOTH apps' component labs, so a
+name added there obliges a web twin to exist. Nothing asserts the reverse direction, so an
+Android-only primitive may stay out of it — said here and in the module's own header so the
+omission reads as a decision.
+
+- [x] The design's seven icons are drawn as real vector paths, at the artifact's own stroke weights
+- [x] Every path string and stroke weight is pinned against the artifact, not merely typechecked
+- [x] Every icon is decorative; the accessible name comes from the host control
+- [x] No product colour is hardcoded in the drawing; the caller passes a resolved token
+- [x] The `react-native-svg` install lands in this, the first commit that imports it
+- [x] `npm test --workspace=@picompanion/android` is all-pass, including the eight files that needed the new stand-in
+- [x] `icons.tsx`'s falsified sentence is corrected in the same commit, and a `CAPABILITIES` entry proven to fire
