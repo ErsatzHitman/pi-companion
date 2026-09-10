@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import {
   PINNED_AREA_LAYOUT_CONTRACT,
   PINNED_AREA_MAX_HEIGHT_DP,
+  PINNED_AREA_MAX_WINDOW_SHARE,
+  resolvePinnedAreaMaxHeightDp,
   resolvePinnedAreaVisibility,
   selectPinnedElements,
 } from "./pinned-model";
@@ -126,6 +131,7 @@ describe("resolvePinnedAreaVisibility", () => {
 describe("PINNED_AREA_LAYOUT_CONTRACT", () => {
   it("declares a bounded height that scrolls rather than growing without limit", () => {
     expect(PINNED_AREA_LAYOUT_CONTRACT.maxHeightDp).toBe(PINNED_AREA_MAX_HEIGHT_DP);
+    expect(PINNED_AREA_LAYOUT_CONTRACT.maxWindowShare).toBe(PINNED_AREA_MAX_WINDOW_SHARE);
     expect(PINNED_AREA_LAYOUT_CONTRACT.maxHeightDp).toBeGreaterThan(0);
     expect(Number.isFinite(PINNED_AREA_LAYOUT_CONTRACT.maxHeightDp)).toBe(true);
     expect(PINNED_AREA_LAYOUT_CONTRACT.scrolls).toBe(true);
@@ -134,5 +140,51 @@ describe("PINNED_AREA_LAYOUT_CONTRACT", () => {
   it("declares that it never overlays the composer or the keyboard/IME", () => {
     expect(PINNED_AREA_LAYOUT_CONTRACT.overlaysComposer).toBe(false);
     expect(PINNED_AREA_LAYOUT_CONTRACT.overlaysKeyboard).toBe(false);
+  });
+});
+
+describe("resolvePinnedAreaMaxHeightDp (T342)", () => {
+  it("is tall enough for a one-row roster card and a one-section panel together on a phone-sized window", () => {
+    // Maestro run 34485299369 measured those two cards at ~310dp
+    // stacked (roster 172dp, panel ~115dp, gaps); the old 240dp cap
+    // clipped the panel's sections below the fold.
+    expect(PINNED_AREA_MAX_HEIGHT_DP).toBeGreaterThanOrEqual(340);
+    expect(resolvePinnedAreaMaxHeightDp(914)).toBe(PINNED_AREA_MAX_HEIGHT_DP);
+  });
+
+  it("caps at the window share on a short window, so transcript and composer keep room", () => {
+    expect(resolvePinnedAreaMaxHeightDp(640)).toBe(Math.round(640 * PINNED_AREA_MAX_WINDOW_SHARE));
+    expect(resolvePinnedAreaMaxHeightDp(640)).toBeLessThan(PINNED_AREA_MAX_HEIGHT_DP);
+  });
+
+  it("falls back to the absolute cap alone when nothing has been measured yet", () => {
+    expect(resolvePinnedAreaMaxHeightDp(0)).toBe(PINNED_AREA_MAX_HEIGHT_DP);
+    expect(resolvePinnedAreaMaxHeightDp(Number.NaN)).toBe(PINNED_AREA_MAX_HEIGHT_DP);
+    expect(resolvePinnedAreaMaxHeightDp(-1)).toBe(PINNED_AREA_MAX_HEIGHT_DP);
+  });
+});
+
+describe("PinnedLiveExtensionArea applies the window-relative cap (T342)", () => {
+  // `pinned-live-extension-area.tsx` imports `react-native`, so this is a
+  // source-level pin over the comment-stripped code, the same reason
+  // every renderer test in this directory gives.
+  const code = readFileSync(
+    fileURLToPath(new URL("./pinned-live-extension-area.tsx", import.meta.url)),
+    "utf8",
+  )
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+
+  it("reads useWindowDimensions().height and resolves the cap through resolvePinnedAreaMaxHeightDp", () => {
+    expect(code).toMatch(/useWindowDimensions/);
+    expect(code).toMatch(/const \{ height: windowHeight \} = useWindowDimensions\(\);/);
+    expect(code).toMatch(/const maxHeight = resolvePinnedAreaMaxHeightDp\(windowHeight\);/);
+    expect(code).toMatch(/createStyles\(theme, maxHeight\), \[theme, maxHeight\]/);
+  });
+
+  it("applies that cap to both the wrapper and the ScrollView, never the constant directly", () => {
+    expect(code).toMatch(/wrapper: \{\s*maxHeight,?\s*\}/);
+    expect(code).toMatch(/scroll: \{\s*maxHeight,?\s*\}/);
+    expect(code).not.toMatch(/maxHeight: PINNED_AREA_MAX_HEIGHT_DP/);
   });
 });

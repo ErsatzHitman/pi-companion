@@ -65,6 +65,8 @@ export function resolvePinnedAreaVisibility(
 export interface PinnedAreaLayoutContract {
   /** The area never grows past this height; it scrolls internally instead. */
   maxHeightDp: number;
+  /** ...nor past this share of the window's height, whichever is smaller (T342). */
+  maxWindowShare: number;
   /** The area's content scrolls within its own bounded region. */
   scrolls: true;
   /** The area sits in normal document flow above the composer, never over it. */
@@ -74,15 +76,44 @@ export interface PinnedAreaLayoutContract {
 }
 
 /**
- * The bounded-height cap the pinned area's `ScrollView` enforces, mirroring
- * `LogRenderer`'s own `LOG_SCROLL_MAX_HEIGHT` precedent
- * (`renderers/log.tsx`) so a pinned `log`-kind element nested inside this
- * area is capped consistently at both levels.
+ * The absolute bounded-height cap the pinned area's `ScrollView` enforces,
+ * the same shape as `LogRenderer`'s own `LOG_SCROLL_MAX_HEIGHT` precedent
+ * (`renderers/log.tsx`): a pinned element nested inside this area is
+ * capped at both levels. (CORRECTED at T342: this said the two were
+ * "capped consistently", but this was 240 against the log renderer's 320,
+ * and 240dp was too short for the two cards the `extension-sheets` flow
+ * pins at once — Maestro run 34485299369 laid out a one-row roster card
+ * at 172dp and the loop panel's title just below it, with the panel's
+ * sections clipped past the cap; the flow's `pi-panel-loop-loop-sections`
+ * assertion could only ever pass by scrolling a strip a user would not
+ * know scrolls. The cap is now 360dp, bounded further by
+ * `resolvePinnedAreaMaxHeightDp` to `PINNED_AREA_MAX_WINDOW_SHARE` of the
+ * window so a short phone still keeps transcript and composer room.)
  */
-export const PINNED_AREA_MAX_HEIGHT_DP = 240;
+export const PINNED_AREA_MAX_HEIGHT_DP = 360;
+
+/** The pinned area never takes more than this share of the window's height (T342). */
+export const PINNED_AREA_MAX_WINDOW_SHARE = 0.45;
+
+/**
+ * T342: the cap the area actually applies for a window `windowHeightDp`
+ * tall — `PINNED_AREA_MAX_HEIGHT_DP`, or `PINNED_AREA_MAX_WINDOW_SHARE` of
+ * the window, whichever is smaller. A non-finite or non-positive height
+ * (nothing measured yet) falls back to the absolute cap alone.
+ */
+export function resolvePinnedAreaMaxHeightDp(windowHeightDp: number): number {
+  if (!Number.isFinite(windowHeightDp) || windowHeightDp <= 0) {
+    return PINNED_AREA_MAX_HEIGHT_DP;
+  }
+  return Math.min(
+    PINNED_AREA_MAX_HEIGHT_DP,
+    Math.round(windowHeightDp * PINNED_AREA_MAX_WINDOW_SHARE),
+  );
+}
 
 export const PINNED_AREA_LAYOUT_CONTRACT: PinnedAreaLayoutContract = {
   maxHeightDp: PINNED_AREA_MAX_HEIGHT_DP,
+  maxWindowShare: PINNED_AREA_MAX_WINDOW_SHARE,
   scrolls: true,
   overlaysComposer: false,
   overlaysKeyboard: false,

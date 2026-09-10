@@ -597,6 +597,8 @@ that recomputation has to be domain-specific:
 | T338   | The composer outgrew the keyboard-shrunk shell and pushed its own send button off screen                             | phase-9   | android          | P9-U   | T337, T329, T33B4                                                     |
 | T339   | Android never marked a session's timeline as viewed, so no agent_stream ever reached it                              | phase-9   | android          | P9-U   | T338, T335, T32S8                                                     |
 | T340   | A portaled sheet laid out under the keyboard and was pruned from the accessibility tree                              | phase-9   | android          | P9-U   | T339, T329, T32S6                                                     |
+| T341   | A confirm dialog reached the approvals sheet as unsupported, with no Approve or Deny                                 | phase-9   | android          | P9-U   | T340, T33B5, T334                                                     |
+| T342   | The pinned area's fixed cap hid the loop panel's sections below the fold                                             | phase-9   | android          | P9-U   | T339, T34A4, T338                                                     |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -638,8 +640,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**549 tasks** (distinct IDs counted directly from the table above), recounted at T340 with
-`grep`/`sort -u` over the table's own rows — two past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**551 tasks** (distinct IDs counted directly from the table above), recounted at T342 with
+`grep`/`sort -u` over the table's own rows — two past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16828,3 +16830,68 @@ named symbol.
 - [x] A sheet opened while the keyboard is up renders its panel above the keyboard, scrim intact
 - [x] The T32S6/T327 shell pins still hold with the new opening tag
 - [ ] A dispatch in which `notification-approval` sees `approvals-dialog` after the send (tracked with T334's last box)
+
+#### T341 — A confirm dialog reached the approvals sheet as unsupported, with no Approve or Deny
+
+`labels: phase-9, area: android` · `depends-on: T340, T33B5, T334`
+
+Maestro run 34485299369 at `c4c2f31` (T339/T340): CI green, shards 1/2/3/5, smoke and build
+green; shard-4 red on both flows, each a step past where `ed88fba` stopped. `notification-approval`
+now sees `approvals-dialog` above the keyboard (T340) and "Approval needed", then fails
+`assertVisible: approvals-dialog-form`. The screenshot shows why: the sheet reads "Run a shell
+command? … needs your response. This request type (confirm) has no Android form yet — dismiss to
+answer with a cancel/deny response." — the `unsupported` branch. The daemon's Pi provider maps a
+`confirm` `extension_ui_request` to a `kind: "question"` permission with
+`metadata.extensionUiMethod: "confirm"` and one question whose options it fixes to `Yes`/`No`
+(`agent.ts`); `toPermissionDialogViewModel` derives `presentation: "confirm"`; and
+`approvals-queue-model.ts`'s `resolveApprovalPanel` reported every presentation but
+`"tool-actions"` as `"unsupported"`, with its doc listing `confirm` among the "Tier-1 extension
+dialog kinds" that "have no Android recipe yet". A `confirm` is a binary decision by definition —
+the exact thing `ApprovalForm` models — so the gap was a classification, not a missing recipe.
+
+`resolveConfirmApprovalPanel` renders it as a `binary` panel through the same `ApprovalForm`:
+Approve answers the question (`buildQuestionAnswerResponse`, keyed by the question's own header)
+with whichever offered option label is yes-shaped, falling back to the literal the provider
+matches (`buildExtensionUiResponse`: `/^yes$/i` → `{confirmed: true}`); Deny and close send the
+plain deny response the provider turns into `{cancelled: true}`; `detail` is the question text,
+into which the provider already joined the dialog's title and message. `select`/`input`/`editor`/
+generic `question` stay `"unsupported"` for the reason the doc still gives (no composing recipe
+yet). Three model tests pin the shape, the label-by-pattern choice and the fallback; the model's
+and `ApprovalsHost.tsx`'s doc comments carry `CORRECTED at T341` markers. A `CAPABILITIES` entry
+keyed on `resolveConfirmApprovalPanel` was registered and watched firing on a scratchpad-backed
+copy of `docs/legacy-retirement.md`, then restored with a clean status.
+
+- [x] A `confirm` dialog renders Approve/Deny; Approve confirms, Deny and close cancel
+- [x] The other Tier-1 kinds are unchanged, and every doc that listed `confirm` among them is corrected
+- [ ] A dispatch in which `notification-approval` denies then approves (tracked with T334's last box)
+
+#### T342 — The pinned area's fixed cap hid the loop panel's sections below the fold
+
+`labels: phase-9, area: android` · `depends-on: T339, T34A4, T338`
+
+The same run's `extension-sheets` rendered `pi-roster-subagents-fleet` (T339), tapped its row
+action, saw `pi-panel-loop-loop`, and failed `assertVisible: pi-panel-loop-loop-sections`. The
+hierarchy has the pinned area at exactly its cap — `pinned-live-extension-area-scroll` 561→1191
+px, 240dp at the emulator's density — holding the one-row roster card (452px) and, below it, the
+loop panel card clipped 136px in: its title, and nothing else. `PINNED_AREA_MAX_HEIGHT_DP` was
+240, a figure `pinned-model.ts` described as "capped consistently" with `LogRenderer`'s
+`LOG_SCROLL_MAX_HEIGHT`, which is 320. The area scrolls internally, so the sections were
+reachable by dragging a strip nothing marks as scrollable — not something the flow, or a user,
+should have to know. `assertVisible` on the card itself passed because Maestro accepts a partly
+visible element; the sections were entirely past the clip.
+
+`PINNED_AREA_MAX_HEIGHT_DP` is now 360, and `resolvePinnedAreaMaxHeightDp(windowHeightDp)` bounds
+it further to `PINNED_AREA_MAX_WINDOW_SHARE` (0.45) of the window, whichever is smaller, falling
+back to the absolute cap when nothing is measured; `pinned-live-extension-area.tsx` reads
+`useWindowDimensions().height` and applies the result to its wrapper and `ScrollView` instead of
+the constant. On the emulator's ~914dp window that is 360dp (945px), comfortably holding the ~310dp
+the two cards measure; on a 640dp phone it is 288dp, so transcript and composer keep room. The
+composer's controls shrink to make way (T338) and its prompt bar stays put. `pinned-model.test.ts`
+covers the three regimes and pins the area's wiring at the source level;
+`PINNED_AREA_LAYOUT_CONTRACT` gains `maxWindowShare`; the model's own doc carries a `CORRECTED at
+T342` marker. A `CAPABILITIES` entry keyed on `resolvePinnedAreaMaxHeightDp` was registered and
+watched firing the same way as T341's.
+
+- [x] Two pinned cards of the flow's size are fully visible without scrolling the area on a phone-sized window
+- [x] The cap is window-relative, so a short window keeps transcript and composer room
+- [ ] A dispatch in which `extension-sheets` reaches its panel-section and form assertions (tracked with T334's last box)

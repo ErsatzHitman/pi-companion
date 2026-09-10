@@ -20,20 +20,34 @@
  * there, or from `@picompanion/frontend-core`'s `permissions` module
  * those builders themselves live in.
  *
- * **Scope**: only the `"tool-actions"` presentation (real Pi tool/plan/
+ * **Scope**: the `"tool-actions"` presentation (real Pi tool/plan/
  * mode permission requests — the case `ui/recipes/ApprovalForm.tsx`
- * itself models, "Pi wants to write src/x.ts — Approve / Deny") is
- * rendered as a real decision surface. The Tier-1 extension dialog
- * kinds (`select`/`input`/`editor`/`confirm`/generic `question`, plan.md
- * §11.2) have no Android recipe yet — `ui/recipes/` has no `Select`/
- * `TextArea`/`TextField`-composing form for them the way
- * `PermissionDialog.tsx`'s `QuestionPanel` does on web — so
+ * itself models, "Pi wants to write src/x.ts — Approve / Deny") and,
+ * since T341, the `"confirm"` presentation are rendered as real decision
+ * surfaces. (CORRECTED at T341: this said the Tier-1 extension dialog
+ * kinds `select`/`input`/`editor`/`confirm`/generic `question` "have no
+ * Android recipe yet" and are all reported as `"unsupported"`. Maestro
+ * run 34485299369's `notification-approval` measured that against the
+ * daemon's own Pi provider: a `confirm` `extension_ui_request` arrives as
+ * a `kind: "question"` request with `metadata.extensionUiMethod:
+ * "confirm"`, one question whose options the daemon itself fixes to
+ * `Yes`/`No`, and the sheet offered a single Dismiss where the flow —
+ * and any user — expected Approve/Deny.) A `confirm` is a binary
+ * decision by definition, which is exactly what `ApprovalForm` models,
+ * so `resolveConfirmApprovalPanel` below renders it through the same
+ * recipe: Approve answers the question with the daemon's own yes-shaped
+ * option (`buildQuestionAnswerResponse`; the provider translates it back
+ * to `{confirmed: true}` by matching the answer text, `agent.ts`'s
+ * `buildExtensionUiResponse`), Deny/close sends the deny response the
+ * provider turns into `{cancelled: true}`. The remaining kinds
+ * (`select`/`input`/`editor`/generic `question`) still have no
+ * `Select`/`TextArea`/`TextField`-composing recipe the way
+ * `PermissionDialog.tsx`'s `QuestionPanel` does on web, so
  * `resolveApprovalPanel` reports those as `"unsupported"`: still
  * answerable (a single Dismiss sends a deny/cancel response, so the
  * daemon is never left blocked — plan.md §11.2 "these block the
  * extension and require a response or timeout"), but not a real
- * decision surface. Building that is a gap for a future task; see this
- * task's report.
+ * decision surface. Building that is a gap for a future task.
  */
 
 import { permissions } from "@picompanion/frontend-core";
@@ -48,7 +62,7 @@ import { buildToolCallDisplayModel } from "@picompanion/protocol/tool-call-displ
  * these come off the `permissions` namespace import — same convention
  * `PermissionDialog.tsx` uses on web.
  */
-const { buildActionResponse, buildDenyResponse } = permissions;
+const { buildActionResponse, buildDenyResponse, buildQuestionAnswerResponse } = permissions;
 
 export interface ApprovalsQueueSnapshot {
   /** The oldest still-pending request, or `null` when the queue is empty. */
@@ -175,6 +189,10 @@ export type ApprovalPanel =
 export function resolveApprovalPanel(view: permissions.PermissionDialogViewModel): ApprovalPanel {
   const toolLabel = view.title ?? view.name;
 
+  if (view.presentation === "confirm") {
+    return resolveConfirmApprovalPanel(view);
+  }
+
   if (view.presentation !== "tool-actions") {
     return {
       kind: "unsupported",
@@ -222,6 +240,40 @@ export function resolveApprovalPanel(view: permissions.PermissionDialogViewModel
     dangerous: isDangerousRequest(view.actions),
     actions: ordered.map((action) => ({ action, response: buildActionResponse(action) })),
     closeResponse: denyAction ? buildActionResponse(denyAction) : buildDenyResponse(),
+  };
+}
+
+/** The answer text the daemon's Pi provider reads as a confirmation (`agent.ts`'s `buildExtensionUiResponse`: `/^yes$/i`). */
+const CONFIRM_YES_PATTERN = /^yes$/i;
+
+/**
+ * T341: a `confirm` extension dialog as a binary Approve/Deny panel — see
+ * this module's doc comment. The daemon builds the request with exactly
+ * one question (`QUESTION_RESPONSE_HEADER`, options `Yes`/`No`) and reads
+ * back the first string answer, so Approve answers that question with
+ * whichever offered option label is yes-shaped (falling back to the
+ * literal the provider matches on, should a daemon ever offer none), and
+ * Deny — like a scrim tap or back gesture — sends the plain deny
+ * response, which the provider turns into `{cancelled: true}`. `detail`
+ * is the question text itself: the provider joins the dialog's title and
+ * message into it, so nothing the extension said is dropped.
+ */
+export function resolveConfirmApprovalPanel(
+  view: permissions.PermissionDialogViewModel,
+): BinaryApprovalPanel {
+  const question = view.questions[0];
+  const yesLabel =
+    question?.options.find((option) => CONFIRM_YES_PATTERN.test(option.label.trim()))?.label ??
+    "Yes";
+  const denyResponse = buildDenyResponse();
+  return {
+    kind: "binary",
+    toolLabel: view.title ?? view.name,
+    detail: question?.question ?? view.description ?? "",
+    dangerous: false,
+    approveResponse: buildQuestionAnswerResponse({ [question?.header ?? "response"]: yesLabel }),
+    denyResponse,
+    closeResponse: denyResponse,
   };
 }
 

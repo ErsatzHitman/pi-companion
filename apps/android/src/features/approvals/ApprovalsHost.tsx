@@ -36,8 +36,10 @@ export interface ApprovalsHostProps {
  * `ApprovalForm`'s fixed pair cannot represent, and to a single Dismiss
  * for a presentation this Android surface does not yet render as a real
  * decision (see `approvals-queue-model.ts`'s doc comment for exactly
- * which — Tier-1 `select`/`input`/`editor`/`confirm`/`question` extension
- * dialogs).
+ * which — Tier-1 `select`/`input`/`editor`/`question` extension dialogs;
+ * CORRECTED at T341: `confirm` was in that list, and now renders through
+ * the same `ApprovalForm` as a tool request, since it is a binary
+ * decision by definition).
  *
  * `Sheet`'s own `onClose` (scrim tap, Android back gesture) always sends
  * `panel.closeResponse` — the deny/cancel side — rather than leaving the

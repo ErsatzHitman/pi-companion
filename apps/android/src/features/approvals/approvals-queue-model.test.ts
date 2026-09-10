@@ -7,6 +7,7 @@ import {
   getApprovalsQueueSnapshot,
   isDangerousRequest,
   resolveApprovalPanel,
+  resolveConfirmApprovalPanel,
 } from "./approvals-queue-model.js";
 
 /**
@@ -79,6 +80,31 @@ function selectDialogRequest(id: string): permissions.AgentPermissionRequest {
           question: "Which branch?",
           header: "branch",
           options: [{ label: "main" }],
+          multiSelect: false,
+        },
+      ],
+    },
+  };
+}
+
+/** The exact shape the daemon's Pi provider builds for a `confirm` `extension_ui_request` (`agent.ts`: one question, `Yes`/`No`). */
+function confirmDialogRequest(
+  id: string,
+  options: { labels?: string[]; header?: string } = {},
+): permissions.AgentPermissionRequest {
+  return {
+    id,
+    provider: "pi",
+    name: "Scripted extension confirm",
+    kind: "question",
+    title: "Run a shell command?\n\nThe scripted extension wants to run `echo hello`.",
+    metadata: { extensionUiMethod: "confirm" },
+    input: {
+      questions: [
+        {
+          question: "Run a shell command?\n\nThe scripted extension wants to run `echo hello`.",
+          header: options.header ?? "response",
+          options: (options.labels ?? ["Yes", "No"]).map((label) => ({ label })),
           multiSelect: false,
         },
       ],
@@ -174,6 +200,49 @@ describe("resolveApprovalPanel", () => {
     if (panel.kind !== "actions-row") throw new Error("expected an actions-row panel");
     expect(panel.actions.map((a) => a.action.id)).toEqual(["deny", "always", "once"]);
     expect(panel.closeResponse).toEqual({ behavior: "deny", selectedActionId: "deny" });
+  });
+
+  it("T341: renders a confirm extension dialog as a binary panel whose Approve answers the daemon's own yes option and whose Deny/close is the deny response", () => {
+    const controller = makeController();
+    const entry = controller.ingestRequest("agt_1", confirmDialogRequest("perm_confirm"));
+    expect(entry.view.presentation).toBe("confirm");
+    const panel = resolveApprovalPanel(entry.view);
+    if (panel.kind !== "binary") throw new Error("expected a binary panel");
+    expect(panel.toolLabel).toBe(entry.view.title);
+    expect(panel.detail).toBe(entry.view.questions[0]?.question);
+    expect(panel.dangerous).toBe(false);
+    expect(panel.approveResponse).toEqual({
+      behavior: "allow",
+      updatedInput: { answers: { response: "Yes" } },
+    });
+    expect(panel.denyResponse).toEqual({ behavior: "deny" });
+    expect(panel.closeResponse).toEqual(panel.denyResponse);
+  });
+
+  it("T341: picks the yes-shaped option by its label, whatever the order or case, keyed by the question's own header", () => {
+    const controller = makeController();
+    const entry = controller.ingestRequest(
+      "agt_1",
+      confirmDialogRequest("perm_confirm_2", { labels: ["No", "YES"], header: "answer" }),
+    );
+    const panel = resolveConfirmApprovalPanel(entry.view);
+    expect(panel.approveResponse).toEqual({
+      behavior: "allow",
+      updatedInput: { answers: { answer: "YES" } },
+    });
+  });
+
+  it("T341: falls back to the literal the provider matches on when no offered option is yes-shaped", () => {
+    const controller = makeController();
+    const entry = controller.ingestRequest(
+      "agt_1",
+      confirmDialogRequest("perm_confirm_3", { labels: ["Proceed", "Stop"] }),
+    );
+    const panel = resolveConfirmApprovalPanel(entry.view);
+    expect(panel.approveResponse).toEqual({
+      behavior: "allow",
+      updatedInput: { answers: { response: "Yes" } },
+    });
   });
 
   it("reports a non-tool-actions presentation (e.g. a select dialog) as unsupported, but still closeable with a deny/cancel response", () => {

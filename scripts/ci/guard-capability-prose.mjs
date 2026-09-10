@@ -2295,6 +2295,37 @@ export const CAPABILITIES = [
       /(?:the |this )?(?:android )?(?:app|client) (?:has|carries) no (?:agent[- ])?timeline subscription (?:call|request) of its own/i,
     ],
   },
+  {
+    // T341: a `confirm` extension dialog renders on Android as a real
+    // Approve/Deny form (`approvals-queue-model.ts`'s
+    // `resolveConfirmApprovalPanel`, through the same `ApprovalForm` a
+    // tool request uses). Until Maestro run 34485299369 it fell into the
+    // "unsupported" branch with a single Dismiss. Worded in T341's own
+    // voice: the model's and host's old prose is behind `CORRECTED at
+    // T341` markers, and the host's live "has no Android form yet" string
+    // interpolates the presentation rather than naming confirm.
+    name: "A confirm extension dialog is a real Approve/Deny decision on Android (resolveConfirmApprovalPanel)",
+    methodNames: ["resolveConfirmApprovalPanel"],
+    denyingPhrases: [
+      /confirm (?:dialogs?|requests?|prompts?) (?:still )?(?:has|have) no (?:real )?(?:android )?(?:form|decision surface|approve\/deny)/i,
+      /(?:a |the |every )?confirm (?:dialog|request|presentation) (?:is|renders as|is reported as|counts as) (?:still )?unsupported on android/i,
+      /android (?:still )?(?:answers|handles|renders) (?:a |every |the )?confirm (?:dialog|request) (?:with|as) (?:only |just )?(?:a |one )?dismiss/i,
+    ],
+  },
+  {
+    // T342: the pinned live-extension area's height cap follows the
+    // window (`pinned-model.ts`'s `resolvePinnedAreaMaxHeightDp`: the
+    // absolute cap or a share of the window height, whichever is
+    // smaller). Until Maestro run 34485299369 it was one fixed constant
+    // that clipped the second pinned card. Worded in T342's own voice,
+    // not lifted from the model's own CORRECTED narration.
+    name: "The pinned live-extension area's cap follows the window height (resolvePinnedAreaMaxHeightDp)",
+    methodNames: ["resolvePinnedAreaMaxHeightDp"],
+    denyingPhrases: [
+      /pinned (?:live[- ]extension )?area (?:is )?(?:still )?(?:hard-)?capped at (?:a |one )?fixed (?:\d+ ?dp|height|constant)/i,
+      /(?:the )?pinned area(?:'s)? (?:height )?cap (?:ignores|does not follow|doesn't follow|never follows|is independent of) (?:the )?(?:window|screen|display) (?:height|size)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

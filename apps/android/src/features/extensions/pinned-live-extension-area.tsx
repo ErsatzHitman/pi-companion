@@ -39,9 +39,11 @@
  *   declares and is unit-tested: it sits in normal document flow (no
  *   `Modal`, no absolute/overlay positioning, no `Portal`) so it can never
  *   paint over the composer beneath it in the slot order, and its own
- *   `ScrollView` is height-capped at `PINNED_AREA_MAX_HEIGHT_DP` so a long
- *   pinned list scrolls internally instead of growing the slot without
- *   bound. Because it is plain flow content, not an overlay, it also makes
+ *   `ScrollView` is height-capped — at `resolvePinnedAreaMaxHeightDp`
+ *   of the window height (T342: `PINNED_AREA_MAX_HEIGHT_DP` or
+ *   `PINNED_AREA_MAX_WINDOW_SHARE` of the window, whichever is smaller;
+ *   previously the constant alone) — so a long pinned list scrolls
+ *   internally instead of growing the slot without bound. Because it is plain flow content, not an overlay, it also makes
  *   no claim on keyboard/IME ownership — plan.md §9.3's "the composer must
  *   retain keyboard ownership when an extension sheet opens" is about a
  *   `sheet`-placement panel's `Modal`/`Portal` choice, which is a different
@@ -58,7 +60,7 @@
  * they render inside.
  */
 import { useMemo } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 
 import { extensions } from "@picompanion/frontend-core";
 import type { Logger } from "@picompanion/frontend-core";
@@ -66,7 +68,7 @@ import type { PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
 import { useTheme } from "../../ui/theme/theme-context";
 import {
-  PINNED_AREA_MAX_HEIGHT_DP,
+  resolvePinnedAreaMaxHeightDp,
   resolvePinnedAreaVisibility,
   selectPinnedElements,
 } from "./pinned-model";
@@ -111,7 +113,11 @@ export function PinnedLiveExtensionArea({
   testId = "pinned-live-extension-area",
 }: PinnedLiveExtensionAreaProps) {
   const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  // T342: the cap follows the window, so a phone keeps transcript and
+  // composer room while a taller window shows two pinned cards at once.
+  const { height: windowHeight } = useWindowDimensions();
+  const maxHeight = resolvePinnedAreaMaxHeightDp(windowHeight);
+  const styles = useMemo(() => createStyles(theme, maxHeight), [theme, maxHeight]);
 
   if (resolvePinnedAreaVisibility(elements) === "collapsed") {
     return null;
@@ -143,13 +149,13 @@ export function PinnedLiveExtensionArea({
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+function createStyles(theme: ReturnType<typeof useTheme>["theme"], maxHeight: number) {
   return StyleSheet.create({
     wrapper: {
-      maxHeight: PINNED_AREA_MAX_HEIGHT_DP,
+      maxHeight,
     },
     scroll: {
-      maxHeight: PINNED_AREA_MAX_HEIGHT_DP,
+      maxHeight,
     },
     content: {
       gap: theme.spacing[2],
