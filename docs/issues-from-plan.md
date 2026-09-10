@@ -611,6 +611,7 @@ that recomputation has to be domain-specific:
 | T352   | A context window could fill to 100% with nothing on the phone saying so                                              | phase-9   | android          | P9-U   | T350, T351, T29C1                                                     |
 | T353   | The composer's controls sat above the prompt bar, and the model picker had never been handed a client                | phase-9   | android          | P9-U   | T352, T39B, T132                                                      |
 | T354   | No control on the phone could switch a session between Build and Plan, or turn auto-compaction on                    | phase-9   | android          | P9-U   | T353, T39B, T132                                                      |
+| T355   | The composer's queued prompts were flat rows, not the blocks every other element on the screen is                    | phase-9   | android          | P9-U   | T354, T338, T346                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -652,8 +653,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**563 tasks** (distinct IDs counted directly from the table above), recounted at T354 with
-`grep`/`sort -u` over the table's own rows — one past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**564 tasks** (distinct IDs counted directly from the table above), recounted at T355 with
+`grep`/`sort -u` over the table's own rows — one past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17578,3 +17579,54 @@ ordering, the exact sentence, and the real mount's testID.
 - [x] The two stale comments (T353's missed third, and this menu's own) are corrected with historical markers
 - [x] Both `CAPABILITIES` entries were registered and proven to fire
 - [x] The Maestro flow and its contract were updated in the same commit
+
+#### T355 — The composer's queued prompts were flat rows, not the blocks every other element on the screen is
+
+`labels: phase-9, area: android` · `depends-on: T354, T338, T346`
+
+The redesign stacks everything the session screen shows as one block shape — radius 14, padding
+9×12, 10 apart, with a background that says what kind of thing it is. The composer's queued
+entries were the last list on the screen still drawn the old way: one flat row per entry, text
+then a chip then Retry, with no surface of its own. They are blocks now: `.usr` on `field` for a
+prompt that reached the daemon, `.pend` on `inset` for one still queued, and the transcript's own
+`tool-error-bg` for one that failed.
+
+`entry-block-model.ts` owns the mapping and the geometry so both are proven by execution rather
+than by matching source text, and it names token ROLES rather than colours, so no product colour
+is written down outside `@picompanion/design-tokens`. The failed block is the only one outlined,
+because an outline spent on all three states means nothing, and the failed block is the one the
+reader has to find and act on. The status chip stays on every block: restyling a state is not the
+same as encoding it, and the fill is a second, faster signal on top of words that already read
+"Sending…"/"Sent"/"Failed".
+
+**The redesign also asked for the `composer-controls` ScrollView to be removed, and it is
+deliberately still here.** `HANDOFF.md` §5.2 offered two ways to stop the composer starving the
+pinned live-extension area and said to pick one: Option A dropped this scroll container once the
+pickers moved into the context-ring menu, Option B capped the composer slot. **T346 took Option
+B** — `resolveComposerSlotMaxHeightDp` returns `min(320, 0.32 × window)` whenever the pinned area
+is occupied, and `compact-shell.tsx` applies it as a hard `maxHeight` on the slot. A hard cap with
+nothing scrolling underneath does not shrink content, it clips it, and what sits lowest in that
+column is the permission-recovery notices and the turn controls: removing the scroll now would
+make a "Photos permission denied — open Settings" notice unreachable on exactly the screens where
+the cap applies. The two options were alternatives, not steps. The decision, and the order a
+later task would have to follow to reverse it (remove the cap first, re-prove shard-4 green
+without it), are recorded in `Composer.tsx`'s own module doc and pinned by a test that fails if
+the ScrollView is deleted — so this is a decision the tree enforces, not a note someone can miss.
+
+One source-regex pin had to move rather than widen: `composer-accessibility.test.ts`'s
+"does not collapse the failed-entry Retry button" case anchored on `style={styles.entryRow}`, and
+the block wrapper now takes a style ARRAY. `styles.entryRow` still exists and is still used by
+`StagedAttachmentRow`, which is exactly why widening the match would have been wrong — it would
+have started resolving against that other component's tag and stopped proving anything about this
+one.
+
+No `CAPABILITIES` entry: nothing here reaches the wire. The four entries §9.1 asked for were all
+registered by T352–T354.
+
+- [x] Queued entries render as the redesign's `.blk` blocks, not flat rows
+- [x] `composer-entries`, `composer-entry-<id>` and `-retry` are unchanged, so every flow still finds them
+- [x] Surface and outline come from a behaviourally-tested model that names token roles, not colours
+- [x] Every block keeps its status chip, so the fill is never the only signal
+- [x] The block geometry is the artifact's own 14/9/12/10, taken from the model rather than re-typed
+- [x] The ScrollView decision is recorded with its reason and pinned by a test that fails if it is dropped
+- [x] The one stale pin was re-anchored, not weakened, and the reason is written where the next reader will hit it

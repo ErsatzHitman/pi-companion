@@ -79,18 +79,56 @@ describe("Composer.tsx", () => {
     expect(code).toMatch(/entryStatusLabel\(entry\.status\)/);
   });
 
+  it("T355: draws each entry as a block whose surface comes from the model, not from a literal", () => {
+    expect(code).toMatch(/entryBlockSurface\(entry\.status\)/);
+    expect(code).toMatch(/entryBlockIsOutlined\(entry\.status\)/);
+    expect(code).toMatch(/backgroundColor: surface/);
+  });
+
+  it("T355: keeps the status chip beside the block fill, so colour is never the only signal", () => {
+    const block = code.slice(code.indexOf("function ComposerEntryRow"));
+    expect(block).toMatch(/<Chip label=\{entryStatusLabel\(entry\.status\)\}/);
+  });
+
+  it("T355: takes the block's geometry from entry-block-model.ts rather than re-typing the numbers", () => {
+    expect(code).toMatch(/borderRadius: ENTRY_BLOCK_RADIUS/);
+    expect(code).toMatch(/paddingVertical: ENTRY_BLOCK_PADDING_VERTICAL/);
+    expect(code).toMatch(/paddingHorizontal: ENTRY_BLOCK_PADDING_HORIZONTAL/);
+    expect(code).toMatch(/gap: ENTRY_BLOCK_GAP/);
+  });
+
+  it("T355: still scrolls its controls, because the shell caps this slot's height", () => {
+    // Not a style preference: `app-shell/compact-shell.tsx` applies
+    // `resolveComposerSlotMaxHeightDp`'s hard `maxHeight` to this slot,
+    // and a cap with nothing scrolling under it clips the permission
+    // notices rather than shrinking them. See `Composer.tsx`'s own T355
+    // paragraph for why the redesign's "drop the ScrollView" is
+    // deliberately not taken while that cap is live.
+    expect(code).toMatch(/<ScrollView/);
+    expect(code).toMatch(/testID=\{`\$\{composerTestId\}-controls`\}/);
+  });
+
   it("does not collapse the failed-entry Retry button into a non-interactive accessible group", () => {
-    // A collapsing wrapper (a bare `accessible` prop on the row's outer
-    // View, which also renders the Retry Button) would make the button
-    // unreachable as its own TalkBack node. Assert the row's opening
-    // `<View ...>` tag — where `ComposerEntryRow` renders its
-    // `entryRow`-styled wrapper — carries no such prop.
+    // A collapsing wrapper (a bare `accessible` prop on the block's
+    // outer View, which also renders the Retry Button) would make the
+    // button unreachable as its own TalkBack node. Assert the block's
+    // opening `<View ...>` tag — where `ComposerEntryRow` renders its
+    // `entryBlock`-styled wrapper — carries no such prop.
+    //
+    // T355 rewrote this anchor from `styles.entryRow` to
+    // `styles.entryBlock`: the entry list became the redesign's `.blk`
+    // stack, whose wrapper takes a style ARRAY (the block style plus a
+    // status-derived background), so the old exact-match pin could no
+    // longer resolve. `styles.entryRow` still exists and is still used
+    // by `StagedAttachmentRow`, which is exactly why the anchor had to
+    // move rather than widen — a looser match would have started
+    // resolving against that other component's tag instead.
     const rowFnStart = source.indexOf("function ComposerEntryRow");
     expect(rowFnStart).toBeGreaterThan(-1);
     const rowOpenTagStart = source.indexOf("<View", rowFnStart);
     const rowOpenTagEnd = source.indexOf(">", rowOpenTagStart);
     const rowOpenTag = source.slice(rowOpenTagStart, rowOpenTagEnd);
-    expect(rowOpenTag).toMatch(/style=\{styles\.entryRow\}/);
+    expect(rowOpenTag).toMatch(/styles\.entryBlock/);
     expect(rowOpenTag).not.toMatch(/\baccessible\b/);
 
     const retryBranch = source.slice(source.indexOf('entry.status === "failed"'));

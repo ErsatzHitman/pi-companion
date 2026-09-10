@@ -5,6 +5,17 @@
  */
 export { Composer } from "./Composer";
 export type { ComposerProps } from "./Composer";
+// T355: the redesign's `.blk` surfaces and geometry for the composer's
+// queued-entry stack. See `entry-block-model.ts`'s module doc.
+export {
+  ENTRY_BLOCK_GAP,
+  ENTRY_BLOCK_PADDING_HORIZONTAL,
+  ENTRY_BLOCK_PADDING_VERTICAL,
+  ENTRY_BLOCK_RADIUS,
+  entryBlockIsOutlined,
+  entryBlockSurface,
+} from "./entry-block-model";
+export type { EntryBlockSurface } from "./entry-block-model";
 export { ComposerIconAction } from "./composer-icon-action";
 export type { ComposerIconActionProps } from "./composer-icon-action";
 export {

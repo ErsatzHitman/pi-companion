@@ -70,6 +70,14 @@ import {
 } from "./model-thinking-model";
 import { ContextRing } from "./ContextRing";
 import {
+  ENTRY_BLOCK_GAP,
+  ENTRY_BLOCK_PADDING_HORIZONTAL,
+  ENTRY_BLOCK_PADDING_VERTICAL,
+  ENTRY_BLOCK_RADIUS,
+  entryBlockIsOutlined,
+  entryBlockSurface,
+} from "./entry-block-model";
+import {
   INITIAL_SESSION_CONTROLS_STATE,
   createSessionControlsController,
   type DaemonSessionControlsSource,
@@ -598,9 +606,8 @@ function voiceOutcomeDisplay(
  * the `ScrollView` every other control lives in, and the root, the
  * `Section` and that `ScrollView` all shrink (`flexShrink: 1`) while
  * `PromptBar` keeps its intrinsic height. So when the shell hands this
- * component less height than its controls want (the queue-mode and
- * model pickers alone outgrow a phone with the keyboard open), the
- * pickers scroll and the prompt bar stays put above the IME — the
+ * component less height than its controls want, the controls scroll
+ * and the prompt bar stays put above the IME — the
  * `reservesOwnHeight` half of `composer-focus-model.ts`'s
  * `COMPOSER_LAYOUT_CONTRACT`, which is about the prompt bar, not the
  * controls above it. (CORRECTED at T338: this said the root container
@@ -612,7 +619,32 @@ function voiceOutcomeDisplay(
  * prompt had been typed.) The `ScrollView` takes
  * `keyboardShouldPersistTaps="handled"` for T329's reason: a default
  * ScrollView spends the first tap after typing on dismissing the
- * keyboard and never delivers it to the control underneath. The other
+ * keyboard and never delivers it to the control underneath.
+ *
+ * **T355: the redesign asked for that `ScrollView` to be REMOVED, and
+ * it is deliberately still here.** `HANDOFF.md` §5.2 offered two ways
+ * to stop the composer starving the pinned live-extension area: Option
+ * A, which drops this scroll container once the pickers move into the
+ * context-ring menu, and Option B, a measured cap on the composer
+ * slot. T346 took Option B — `app-shell/composer-slot-cap-model.ts`'s
+ * `resolveComposerSlotMaxHeightDp` returns `min(320, 0.32 × window)`
+ * whenever the pinned area is occupied, and `app-shell/
+ * compact-shell.tsx` applies it as a hard `maxHeight` on this slot. A
+ * hard cap with nothing scrolling underneath it does not shrink
+ * content, it CLIPS it, and what sits lowest in this column is the
+ * permission-recovery notices and the turn controls. Removing the
+ * scroll container now would make a "Photos permission denied — open
+ * Settings" notice unreachable on exactly the screens where the cap
+ * applies. The two options were alternatives, not steps: B shipped, so
+ * A's removal is not a change that can be layered on top of it. What
+ * T355 did take from the design is the part that does not depend on
+ * which option won — the entry list is now a stack of `.blk` blocks
+ * (see `ComposerEntryRow` and `./entry-block-model.ts`) rather than a
+ * flat row per entry. A later task that wants this container gone
+ * should remove the slot cap first and re-prove shard-4 green without
+ * it.
+ *
+ * The other
  * half, `consumesKeyboardInset`,
  * is the session shell's own doing: `app-shell/compact-shell.tsx` pads
  * its bottom by the live keyboard height (`app-shell/keyboard-inset.ts`,
@@ -1708,6 +1740,23 @@ export function Composer({
   );
 }
 
+/**
+ * One queued prompt, as the redesign's `.blk` (T355).
+ *
+ * This used to be a flat row — text, then a chip, then Retry, all on
+ * one line with no surface of its own. The design stacks every
+ * session-screen element as a block instead, and the entry list is the
+ * composer's own contribution to that stack, sitting directly above the
+ * prompt bar: `.usr` for a prompt that reached the daemon, `.pend` for
+ * one still queued, and the transcript's error surface for one that
+ * failed. `./entry-block-model.ts` owns which surface goes with which
+ * status and why, and is tested by execution.
+ *
+ * The chip stays. Restyling a state is not the same as encoding it: the
+ * block's fill is a second, faster signal on top of words that already
+ * say "Sending…"/"Sent"/"Failed", never a replacement for them
+ * (plan.md §10.5).
+ */
 function ComposerEntryRow({
   entry,
   onRetry,
@@ -1719,33 +1768,40 @@ function ComposerEntryRow({
 }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const surface = theme.colors[entryBlockSurface(entry.status)];
+  const outlined = entryBlockIsOutlined(entry.status);
 
   // Deliberately not wrapped in an `accessible` View: that would collapse
   // every child (including the failed-state Retry button) into a single
   // TalkBack node, making the button unreachable on its own. Each piece
   // below is its own accessible element instead.
   return (
-    <View style={styles.entryRow} testID={testId}>
-      <View style={styles.entryTextColumn}>
-        <Text style={styles.entryText} numberOfLines={2}>
-          {entry.text}
+    <View
+      style={[
+        styles.entryBlock,
+        { backgroundColor: surface },
+        outlined ? { borderWidth: 1, borderColor: theme.colors.red } : null,
+      ]}
+      testID={testId}
+    >
+      <Text style={styles.entryText}>{entry.text}</Text>
+      {/* T33B7: "An attachment uploads and appears on the message" — every attachment carried by this entry (`handleSend`'s `submitDraft` + attach step) is named here, next to the entry's own text. */}
+      {entry.attachments && entry.attachments.length > 0 ? (
+        <Text style={styles.entryAttachments} testID={`${testId}-attachments`}>
+          {entry.attachments.map((attachment) => attachment.fileName).join(", ")}
         </Text>
-        {/* T33B7: "An attachment uploads and appears on the message" — every attachment carried by this entry (`handleSend`'s `submitDraft` + attach step) is named here, next to the entry's own text. */}
-        {entry.attachments && entry.attachments.length > 0 ? (
-          <Text style={styles.entryAttachments} testID={`${testId}-attachments`}>
-            {entry.attachments.map((attachment) => attachment.fileName).join(", ")}
-          </Text>
+      ) : null}
+      <View style={styles.entryBlockFooter}>
+        <Chip label={entryStatusLabel(entry.status)} tone={TONE_BY_STATUS[entry.status]} />
+        {entry.status === "failed" ? (
+          <Button
+            kind="secondary"
+            label="Retry"
+            onPress={() => onRetry(entry.id)}
+            testId={`${testId}-retry`}
+          />
         ) : null}
       </View>
-      <Chip label={entryStatusLabel(entry.status)} tone={TONE_BY_STATUS[entry.status]} />
-      {entry.status === "failed" ? (
-        <Button
-          kind="secondary"
-          label="Retry"
-          onPress={() => onRetry(entry.id)}
-          testId={`${testId}-retry`}
-        />
-      ) : null}
     </View>
   );
 }
@@ -1868,7 +1924,22 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     section: { flexShrink: 1, minHeight: 0 },
     scroll: { flexGrow: 0, flexShrink: 1 },
     scrollContent: { gap: theme.spacing[3] },
-    entries: { gap: theme.spacing[2], marginBottom: theme.spacing[2] },
+    // T355: the block stack. `ENTRY_BLOCK_GAP` is the artifact's own
+    // `margin: 10px 0` between blocks, expressed as the container's gap
+    // so the first and last block do not carry a half-margin each.
+    entries: { gap: ENTRY_BLOCK_GAP, marginBottom: theme.spacing[2] },
+    entryBlock: {
+      gap: theme.spacing[1],
+      borderRadius: ENTRY_BLOCK_RADIUS,
+      paddingVertical: ENTRY_BLOCK_PADDING_VERTICAL,
+      paddingHorizontal: ENTRY_BLOCK_PADDING_HORIZONTAL,
+    },
+    entryBlockFooter: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: theme.spacing[2],
+    },
     entryRow: {
       flexDirection: "row",
       alignItems: "center",
