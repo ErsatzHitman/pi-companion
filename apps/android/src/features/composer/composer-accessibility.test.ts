@@ -156,6 +156,20 @@ describe("Composer.tsx", () => {
     expect(code.slice(scrollOpen, scrollTagEnd)).not.toMatch(/onLayout=/);
   });
 
+  it("T346: reports that same measured floor upward, so the shell's composer slot can carry it too", () => {
+    expect(code).toMatch(/onMinHeightChange\?: \(minHeight: number\) => void;/);
+    // Reported from an effect on the resolved value, never from inside
+    // `remeasureMinHeight`: the two layout handlers fire separately, so
+    // reporting there would publish the half-measured 0.
+    expect(code).toMatch(
+      /useEffect\(\(\) => \{\s*onMinHeightChange\?\.\(minHeight\);\s*\}, \[minHeight, onMinHeightChange\]\);/,
+    );
+    const remeasure = code.slice(code.indexOf("const remeasureMinHeight"));
+    expect(remeasure.slice(0, remeasure.indexOf("const handleTitleLayout"))).not.toMatch(
+      /onMinHeightChange/,
+    );
+  });
+
   // T75: `onSubmit` is no longer called directly from `handleSend` — it
   // moved inside `sendWithOutbox`, which every send (text-only or not)
   // now goes through. The optimistic guarantee this test proves is

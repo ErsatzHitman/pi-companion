@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
+import { useWindowDimensions } from "react-native";
 
 import { timeline as coreTimeline } from "@picompanion/frontend-core";
 
@@ -18,8 +19,10 @@ import { useConnectionStatus } from "../../../../../features/connect";
 import {
   PiUiElementView,
   PinnedLiveExtensionArea,
+  resolvePinnedAreaVisibility,
   usePiUiElements,
 } from "../../../../../features/extensions/registry-index";
+import { resolveComposerSlotMaxHeightDp } from "../../../../../app-shell/composer-slot-cap-model";
 import { selectSheetPlacementElements } from "../../../../../app-shell/sheet-extension-model";
 import {
   RecoveredTurnBanner,
@@ -835,9 +838,29 @@ export default function SessionRoute() {
   const attachmentSource = useMemo(() => createExpoAttachmentSourcePort(), []);
   const cameraCapture = useMemo(() => createExpoCameraCapturePort(), []);
 
+  // T346: the composer slot's two height bounds. The cap needs to know
+  // whether the pinned area is really drawing, which only the elements
+  // can answer (`SessionLiveExtension` below reads the same store; the
+  // shell's own `liveExtension` prop is an element either way), and the
+  // floor is the composer's own runtime measurement reported upward.
+  // `app-shell/composer-slot-cap-model.ts` holds the measured geometry
+  // and the reason both are needed together.
+  const { height: windowHeightDp } = useWindowDimensions();
+  const { elements: liveExtensionElements } = usePiUiElements(
+    core.piUiSession.store,
+    agentId ?? "",
+  );
+  const composerMaxHeight = resolveComposerSlotMaxHeightDp({
+    windowHeightDp,
+    liveExtensionOccupied: resolvePinnedAreaVisibility(liveExtensionElements) === "visible",
+  });
+  const [composerContentMinHeight, setComposerContentMinHeight] = useState(0);
+
   return (
     <>
       <CompactSessionShell
+        composerContentMinHeight={composerContentMinHeight}
+        composerMaxHeight={composerMaxHeight}
         header={
           <>
             <TranscriptHeader
@@ -866,6 +889,7 @@ export default function SessionRoute() {
             editorTextClient={editorTextClient}
             attachmentSource={attachmentSource}
             cameraCapture={cameraCapture}
+            onMinHeightChange={setComposerContentMinHeight}
             outbox={core.turnOutbox.getOutbox() ?? undefined}
           />
         }

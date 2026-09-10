@@ -441,6 +441,17 @@ export interface ComposerProps {
    * timeout covers that exactly as it covers a second, unanswered client.
    */
   editorTextClient?: DaemonEditorTextSource;
+  /**
+   * T346: reports `resolveComposerMinHeight`'s measured floor — the
+   * height of everything in this composer that never scrolls — every
+   * time it changes, so the shell's composer SLOT can carry the same
+   * floor one level out. Without it the slot can be shrunk smaller than
+   * this component's own root and draw the prompt bar under the keyboard;
+   * see `app-shell/composer-slot-cap-model.ts` for the measured geometry.
+   * Optional: omitted, this component behaves exactly as it did before,
+   * applying the floor to its own root and nothing else.
+   */
+  onMinHeightChange?: (minHeight: number) => void;
   placeholder?: string;
   testId?: string;
 }
@@ -600,6 +611,7 @@ export function Composer({
   turnStatusClient,
   slashCommandsClient,
   editorTextClient,
+  onMinHeightChange,
   placeholder,
   testId,
 }: ComposerProps) {
@@ -1345,6 +1357,16 @@ export function Composer({
     },
     [remeasureMinHeight],
   );
+  // T346: publish the same measured floor the root applies, so the shell
+  // slot can apply it too. Deliberately an effect on the resolved value
+  // rather than a second call inside `remeasureMinHeight`: the two layout
+  // handlers fire as separate events, and reporting from there would emit
+  // the half-measured `0` that `resolveComposerMinHeight` returns before
+  // both views have reported — see its own doc comment on why a stale low
+  // reading is safe for the root but would churn a consumer.
+  useEffect(() => {
+    onMinHeightChange?.(minHeight);
+  }, [minHeight, onMinHeightChange]);
 
   return (
     <View style={[styles.root, { minHeight }]} testID={`${composerTestId}-root`}>

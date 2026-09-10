@@ -452,7 +452,7 @@ describe("SessionRoute source", () => {
     // the same reasoning `handleSubmit`/`turnRunning`'s cases above use.
     const code = readCode();
     expect(code).toMatch(
-      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
+      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+onMinHeightChange=\{setComposerContentMinHeight\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
     );
   });
 
@@ -734,5 +734,35 @@ describe("SessionRoute marks the viewed agent's timeline (T339)", () => {
   it("issues the registration from this route, not from a consumer that could be mounted without it", () => {
     const code = readCode();
     expect(code.match(/setViewedAgentTimeline\(/g)).toHaveLength(2);
+  });
+});
+
+describe("SessionRoute bounds the composer slot beside a drawing pinned area (T346)", () => {
+  it("resolves the cap from the real window height and the real pinned-area visibility, never a guess", () => {
+    const code = readCode();
+    expect(code).toMatch(/import \{ useWindowDimensions \} from "react-native";/);
+    expect(code).toMatch(
+      /import \{ resolveComposerSlotMaxHeightDp \} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/composer-slot-cap-model";/,
+    );
+    expect(code).toMatch(/const \{ height: windowHeightDp \} = useWindowDimensions\(\);/);
+    expect(code).toMatch(
+      /const composerMaxHeight = resolveComposerSlotMaxHeightDp\(\{\s*windowHeightDp,\s*liveExtensionOccupied: resolvePinnedAreaVisibility\(liveExtensionElements\) === "visible",\s*\}\);/,
+    );
+    // The visibility answer comes from the same store SessionLiveExtension
+    // reads, through the registry barrel's own re-export.
+    expect(code).toMatch(/resolvePinnedAreaVisibility,/);
+    expect(code).toMatch(
+      /const \{ elements: liveExtensionElements \} = usePiUiElements\(core\.piUiSession\.store, agentId \?\? ""\);/,
+    );
+  });
+
+  it("carries the composer's own reported floor into the shell, so the prompt bar survives the keyboard", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /const \[composerContentMinHeight, setComposerContentMinHeight\] = useState\(0\);/,
+    );
+    expect(code).toMatch(/onMinHeightChange=\{setComposerContentMinHeight\}/);
+    expect(code).toMatch(/composerContentMinHeight=\{composerContentMinHeight\}/);
+    expect(code).toMatch(/composerMaxHeight=\{composerMaxHeight\}/);
   });
 });

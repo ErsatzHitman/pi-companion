@@ -602,6 +602,7 @@ that recomputation has to be domain-specific:
 | T343   | With the keyboard up, the pinned area squeezed the composer down to its heading                                      | phase-9   | android          | P9-U   | T342, T338, T329                                                      |
 | T344   | The composer's measured floor paired stale readings and froze it at full height                                      | phase-9   | android          | P9-U   | T343                                                                  |
 | T345   | S7 foundations: JetBrains Mono on Android and the Pi role colours                                                    | phase-9   | android          | P9-U   | T13C, T13B                                                            |
+| T346   | The composer slot took half the shell, hiding a pinned panel's sections                                              | phase-9   | android          | P9-U   | T344, T343, T342                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -643,8 +644,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**554 tasks** (distinct IDs counted directly from the table above), recounted at T345 with
-`grep`/`sort -u` over the table's own rows — one past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**555 tasks** (distinct IDs counted directly from the table above), recounted at T346 with
+`grep`/`sort -u` over the table's own rows — one past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17003,3 +17004,52 @@ type sentence records the per-platform mono face.
 - [x] `useAppFonts()` registers four JetBrains Mono weights and no Geist Mono asset remains under `apps/android/assets/fonts/`
 - [x] Both themes carry the six Pi role colours and every pinned pair reaches 4.5:1
 - [x] `THIRD_PARTY_NOTICES.md` §3 and plan.md §10.2 name the new face and its licence
+
+#### T346 — The composer slot took half the shell, hiding a pinned panel's sections
+
+`labels: phase-9, area: android` · `depends-on: T344, T343, T342`
+
+Maestro run `34502151872` (shard-4) failed on `assertVisible id: pi-panel-loop-loop-sections`
+with the keyboard closed, and the hierarchy dump that run captured settles what happened: it is
+a space argument, not a rendering one. On the 1080x2400 emulator the shell had 2138px. The
+composer slot held **1106px** of it — its full natural height, a 54px heading, a 584px controls
+`ScrollView`, and a prompt bar whose input and send button stack into 341px — the transcript was
+squeezed to nothing, and the pinned area was left **608px** for roughly 877px of content.
+`pi-roster-subagents-fleet` and `pi-panel-loop-loop` were both visible; the panel's card was
+clipped at the pinned area's bottom edge (y=1168) and `panel.tsx`'s `${testId}-sections`
+`ScrollView` begins about 25px below that edge, so it was pruned from the view hierarchy
+entirely rather than reported as a zero-height node. The scripted provider's panel does carry a
+section (`scripted-pi.mjs`'s `SHEETS_PANEL_ELEMENT`, one `status` child), so nothing was missing
+from the data — only from the room.
+
+Neither T343 nor T344 could have closed this. Both act on the composer's own root, one level
+INSIDE the shell's composer slot: `resolveComposerMinHeight` measures the parts of the composer
+that never scroll and applies them as that root's `minHeight`, which is why the slot could keep
+its full natural height while the pinned slot absorbed every pixel of overflow.
+
+This task bounds the slot itself, in both directions, because either bound alone is the unsafe
+half. `app-shell/composer-slot-cap-model.ts` adds `resolveComposerSlotMaxHeightDp` — a cap of
+320dp or 0.32 of the window, whichever is smaller, applied **only while the pinned area is
+actually drawing**, so an idle session keeps today's layout exactly and no flow that drives the
+composer's controls with nothing pinned can be affected — and `resolveComposerSlotMinHeight`,
+which lifts the composer's own measured floor (plus the slot's padding) onto the slot. The floor
+is what makes the cap safe at any value: CSS and Yoga both resolve a `minHeight` that exceeds a
+`maxHeight` in favour of the `minHeight`, so the cap can never squeeze the prompt bar under the
+keyboard however short the window — which matters because the same flow types and sends with
+both cards still pinned. `Composer.tsx` gains an optional `onMinHeightChange`, reported from an
+effect on the already-resolved value rather than from inside `remeasureMinHeight` (whose two
+layout handlers fire separately and would publish the half-measured `0`), and the session route
+resolves the cap from the real `useWindowDimensions().height` and the real
+`resolvePinnedAreaVisibility` of the same element store `SessionLiveExtension` reads — the shell
+cannot answer that question itself, because its `liveExtension` prop is an element on every
+render and returns `null` from inside when nothing is pinned.
+
+`guard-capability-prose.mjs` registers both names as one T168 AND-group, for the same reason the
+two bounds ship together: a cap with no floor is the unsafe half, and a prose claim that the
+slot is unbounded would still be true of the missing one.
+
+- [x] `resolveComposerSlotMaxHeightDp` returns no cap while nothing is pinned, and the window share on the emulator's own 873dp window
+- [x] `resolveComposerSlotMinHeight` is the composer's measured floor plus the slot's padding, and no floor at all until that measurement exists
+- [x] The shell applies both to the composer slot, and the route resolves the cap from the live window height and the live pinned-area visibility
+- [x] A `CAPABILITIES` entry covers both names as one same-file group, proven able to fire and restored to exit 0
+- [ ] A dispatch in which shard-4's `extension-sheets` reaches `pi-panel-loop-loop-section-.*` and still sends from the composer with both cards pinned

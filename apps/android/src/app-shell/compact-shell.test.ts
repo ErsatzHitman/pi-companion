@@ -71,6 +71,29 @@ describe("CompactSessionShell source", () => {
     expect(styleBlock("composer")).toMatch(/flexShrink:\s*1/);
   });
 
+  it("T346: bounds the composer slot with the caller's cap and the composer's own measured floor, both resolved through composer-slot-cap-model", () => {
+    expect(code).toMatch(
+      /import \{\s*resolveComposerSlotMinHeight,[\s\S]*?\} from "\.\/composer-slot-cap-model";/,
+    );
+    expect(code).toMatch(
+      /const composerSlotMinHeight = resolveComposerSlotMinHeight\(\{\s*contentMinHeight: composerContentMinHeight,\s*verticalPadding: composerSlotPadding,\s*\}\);/,
+    );
+    // The cap is the caller's number, never re-derived here: this
+    // component cannot tell whether the pinned area is drawing.
+    expect(code).toMatch(
+      /style=\{\[\s*styles\.composer,\s*\{ maxHeight: composerMaxHeight, minHeight: composerSlotMinHeight \},\s*\]\}/,
+    );
+    expect(code).toMatch(/composerContentMinHeight = 0,/);
+    expect(code).toMatch(/composerMaxHeight,/);
+    // The slot's padding comes from the same token the style block uses,
+    // so the floor can never drift from the padding it compensates for.
+    expect(code).toMatch(/composerSlotPadding[^=]*= theme\.spacing\[3\] \* 2;/);
+    const styleBlockStart = code.indexOf("composer: {");
+    expect(code.slice(styleBlockStart, code.indexOf("}", styleBlockStart))).toMatch(
+      /padding: theme\.spacing\[3\]/,
+    );
+  });
+
   it('contains no raw hex colour literal (plan.md §10 "no raw hex" rule)', () => {
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });

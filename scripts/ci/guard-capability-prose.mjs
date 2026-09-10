@@ -2343,6 +2343,31 @@ export const CAPABILITIES = [
       /nothing (?:stops|prevents|keeps) (?:the )?(?:pinned area|live[- ]extension area|keyboard) from (?:crushing|squeezing|collapsing) (?:the )?composer/i,
     ],
   },
+  {
+    // T346: the shell's composer SLOT now carries both bounds --
+    // `composer-slot-cap-model.ts`'s `resolveComposerSlotMaxHeightDp`
+    // (a cap that applies only while the pinned area draws, so the
+    // pinned area can reach its own ceiling) and
+    // `resolveComposerSlotMinHeight` (the composer's own measured floor,
+    // lifted one level out of `Composer.tsx`'s root so the slot cannot be
+    // shrunk smaller than its child). Until Maestro run 34502151872 the
+    // slot had neither, the composer held 1106px of a 2138px shell with
+    // the keyboard closed, and `pi-panel-loop-loop-sections` sat below the
+    // pinned area's fold. A group (T168's shape): BOTH names must be
+    // declared in the SAME file before this counts as shipped, because
+    // either alone is the unsafe half -- a cap with no floor can squeeze
+    // the prompt bar under the keyboard, and a floor with no cap frees
+    // nothing. Worded in T346's own voice, not lifted from the model's or
+    // the shell's narration of the pre-fix geometry.
+    name: "The composer slot is bounded above and below, so a pinned panel gets the room (resolveComposerSlotMaxHeightDp + resolveComposerSlotMinHeight)",
+    methodNames: [["resolveComposerSlotMaxHeightDp", "resolveComposerSlotMinHeight"]],
+    denyingPhrases: [
+      /(?:the )?composer slot (?:has|carries|gets|is given) no (?:height )?(?:cap|ceiling|maximum|upper bound)/i,
+      /(?:the )?composer (?:slot )?(?:can|may) (?:still )?(?:take|claim|hold|keep) (?:every|all the|the whole) (?:pixel|remaining height|available height)/i,
+      /(?:the )?pinned area (?:alone )?absorbs (?:every|all the|the whole) overflow/i,
+      /(?:the )?shell cannot bound (?:the )?composer slot/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

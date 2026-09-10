@@ -5313,3 +5313,104 @@ test("T298: the real committed tree carries no live denial of android permission
     );
   }
 });
+
+// T346: the composer slot's two height bounds, registered as a T168
+// AND-group because either half alone is the unsafe half — a cap with no
+// floor can squeeze the prompt bar under the keyboard, and a floor with no
+// cap frees nothing for the pinned area. The three cases below pin that
+// shape, the firing, and the real tree's silence, the same way T281's and
+// T298's own cases do for theirs.
+const T346_CAPABILITY_NAME =
+  "The composer slot is bounded above and below, so a pinned panel gets the room (resolveComposerSlotMaxHeightDp + resolveComposerSlotMinHeight)";
+
+const T346_SHIPPED_FIXTURE = [
+  {
+    path: "apps/android/src/app-shell/composer-slot-cap-model.ts",
+    content:
+      "export function resolveComposerSlotMaxHeightDp(input) { return 320; }\n" +
+      "export function resolveComposerSlotMinHeight(input) { return input.contentMinHeight; }\n",
+  },
+];
+
+test("T346: the composer-slot bounds are a same-file AND-group -- one name alone is not enough", () => {
+  const onlyCapShipped = findShippedCapabilities([
+    {
+      path: "apps/android/src/app-shell/composer-slot-cap-model.ts",
+      content: "export function resolveComposerSlotMaxHeightDp(input) { return 320; }\n",
+    },
+  ]);
+
+  assert.ok(
+    !onlyCapShipped.some((capability) => capability.name === T346_CAPABILITY_NAME),
+    "a cap with no floor must not count as shipped -- that is the unsafe half, and a" +
+      " prose claim that the slot is unbounded is still true of the floor",
+  );
+
+  assert.ok(
+    findShippedCapabilities(T346_SHIPPED_FIXTURE).some(
+      (capability) => capability.name === T346_CAPABILITY_NAME,
+    ),
+    "both names declared in the same file must resolve as shipped",
+  );
+});
+
+test("T346: a live composer-slot-is-unbounded claim is flagged once both bounds ship", () => {
+  const violations = findCapabilityDenialViolations({
+    shippedFiles: T346_SHIPPED_FIXTURE,
+    appFiles: [
+      {
+        path: "docs/legacy-retirement.md",
+        content:
+          "# Notes\n\nThe composer slot has no height cap, so the pinned area alone absorbs" +
+          " every overflow.\n",
+      },
+    ],
+  });
+
+  assert.equal(violations.length, 2);
+  for (const violation of violations) {
+    assert.equal(violation.capability, T346_CAPABILITY_NAME);
+    assert.equal(violation.path, "docs/legacy-retirement.md");
+  }
+});
+
+test("T346: a quoted historical correction of that same claim is exempt", () => {
+  const violations = findCapabilityDenialViolations({
+    shippedFiles: T346_SHIPPED_FIXTURE,
+    appFiles: [
+      {
+        path: "docs/legacy-retirement.md",
+        content:
+          "# Notes\n\nCORRECTED at T346: this said the composer slot has no height cap, which" +
+          " Maestro run 34502151872 made expensive.\n",
+      },
+    ],
+  });
+
+  assert.deepEqual(violations, []);
+});
+
+test("T346: the real tree carries no live denial of the composer-slot bounds", () => {
+  // `readRepoFile`, not `readCommittedFile`: every file below either is
+  // this capability's own new source or narrates the pre-fix geometry it
+  // replaced, so the content that has to be checked is the content that
+  // ships, which `git show HEAD:` cannot see until after the commit. The
+  // T244 case above reads the real tree the same way for the same reason.
+  for (const path of [
+    "apps/android/src/app-shell/compact-shell.tsx",
+    "apps/android/src/app-shell/composer-slot-cap-model.ts",
+    "apps/android/src/features/composer/composer-min-height-model.ts",
+    "apps/android/src/features/composer/Composer.tsx",
+  ]) {
+    const content = readRepoFile(path);
+    const violations = findCapabilityDenialViolations({
+      shippedFiles: T346_SHIPPED_FIXTURE,
+      appFiles: [{ path, content }],
+    });
+    assert.equal(
+      violations.filter((v) => v.path === path).length,
+      0,
+      `${path}'s real committed content must not trip the composer-slot-bounds entry`,
+    );
+  }
+});

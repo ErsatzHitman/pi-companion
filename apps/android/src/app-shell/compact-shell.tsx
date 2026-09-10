@@ -3,10 +3,32 @@ import { StyleSheet, View } from "react-native";
 
 import { useTheme } from "../ui/theme/theme-context";
 import type { CompactShellSlots } from "./compact-shell-slots";
+import {
+  resolveComposerSlotMinHeight,
+  type ComposerSlotFloorInput,
+} from "./composer-slot-cap-model";
 import { useKeyboardInset } from "./keyboard-inset";
 
 export type { CompactShellSlots } from "./compact-shell-slots";
 export { COMPACT_SHELL_SLOT_ORDER } from "./compact-shell-slots";
+
+/**
+ * The slots, plus T346's two composer-slot height bounds. They are props
+ * rather than something this component derives because neither value is
+ * knowable here: the cap depends on whether the pinned live-extension
+ * area is actually drawing (this component's `liveExtension` prop is an
+ * element either way — see `./composer-slot-cap-model.ts`), and the floor
+ * is a runtime measurement the composer itself takes.
+ */
+export interface CompactSessionShellProps extends CompactShellSlots {
+  /**
+   * `resolveComposerMinHeight`'s measured height for the composer's own
+   * unshrinkable content. The slot adds its own padding to it.
+   */
+  composerContentMinHeight?: number;
+  /** `resolveComposerSlotMaxHeightDp`'s cap, or `undefined` for no cap. */
+  composerMaxHeight?: number;
+}
 
 /**
  * Lives in `app-shell/`, not the Expo Router root — see
@@ -51,7 +73,9 @@ export function CompactSessionShell({
   liveExtension = null,
   transcript = null,
   composer = null,
-}: CompactShellSlots) {
+  composerContentMinHeight = 0,
+  composerMaxHeight,
+}: CompactSessionShellProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   // T329: under edge-to-edge the window never resizes around the IME, so
@@ -59,6 +83,16 @@ export function CompactSessionShell({
   // keeps the composer "visible above the IME" (plan.md §9.3). See
   // `./keyboard-inset.ts` for the measurement this rests on.
   const keyboardInset = useKeyboardInset();
+  // T346: the slot carries the composer's own measured floor, one level
+  // out from where `Composer.tsx` applies it, so the pinned area gives
+  // way before the prompt bar is squeezed under the keyboard — and so the
+  // cap below can never squeeze it either. See
+  // `./composer-slot-cap-model.ts` for the measured geometry behind both.
+  const composerSlotPadding: ComposerSlotFloorInput["verticalPadding"] = theme.spacing[3] * 2;
+  const composerSlotMinHeight = resolveComposerSlotMinHeight({
+    contentMinHeight: composerContentMinHeight,
+    verticalPadding: composerSlotPadding,
+  });
 
   return (
     <View style={[styles.shell, { paddingBottom: keyboardInset }]} testID="compact-shell">
@@ -85,7 +119,13 @@ export function CompactSessionShell({
        * what is left under the keyboard is squeezed to fit and scrolls its
        * own controls, instead of overflowing the shell and pushing its
        * prompt bar off screen. */}
-      <View style={styles.composer} testID="compact-shell-composer">
+      <View
+        style={[
+          styles.composer,
+          { maxHeight: composerMaxHeight, minHeight: composerSlotMinHeight },
+        ]}
+        testID="compact-shell-composer"
+      >
         {composer}
       </View>
     </View>
