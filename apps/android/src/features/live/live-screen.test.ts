@@ -67,4 +67,25 @@ describe("LiveScreen source", () => {
     const code = readCode();
     expect(code).toMatch(/label=\{turnRunning \? "Working" : "Idle"\}/);
   });
+
+  it("T352: the Context card takes every string and the band from the shared telemetry model", () => {
+    const code = readCode();
+    expect(code).toMatch(/buildContextCardViewModel\(\{ usage, autoCompaction \}\)/);
+    expect(code).toMatch(/\{model\.summary\}/);
+    expect(code).toMatch(/bandColors\[model\.band\]/);
+    expect(code).not.toMatch(/"auto-compaction/);
+  });
+
+  it("T352: draws an empty track when the provider has reported no window, never a full or half one", () => {
+    const code = readCode();
+    expect(code).toMatch(/model\.fraction === null \? null :/);
+  });
+
+  it("T352: speaks the context reading, so its colour band is never the only signal", () => {
+    expect(readCode()).toMatch(/accessibilityLabel=\{model\.accessibilityLabel\}/);
+  });
+
+  it("T352: hides the stats row entirely when the provider reported nothing countable", () => {
+    expect(readCode()).toMatch(/model\.statsText\.length > 0 \?/);
+  });
 });

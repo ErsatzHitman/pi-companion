@@ -46,6 +46,21 @@
  * already narrows four times above satisfies this fifth port as-is
  * too, with no adapter.
  *
+ * **T352 adds `resolveAgentUsageClient` below**, the same pattern an
+ * eighth time: the Live screen's Context card needs this session's
+ * token usage, and the daemon delivers it as `lastUsage` on the whole
+ * refreshed snapshot inside an `agent_update` push (never as an
+ * `agent_stream` event — `../features/telemetry/context-usage-signal.ts`'s
+ * own module doc explains why, measured against the wire schema).
+ * `createContextUsageSignal` wants a `DaemonAgentUsageSource`
+ * (`{ on("agent_update", handler), fetchAgent?(agentId) }`), and the
+ * real `DaemonClient` implements both exactly — so the one live
+ * `DaemonClient` instance this file already narrows seven times above
+ * satisfies this eighth port as-is too, with no adapter. Kept separate
+ * from `resolveAgentSnapshotClient` rather than widened into it: the
+ * two features need different methods, and a port that demands more
+ * than its caller uses is a port a partial fake can no longer satisfy.
+ *
  * **T351 adds `resolveAgentSnapshotClient` below**, the same pattern a
  * seventh time: the session app bar's mono subtitle is the session's
  * working directory, which only the daemon's own agent snapshot knows
@@ -93,6 +108,7 @@ import type {
   DaemonTurnStatusSource,
 } from "../features/composer";
 import type { AgentSnapshotSource, AttachmentDownloadTokenClient } from "../features/transcript";
+import type { DaemonAgentUsageSource } from "../features/telemetry";
 import type { VoiceTranscriptionClient } from "../features/voice";
 
 /**
@@ -213,6 +229,29 @@ export function resolveSlashCommandsClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | DaemonSlashCommandSource
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T352: same fresh-read contract as the seven functions above, cast to
+ * `DaemonAgentUsageSource` instead — the eighth narrow port this one
+ * live `DaemonClient` instance satisfies (the real
+ * `on("agent_update", handler)` overload plus `fetchAgent`, see
+ * `packages/client/src/daemon-client.ts`'s own doc comments on both).
+ * `undefined` (never `null`) with no active lifecycle or no live client
+ * yet, matching every sibling resolver above — the Live screen then
+ * opens no subscription at all and its Context card reads "the provider
+ * has not reported this session's context window yet", which is exactly
+ * what is true with nothing connected.
+ */
+export function resolveAgentUsageClient(
+  connection: SessionRouteConnectionSource,
+): DaemonAgentUsageSource | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | DaemonAgentUsageSource
       | null
       | undefined) ?? undefined
   );

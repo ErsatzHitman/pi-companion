@@ -2439,6 +2439,30 @@ export const CAPABILITIES = [
       /(?:the )?session's working directory is never (?:shown|displayed) (?:on|in) (?:the )?(?:transcript|session) (?:screen|header)/i,
     ],
   },
+  {
+    // T352: `features/telemetry/context-usage-signal.ts`'s
+    // `createContextUsageSignal` is the first thing on Android to
+    // subscribe to a session's token usage at all, and
+    // `context-usage-model.ts`'s `buildContextCardViewModel` is what
+    // turns `frontend-core`'s shared derivation into the strings the
+    // Live screen's Context card draws. Before it, `apps/web` had a
+    // usage rail (T29C2) and Android had no reader of any kind, so a
+    // context window could fill to 100% with nothing on the phone
+    // saying so. An OR-across-members pair, not T168's same-file
+    // AND-group: the two names are declared in two different files,
+    // each uniquely, and either existing means the capability is real.
+    // The phrases are worded in T352's own voice and deliberately avoid
+    // the "the provider has not reported this session's context window
+    // yet" sentence, which is live product copy for a real UNKNOWN
+    // state rather than a claim about what this app can do.
+    name: "Android reads its own context-window usage from the daemon (createContextUsageSignal / buildContextCardViewModel)",
+    methodNames: ["createContextUsageSignal", "buildContextCardViewModel"],
+    denyingPhrases: [
+      /(?:nothing|no screen) (?:on android |in this app )?(?:reads|shows|surfaces) (?:a |the )?session's token usage/i,
+      /android (?:has|carries) no context[- ]window (?:readout|meter|indicator)/i,
+      /token usage (?:is|remains) (?:web|apps\/web)[- ]only/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

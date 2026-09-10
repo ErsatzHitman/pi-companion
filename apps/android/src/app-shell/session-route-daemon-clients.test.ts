@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   resolveAgentSnapshotClient,
+  resolveAgentUsageClient,
   resolveAttachmentDownloadClient,
   resolveEditorTextClient,
   resolveQueueModeClient,
@@ -355,5 +356,46 @@ describe("resolveAgentSnapshotClient", () => {
       getActiveLifecycle: () => ({ getDaemonClient: () => null }),
     };
     expect(resolveAgentSnapshotClient(connection)).toBeUndefined();
+  });
+});
+
+describe("resolveAgentUsageClient", () => {
+  it("returns the exact live client reference unchanged — never a wrapper or a clone", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveAgentUsageClient(connectionWithClient(fakeClient));
+    expect(resolved).toBe(fakeClient as unknown as typeof resolved);
+  });
+
+  it("an on('agent_update', handler) call on the resolved client reaches the real counting fake", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveAgentUsageClient(connectionWithClient(fakeClient));
+
+    const unsubscribe = resolved!.on("agent_update", () => {});
+
+    expect(fakeClient.on).toHaveBeenCalledTimes(1);
+    expect(fakeClient.calls[0]).toEqual(["on", "agent_update"]);
+    unsubscribe();
+    expect(fakeClient.calls[1]).toEqual(["unsubscribe"]);
+  });
+
+  it("resolves the SAME object every other resolver on this connection resolves — one client, eight ports", () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const connection = connectionWithClient(fakeClient);
+
+    expect(resolveAgentUsageClient(connection) as unknown).toBe(
+      resolveAgentSnapshotClient(connection) as unknown,
+    );
+  });
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveAgentUsageClient(connection)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveAgentUsageClient(connection)).toBeUndefined();
   });
 });

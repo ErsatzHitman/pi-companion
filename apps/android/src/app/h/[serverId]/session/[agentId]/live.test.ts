@@ -61,4 +61,21 @@ describe("SessionLiveRoute source", () => {
     expect(code).toMatch(/router\.back\(\)/);
     expect(code).not.toMatch(/router\.push\("/);
   });
+
+  it("T352: feeds the Context card from a real agent_update subscription, never a literal", () => {
+    const code = readCode();
+    expect(code).toMatch(/resolveAgentUsageClient\(core\.connection\)/);
+    expect(code).toMatch(/createContextUsageSignal\(usageClient, agentId, setUsage\)/);
+    expect(code).toMatch(/usage=\{usage\}/);
+  });
+
+  it("T352: opens no subscription with no client, and disposes the one it opens", () => {
+    const code = readCode();
+    expect(code).toMatch(/if \(!agentId \|\| !usageClient\) return;/);
+    expect(code).toMatch(/return \(\) => signal\.dispose\(\);/);
+  });
+
+  it("T352: passes no autoCompaction, because no control has asked the daemon yet", () => {
+    expect(readCode()).not.toMatch(/autoCompaction=/);
+  });
 });

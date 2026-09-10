@@ -1,8 +1,10 @@
 import { useMemo, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import type { AgentUsage } from "@picompanion/protocol/agent-types";
 import type { PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
+import { buildContextCardViewModel, type ContextUsageBand } from "../telemetry";
 import { StatusPill, VectorIcon } from "../../ui/primitives";
 import { PixelLoader, ScreenBar } from "../../ui/recipes";
 import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
@@ -39,6 +41,21 @@ export interface LiveScreenProps {
   elements: readonly PiUiElement[];
   /** Whether a turn is in flight, which is what the bar's pill reports. */
   turnRunning: boolean;
+  /**
+   * The newest token usage the daemon has reported for this session
+   * (T352), straight off `createContextUsageSignal`. `null` before any
+   * has arrived, and with no connection — the Context card then says
+   * the window is unreported rather than drawing an empty meter that
+   * looks like a fresh session.
+   */
+  usage?: AgentUsage | null;
+  /**
+   * Whether auto-compaction is on, when that is known. Left
+   * `undefined` here: the control that reads and sets it is the
+   * context-ring menu's, and until that lands nobody has asked, so the
+   * card omits the clause rather than guessing.
+   */
+  autoCompaction?: boolean;
   onBack: () => void;
   /**
    * The Files/Terminal controls, mounted by the route because they
@@ -64,6 +81,10 @@ const WORKFLOW_BAR_WIDTH = 70;
 const WORKFLOW_BAR_HEIGHT = 5;
 /** The artifact's hollow waiting ring. */
 const GLYPH_SIZE = 12;
+/** The artifact's Context meter: a 6px track across the card. */
+const CONTEXT_BAR_HEIGHT = 6;
+/** The artifact's mono stats row under that meter. */
+const CONTEXT_STATS_SIZE = 11;
 
 function RowGlyph({ glyph }: { glyph: LiveRowGlyph }) {
   const { theme } = useTheme();
@@ -147,9 +168,74 @@ function LiveCard({
   );
 }
 
+/**
+ * The artifact's Context card (T352). Its numbers come from
+ * `../telemetry`'s `buildContextCardViewModel`, which wraps
+ * `frontend-core`'s shared derivation — so this card and the composer's
+ * context ring can never disagree about what a percentage means.
+ *
+ * An unknown window draws an EMPTY track, not a full or a half one:
+ * "the provider has not said" must not be able to look like a reading.
+ */
+function ContextCard({
+  usage,
+  autoCompaction,
+  testId,
+}: {
+  usage: AgentUsage | null | undefined;
+  autoCompaction: boolean | undefined;
+  testId: string;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const model = useMemo(
+    () => buildContextCardViewModel({ usage, autoCompaction }),
+    [usage, autoCompaction],
+  );
+  const bandColors: Record<ContextUsageBand, string> = {
+    normal: theme.colors.accent,
+    warning: theme.colors.orange,
+    critical: theme.colors.red,
+  };
+
+  return (
+    <View
+      accessible
+      accessibilityLabel={model.accessibilityLabel}
+      style={styles.card}
+      testID={testId}
+    >
+      <Text accessibilityRole="header" style={styles.cardTitle}>
+        {model.title}
+      </Text>
+      <Text style={styles.cardSummary}>{model.summary}</Text>
+      <View style={styles.contextTrack}>
+        {model.fraction === null ? null : (
+          <View
+            style={[
+              styles.contextFill,
+              {
+                width: `${Math.round(model.fraction * 100)}%`,
+                backgroundColor: bandColors[model.band],
+              },
+            ]}
+          />
+        )}
+      </View>
+      {model.statsText.length > 0 ? (
+        <Text style={styles.contextStats} testID={`${testId}-stats`}>
+          {model.statsText}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function LiveScreen({
   elements,
   turnRunning,
+  usage,
+  autoCompaction,
   onBack,
   navActions,
   testId = "live-screen",
@@ -203,6 +289,7 @@ export function LiveScreen({
             ))}
           </View>
         </LiveCard>
+        <ContextCard usage={usage} autoCompaction={autoCompaction} testId={`${testId}-context`} />
         {navActions ? (
           <View style={styles.card} testID={`${testId}-nav`}>
             <Text accessibilityRole="header" style={styles.cardTitle}>
@@ -300,6 +387,23 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       height: WORKFLOW_BAR_HEIGHT,
       borderRadius: theme.radii.full,
       backgroundColor: theme.colors.accent,
+    },
+    contextTrack: {
+      marginTop: theme.spacing[2],
+      height: CONTEXT_BAR_HEIGHT,
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.inset,
+      overflow: "hidden",
+    },
+    contextFill: {
+      height: CONTEXT_BAR_HEIGHT,
+      borderRadius: theme.radii.full,
+    },
+    contextStats: {
+      marginTop: theme.spacing[1],
+      color: theme.colors["ink-2"],
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: CONTEXT_STATS_SIZE,
     },
   });
 }

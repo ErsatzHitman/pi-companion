@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { AgentUsage } from "@picompanion/protocol/agent-types";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { SessionNavActions } from "../../../../../app-shell/session-nav-actions";
@@ -8,6 +9,8 @@ import {
   type DaemonTurnStreamSource,
 } from "../../../../../features/sessions/turn-running-signal.js";
 import { LiveScreen } from "../../../../../features/live";
+import { createContextUsageSignal } from "../../../../../features/telemetry";
+import { resolveAgentUsageClient } from "../../../../../app-shell/session-route-daemon-clients";
 import { usePiUiElements } from "../../../../../features/extensions/registry-index";
 import { useAppCore } from "../../../../core-context";
 
@@ -42,6 +45,19 @@ import { useAppCore } from "../../../../core-context";
  * therefore has to re-register, or this screen would show a snapshot
  * frozen at the moment it opened. The effect below is T339's, keyed the
  * same way on the connection `phase`.
+ *
+ * **T352 mount.** The Context card's numbers come from
+ * `features/telemetry`'s `createContextUsageSignal`, over the live
+ * `DaemonClient` this route narrows with `resolveAgentUsageClient` —
+ * the eighth `resolve*Client` port off that one instance. It listens on
+ * `agent_update`, not `agent_stream`: that signal's own module doc
+ * records why, measured against the wire schema rather than assumed
+ * from the event union's names. With no connection the resolver hands
+ * back `undefined`, no subscription opens, and the card truthfully
+ * reports an unreported window. `autoCompaction` is deliberately not
+ * passed yet — the control that reads and sets it is the context-ring
+ * menu's, and until it exists nobody has asked the daemon, so the card
+ * omits the clause rather than inventing a default.
  *
  * **Files and Terminal are mounted here**, as `SessionNavActions`,
  * keeping `session-nav-actions-files`/`session-nav-actions-terminal`.
@@ -95,6 +111,19 @@ export default function SessionLiveRoute() {
     };
   }, [core, agentId]);
 
+  // T352: this session's live token usage. Re-derived on every render
+  // like the session route's own `resolve*Client` reads, and effectful
+  // only inside the effect below, so a reconnect (a new lifecycle)
+  // rebuilds the subscription instead of holding a dead one.
+  const usageClient = resolveAgentUsageClient(core.connection);
+  const [usage, setUsage] = useState<AgentUsage | null>(null);
+  useEffect(() => {
+    if (!agentId || !usageClient) return;
+    const signal = createContextUsageSignal(usageClient, agentId, setUsage);
+    setUsage(signal.getUsage());
+    return () => signal.dispose();
+  }, [usageClient, agentId]);
+
   const handleBack = useCallback(() => {
     router.back();
   }, [router]);
@@ -103,6 +132,7 @@ export default function SessionLiveRoute() {
     <LiveScreen
       elements={elements}
       turnRunning={turnRunning}
+      usage={usage}
       onBack={handleBack}
       navActions={<SessionNavActions serverId={serverId ?? ""} agentId={agentId ?? ""} />}
     />

@@ -608,6 +608,7 @@ that recomputation has to be domain-specific:
 | T349   | The S7 icon set had no vector renderer to draw it                                                                    | phase-9   | android          | P9-U   | T345                                                                  |
 | T350   | A session's running work had no screen, and Files/Terminal crowded the transcript                                    | phase-9   | android          | P9-U   | T349, T79, T339                                                       |
 | T351   | The session screen's header showed a title and a host, navigated nowhere, and never named the directory              | phase-9   | android          | P9-U   | T350, T349, T132                                                      |
+| T352   | A context window could fill to 100% with nothing on the phone saying so                                              | phase-9   | android          | P9-U   | T350, T351, T29C1                                                     |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -649,8 +650,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**560 tasks** (distinct IDs counted directly from the table above), recounted at T351 with
-`grep`/`sort -u` over the table's own rows — one past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**561 tasks** (distinct IDs counted directly from the table above), recounted at T352 with
+`grep`/`sort -u` over the table's own rows — one past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17354,4 +17355,71 @@ clean for that file.
 - [x] Every status has a distinct pill word, so colour is never the only signal
 - [x] `header-model.ts` gained no React Native import, so all of it is behaviourally tested
 - [x] `StatusPill`'s falsified reasoning is corrected in the same commit
+- [x] A `CAPABILITIES` entry was registered and proven to fire
+
+#### T352 — A context window could fill to 100% with nothing on the phone saying so
+
+`labels: phase-9, area: android` · `depends-on: T350, T351, T29C1`
+
+`frontend-core`'s `telemetry` module has derived context-window usage and cache share since
+T29C1, and `apps/web` has drawn a rail from it since T29C2. Android had neither a subscription
+nor a consumer: no screen in this app had ever read a session's token usage, so the one number
+that decides whether a long session is about to be compacted away was invisible on the device
+where those sessions actually run.
+
+**The channel was measured, not assumed, and the obvious answer is the wrong one.** The
+daemon's `AgentStreamEvent` union declares a `usage_updated` variant, so subscribing to
+`agent_stream` looks right. `AgentStreamEventPayloadSchema` — what `DaemonClient` actually
+validates an incoming `agent_stream` against — has no such member, and `DaemonClient` drops a
+whole message that fails validation. The real channel is the `agent_update` push carrying the
+refreshed `AgentSnapshotPayload`, whose `lastUsage` the server folds every `usage_updated`
+into. `apps/web`'s `daemon-session-cost-client.ts` reached that conclusion first, for the same
+reason, and this task re-derived it against the schema rather than inheriting the claim.
+
+`features/telemetry/context-usage-signal.ts` is Android's reader of it — deliberately not a
+copy of the web adapter. That one carries a cost store, turn attribution and a cold-snapshot
+guard, because a cost LEDGER must never attribute a turn it did not watch begin. A context
+READOUT has the opposite requirement: a session resumed at 60% should say 60% the moment it
+loads, and a window reading cannot be double-counted, so this signal bootstraps from
+`fetchAgent` and shows whatever is newest. It de-duplicates by the usage's serialized form,
+because the daemon re-sends the whole snapshot on every unrelated change (a title edit, a mode
+switch) and a `useState` consumer must not re-render for those.
+
+`features/telemetry/context-usage-model.ts` owns the strings and the colour band, so the Live
+screen's card and the composer's context ring cannot drift into two ideas of what 41.2% means.
+`formatTokenCount` rounds toward zero rather than to nearest — `999_999` is `999.9k`, never
+`1.0M`, because a readout must not claim a threshold the session has not reached. The stats
+line is assembled from the fields a provider actually reported, so a provider that bills no
+cache shows nothing rather than `CH0.0%`, which reads as a measured zero.
+
+**Unknown is rendered as unknown.** A provider that has not reported both context fields gives
+`{ status: "unknown" }`, and the card says so in words while its meter draws an EMPTY track. A
+fresh session and a session at 0% look identical at zero and only one of them is true.
+
+`resolveAgentUsageClient` is the eighth narrow port off the one live `DaemonClient`, added
+following the seven before it exactly. It is kept separate from T351's
+`resolveAgentSnapshotClient` rather than widened into it: the two features call different
+methods, and a port that demands more than its caller uses is a port a partial fake can no
+longer satisfy.
+
+`autoCompaction` is a prop the card understands and nothing passes yet. The control that reads
+and sets it belongs to the context-ring menu; until that exists nobody has asked the daemon, so
+the summary omits the clause rather than inventing a default — "on" and "off" differ by whether
+a long session survives, which is not a guess worth making.
+
+A `CAPABILITIES` entry ("Android reads its own context-window usage from the daemon") was
+registered in the same change and watched firing against a scratchpad-backed copy of
+`docs/legacy-retirement.md`, then restored with `git status --porcelain` clean for that file.
+Its phrases deliberately avoid the card's own "has not reported this session's context window
+yet" sentence, which is live product copy for a real unknown state and not a claim about what
+this app can do.
+
+- [x] Android subscribes to a session's real token usage, over the channel the wire schema actually delivers
+- [x] The Live screen reports the context window, its percentage, its ceiling and its band
+- [x] An unreported window says so in words and draws an empty meter, never a zero reading
+- [x] A resumed session shows its real window immediately, without waiting for the next turn
+- [x] An unrelated snapshot change does not re-render the readout
+- [x] Another session's numbers can never reach this session's screen
+- [x] The stats line shows only what the provider reported
+- [x] Every string and threshold is behaviourally tested; nothing here imports React Native
 - [x] A `CAPABILITIES` entry was registered and proven to fire
