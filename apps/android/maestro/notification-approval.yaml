@@ -136,8 +136,10 @@ tags:
 - inputText: "ws://${DAEMON_ADDRESS}"
 - tapOn:
     id: "connect-form-submit-button"
-- assertVisible:
-    text: "Connected via direct connection"
+
+# --- T332: no "Connected via direct connection" assertion here -- the
+# navigation replaces that status text before Maestro can sample it (run
+# 34459631677); the arrival below is the stable state.
 
 # ---------------------------------------------------------------------
 # Everything below is written against the intended design and is BLOCKED

@@ -115,11 +115,22 @@ tags:
 - inputText: "ws://${DAEMON_ADDRESS}"
 - tapOn:
     id: "connect-form-submit-button"
-- assertVisible:
-    text: "Connected via direct connection"
 
-# --- Blocked on KNOWN BLOCKER (1) above: nothing navigates from here to
-# a session screen today. Once it does, this is the arrival at
+# --- Stable end state (T332): the arrival at `/h/:serverId/sessions`,
+# never the transient "Connected via direct connection" status text.
+# Since T331 the connect screen navigates away the moment the socket
+# opens (`saveHostProfile` no longer throws), and run 34459631677 sampled
+# the hierarchy after `router.replace` had already run in every flow that
+# asserted the text -- exactly the race ../network-switch.yaml's header
+# disclosed. `serverId` is the profile's own endpoint, unknown until run
+# time, hence the wildcard.
+- assertVisible:
+    id: "sessions-screen-.*"
+
+# --- CORRECTED (T332): this said "Blocked on KNOWN BLOCKER (1) above:
+# nothing navigates from here to a session screen today". The connect now
+# lands on the sessions screen (asserted above); what is still missing is
+# a session to open, so this is the arrival at
 # `/h/:serverId/session/:agentId` — `session/[agentId]/index.tsx`'s own
 # transcript root, testId="session-transcript" — where
 # `SessionLiveExtension` mounts `PinnedLiveExtensionArea` alongside it.

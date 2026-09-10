@@ -97,6 +97,9 @@ tags:
 # direct connection" text as a final state — only the stable, post-
 # navigation arrival at the sessions screen. Whoever next runs
 # `pairing.yaml` on a real device should watch for this.
+# (CORRECTED (T332): run 34459631677 was that device -- every flow that
+# asserted the transient text failed on it, and `pairing.yaml` plus its
+# four siblings now use this flow's order and its stable arrival.)
 # ---------------------------------------------------------------------
 #
 # `clearState`/`clearKeychain` make this flow independent and repeatable

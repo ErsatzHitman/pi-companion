@@ -27,8 +27,10 @@ export const PAIRING_FLOW = {
   connectFormAddressField: "connect-form-address-field",
   connectFormSubmitButton: "connect-form-submit-button",
 
-  /** `describeConnectionStatus("connected", "direct")` in `connection-shell.tsx`. */
+  /** `describeConnectionStatus("connected", "direct")` in `connection-shell.tsx`. Kept as the one pinned copy of that copy string; since T332 no flow asserts it (the navigation replaces it too fast to sample). */
   connectedDirectStatusText: "Connected via direct connection",
+  /** `sessions-screen.tsx`'s root testId is `sessions-screen-${serverId}`; the serverId is the connected endpoint, unknown until run time, so every flow matches the arrival with this wildcard (T332). */
+  sessionsScreenArrival: "sessions-screen-.*",
   /** `describeConnectionStatus("idle", null)` — the pre-attempt status text. */
   notConnectedStatusText: "Not connected",
 

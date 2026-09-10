@@ -188,6 +188,7 @@ describe("pairing.yaml anchors exist in source", () => {
     expect(PAIRING_FLOW.connectFormSubmitButton).toBe("connect-form-submit-button");
     expect(PAIRING_FLOW.connectedDirectStatusText).toBe("Connected via direct connection");
     expect(PAIRING_FLOW.notConnectedStatusText).toBe("Not connected");
+    expect(PAIRING_FLOW.sessionsScreenArrival).toBe("sessions-screen-.*");
     expect(PAIRING_FLOW.showScannerButton).toBe("connection-shell-show-scanner-button");
     expect(PAIRING_FLOW.hideScannerButton).toBe("connection-shell-hide-scanner-button");
     expect(PAIRING_FLOW.qrPairingSection).toBe("connection-shell-qr-pairing");

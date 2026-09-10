@@ -43,8 +43,8 @@ export const FILE_DOWNLOAD_FLOW = {
   connectFormSection: "connect-form",
   connectFormAddressField: "connect-form-address-field",
   connectFormSubmitButton: "connect-form-submit-button",
-  /** `describeConnectionStatus("connected", "direct")` in `connection-shell.tsx`, the same literal `files-and-terminal-contract.ts`/`pairing-contract.ts` already pin. */
-  connectedDirectStatusText: "Connected via direct connection",
+  /** `sessions-screen.tsx`'s root testId is `sessions-screen-${serverId}`, the serverId being the connected endpoint -- unknown until run time, hence the wildcard. The stable post-connect state every flow asserts since T332 (the "Connected via direct connection" status text is replaced by the navigation before Maestro can sample it). */
+  sessionsScreenArrival: "sessions-screen-.*",
 
   /** `explainFileBrowserError("cwd is required")`'s exact title (`file-browser-client.ts`) — the real state a REAL round trip to a REAL (isolated, never production-port) daemon reaches from this route today, because `SessionFilesRoute` hardcodes `workspaceRoot=""` (see this flow's header comment for the full gap and its owner). */
   noWorkspaceSelectedTitle: "No workspace selected",

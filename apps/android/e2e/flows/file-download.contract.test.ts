@@ -204,11 +204,17 @@ describe("file-download.yaml itself, read from disk", () => {
     expect(visibleTexts).toContain(explanation.description);
   });
 
-  it("asserts the real direct-connection status text", () => {
+  it("asserts the sessions-screen arrival after the connect, never the transient status text (T332)", () => {
     const visibleTexts = steps
       .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
       .map((step) => step.text as string);
-    expect(visibleTexts).toContain(FILE_DOWNLOAD_FLOW.connectedDirectStatusText);
+    const visibleIds = steps
+      .filter((step) => step.kind === "assertVisible" && step.id !== undefined)
+      .map((step) => step.id as string);
+    // Run 34459631677: the connect navigates away before "Connected via
+    // direct connection" can be sampled, so the flow asserts the arrival.
+    expect(visibleTexts).not.toContain("Connected via direct connection");
+    expect(visibleIds).toContain(FILE_DOWNLOAD_FLOW.sessionsScreenArrival);
   });
 
   it("never names the production daemon's port, in any form including comments", () => {

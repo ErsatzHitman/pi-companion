@@ -65,8 +65,8 @@ export const FILES_TERMINAL_FLOW = {
   connectFormSection: "connect-form",
   connectFormAddressField: "connect-form-address-field",
   connectFormSubmitButton: "connect-form-submit-button",
-  /** `describeConnectionStatus("connected", "direct")` in `connection-shell.tsx`, same literal `extension-sheets.yaml`/`pairing-contract.ts` already pin. */
-  connectedDirectStatusText: "Connected via direct connection",
+  /** `sessions-screen.tsx`'s root testId is `sessions-screen-${serverId}`, the serverId being the connected endpoint -- unknown until run time, hence the wildcard. The stable post-connect state every flow asserts since T332 (the "Connected via direct connection" status text is replaced by the navigation before Maestro can sample it). */
+  sessionsScreenArrival: "sessions-screen-.*",
 
   /** `terminal-screen.tsx`'s outer container testID — present in both the "unavailable" and live branches. */
   terminalScreenTestId: "terminal-screen",

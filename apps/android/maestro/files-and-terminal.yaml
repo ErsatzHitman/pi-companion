@@ -198,8 +198,17 @@ tags:
 - inputText: "ws://${DAEMON_ADDRESS}"
 - tapOn:
     id: "connect-form-submit-button"
+
+# --- Stable end state (T332): the arrival at `/h/:serverId/sessions`,
+# never the transient "Connected via direct connection" status text.
+# Since T331 the connect screen navigates away the moment the socket
+# opens (`saveHostProfile` no longer throws), and run 34459631677 sampled
+# the hierarchy after `router.replace` had already run in every flow that
+# asserted the text -- exactly the race ../network-switch.yaml's header
+# disclosed. `serverId` is the profile's own endpoint, unknown until run
+# time, hence the wildcard.
 - assertVisible:
-    text: "Connected via direct connection"
+    id: "sessions-screen-.*"
 
 # =====================================================================
 # FILES — reached by deep link; see this file's header for exactly why.

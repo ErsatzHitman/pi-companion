@@ -61,7 +61,9 @@ tags:
 # `../e2e/harness/`'s call, not this file's, and is still the open
 # blocker.
 #
-# So the second half of this flow proves what **is** true today: the
+# So the relay half of this flow (CORRECTED (T332): this said "the second
+# half" -- it now runs BEFORE the direct connect, see the step comment
+# below) proves what **is** true today: the
 # relay entry point exists, is reachable from `ConnectionShell`, and
 # renders its honest `"unavailable"` fallback — never a fake "paired"
 # state. Treat this half as a regression guard on that honesty, not as
@@ -96,22 +98,19 @@ tags:
 - tapOn:
     id: "connect-onboarding-permission-continue"
 
-# --- Direct pairing: ConnectionShell + ConnectForm now render.
+# --- ConnectionShell + ConnectForm now render.
 - assertVisible:
     id: "connect-form"
 - assertVisible:
     text: "Not connected"
-- tapOn:
-    id: "connect-form-address-field"
-- inputText: "ws://${DAEMON_ADDRESS}"
-- tapOn:
-    id: "connect-form-submit-button"
-- assertVisible:
-    text: "Connected via direct connection"
 
 # --- Relay entry point: reachable, and honest about not being wired up
 # --- yet (see the header comment above for exactly why). This is a
 # --- regression guard on that honesty, not a completed pairing.
+# --- T332: checked BEFORE the direct connect, the order
+# --- ../network-switch.yaml always used -- a successful connect navigates
+# --- this screen away, so nothing on it can be tapped afterwards (run
+# --- 34459631677 proved the old order could not pass).
 - tapOn:
     id: "connection-shell-show-scanner-button"
 - assertVisible:
@@ -124,3 +123,21 @@ tags:
     id: "connection-shell-hide-scanner-button"
 - assertVisible:
     id: "connect-form"
+
+# --- Direct pairing against this run's isolated daemon.
+- tapOn:
+    id: "connect-form-address-field"
+- inputText: "ws://${DAEMON_ADDRESS}"
+- tapOn:
+    id: "connect-form-submit-button"
+
+# --- Stable end state (T332): the arrival at `/h/:serverId/sessions`,
+# never the transient "Connected via direct connection" status text.
+# Since T331 the connect screen navigates away the moment the socket
+# opens (`saveHostProfile` no longer throws), and run 34459631677 sampled
+# the hierarchy after `router.replace` had already run in every flow that
+# asserted the text -- exactly the race ../network-switch.yaml's header
+# disclosed. `serverId` is the profile's own endpoint, unknown until run
+# time, hence the wildcard.
+- assertVisible:
+    id: "sessions-screen-.*"

@@ -588,6 +588,7 @@ that recomputation has to be domain-specific:
 | T329   | The first tap after typing dismissed the keyboard, the composer sat under it, and an ANR dialog outlived its setting | phase-9   | android/tooling  | P9-U   | T328, T327                                                            |
 | T330   | A release-variant build could not open any `ws://` socket, and the smoke job's EAS quota ran out                     | phase-9   | android/ci       | P9-U   | T329, T43B2b                                                          |
 | T331   | Every storage key with a colon or slash was rejected on device, and the files root had no route                      | phase-9   | android          | P9-U   | T330, T32A8, T37E9                                                    |
+| T332   | Five flows asserted the transient connected status text the navigation now replaces first                            | phase-9   | android/tooling  | P9-U   | T331, T37E1                                                           |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -629,8 +630,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**540 tasks** (distinct IDs counted directly from the table above), recounted at T331 with
-`grep`/`sort -u` over the table's own rows — one past the **539** at T330, five past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**541 tasks** (distinct IDs counted directly from the table above), recounted at T332 with
+`grep`/`sort -u` over the table's own rows — one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16498,5 +16499,53 @@ describe.
 - [x] Both storage adapters encode keys; the encoder is pure, tested, and pinned to
       `expo-secure-store`'s real validation regex
 - [x] `files/index.tsx` gives the catch-all its root; `router-root.test.ts` knows the file
-- [ ] A dispatch in which a connect-form flow arrives at `sessions-screen-*` and
+- [x] A dispatch in which a connect-form flow arrives at `sessions-screen-*` and
       `files-and-terminal` reaches `files-screen-e2e-host-e2e-files-agent`
+      (Half closed by run 34459631677 at `5a487de`: `network-switch` arrived at the sessions
+      screen and passed, and every other connect-form flow's failing-step hierarchy IS the
+      sessions screen. The files half is still open — those flows died on the step before the
+      deep link, see T332 — and is carried by T332's own last box.)
+
+#### T332 — Five flows asserted the transient connected status text the navigation now replaces first
+
+`labels: phase-9, area: android/tooling` · `depends-on: T331, T37E1`
+
+Run 34459631677 (at `5a487de`, T331) was the first dispatch in which a connect-form submit
+navigated: `network-switch` arrived at `sessions-screen-*` and passed outright, so shard-1's
+second flow, shard-3, `background-kill-restore`, `accessibility-audit`, `packaged-app-smoke`
+and `build-development-apk` were all green, and CI was green. The five remaining flows —
+`pairing`, `cold-start-restore`, `files-and-terminal`, `notification-approval`,
+`extension-sheets` — all failed on one step: `assertVisible: text: "Connected via direct
+connection"` (or `"Connected.*"`) immediately after tapping the submit button. Every one of
+their failing-step hierarchies is the sessions screen (`sessions-screen-10.0.2.2:<port>`,
+"Connection: Unknown", "No sessions yet"): `connection-shell.tsx` calls `router.replace` the
+moment `saveHostProfile` resolves, which since T331 is a few milliseconds after the socket
+opens, so the status strip's text is gone before Maestro samples the hierarchy. This is
+precisely the race `network-switch.yaml`'s own "ORDERING NOTE" disclosed in P5-W18 and
+avoided for itself by asserting only the stable, post-navigation arrival.
+
+All five flows (plus `file-download.yaml`, which is not in the shard set but carried the same
+step) now do what `network-switch` does: no assertion on the transient text, and
+`assertVisible: id: "sessions-screen-.*"` as the stable end state of the connect.
+`pairing.yaml` additionally moves its relay-entry-point check (tapping
+`connection-shell-show-scanner-button` on the connect screen) BEFORE the connect, since the
+screen it taps is navigated away afterwards — the order `network-switch` always used.
+`pairing-contract.ts`, `files-and-terminal-contract.ts` and `file-download-contract.ts` gain a
+`sessionsScreenArrival` constant; the two files/download contract tests now assert the arrival
+id is in the flow and the transient text is NOT, and `files-and-terminal`'s id-completeness
+test knows the new id. The ORDERING NOTE, `pairing.yaml`'s "second half" header sentence and
+`extension-sheets.yaml`'s "nothing navigates from here" lead-in carry `CORRECTED (T332)`
+markers.
+
+What this does not claim: `extension-sheets` and `notification-approval` remain blocked
+downstream of the arrival on their own headers' KNOWN BLOCKERS (a real session with real
+roster/permission events); `cold-start-restore` next depends on creating a real session
+through the "New session" form. Those are the next layer, visible only once this one is out
+of the way.
+
+- [x] No flow asserts the transient status text; every connect ends on the sessions-screen
+      arrival, and `pairing`'s relay check runs before its connect
+- [x] The three contracts carry `sessionsScreenArrival`; their tests pin it and forbid the
+      transient text
+- [ ] A dispatch in which `pairing` passes and `files-and-terminal` reaches
+      `files-screen-e2e-host-e2e-files-agent`

@@ -474,14 +474,20 @@ describe("files-and-terminal.yaml itself, read from disk", () => {
     expect(notVisibleIds).toContain(FILES_TERMINAL_FLOW.terminalScreenTestId);
   });
 
-  it("asserts terminal-unavailable's real title/description and the real direct-connection status text", () => {
+  it("asserts terminal-unavailable's real title/description, and the sessions-screen arrival rather than the transient status text (T332)", () => {
     const visibleTexts = steps
       .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
       .map((step) => step.text as string);
+    const visibleIds = steps
+      .filter((step) => step.kind === "assertVisible" && step.id !== undefined)
+      .map((step) => step.id as string);
 
     expect(visibleTexts).toContain(FILES_TERMINAL_FLOW.terminalUnavailableTitle);
     expect(visibleTexts).toContain(FILES_TERMINAL_FLOW.terminalUnavailableDescription);
-    expect(visibleTexts).toContain(FILES_TERMINAL_FLOW.connectedDirectStatusText);
+    // Run 34459631677: the connect navigates away before "Connected via
+    // direct connection" can be sampled, so the flow asserts the arrival.
+    expect(visibleTexts).not.toContain("Connected via direct connection");
+    expect(visibleIds).toContain(FILES_TERMINAL_FLOW.sessionsScreenArrival);
   });
 
   it("every id: selector this flow names resolves to a real testId this file already pinned against source", () => {
@@ -504,6 +510,7 @@ describe("files-and-terminal.yaml itself, read from disk", () => {
       FILES_TERMINAL_FLOW.connectFormSection,
       FILES_TERMINAL_FLOW.connectFormAddressField,
       FILES_TERMINAL_FLOW.connectFormSubmitButton,
+      FILES_TERMINAL_FLOW.sessionsScreenArrival,
       "connect-onboarding",
       "connect-onboarding-welcome-continue",
       "connect-onboarding-permission-continue",

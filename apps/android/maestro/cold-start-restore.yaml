@@ -91,9 +91,10 @@ tags:
 - inputText: "ws://${DAEMON_ADDRESS}"
 - tapOn:
     id: "connect-form-submit-button"
-- assertVisible:
-    text: "Connected.*"
 
+# --- T332: no `text: "Connected.*"` assertion between the tap and the
+# arrival below -- the navigation replaces that status text before
+# Maestro can sample it (run 34459631677).
 # --- CORRECTED (T331): this said "Blocked on gap (1) above: nothing
 # navigates here today". Gap (1) was closed by T32A8 (see the header), and
 # run 34454596535 showed the navigation blocked one line EARLIER instead:
