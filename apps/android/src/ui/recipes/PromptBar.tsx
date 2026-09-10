@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { StyleSheet, Text, TextInput, View, type BlurEvent, type FocusEvent } from "react-native";
 
 import { Button } from "../primitives/Button";
@@ -23,6 +23,15 @@ export interface PromptBarProps {
   onFocus?: (event: FocusEvent) => void;
   /** Fires when the input loses focus; the `blurComposer` counterpart to `onFocus` above. */
   onBlur?: (event: BlurEvent) => void;
+  /**
+   * A node rendered at the left of the bar's action row, before the
+   * queued counter (T353). The redesign puts the composer's own
+   * controls here — today the context ring that opens the session's
+   * mode/model/effort menu. A slot rather than a named prop so this
+   * recipe keeps no opinion on what a given app puts in its bar; it is
+   * optional, so nothing that mounted this recipe before has to change.
+   */
+  leading?: ReactNode;
   testId?: string;
 }
 
@@ -56,6 +65,7 @@ export function PromptBar({
   onSend,
   onFocus,
   onBlur,
+  leading,
   testId,
 }: PromptBarProps) {
   const { theme } = useTheme();
@@ -79,6 +89,7 @@ export function PromptBar({
         testID={testId ? `${testId}-input` : undefined}
       />
       <View style={styles.row}>
+        {leading}
         <Text style={styles.queued} accessibilityLiveRegion="polite">
           {queuedCount > 0 ? `${queuedCount} queued` : ""}
         </Text>
@@ -110,11 +121,19 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontSize: theme.typography.variant.body.fontSize,
       textAlignVertical: "top",
     },
-    row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing[2],
+    },
     // The mono family with tabular figures for the queued-message counter
     // (docs/beautiful-ui-reference.md "tabular-nums on counters and
     // timers").
     queued: {
+      // Takes the slack between the leading slot and Send, so adding a
+      // leading node cannot push the send button off its right edge.
+      flex: 1,
       color: theme.colors["ink-3"],
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.caption.fontSize,

@@ -128,11 +128,44 @@ describe("Composer.tsx", () => {
     // T329's lesson, applied here: the first tap after typing must reach
     // the control, not be spent dismissing the keyboard.
     expect(scrollBody).toMatch(/keyboardShouldPersistTaps="handled"/);
-    // The pickers -- the controls that outgrow the keyboard-shrunk shell
-    // -- are inside the scrolling half, never beside the prompt bar.
-    expect(scrollBody).toMatch(/<QueueModePicker/);
-    expect(scrollBody).toMatch(/<ModelThinkingPicker/);
+    // The controls that outgrow the keyboard-shrunk shell are still
+    // never beside the prompt bar. T353 moved the model/effort and
+    // queue pickers OUT of this ScrollView and into the context-ring
+    // menu, which is a `Sheet` -- a bottom-anchored panel that is not
+    // in this flex column at all, so it cannot squeeze the prompt bar
+    // either. What this case guards is unchanged: neither control may
+    // sit between the ScrollView and the PromptBar.
     expect(scrollBody).toMatch(/<SlashCommandPicker/);
+    expect(scrollBody).not.toMatch(/<QueueModePicker/);
+    expect(scrollBody).not.toMatch(/<ModelThinkingPicker/);
+    const afterScroll = code.slice(scrollClose, promptBar);
+    expect(afterScroll).not.toMatch(/<QueueModePicker/);
+    expect(afterScroll).not.toMatch(/<ModelThinkingPicker/);
+  });
+
+  it("T353: the model/effort and queue controls live in the context-ring menu, keeping their own testIDs", () => {
+    // The menu is mounted AFTER the prompt bar so a Sheet with no
+    // PortalHost falls back to rendering inline below it, rather than
+    // above the bar where it would push the input off-screen.
+    const menu = code.indexOf("<PromptControlsMenu");
+    expect(menu).toBeGreaterThan(code.indexOf("<PromptBar"));
+    const menuBody = code.slice(menu);
+    expect(menuBody).toMatch(/<ModelThinkingPicker/);
+    expect(menuBody).toMatch(/<QueueModePicker/);
+    expect(menuBody).toMatch(/testId=\{`\$\{composerTestId\}-queue-mode`\}/);
+    expect(menuBody).toMatch(/testId=\{`\$\{composerTestId\}-model-thinking`\}/);
+  });
+
+  it("T353: the context ring is inside the prompt bar and is what opens that menu", () => {
+    expect(code).toMatch(/<PromptBar[\s\S]*?leading=\{[\s\S]*?<ContextRing/);
+    expect(code).toMatch(/onPress=\{handleOpenControlsMenu\}/);
+    expect(code).toMatch(/open=\{controlsMenuOpen\}/);
+    expect(code).toMatch(/onClose=\{handleCloseControlsMenu\}/);
+  });
+
+  it("T353: the ring's reading is the daemon's, never a literal", () => {
+    expect(code).toMatch(/<ContextRing\s+usage=\{usage\}/);
+    expect(code).not.toMatch(/usage=\{\{/);
   });
 
   it("T343/T344: reserves the prompt bar's height — the root's minHeight is resolveComposerMinHeight over the heading's and the prompt bar's own onLayout, never a section-minus-scroll-view difference", () => {

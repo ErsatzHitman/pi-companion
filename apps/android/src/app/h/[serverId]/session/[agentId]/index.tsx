@@ -41,6 +41,8 @@ import {
 } from "../../../../../features/transcript";
 import { buildDaemonHttpOrigin } from "../../../../../features/connect/daemon-connection-store.js";
 import { deriveSessionRouteStatus } from "../../../../../app-shell/session-route-model";
+import { createContextUsageSignal } from "../../../../../features/telemetry";
+import type { AgentUsage } from "@picompanion/protocol/agent-types";
 import {
   pressSessionList,
   pressSessionLive,
@@ -62,8 +64,10 @@ import { Banner } from "../../../../../ui/primitives";
 import { useAppCore } from "../../../../core-context";
 import {
   resolveAgentSnapshotClient,
+  resolveAgentUsageClient,
   resolveAttachmentDownloadClient,
   resolveEditorTextClient,
+  resolveModelThinkingClient,
   resolveQueueModeClient,
   resolveSlashCommandsClient,
   resolveTranscribeClient,
@@ -711,6 +715,17 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * `app-shell/navigation-shell.tsx` is enough. `SessionSheetExtensions`
  * (T32S12, above) joins it there for the identical reason.
  *
+ * **T353 mount.** Two more props for `Composer`, both off the same
+ * live `DaemonClient` the rest of this route reads: `usage`, driven by
+ * `features/telemetry`'s `createContextUsageSignal` through
+ * `resolveAgentUsageClient`, which is what fills the prompt bar's
+ * context ring; and `modelThinkingClient`, through
+ * `resolveModelThinkingClient`. The second closes a gap rather than
+ * adding a feature — `ComposerProps.modelThinkingClient` and the
+ * controller behind it have existed since T39B, no route had ever
+ * passed one, and `ModelThinkingPicker` could therefore only ever
+ * render its truthful "Connect to a daemon…" state on a real build.
+ *
  * **T351 mount.** The `header` slot is still `TranscriptHeader` alone,
  * but that component is now the redesign's S7 app bar (see its own doc
  * comment). Three things this route supplies that it could not supply
@@ -903,6 +918,21 @@ export default function SessionRoute() {
   );
   const cwd = useAgentCwd(resolveAgentSnapshotClient(core.connection), agentId ?? "");
 
+  // T353: the two things the composer's context ring and its menu need.
+  // `modelThinkingClient` closes a gap rather than adding a feature —
+  // `Composer` has accepted this prop since T39B and no route had ever
+  // passed one, so `ModelThinkingPicker` could only ever render its
+  // "Connect to a daemon…" state on a real build.
+  const modelThinkingClient = resolveModelThinkingClient(core.connection);
+  const usageClient = resolveAgentUsageClient(core.connection);
+  const [usage, setUsage] = useState<AgentUsage | null>(null);
+  useEffect(() => {
+    if (!agentId || !usageClient) return;
+    const signal = createContextUsageSignal(usageClient, agentId, setUsage);
+    setUsage(signal.getUsage());
+    return () => signal.dispose();
+  }, [usageClient, agentId]);
+
   return (
     <>
       <CompactSessionShell
@@ -934,6 +964,8 @@ export default function SessionRoute() {
             transcribeClient={transcribeClient}
             slashCommandsClient={slashCommandsClient}
             editorTextClient={editorTextClient}
+            modelThinkingClient={modelThinkingClient}
+            usage={usage}
             attachmentSource={attachmentSource}
             cameraCapture={cameraCapture}
             onMinHeightChange={setComposerContentMinHeight}

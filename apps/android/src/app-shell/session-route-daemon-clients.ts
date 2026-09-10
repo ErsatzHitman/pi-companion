@@ -46,6 +46,19 @@
  * already narrows four times above satisfies this fifth port as-is
  * too, with no adapter.
  *
+ * **T353 adds `resolveModelThinkingClient` below**, the same pattern a
+ * ninth time, and it closes a gap rather than adding a feature.
+ * `Composer`'s `modelThinkingClient` prop and the whole
+ * `createModelThinkingController` behind it (T39B) have existed and
+ * been tested for many waves, and no route had ever passed one — so
+ * `ModelThinkingPicker` could only ever render its truthful
+ * "Connect to a daemon…" unavailable state, on every real build.
+ * `DaemonModelThinkingSource` (`../features/composer`) names its four
+ * methods identically to `DaemonClient`'s real `fetchAgent`,
+ * `listProviderModels`, `setAgentModel` and `setAgentThinkingOption`,
+ * so the one live instance this file already narrows eight times above
+ * satisfies this ninth port as-is too, with no adapter.
+ *
  * **T352 adds `resolveAgentUsageClient` below**, the same pattern an
  * eighth time: the Live screen's Context card needs this session's
  * token usage, and the daemon delivers it as `lastUsage` on the whole
@@ -103,6 +116,7 @@
  */
 import type {
   DaemonEditorTextSource,
+  DaemonModelThinkingSource,
   DaemonQueueModeSource,
   DaemonSlashCommandSource,
   DaemonTurnStatusSource,
@@ -229,6 +243,30 @@ export function resolveSlashCommandsClient(
   return (
     (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
       | DaemonSlashCommandSource
+      | null
+      | undefined) ?? undefined
+  );
+}
+
+/**
+ * T353: same fresh-read contract as the eight functions above, cast to
+ * `DaemonModelThinkingSource` instead — the ninth narrow port this one
+ * live `DaemonClient` instance satisfies (the real `fetchAgent`,
+ * `listProviderModels`, `setAgentModel` and `setAgentThinkingOption`;
+ * see `../features/composer/model-thinking-model.ts`'s own module doc
+ * for how those four names were established against the real client
+ * rather than taken from a brief). `undefined` (never `null`) with no
+ * active lifecycle or no live client yet, matching every sibling
+ * resolver above — `ModelThinkingPicker` then renders the same
+ * truthful "Connect to a daemon…" state it rendered before this
+ * resolver existed, rather than an enabled control that can only fail.
+ */
+export function resolveModelThinkingClient(
+  connection: SessionRouteConnectionSource,
+): DaemonModelThinkingSource | undefined {
+  return (
+    (connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+      | DaemonModelThinkingSource
       | null
       | undefined) ?? undefined
   );

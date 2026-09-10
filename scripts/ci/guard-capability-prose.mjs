@@ -2463,6 +2463,48 @@ export const CAPABILITIES = [
       /token usage (?:is|remains) (?:web|apps\/web)[- ]only/i,
     ],
   },
+  {
+    // T353: the prompt bar's context ring.
+    // `features/composer/context-ring-model.ts`'s
+    // `buildContextRingViewModel` is the geometry and the wording, and
+    // `ContextRing` is the control drawing it — the redesign's
+    // replacement for the four pills that used to sit above the prompt
+    // bar, showing the session's context fill and opening its
+    // mode/model/effort menu. A single-file pair would have been a
+    // T168 AND-group, but the two names are declared in two different
+    // files, each uniquely, so this is an OR-across-members pair like
+    // the two entries above it. The phrases avoid the ring's own
+    // "Context usage unknown" copy, which is a real product state and
+    // not a claim about what this app can draw.
+    name: "The prompt bar shows this session's context fill and opens its controls (ContextRing / buildContextRingViewModel)",
+    methodNames: ["ContextRing", "buildContextRingViewModel"],
+    denyingPhrases: [
+      /(?:the )?(?:android )?prompt bar (?:carries|has|shows) no context (?:ring|meter|fill)/i,
+      /context (?:usage|fill) cannot be seen (?:from|on) the (?:composer|prompt bar)/i,
+      /(?:the )?(?:session|per-turn) controls (?:sit|live) (?:as|in) (?:four )?pills above the (?:prompt bar|composer)/i,
+    ],
+  },
+  {
+    // T353: the session route finally passes `modelThinkingClient`.
+    // `Composer` has accepted that prop since T39B and
+    // `createModelThinkingController` has been tested for as long, but
+    // no route had ever supplied one, so on every real build the model
+    // and thinking-effort picker could only render its "no-client"
+    // state. `resolveModelThinkingClient` is the narrowing that closed
+    // it, declared once in `app-shell/session-route-daemon-clients.ts`
+    // — a single bare-string member is enough, no group needed. The
+    // phrases are worded away from `Composer.tsx`'s and
+    // `model-thinking-model.ts`'s own CORRECTED narrations of the
+    // pre-fix state, both of which this commit wrote and both of which
+    // carry a historical-quotation marker of their own.
+    name: "The session route supplies the model/effort picker a live client (resolveModelThinkingClient)",
+    methodNames: ["resolveModelThinkingClient"],
+    denyingPhrases: [
+      /(?:the )?model(?:\/| and )(?:thinking )?(?:effort|level) picker never receives a (?:live )?client/i,
+      /no route supplies (?:a |the )?modelThinkingClient/i,
+      /changing the model (?:is|remains) impossible from (?:the )?android/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

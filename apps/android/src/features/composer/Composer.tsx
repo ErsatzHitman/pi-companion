@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import type { AgentUsage } from "@picompanion/protocol/agent-types";
 import type { Clock, StructuredStorage } from "@picompanion/frontend-core";
 import { composer as coreComposer } from "@picompanion/frontend-core";
 
@@ -67,7 +68,9 @@ import {
   createModelThinkingController,
   type DaemonModelThinkingSource,
 } from "./model-thinking-model";
+import { ContextRing } from "./ContextRing";
 import { ModelThinkingPicker } from "./ModelThinkingPicker";
+import { PromptControlsMenu } from "./PromptControlsMenu";
 import { PermissionRecoveryNotice } from "./PermissionRecoveryNotice";
 import { resolvePermission, type PermissionState } from "./permission-recovery";
 import {
@@ -364,24 +367,35 @@ export interface ComposerProps {
    * `listProviderModels`/`setAgentModel`/`setAgentThinkingOption` — see
    * `model-thinking-model.ts`'s module doc for exactly why those are
    * the right names (not `listAgentModels`/`listAgentThinkingOptions`,
-   * which do not exist on `DaemonClient`). Optional, and still
-   * unwired at every mount — which is NOT the same claim as "no
-   * Android route wires a live `DaemonClient` into this feature
-   * yet". That was true when T39B wrote it and T132 falsified it:
-   * the production session route
-   * (`app/h/[serverId]/session/[agentId]/index.tsx`) now passes
-   * `queueModeClient`/`turnStatusClient` off a live
-   * `AppCore.connection`-derived `DaemonClient` (see those props'
-   * doc comments). It simply has no `modelThinkingClient` on its
-   * `<Composer .../>` yet, so omitted stays today's only real shape
-   * and renders `ModelThinkingPicker`'s truthful "Connect to a
-   * daemon…" unavailable state instead of an enabled control that
-   * can only fail. Wiring it means proving a real `DaemonClient`
-   * satisfies `DaemonModelThinkingSource`, the way
-   * `app-shell/session-route-daemon-clients.ts` proved it for the
-   * other two; nobody has done that yet.
+   * which do not exist on `DaemonClient`). Optional, and WIRED since
+   * T353: the production session route
+   * (`app/h/[serverId]/session/[agentId]/index.tsx`) passes
+   * `resolveModelThinkingClient(core.connection)` — the ninth narrow
+   * port off the same live `DaemonClient` its
+   * `queueModeClient`/`turnStatusClient` already came from, proven in
+   * `app-shell/session-route-daemon-clients.test.ts` the same way
+   * those two were.
+   *
+   * CORRECTED (T353): this said the prop was "still unwired at every
+   * mount", and that it "simply has no `modelThinkingClient` on its
+   * `<Composer .../>` yet, so omitted stays today's only real shape",
+   * closing with "nobody has done that yet". All three were true when
+   * written and this commit falsified them. What survives unchanged is
+   * the seam itself: omitted — a lab mount, a test harness, or a route
+   * with no live connection — still renders `ModelThinkingPicker`'s
+   * truthful "Connect to a daemon…" unavailable state rather than an
+   * enabled control that can only fail.
    */
   modelThinkingClient?: DaemonModelThinkingSource;
+  /**
+   * The newest token usage the daemon has reported for this session
+   * (T353), from `features/telemetry`'s `createContextUsageSignal`.
+   * Feeds the prompt bar's context ring and the readout inside the
+   * menu it opens. Absent — the honest default with no connection —
+   * draws a ring with no arc and a menu that says the window is
+   * unreported, never a fabricated 0%.
+   */
+  usage?: AgentUsage | null;
   /**
    * T39C: session-wide steer/follow-up queue-mode transport, mirrors
    * `packages/client/src/daemon-client.ts`'s real `getQueueModes`/
@@ -607,6 +621,7 @@ export function Composer({
   clock: clockProp,
   sessionId,
   modelThinkingClient,
+  usage,
   queueModeClient,
   turnStatusClient,
   slashCommandsClient,
@@ -1350,6 +1365,13 @@ export function Composer({
     },
     [remeasureMinHeight],
   );
+  // T353: the context ring's menu. Local state, not lifted: nothing
+  // outside this component opens or closes it, and a route that owned
+  // the flag would have to be told about a control it does not draw.
+  const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
+  const handleOpenControlsMenu = useCallback(() => setControlsMenuOpen(true), []);
+  const handleCloseControlsMenu = useCallback(() => setControlsMenuOpen(false), []);
+
   const handlePromptBarLayout = useCallback(
     (event: LayoutChangeEvent) => {
       promptBarHeightRef.current = event.nativeEvent.layout.height;
@@ -1446,18 +1468,8 @@ export function Composer({
               {describeAttachmentLimits(limits)}
             </Text>
           </View>
-          <ModelThinkingPicker
-            state={modelThinkingState}
-            onSelectModel={handleSelectModel}
-            onSelectThinking={handleSelectThinking}
-            testId={`${composerTestId}-model-thinking`}
-          />
-          <QueueModePicker
-            state={queueModesState}
-            onSelectSteeringMode={handleSelectSteeringMode}
-            onSelectFollowUpMode={handleSelectFollowUpMode}
-            testId={`${composerTestId}-queue-mode`}
-          />
+          {/* T353: the model/effort and queue controls moved into the
+              context-ring menu below, keeping their own testIDs. */}
           <TurnStatusBanner state={turnStatusState} testId={`${composerTestId}-turn-status`} />
           {attachmentPermissionState !== null ? (
             <PermissionRecoveryNotice
@@ -1587,9 +1599,38 @@ export function Composer({
             queuedCount={pendingCount(state)}
             onValueChange={handleValueChange}
             onSend={handleSend}
+            leading={
+              <ContextRing
+                usage={usage}
+                onPress={handleOpenControlsMenu}
+                testId={`${composerTestId}-context-ring`}
+              />
+            }
             testId={composerTestId}
           />
         </View>
+        <PromptControlsMenu
+          open={controlsMenuOpen}
+          onClose={handleCloseControlsMenu}
+          usage={usage}
+          modelControl={
+            <ModelThinkingPicker
+              state={modelThinkingState}
+              onSelectModel={handleSelectModel}
+              onSelectThinking={handleSelectThinking}
+              testId={`${composerTestId}-model-thinking`}
+            />
+          }
+          queueControl={
+            <QueueModePicker
+              state={queueModesState}
+              onSelectSteeringMode={handleSelectSteeringMode}
+              onSelectFollowUpMode={handleSelectFollowUpMode}
+              testId={`${composerTestId}-queue-mode`}
+            />
+          }
+          testId={`${composerTestId}-controls-menu`}
+        />
       </Section>
     </View>
   );

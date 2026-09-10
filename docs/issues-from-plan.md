@@ -609,6 +609,7 @@ that recomputation has to be domain-specific:
 | T350   | A session's running work had no screen, and Files/Terminal crowded the transcript                                    | phase-9   | android          | P9-U   | T349, T79, T339                                                       |
 | T351   | The session screen's header showed a title and a host, navigated nowhere, and never named the directory              | phase-9   | android          | P9-U   | T350, T349, T132                                                      |
 | T352   | A context window could fill to 100% with nothing on the phone saying so                                              | phase-9   | android          | P9-U   | T350, T351, T29C1                                                     |
+| T353   | The composer's controls sat above the prompt bar, and the model picker had never been handed a client                | phase-9   | android          | P9-U   | T352, T39B, T132                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -650,8 +651,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**561 tasks** (distinct IDs counted directly from the table above), recounted at T352 with
-`grep`/`sort -u` over the table's own rows — one past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**562 tasks** (distinct IDs counted directly from the table above), recounted at T353 with
+`grep`/`sort -u` over the table's own rows — one past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17423,3 +17424,78 @@ this app can do.
 - [x] The stats line shows only what the provider reported
 - [x] Every string and threshold is behaviourally tested; nothing here imports React Native
 - [x] A `CAPABILITIES` entry was registered and proven to fire
+
+#### T353 — The composer's controls sat above the prompt bar, and the model picker had never been handed a client
+
+`labels: phase-9, area: android` · `depends-on: T352, T39B, T132`
+
+Two things, one commit, because the second is what makes the first worth opening.
+
+**The controls moved behind a ring.** The design artifact drew four pills above the prompt bar
+— Context, Model, Effort, Build/Plan — and the owner's amendment removed them in favour of a
+single small circle sitting in the bar itself, filling with context usage, which opens those
+controls when tapped. `ContextRing` is that circle and `PromptControlsMenu` is what it opens.
+The model/effort and queue controls were MOVED into the menu, not rebuilt: `ModelThinkingPicker`
+and `QueueModePicker` keep their own testIDs, `composer-queue-mode` included, so every flow and
+contract that names one still finds it.
+
+**The picker had nothing behind it, and nobody had noticed for many waves.**
+`ComposerProps.modelThinkingClient` and the whole `createModelThinkingController` behind it have
+existed and been tested since T39B. No route had ever passed one. On every real build the model
+and thinking-effort picker could therefore render exactly one thing — its truthful "Connect to a
+daemon…" unavailable state — and moving it behind a ring would have shipped a control that opens
+onto a dead end. `resolveModelThinkingClient` is the ninth narrow port off the one live
+`DaemonClient` this route already reads eight others from, proven by the same counting-fake shape
+as the eight before it.
+
+Two comments asserting the pre-fix state were corrected in the same commit, per `CLAUDE.md`'s
+T124 rule, both with a quoted historical marker: `Composer.tsx`'s prop doc said the prop was
+"still unwired at every mount" and closed with "nobody has done that yet", and
+`model-thinking-model.ts` gave its optional-methods seam a reason that included "no Android route
+wires a live `DaemonClient` into this feature yet". What survives in both is the seam itself,
+which is still real and still correct: a lab mount, a test harness, or a route with no live
+connection gets `undefined` and the honest unavailable state.
+
+**`Sheet`, not a hand-built overlay.** The artifact positions `.pmenu` absolutely over a scrim,
+and reproducing that here would have meant re-deriving a scrim, a back-gesture handler and a
+TalkBack focus move that `ui/primitives/Sheet.tsx` already owns — and re-opening the IME question
+that primitive exists to answer. A menu opened from the composer competes with a focused
+`TextInput`; `Sheet` deliberately avoids React Native's `<Modal>` for exactly that reason. It is
+mounted after the prompt bar so a `Sheet` with no `PortalHost` falls back to rendering below the
+bar rather than above it.
+
+**T338's guarantee is preserved, and its test case now says so precisely.** That case asserted
+both pickers sit inside the composer's `ScrollView`, because they are the controls that outgrow a
+keyboard-shrunk shell. They are now in the menu, which is not in that flex column at all, so it
+cannot squeeze the prompt bar either. The case was rewritten rather than deleted, and now pins the
+property that actually mattered: neither control may sit between the `ScrollView` and the
+`PromptBar`.
+
+`context-ring-model.ts` carries the geometry, in the artifact's own terms — a circumference and a
+`strokeDashoffset`, not an arc `d` string, which would have meant trigonometry in a component, a
+second rounding policy and a seam at 100% where an arc's ends coincide. It reads its fraction and
+band from `../telemetry`'s shared model, so the ring and the Live screen's Context card cannot
+drift. An unknown window draws no arc, which is geometrically the same as 0% and deliberately so:
+a ring cannot express "unknown", and inventing a distinct shape for it would be a shape the user
+has to be taught. The distinction is carried in words — `"–"` on the label, and an announced
+sentence that says the window is unreported.
+
+`PromptBar` gained one optional `leading` slot for the ring. A slot rather than a named prop, so
+the recipe keeps no opinion on what an app puts in its bar, and optional, so nothing that already
+mounted it had to change. Its queued counter takes the row's slack, so a leading node can never
+push Send off the right edge.
+
+Two `CAPABILITIES` entries were registered in the same change and each watched firing against a
+scratchpad-backed copy of `docs/legacy-retirement.md`, then restored with `git status --porcelain`
+clean for that file.
+
+- [x] The prompt bar carries a context ring that fills with the session's real usage
+- [x] Tapping it opens the mode/model/effort/context controls
+- [x] The model/effort and queue controls moved, keeping every testID including `composer-queue-mode`
+- [x] The session route passes `modelThinkingClient`, so the picker can leave its no-client state
+- [x] The two comments asserting the pre-fix state are corrected, with historical markers
+- [x] The menu is the shared `Sheet`, so the scrim, back gesture, TalkBack focus and IME behaviour are not re-derived
+- [x] T338's prompt-bar guarantee is re-pinned on the property that mattered, not deleted
+- [x] An unreported window draws no arc and says so in words
+- [x] Every number the ring draws is behaviourally tested; nothing in the model imports React Native
+- [x] Both `CAPABILITIES` entries were registered and proven to fire

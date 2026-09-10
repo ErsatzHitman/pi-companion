@@ -80,9 +80,22 @@ tags:
 - assertVisible:
     id: "composer"
 
-# --- QUEUE MODE: no client wired in at this route, so the picker
-# --- renders its truthful "no-client" unavailable sentence rather than
-# --- an enabled Select pair that could only fail.
+# --- T353 moved the queue-mode picker into the context-ring menu, so
+# --- it has to be opened before it can be asserted on. The ring is the
+# --- small circle in the prompt bar that fills with context usage; the
+# --- menu is a `Sheet`, which renders in the same window (never a
+# --- second native Window), so Maestro sees its contents as ordinary
+# --- nodes once it is open.
+- tapOn:
+    id: "composer-context-ring"
+- assertVisible:
+    id: "composer-controls-menu"
+
+# --- QUEUE MODE: this route resolves `queueModeClient` off
+# --- `AppCore.connection` (T132), and this harness has no live daemon,
+# --- so it resolves to `undefined` and the picker renders its truthful
+# --- "no-client" unavailable sentence rather than an enabled Select
+# --- pair that could only fail.
 - assertVisible:
     id: "composer-queue-mode"
 - assertVisible:

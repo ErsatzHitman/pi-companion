@@ -162,6 +162,22 @@ export type {
 export { ModelThinkingPicker } from "./ModelThinkingPicker";
 export type { ModelThinkingPickerProps } from "./ModelThinkingPicker";
 
+// T353: the context ring and the menu it opens — the redesign's
+// replacement for the four control pills that used to sit above the
+// prompt bar. See `context-ring-model.ts`'s module doc.
+export {
+  CONTEXT_RING_CIRCUMFERENCE,
+  CONTEXT_RING_RADIUS,
+  CONTEXT_RING_SIZE,
+  CONTEXT_RING_STROKE,
+  buildContextRingViewModel,
+} from "./context-ring-model";
+export type { ContextRingViewModel } from "./context-ring-model";
+export { ContextRing } from "./ContextRing";
+export type { ContextRingProps } from "./ContextRing";
+export { PromptControlsMenu } from "./PromptControlsMenu";
+export type { PromptControlsMenuProps } from "./PromptControlsMenu";
+
 // --- T39C: session-wide steer/follow-up queue mode ------------------------
 export {
   INITIAL_QUEUE_MODES_STATE,

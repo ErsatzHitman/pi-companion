@@ -57,11 +57,21 @@
  * `../approvals/daemon-permissions-client.ts`'s `DaemonPermissionsSource`
  * and `../sessions/session-tree-sheet-model.ts`'s `SessionTreeClientPort`
  * both use. Every method is OPTIONAL, so an object implementing none of
- * them (today's only real shape — `apps/android/package.json` does not
- * declare `@picompanion/client` as a dependency, and no Android route
- * wires a live `DaemonClient` into this feature yet, the same "no
- * client yet" seam `TurnService`/`SessionTreeClientPort` already carry)
- * still structurally satisfies this interface. `supportsModelThinking`
+ * them still structurally satisfies this interface — the same "no
+ * client yet" seam `TurnService`/`SessionTreeClientPort` already carry,
+ * and what a lab mount or a route with no live connection gets.
+ *
+ * CORRECTED (T353): the sentence above used to give that seam's reason
+ * as "`apps/android/package.json` does not declare `@picompanion/client`
+ * as a dependency, and no Android route wires a live `DaemonClient`
+ * into this feature yet". The second half is no longer true: the
+ * production session route passes
+ * `resolveModelThinkingClient(core.connection)`
+ * (`../../app-shell/session-route-daemon-clients.ts`), so a real,
+ * live `DaemonClient` reaches this port on every connected build. The
+ * first half is a fact about the manifest and is beside the point —
+ * this port is satisfied structurally, which is exactly why no
+ * dependency on that package was ever needed. `supportsModelThinking`
  * below is what decides `"ready"` vs `"unsupported"` — see
  * `describeModelThinkingUnavailable` for the truthful, explained states
  * this produces instead of an enabled control whose only real-build

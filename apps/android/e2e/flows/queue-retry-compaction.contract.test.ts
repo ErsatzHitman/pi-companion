@@ -157,6 +157,39 @@ describe("queue-retry-compaction.yaml anchors exist in source", () => {
       expect(ids).toContain(QUEUE_RETRY_COMPACTION_FLOW.queueModePickerUnavailable);
     });
 
+    // T353 moved the queue-mode picker into the context-ring menu. A
+    // node inside a closed `Sheet` is not rendered at all, so a flow
+    // that still asserted it straight after `openLink` would fail on a
+    // real device with a "not visible" that looks like a regression in
+    // the picker rather than a stale flow. These two cases pin the tap
+    // and its ordering so that cannot happen silently.
+    it("T353: taps the context ring before asserting anything inside the menu it opens", () => {
+      const ringIndex = steps.findIndex(
+        (step) => step.kind === "tapOn" && step.id === QUEUE_RETRY_COMPACTION_FLOW.contextRing,
+      );
+      expect(
+        ringIndex,
+        `queue-retry-compaction.yaml should tapOn id="${QUEUE_RETRY_COMPACTION_FLOW.contextRing}"`,
+      ).toBeGreaterThanOrEqual(0);
+      const pickerIndex = steps.findIndex(
+        (step) => step.id === QUEUE_RETRY_COMPACTION_FLOW.queueModePickerRoot,
+      );
+      expect(pickerIndex).toBeGreaterThan(ringIndex);
+    });
+
+    it("T353: asserts the menu itself is open, so a tap that misses reads as a tap that missed", () => {
+      const ids = steps.filter((step) => step.id !== undefined).map((step) => step.id as string);
+      expect(ids).toContain(QUEUE_RETRY_COMPACTION_FLOW.controlsMenu);
+    });
+
+    it("T353: the ring and the menu it opens carry the ids this flow names, at their real Composer.tsx mounts", () => {
+      const composer = readComponentCode(COMPOSER_TSX, "Composer");
+      expect(composer).toMatch(/testId=\{`\$\{composerTestId\}-context-ring`\}/);
+      expect(composer).toMatch(/testId=\{`\$\{composerTestId\}-controls-menu`\}/);
+      expect(QUEUE_RETRY_COMPACTION_FLOW.contextRing).toBe("composer-context-ring");
+      expect(QUEUE_RETRY_COMPACTION_FLOW.controlsMenu).toBe("composer-controls-menu");
+    });
+
     it('asserts describeQueueModesUnavailable("no-client")\'s real copy, exactly', () => {
       const assertedTexts = steps
         .filter((step) => step.kind === "assertVisible" && step.text !== undefined)

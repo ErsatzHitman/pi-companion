@@ -30,7 +30,11 @@
  *  - `QueueModePicker` renders its "no-client" unavailable state
  *    (`describeQueueModesUnavailable("no-client")`'s own text) — a
  *    truthful unavailable render, never an enabled control that
- *    silently does nothing.
+ *    silently does nothing. **Since T353 it renders inside the
+ *    context-ring menu rather than in the composer's own scroll area**,
+ *    so the flow taps `contextRing` first; the picker's own testId is
+ *    unchanged, which is the point of this redesign's
+ *    testID-continuity rule.
  *  - `TurnStatusBanner` renders nothing at all (its default
  *    `alwaysShowUnavailable={false}`, and `Composer.tsx` passes no such
  *    prop) — there is no banner text, no testId, nothing this flow can
@@ -45,6 +49,23 @@ export const QUEUE_RETRY_COMPACTION_FLOW = {
 
   /** `Composer.tsx`'s default root testId — `session/[agentId]/index.tsx` passes none. */
   composerRoot: "composer",
+
+  /**
+   * T353: the prompt bar's context ring, which is what now opens the
+   * menu holding the queue-mode picker. `Composer.tsx` mounts it as
+   * `${composerTestId}-context-ring`.
+   */
+  contextRing: "composer-context-ring",
+
+  /**
+   * T353: the menu the ring opens (`PromptControlsMenu`'s default
+   * testId at its `Composer.tsx` mount,
+   * `${composerTestId}-controls-menu`). It is a `Sheet`, which renders
+   * into the same native Window rather than a second one, so its
+   * contents are ordinary nodes in the hierarchy Maestro reads once it
+   * is open.
+   */
+  controlsMenu: "composer-controls-menu",
 
   /** `QueueModePicker`'s default testId, applied at its `Composer.tsx` mount (`${composerTestId}-queue-mode`). */
   queueModePickerRoot: "composer-queue-mode",
