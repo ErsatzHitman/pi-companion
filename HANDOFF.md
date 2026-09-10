@@ -54,7 +54,7 @@ And the one amendment to S7, which supersedes the artifact for the prompt-bar co
 | Fact                         | Value                                                                                                                                                                            |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HEAD                         | `f75bbd8` — "T345: S7 foundations -- JetBrains Mono on Android and the Pi role colours", pushed to `origin/main`                                                                 |
-| CI for `f75bbd8`             | run `34510418394`, still `in_progress` when this was written. Read it first: `gh run view 34510418394`                                                                           |
+| CI for `f75bbd8`             | run `34510418394`, success. The handoff commit `622b447` that followed it: run `34511798678`, success                                                                            |
 | Last Maestro dispatch        | run `34502151872` at `26e467a` (T344): APK build, packaged-app smoke, shards 1, 2, 3, 5 all green; **shard-4 red** on `extension-sheets` (details §5)                            |
 | CI for `26e467a`             | run `34502152280`, success                                                                                                                                                       |
 | Working tree                 | two uncommitted files: `apps/android/package.json` and `package-lock.json`, from `npx expo install react-native-svg` (pins `react-native-svg@15.12.1`). Not yet used by any code |
@@ -67,7 +67,7 @@ Re-derive before acting:
 ```bash
 cd D:/pi-companion && git rev-parse --short HEAD && git status --short
 gh run list --branch main --limit 5
-gh run view 34510418394 --json status,conclusion
+gh run view 34511798678 --json status,conclusion
 gh run view 34502151872 --json jobs -q '.jobs[] | "\(.name): \(.conclusion)"'
 ```
 
@@ -633,7 +633,7 @@ first commit that touches the file, or sweep all seven in T347:
 
 ## 10. Next Steps
 
-1. **Fix the failing Maestro checks.** Read run `34510418394` for `f75bbd8` first. Then take
+1. **Fix the failing Maestro checks.** CI is green at `622b447`. Take
    shard-4's `extension-sheets` from red to green using Option A or Option B in §5.2, dispatch
    `android-maestro-e2e.yml`, wait for it (no code while it runs), read every shard, and repeat
    until all five shards, the APK build and the packaged-app smoke are green.
