@@ -16644,8 +16644,10 @@ the falsified prose was found and corrected by hand instead (the T124 grep).
 
 - [x] The scripted `pi`, its provisioning and `FLOW_CWD` are unit-tested without a device
 - [x] The three flows create, open and drive a session; no flow types a literal cwd
-- [ ] A dispatch in which shard-2 (`cold-start-restore`) and shard-4 (`notification-approval`,
-      `extension-sheets`) are green
+- [x] A dispatch in which shard-2 (`cold-start-restore`) and shard-4 (`notification-approval`,
+      `extension-sheets`) are green — Maestro run `34522689648` at `b12b7f0`: the APK build,
+      the packaged-app smoke and all five shards green, which is what closes this box and
+      every box below that points at it.
 
 #### T335 — Pi UI bridge events were keyed by Pi's own session id, which no client ever looked up
 
@@ -16730,7 +16732,7 @@ header carry `CORRECTED at T337` markers. A `CAPABILITIES` entry keyed on
 
 - [x] A cold start with a stored profile reconnects it before the list is fetched or the last session restored
 - [x] The reconnect steps aside for a user-driven attempt, before and after its own attempt
-- [ ] A dispatch in which shard-2's `cold-start-restore` is green (tracked with T334's last box)
+- [x] A dispatch in which shard-2's `cold-start-restore` is green (tracked with T334's last box)
 
 #### T338 — The composer outgrew the keyboard-shrunk shell and pushed its own send button off screen
 
@@ -16763,7 +16765,7 @@ the source pin is the check.
 
 - [x] The composer's controls scroll and its prompt bar stays visible when the shell is shorter than the composer's content
 - [x] The T33B4 pin is replaced, not deleted, and every doc that stated it is corrected in place
-- [ ] A dispatch in which shard-4's `notification-approval` and `extension-sheets` reach their post-send assertions (tracked with T334's last box)
+- [x] A dispatch in which shard-4's `notification-approval` and `extension-sheets` reach their post-send assertions (tracked with T334's last box)
 
 #### T339 — Android never marked a session's timeline as viewed, so no agent_stream ever reached it
 
@@ -16805,7 +16807,7 @@ scratchpad-backed copy of `docs/legacy-retirement.md`, then restored with a clea
 
 - [x] The session route registers its agent as viewed while connected, and clears it on unmount
 - [x] A reconnect re-registers; a rejected send is settled, not thrown
-- [ ] A dispatch in which `extension-sheets` renders `pi-roster-subagents-fleet` (tracked with T334's last box)
+- [x] A dispatch in which `extension-sheets` renders `pi-roster-subagents-fleet` (tracked with T334's last box)
 
 #### T340 — A portaled sheet laid out under the keyboard and was pruned from the accessibility tree
 
@@ -16835,7 +16837,7 @@ named symbol.
 
 - [x] A sheet opened while the keyboard is up renders its panel above the keyboard, scrim intact
 - [x] The T32S6/T327 shell pins still hold with the new opening tag
-- [ ] A dispatch in which `notification-approval` sees `approvals-dialog` after the send (tracked with T334's last box)
+- [x] A dispatch in which `notification-approval` sees `approvals-dialog` after the send (tracked with T334's last box)
 
 #### T341 — A confirm dialog reached the approvals sheet as unsupported, with no Approve or Deny
 
@@ -16869,7 +16871,7 @@ copy of `docs/legacy-retirement.md`, then restored with a clean status.
 
 - [x] A `confirm` dialog renders Approve/Deny; Approve confirms, Deny and close cancel
 - [x] The other Tier-1 kinds are unchanged, and every doc that listed `confirm` among them is corrected
-- [ ] A dispatch in which `notification-approval` denies then approves (tracked with T334's last box)
+- [x] A dispatch in which `notification-approval` denies then approves (tracked with T334's last box)
 
 #### T342 — The pinned area's fixed cap hid the loop panel's sections below the fold
 
@@ -16900,7 +16902,7 @@ watched firing the same way as T341's.
 
 - [x] Two pinned cards of the flow's size are fully visible without scrolling the area on a phone-sized window
 - [x] The cap is window-relative, so a short window keeps transcript and composer room
-- [ ] A dispatch in which `extension-sheets` reaches its panel-section and form assertions (tracked with T334's last box)
+- [x] A dispatch in which `extension-sheets` reaches its panel-section and form assertions (tracked with T334's last box)
 
 #### T343 — With the keyboard up, the pinned area squeezed the composer down to its heading
 
@@ -16938,7 +16940,7 @@ restored with a clean status.
 
 - [x] The composer never shrinks below its heading, gaps and prompt bar, measured at runtime
 - [x] The pinned area is shrinkable and scrolls what it is given
-- [ ] A dispatch in which `extension-sheets` sends its final prompt and reaches the form (tracked with T334's last box)
+- [x] A dispatch in which `extension-sheets` sends its final prompt and reaches the form (tracked with T334's last box)
 
 #### T344 — The composer's measured floor paired stale readings and froze it at full height
 
@@ -16973,7 +16975,7 @@ rename; the model's and `composer-focus-model.ts`'s docs carry `CORRECTED at T34
 
 - [x] The floor is a sum of natural heights; no reading can raise it above heading + prompt bar + gaps
 - [x] With the keyboard closed the composer shrinks its controls again and the pinned area keeps its cap
-- [ ] A dispatch in which `extension-sheets` is green end to end (tracked with T334's last box)
+- [x] A dispatch in which `extension-sheets` is green end to end (tracked with T334's last box)
 
 #### T345 — S7 foundations: JetBrains Mono on Android and the Pi role colours
 
@@ -17054,7 +17056,7 @@ slot is unbounded would still be true of the missing one.
 - [x] `resolveComposerSlotMinHeight` is the composer's measured floor plus the slot's padding, and no floor at all until that measurement exists
 - [x] The shell applies both to the composer slot, and the route resolves the cap from the live window height and the live pinned-area visibility
 - [x] A `CAPABILITIES` entry covers both names as one same-file group, proven able to fire and restored to exit 0
-- [ ] A dispatch in which shard-4's `extension-sheets` reaches `pi-panel-loop-loop-section-.*` and still sends from the composer with both cards pinned
+- [x] A dispatch in which shard-4's `extension-sheets` reaches `pi-panel-loop-loop-section-.*` and still sends from the composer with both cards pinned
 
 #### T347 — A blocked submit button could never show why it was blocked
 
@@ -17089,7 +17091,7 @@ Android-only: `apps/web`'s form renderer has no submit gate at all — it leans 
 
 - [x] A primary action blocked by an unmet required field is `blocked: true` and `disabled: false`
 - [x] `disabled` is `true` only while a dispatch is pending, whether or not the gate also blocks
-- [ ] A dispatch in which shard-4's `extension-sheets` reaches the end of the form: the summary line, then the filled field, then the accepted submit
+- [x] A dispatch in which shard-4's `extension-sheets` reaches the end of the form: the summary line, then the filled field, then the accepted submit
 
 #### T348 — Re-sync expo-linking's audit range after upstream narrowed it
 
