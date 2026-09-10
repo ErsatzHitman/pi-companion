@@ -580,6 +580,7 @@ that recomputation has to be domain-specific:
 | T321   | The daemon stop command never worked, and Maestro's driver never had time to start            | phase-9   | tooling          | P9-U   | T320, T37D, T37F                                                      |
 | T322   | A failing Maestro flow threw away every piece of evidence about why                           | phase-9   | tooling          | P9-U   | T321, T320, T37F                                                      |
 | T323   | Two Windows temp-dir races turned CI red on consecutive pushes                                | phase-9   | server           | P9-U   | T240, T280, T297                                                      |
+| T324   | The emulator ran with `-accel off` for every run, and nothing said so                         | phase-9   | tooling          | P9-U   | T322, T319, T37F                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -15823,8 +15824,12 @@ that into a second failure would bury the first.
       emulator is killed
 - [x] `packaged-app-smoke` gets the same treatment, not just the shard matrix
 - [x] A green run uploads nothing, and a shard that dies before Maestro warns rather than fails
-- [ ] The `connect-onboarding` assertion is diagnosed from real artifacts and either the app or
-      the flow is fixed
+- [x] The `connect-onboarding` assertion is diagnosed from real artifacts: **neither the app nor
+      the flow was at fault.** The captured view hierarchy shows Android's
+      `System UI isn't responding` dialog covering the screen, and the device log shows the app
+      itself starting cleanly. Cause filed as **T324** — the emulator had been running with
+      `-accel off` on every run. This entry closes on the diagnosis, which is what it asked for;
+      the fix belongs to T324
 
 #### T323 — Two Windows temp-dir races turned CI red on consecutive pushes
 
@@ -15884,3 +15889,71 @@ occurrence of this error starts from a candidate list instead of a fresh investi
 - [x] `agent-manager.test.ts` passes locally (158 tests)
 - [ ] Two consecutive green `server-tests (windows-latest)` runs, since one green run cannot
       distinguish a fixed race from a lucky one
+
+#### T324 — The emulator ran with `-accel off` for every run, and nothing said so
+
+`labels: phase-9, area: tooling` · `depends-on: T322, T319, T37F`
+
+T322's artifacts landed on their first run and answered the question immediately — with an
+answer nothing in the log had hinted at. The view hierarchy captured at the failing
+`connect-onboarding` assertion contains no application at all:
+
+```
+System UI isn't responding
+  Close app
+  Wait
+```
+
+The device log agrees: `E/ActivityManager: ANR in com.android.phone`, `Reason: Process ...
+failed to complete startup`, and `Skipped 228 frames!` warnings from **system** pids (578, 985,
+1333 — system_server and SystemUI), not from this app.
+
+**The app was fine.** The same log shows it starting normally: `START u0 ...
+cmp=sh.picompanion.debug/.MainActivity`, `Start proc 3305:sh.picompanion.debug`, a splash
+window, `nativeloader` configuring the APK, and `SoLoader` recording the base apk path — React
+Native's own native libraries loading, with no crash and no fatal exception anywhere.
+
+**Root cause, from the emulator's own startup lines:**
+
+```
+ProbeKVM: This user doesn't have permissions to use KVM (/dev/kvm).
+The KVM line in /etc/group is: [kvm:x:993:]
+disable Linux hardware acceleration: true
+emulator ... -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel off
+```
+
+Every emulator this workflow has ever booted ran in **pure software emulation**. GitHub's ubuntu
+runners do ship `/dev/kvm`, but the runner user is not in the `kvm` group, so the action probes,
+fails, and falls back silently — `disable-linux-hw-accel: auto` resolving to `true`. The fix is
+the udev rule the action's own documentation prescribes, added as an `Enable KVM for the
+emulator` step ahead of both emulator jobs.
+
+**This retires the disclosure this workflow has carried since it was written**, which said KVM
+support for this action "has not been confirmed in this repository". It is confirmed now, and
+the answer had two halves: the capability is present, the permission is not.
+
+**One symptom list, one cause.** Everything observed since the emulator first booted traces to
+`-accel off`, and none of it was an app defect:
+
+| Symptom                                                 | Runs                         |
+| ------------------------------------------------------- | ---------------------------- |
+| `Boot completed in` 358s / 442s / 479s / 481s           | every run that booted        |
+| `adb install` taking 4m 30s                             | `34413092055`, `34420667467` |
+| `Failed to find ColorBuffer: 98`                        | `34413092055` onward         |
+| adb exit 224 right after boot                           | 2 of 10 shards               |
+| `Maestro Android driver did not start up in time`       | `34413092055`                |
+| `Assertion is false: id: connect-onboarding is visible` | every flow that ran          |
+
+**A theory this disproves, recorded because it was mine and it was wrong.** Between T322 landing
+and its artifacts arriving, the two-Expo-runtime split found under T307 (app code resolving
+`expo-modules-core@3.0.30`, `expo-audio` resolving `2.5.0`, both in one bundle) looked like the
+obvious explanation for a blank first screen. It is a real defect and it stays filed — but it
+is NOT this one: the logcat shows the app's native libraries loading cleanly. No fix was shipped
+on the strength of that theory, and T307's own entry says so.
+
+- [x] Both emulator jobs enable KVM before the emulator action runs
+- [x] The workflow header's "KVM ... has not been confirmed" disclosure is corrected rather than
+      deleted, naming what was actually wrong
+- [ ] A dispatch shows the emulator booting with acceleration — no `ProbeKVM` permission line,
+      no `-accel off`, and a boot time in the low minutes rather than 6-8
+- [ ] With acceleration on, the flows report real assertion results instead of System UI ANRs

@@ -27,9 +27,15 @@ name: Android Maestro E2E
 #   2. a booted Android emulator with Maestro installed
 #      (apps/android/maestro/README.md's "Prerequisites" -- something the
 #      harness has never provided and this workflow is the first attempt
-#      at providing via reactivecircus/android-emulator-runner, itself
-#      unverified here: GitHub-hosted Linux runners' KVM support for that
-#      action has not been confirmed in this repository).
+#      at providing via reactivecircus/android-emulator-runner).
+#      CORRECTED (T324): this said GitHub-hosted Linux runners' KVM support
+#      for that action "has not been confirmed in this repository". It is
+#      confirmed now, and the answer had two halves: /dev/kvm is present on
+#      ubuntu runners, but the runner user is not in the `kvm` group, so the
+#      action probed it, reported `ProbeKVM: This user doesn't have
+#      permissions to use KVM (/dev/kvm)`, and silently ran the emulator
+#      with `-accel off`. The `Enable KVM for the emulator` step in both
+#      emulator jobs below adds the udev rule that grants access.
 # CORRECTED (T318): this said "Until both exist, every shard job below
 # no-ops with a logged notice instead of failing ... so this workflow is
 # dry-run-safe today". Neither half survives. Requirement 1 exists --
@@ -349,6 +355,25 @@ jobs:
       # shard-plan.test.ts proves that order never matters (every flow
       # starts with its own clearState: true launchApp), so this loop
       # could run its flows in any order and reach the same result.
+      # T324: without this the emulator runs with `-accel off`. GitHub's
+      # ubuntu runners ship /dev/kvm but the runner user is not in the `kvm`
+      # group, so the action's own probe reports
+      # `ProbeKVM: This user doesn't have permissions to use KVM (/dev/kvm)`
+      # and falls back to pure software emulation. Every symptom this
+      # workflow has shown since the emulator first booted came from that:
+      # 6-8 minute boots, a 4m30s `adb install`, `Failed to find
+      # ColorBuffer`, adb exit 224, Maestro's driver missing its startup
+      # budget, and finally System UI itself throwing
+      # `ANR in com.android.phone` and covering the screen with an
+      # "isn't responding" dialog -- which is what actually failed the
+      # `connect-onboarding` assertion, not anything in the app.
+      - name: Enable KVM for the emulator
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"'             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       # T317: `profile: pixel_8` was hardcoded here and all five shards of
       # run 34392173679 died 35s in with `Error: No device found matching
       # --device pixel_8` -- the runner image's avdmanager catalog does not
@@ -557,6 +582,25 @@ jobs:
       # `scripts/ci/guard-app-id-package-pairing.mjs` fails CI if this
       # job's profile and the package its flow launches ever drift apart
       # again.
+      # T324 -- see the identical step in `maestro-e2e` above. Without this the emulator runs with `-accel off`. GitHub's
+      # ubuntu runners ship /dev/kvm but the runner user is not in the `kvm`
+      # group, so the action's own probe reports
+      # `ProbeKVM: This user doesn't have permissions to use KVM (/dev/kvm)`
+      # and falls back to pure software emulation. Every symptom this
+      # workflow has shown since the emulator first booted came from that:
+      # 6-8 minute boots, a 4m30s `adb install`, `Failed to find
+      # ColorBuffer`, adb exit 224, Maestro's driver missing its startup
+      # budget, and finally System UI itself throwing
+      # `ANR in com.android.phone` and covering the screen with an
+      # "isn't responding" dialog -- which is what actually failed the
+      # `connect-onboarding` assertion, not anything in the app.
+      - name: Enable KVM for the emulator
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"'             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       # T317 -- see the identical step in `maestro-e2e` above for why the
       # device profile is resolved against the runner's real avdmanager
       # catalog rather than hardcoded.
