@@ -259,8 +259,11 @@ describe("cold-start-restore.yaml's testId anchors exist in source", () => {
 
   it('sessions-screen.tsx\'s root testId is "sessions-screen-${serverId}"', () => {
     expect(sessionsScreenCode()).toMatch(/const testId = `sessions-screen-\$\{serverId\}`;/);
+    // T329 widened the ScrollView to a multi-line JSX tag (it gained
+    // `keyboardShouldPersistTaps`), so the anchor tolerates any props
+    // between `<ScrollView` and its closing `>`.
     expect(sessionsScreenCode()).toMatch(
-      /<ScrollView style=\{styles\.container\} testID=\{testId\}>/,
+      /<ScrollView\s[^>]*style=\{\[?styles\.container[^>]*testID=\{testId\}[^>]*>/,
     );
   });
 

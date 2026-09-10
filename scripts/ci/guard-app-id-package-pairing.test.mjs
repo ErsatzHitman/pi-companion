@@ -890,6 +890,12 @@ test("T315: the real build-development-apk job carries no EAS profile at all", (
 
   assert.equal(builder.profile, null);
   assert.equal(builder.appVariant, "development");
-  // packaged-app-smoke deliberately still uses EAS, for its release signing.
-  assert.equal(jobs.find((job) => job.name === "packaged-app-smoke").profile, "production-apk");
+  // T330: packaged-app-smoke assembles on the runner too, since the free
+  // plan's monthly build quota ran out mid-wave. It pairs its package the
+  // same way this job does -- through an explicit APP_VARIANT -- so a job
+  // with neither mechanism (which this guard must skip) never comes back
+  // quietly.
+  const smoke = jobs.find((job) => job.name === "packaged-app-smoke");
+  assert.equal(smoke.profile, null);
+  assert.equal(smoke.appVariant, "production");
 });

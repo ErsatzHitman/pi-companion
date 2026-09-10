@@ -399,7 +399,17 @@ const config: ExpoConfig = {
   // `expo-image-picker` case below: there the plugin would have ADDED a
   // permission nothing needs, here the permission is genuinely needed (this
   // app records voice) and arrives without the plugin either way.
-  plugins: ["expo-router", "./plugins/with-share-intent-module"],
+  // T330: `./plugins/with-cleartext-traffic` sets
+  // `android:usesCleartextTraffic="true"` on the release manifest. Without
+  // it a release-variant build cannot open a `ws://` socket to a LAN
+  // daemon at all — Android's default policy for this target SDK refuses
+  // cleartext, and only the DEBUG build type is opted in by Expo's
+  // template. See the plugin's own doc comment for the measurement.
+  plugins: [
+    "expo-router",
+    "./plugins/with-share-intent-module",
+    "./plugins/with-cleartext-traffic",
+  ],
   experiments: {
     typedRoutes: true,
   },

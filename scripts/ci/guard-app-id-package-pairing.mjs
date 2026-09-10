@@ -310,8 +310,12 @@ export function resolveTargetPackage(target, easProfileVariants, packageIds) {
 }
 
 /**
- * How a target reads in a failure message. `packaged-app-smoke` still
- * builds an EAS profile, so both phrasings appear in this repository today.
+ * How a target reads in a failure message. Both phrasings are kept even
+ * though no job in this repository builds an EAS profile any more
+ * (CORRECTED at T330: this said `packaged-app-smoke` "still builds an EAS
+ * profile"; it assembles with Gradle under `APP_VARIANT: production`
+ * since T330) -- `android-apk-release.yml` still builds one, and a future
+ * job here may again.
  *
  * @param {BuildTarget | null} target
  * @returns {string}

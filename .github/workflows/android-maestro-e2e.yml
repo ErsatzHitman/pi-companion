@@ -24,6 +24,16 @@ name: Android Maestro E2E
 #      because the EAS free tier queued that build for 1h5m in front of a
 #      1m54s build, twice per dispatch. Only `packaged-app-smoke` still
 #      needs EXPO_TOKEN, for its release signing;
+#      CORRECTED (T330): `packaged-app-smoke` no longer needs EXPO_TOKEN
+#      either. Run 34450130423 failed it before any flow on the free
+#      plan's monthly Android build quota ("This account has used its
+#      Android builds from the Free plan this month"), and the job now
+#      assembles the release-package APK with Gradle on the runner, the
+#      same recipe `build-development-apk` uses, with `APP_VARIANT`
+#      unset-equivalent (`production`) so the package is `sh.picompanion`.
+#      EAS-managed release signing is exercised by android-apk-release.yml,
+#      the workflow that actually publishes an APK; nothing in this
+#      workflow has ever needed the release keystore to run a flow.
 #   2. a booted Android emulator with Maestro installed
 #      (apps/android/maestro/README.md's "Prerequisites" -- something the
 #      harness has never provided and this workflow is the first attempt
@@ -44,7 +54,9 @@ name: Android Maestro E2E
 # step along with the `configured` gate that selected it, so these shards
 # fail loudly now rather than no-op. `packaged-app-smoke` still keeps its
 # own EXPO_TOKEN dry run, which is the only part of that sentence that was
-# still true. Requirement 2 remains genuinely unproven: no emulator has
+# still true. (CORRECTED (T330): that dry run is gone too, along with the
+# EAS build it guarded -- see the T330 correction above.) Requirement 2
+# remains genuinely unproven: no emulator has
 # ever booted here, because every dispatch so far died before boot -- most
 # recently on `Error: No device found matching --device pixel_8` (T317).
 # This is a manual (workflow_dispatch) workflow, not part of the
@@ -106,7 +118,14 @@ name: Android Maestro E2E
 # it red (see that guard's own test file for the proof). This job is
 # still blocked by the missing `EXPO_TOKEN` secret disclosed further
 # down and an unverified emulator boot (T208, owner-gated) -- that part
-# of the original disclosure stands.
+# of the original disclosure stands. (CORRECTED (T330): neither block
+# remains. The secret has existed since T208, the job stopped needing it
+# at T330, and the emulator has booted on every dispatch since T324. The
+# same correction applies to the `packaged-app-smoke` bullet above: the
+# package is still `sh.picompanion` and the variant is still the release
+# one, but the APK is assembled by Gradle on the runner under
+# `APP_VARIANT: production`, not by the EAS `production-apk` profile --
+# see the T330 correction near the top of this comment for why.)
 # It deliberately runs only `smoke.yaml` -- `apps/android/e2e/harness/
 # shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` already excludes `smoke`
 # from the Phase 5 ten-flow set for exactly this reason: it is the one
@@ -129,6 +148,10 @@ name: Android Maestro E2E
 # end-to-end (no EXPO_TOKEN, no verified emulator boot here), dry-runs
 # with a logged notice until EXPO_TOKEN is configured, and stays
 # workflow_dispatch rather than joining the push/pull_request `ci.yml`
+# (CORRECTED (T330): the first two clauses are history. The job has run
+# its flow end-to-end since run 34442086730, needs no EXPO_TOKEN since
+# T330, and has no dry run any more; only the workflow_dispatch clause
+# below still holds.)
 # gate, for the identical reason `maestro-e2e` gives above (plan.md
 # §15.4's required-job list does not include an emulator-backed run).
 
@@ -174,7 +197,10 @@ jobs:
   # Nothing about the E2E path needs EAS. EAS earns its place for the
   # PACKAGED build (`packaged-app-smoke` below still uses it) because that
   # job exists to exercise the real release artifact and its
-  # Expo-managed release signing. This job installs
+  # Expo-managed release signing. (CORRECTED (T330): `packaged-app-smoke`
+  # uses this same Gradle recipe now, after the free plan's monthly build
+  # quota ran out mid-wave; Expo-managed signing is exercised where an APK
+  # is actually published, android-apk-release.yml.) This job installs
   # `sh.picompanion.debug` on a throwaway emulator, where the debug
   # keystore `expo prebuild` generates is exactly the right signing
   # material -- and it is generated on the runner, so no signing material
@@ -431,18 +457,32 @@ jobs:
   packaged-app-smoke:
     name: packaged-app-smoke
     runs-on: ubuntu-latest
-    # T318: this job blocks on `eas build --wait`, and on the free tier the
-    # QUEUE dominates -- run 34392173679 spent 1h 05m queued against 1m 54s
-    # building, and this job took 1h 06m wall-clock. 150 minutes leaves room
-    # for a queue twice that long without ever letting a hung emulator run to
-    # the 360-minute default.
-    timeout-minutes: 150
+    # T318 measured this job at 1h 06m when it blocked on an EAS cloud build
+    # (1h 05m of that was the free tier's queue). T330: the APK is
+    # assembled on the runner now, so the budget is `build-development-apk`'s
+    # measured 23m of Gradle plus the emulator's 20-minute boot allowance
+    # and one flow -- 90 minutes is roughly twice that.
+    timeout-minutes: 90
+    env:
+      # T330: `app.config.ts` resolves the RELEASE package `sh.picompanion`
+      # for any `APP_VARIANT` other than `development`. It is set
+      # explicitly, rather than left unset, so that
+      # `scripts/ci/guard-app-id-package-pairing.mjs` can pair this job's
+      # package with the flow it runs the same way it reads
+      # `build-development-apk`'s `APP_VARIANT` -- a job with neither an
+      # EAS `--profile` nor an `APP_VARIANT` is one that guard must skip.
+      APP_VARIANT: production
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
       - run: npm ci
 
       - name: Build frontend-core dependencies (protocol, design-tokens, highlight, frontend-core)
@@ -467,104 +507,49 @@ jobs:
           npm run build --workspace=@picompanion/server
           npm run build --workspace=@picompanion/cli
 
-      - name: Check EAS credentials are configured
-        id: eas-secrets
-        shell: bash
-        run: |
-          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Setup Expo and EAS
-        if: steps.eas-secrets.outputs.configured == 'true'
-        uses: expo/expo-github-action@c7b66a9c327a43a8fa7c0158e7f30d6040d2481e # v8.2.1
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      # Same shape as maestro-e2e's "Build development APK on EAS" step
-      # above and android-apk-release.yml's "Build Android APK on EAS"
-      # step, but `apps/android/eas.json`'s `production-apk` profile
-      # (package `sh.picompanion`, `distribution: store`) -- the real
-      # packaged/release build, not `build-development-apk`'s
-      # `sh.picompanion.debug` variant. EAS auto-manages signing
-      # credentials for this profile the same way it would for a real
-      # release build; no keystore is committed to this repository
-      # (plan.md §15.3, T44B1's "signing material is not present in the
-      # repository" criterion).
-      - name: Build production APK on EAS
-        id: eas_build
-        if: steps.eas-secrets.outputs.configured == 'true'
+      # T330: the same two steps `build-development-apk` runs, for the
+      # release package. `assembleRelease` embeds the Hermes bundle (see
+      # that job's comment for why the debug variant cannot be used), and
+      # Expo's prebuild template signs it with the generated debug keystore
+      # when no release keystore is configured -- which installs on a
+      # throwaway emulator exactly as well as an EAS-signed build does, and
+      # keeps every credential out of this workflow (plan.md §15.3, T44B1).
+      # What this job proves is therefore the release VARIANT -- package
+      # `sh.picompanion`, the production bundle, `app.config.ts`'s release
+      # branch -- launching to onboarding on a clean device. Expo-managed
+      # release signing itself is exercised by android-apk-release.yml.
+      - name: Generate the native Android project
         shell: bash
         run: |
           set -euo pipefail
           cd apps/android
+          npx expo prebuild --platform android --no-install
 
-          # T310: `npx eas-cli`, never `npx eas`. `eas` IS a real npm package
-          # (0.1.0) and it has NO `bin`, so npx downloads it and dies with
-          # `npm error could not determine executable to run` — which is
-          # exactly how all six jobs of Maestro run 34368430903 failed, before
-          # any EAS build started. The binary named `eas` is shipped BY
-          # `eas-cli` (`bin = { eas: 'bin/run' }`), so the package name is what
-          # npx needs. `expo/expo-github-action` has already installed
-          # `eas-cli` into the workspace by this point, so this resolves
-          # locally rather than re-downloading.
-          build_json="$(npx eas-cli build --platform android --profile production-apk --non-interactive --wait --json)"
-          echo "$build_json" > "$RUNNER_TEMP/eas-build.json"
-
-          build_id="$(jq -r 'if type == "array" then .[0].id // empty else .id // empty end' "$RUNNER_TEMP/eas-build.json")"
-          if [ -z "$build_id" ]; then
-            echo "Failed to determine EAS build ID."
-            cat "$RUNNER_TEMP/eas-build.json"
-            exit 1
-          fi
-
-          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
-
-      # T313: `eas build --wait` prints `✖ Build failed` and exits 1 without
-      # ever naming the reason -- the reason lives only on expo.dev, behind
-      # the account. Run 34369364166's `packaged-app-smoke` spent 67 minutes
-      # to produce exactly that one line, and nobody without the token could
-      # tell a Gradle failure from a credentials problem from a timeout.
-      # This step makes the next failure legible in the CI log itself.
-      # `|| true` because a diagnostic that can fail the job it is diagnosing
-      # replaces one useless log with two.
-      - name: Explain the EAS build failure
-        if: failure()
+      - name: Assemble the release-package APK
         shell: bash
         run: |
-          set -uo pipefail
-          cd apps/android
-          echo "::group::Most recent EAS builds"
-          npx eas-cli build:list --platform android --limit 3 --non-interactive --json || true
-          echo "::endgroup::"
+          set -euo pipefail
+          cd apps/android/android
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Resolve and download the packaged APK artifact
+      - name: Stage the packaged APK
         id: artifact
-        if: steps.eas-secrets.outputs.configured == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          cd apps/android
-
-          build_view_json="$(npx eas-cli build:view '${{ steps.eas_build.outputs.build_id }}' --json)"
-          echo "$build_view_json" > "$RUNNER_TEMP/eas-build-view.json"
-
-          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' "$RUNNER_TEMP/eas-build-view.json")"
-          if [ -z "$artifact_url" ]; then
-            echo "Failed to determine APK artifact URL."
-            cat "$RUNNER_TEMP/eas-build-view.json"
+          built="$(find apps/android/android/app/build/outputs/apk -name '*.apk' -print | head -n 1)"
+          if [ -z "$built" ]; then
+            echo "Gradle produced no APK under apps/android/android/app/build/outputs/apk."
+            find apps/android/android/app/build/outputs -type f -print || true
             exit 1
           fi
-
+          echo "Built: $built"
           apk_path="$RUNNER_TEMP/picompanion-packaged.apk"
-          curl --fail --location --output "$apk_path" "$artifact_url"
+          cp "$built" "$apk_path"
           echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
 
       - name: Install Maestro CLI
-        if: steps.eas-secrets.outputs.configured == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -580,8 +565,8 @@ jobs:
       # variable `${APP_ID}`, and `APP_ID=sh.picompanion` below resolves
       # it to the exact package `adb install` just installed --
       # `scripts/ci/guard-app-id-package-pairing.mjs` fails CI if this
-      # job's profile and the package its flow launches ever drift apart
-      # again.
+      # job's build target and the package its flow launches ever drift
+      # apart again.
       # T324 -- see the identical step in `maestro-e2e` above. Without this the emulator runs with `-accel off`. GitHub's
       # ubuntu runners ship /dev/kvm but the runner user is not in the `kvm`
       # group, so the action's own probe reports
@@ -606,11 +591,9 @@ jobs:
       # catalog rather than hardcoded.
       - name: Resolve an AVD device profile this runner's catalog actually has
         id: avd
-        if: steps.eas-secrets.outputs.configured == 'true'
         run: node scripts/ci/run-resolve-avd-device-profile.mjs
 
       - name: Boot emulator, install the packaged APK, and run the smoke flow
-        if: steps.eas-secrets.outputs.configured == 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -646,10 +629,3 @@ jobs:
           path: ~/.maestro/tests
           if-no-files-found: warn
           retention-days: 7
-
-      - name: Dry run (EXPO_TOKEN not configured)
-        if: steps.eas-secrets.outputs.configured == 'false'
-        run: |
-          echo "::notice::EXPO_TOKEN secret is not configured on this repository yet (see android-apk-release.yml)."
-          echo "::notice::Skipping the packaged-app smoke run; this job is a dry run."
-          echo "::notice::This job has never executed end-to-end -- see this file's header comment."

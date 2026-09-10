@@ -229,6 +229,16 @@ describe("ConnectionShell source", () => {
     expect(code).toMatch(/<ScrollView[^>]*keyboardShouldPersistTaps="handled"/);
   });
 
+  it("T330: shrinks the ScrollView viewport by the live keyboard inset, since edge-to-edge never resizes the window", () => {
+    const code = readCode()
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    expect(code).toMatch(/const keyboardInset = useKeyboardInset\(\);/);
+    expect(code).toMatch(
+      /<ScrollView[^>]*style=\{\[styles\.root, \{ marginBottom: keyboardInset \}\]\}/,
+    );
+  });
+
   it("never logs a host, port, token, or pairing URL — no logger/console call anywhere in this file", () => {
     expect(readCode()).not.toMatch(/console\.(log|info|warn|error|debug)/);
     expect(readCode()).not.toMatch(/\blogger\b/i);

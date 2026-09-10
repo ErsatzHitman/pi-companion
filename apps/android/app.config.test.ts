@@ -87,6 +87,12 @@ describe("apps/android/app.config.ts's android.blockedPermissions (T294 decision
   });
 });
 
+describe("apps/android/app.config.ts's cleartext plugin (T330)", () => {
+  it("registers ./plugins/with-cleartext-traffic, so a release build can open ws:// sockets", () => {
+    expect(config.plugins).toContain("./plugins/with-cleartext-traffic");
+  });
+});
+
 describe("whyWriteExternalStorageStays (measured from expo-image-picker's own Kotlin)", () => {
   const source = readFileSync(IMAGE_PICKER_MODULE_SOURCE_PATH, "utf8");
 

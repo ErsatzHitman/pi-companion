@@ -170,6 +170,14 @@ tags:
     id: "connect-form-address-field"
 - eraseText: 64
 - inputText: "ws://${DAEMON_ADDRESS}"
+# T330: with the error banner above the form, the submit button now sits
+# below the keyboard (run 34450130423: `Element not found:
+# connect-form-submit-button` at exactly this step -- the field ended at
+# y=1529 against a keyboard starting at y=1499, and the button under it
+# was fully covered, so the accessibility tree pruned it). A user dismisses
+# the keyboard or scrolls; this flow does the former, which is what the
+# keyboard's own Back/Done does.
+- hideKeyboard
 - tapOn:
     id: "connect-form-submit-button"
 

@@ -88,6 +88,7 @@ import {
 } from "../../ui/primitives";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
+import { useKeyboardInset } from "../../app-shell/keyboard-inset";
 import { SessionListNetworkSync } from "./session-list-network-sync";
 import { createSessionResumeController } from "./session-resume-controller";
 import {
@@ -183,6 +184,7 @@ export function SessionsScreen({
   onSessionOpened,
 }: SessionsScreenProps) {
   const { theme } = useTheme();
+  const keyboardInset = useKeyboardInset();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const testId = `sessions-screen-${serverId}`;
 
@@ -426,7 +428,8 @@ export function SessionsScreen({
 
   return (
     <ScrollView
-      style={styles.container}
+      // T330: same viewport shrink as `connection-shell.tsx`'s ScrollView.
+      style={[styles.container, { marginBottom: keyboardInset }]}
       testID={testId}
       // T329: same reason as `connection-shell.tsx`'s ScrollView — the
       // create-session form's submit is tapped straight after typing, and

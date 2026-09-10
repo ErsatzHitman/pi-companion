@@ -159,7 +159,10 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
     it("FilesScreen's root testId is built as `files-screen-${serverId}-${agentId}`", () => {
       const code = readComponentCode("../../src/features/files/files-screen.tsx", "FilesScreen");
       expect(code).toMatch(/const testId = `files-screen-\$\{serverId\}-\$\{agentId\}`;/);
-      expect(code).toMatch(/<ScrollView style=\{styles\.container\} testID=\{testId\}>/);
+      // T329: the tag is multi-line now (`keyboardShouldPersistTaps` was added).
+      expect(code).toMatch(
+        /<ScrollView\s[^>]*style=\{styles\.container\}[^>]*testID=\{testId\}[^>]*>/,
+      );
     });
 
     it("the breadcrumbs row carries testId={`${testId}-breadcrumbs`}", () => {

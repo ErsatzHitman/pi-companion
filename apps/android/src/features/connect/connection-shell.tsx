@@ -6,6 +6,7 @@ import { Banner } from "../../ui/primitives/Banner";
 import { Button } from "../../ui/primitives/Button";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
+import { useKeyboardInset } from "../../app-shell/keyboard-inset";
 import { useAppCore } from "../../app/core-context";
 import {
   listHostProfiles,
@@ -114,6 +115,7 @@ const ANDROID_DAEMON_CLIENT_ID = "picompanion-android";
 export function ConnectionShell() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const keyboardInset = useKeyboardInset();
   const { connection: store, keyValueStorage, secureStorage, reconnectHostProfile } = useAppCore();
   const router = useRouter();
 
@@ -243,7 +245,13 @@ export function ConnectionShell() {
 
   return (
     <ScrollView
-      style={styles.root}
+      // T330: under edge-to-edge the window never shrinks around the IME,
+      // so the viewport is shrunk here instead. That is what lets the
+      // native ScrollView keep a focused field in view and lets the user
+      // scroll to whatever the keyboard would otherwise cover (run
+      // 34450130423: after an error banner, "Add host" sat under the
+      // keyboard and was unreachable).
+      style={[styles.root, { marginBottom: keyboardInset }]}
       contentContainerStyle={styles.container}
       // T329: a ScrollView's default `keyboardShouldPersistTaps="never"`
       // spends the first tap after typing on dismissing the keyboard and

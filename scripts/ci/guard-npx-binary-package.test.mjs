@@ -184,7 +184,10 @@ test("the real tree: every npx invocation resolves, and there are some to check"
 });
 
 test("MUTATION PROOF: rewriting the real eas-cli step to `npx eas` turns the real tree red", () => {
-  const path = ".github/workflows/android-maestro-e2e.yml";
+  // T330: android-maestro-e2e.yml no longer runs eas-cli at all (both of its
+  // APKs are assembled on the runner), so the proof anchors on the release
+  // workflow, which still does.
+  const path = ".github/workflows/android-apk-release.yml";
   const real = readFileSync(path, "utf8");
   const mutated = real.replace("npx eas-cli build", "npx eas build");
   assert.notEqual(mutated, real, "the mutation must actually change the file");

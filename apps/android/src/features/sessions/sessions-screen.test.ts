@@ -197,6 +197,13 @@ describe("SessionsScreen source: T32B6 network sync / connection path / stalenes
     expect(readScreenCode()).toMatch(/<ScrollView[^>]*keyboardShouldPersistTaps="handled"/);
   });
 
+  it("T330: shrinks the ScrollView viewport by the live keyboard inset", () => {
+    expect(readScreenCode()).toMatch(/const keyboardInset = useKeyboardInset\(\);/);
+    expect(readScreenCode()).toMatch(
+      /<ScrollView[^>]*style=\{\[styles\.container, \{ marginBottom: keyboardInset \}\]\}/,
+    );
+  });
+
   it("renders T37B's staleness sentence as a warning Banner, text not colour alone, gated on listStaleness rather than a second boolean", () => {
     expect(code).toMatch(
       /\{listStaleness \? \([\s\S]*?<Banner tone="warning" message=\{listStaleness\.text\} testId=\{`\$\{testId\}-list-stale`\} \/>/,

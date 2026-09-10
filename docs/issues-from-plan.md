@@ -586,6 +586,7 @@ that recomputation has to be domain-specific:
 | T327   | Every screen rendered under the status bar, and the heading Maestro asserts was pruned                               | phase-9   | android          | P9-U   | T326, T325                                                            |
 | T328   | The flows typed `ws://undefined`: Maestro never saw the harness's DAEMON\_\* variables                               | phase-9   | tooling          | P9-U   | T327, T321, T320                                                      |
 | T329   | The first tap after typing dismissed the keyboard, the composer sat under it, and an ANR dialog outlived its setting | phase-9   | android/tooling  | P9-U   | T328, T327                                                            |
+| T330   | A release-variant build could not open any `ws://` socket, and the smoke job's EAS quota ran out                     | phase-9   | android/ci       | P9-U   | T329, T43B2b                                                          |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -627,8 +628,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**538 tasks** (distinct IDs counted directly from the table above), recounted at T329 with
-`awk`/`sort -u` over the table's own rows — one past the **537** at T328, three past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**539 tasks** (distinct IDs counted directly from the table above), recounted at T330 with
+`grep`/`sort -u` over the table's own rows — one past the **538** at T329, four past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -13310,6 +13311,13 @@ Phases 5-7 may take a dependency on this task.
 `plan.md` §16 requirement to keep relay key material "Web Crypto-wrapped in IndexedDB" does not
 degrade, it throws. Android 9+ additionally blocks cleartext traffic by default. Neither client
 works without TLS.
+(CORRECTED at T330: "Neither client works without TLS" is now only half true. The web client
+still needs a secure context for `crypto.subtle`. The Android app opts its own manifest into
+cleartext (`apps/android/plugins/with-cleartext-traffic.js`), because a LAN daemon reached as
+`ws://192.168.x.x:<port>` is the product's primary path and Android's default policy had been
+refusing it in every release-variant build — see T330. The public-VPS deployment this section
+describes should still terminate TLS; the correction is about what the client can do, not
+about what a public host should.)
 
 **Shape.** "Public IP" does not mean the daemon listens publicly. `bootstrap.ts:65` already
 defaults to `127.0.0.1`; keep it there. Terminate TLS in a reverse proxy on 443 and proxy to
@@ -16355,3 +16363,70 @@ Widening is a decision for its own task, measured the way T246 and T295 measured
 - [x] `COMPOSER_LAYOUT_CONTRACT`'s `consumesKeyboardInset` prose describes what actually holds
 - [ ] A dispatch in which a connect-form flow reaches `"Connected via direct connection"` and a
       session-screen flow taps `composer-send`
+
+#### T330 — A release-variant build could not open any `ws://` socket, and the smoke job's EAS quota ran out
+
+`labels: phase-9, area: android/ci` · `depends-on: T329, T43B2b`
+
+Run 34450130423 (at `19bee5c`, T329) was the first dispatch in which a connect-form tap
+reached the app: `shard-3` passed outright (`composer-inputs`, `offline-cache-outbox`),
+`background-kill-restore` and `accessibility-audit` passed, and every connect-form flow got as
+far as a real error banner. Three findings, two of them defects that predate every Maestro run.
+
+**1. The app's release variant refuses every `ws://` connection before a packet leaves it.**
+All seven connect-form flows failed on `Could not reach the daemon. Check the address and try
+again.`, and the isolated daemons' own `ws_runtime_metrics` lines showed `activeSockets: 0`,
+`helloNew: 0`, `hostRejected: 0`, `originRejected: 0` in every window until the harness's own
+`daemon stop` — the emulator never opened a TCP connection at all. The binary manifest of the
+very APK that run installed (`picompanion-debug-apk`, decoded from its UTF-16 string pool)
+carries no `usesCleartextTraffic` and no `networkSecurityConfig`. Android's default policy for
+an app targeting SDK 28 or later refuses cleartext, `ws://` included; Expo's prebuild template
+opts only the DEBUG build type in (`src/debug/AndroidManifest.xml`), and both this workflow's
+jobs and every real release use `assembleRelease`. OkHttp's `CLEARTEXT communication to
+10.0.2.2 not permitted by network security policy` contains "network", which
+`daemon-connection-error.ts` classifies as `unreachable` — hence the copy on screen. The same
+refusal applies to a release install on a phone against `ws://192.168.x.x:<port>`, the connect
+form's own placeholder and the product's primary path; only `wss://` would ever have connected.
+`apps/android/plugins/with-cleartext-traffic.js` now sets
+`android:usesCleartextTraffic="true"` on the main `<application>` (registered in
+`app.config.ts`; its pure core is tested against a manifest in `@expo/config-plugins`' own
+shape). Application-wide rather than a `networkSecurityConfig` domain allowlist because that
+format admits hostnames and literal IPs only — a LAN daemon has neither a fixed hostname nor a
+fixed IP, and no CIDR form exists. The relay path is `wss://` and unaffected.
+
+**2. With an error banner on screen, the re-submit sat under the keyboard.** `network-switch`
+failed its second `tapOn: connect-form-submit-button` with `Element not found`: the banner
+pushed the address field down to y=1529 against a keyboard starting at y=1499, and the button
+below it was fully covered and pruned. Two changes: the connect and sessions screens' `ScrollView`s
+shrink their viewport by `useKeyboardInset()` (`marginBottom`, the same inset T329 gave the
+session shell) — that is what lets the native ScrollView keep a focused field in view and lets a
+user scroll to anything the keyboard covers, the adjustResize behaviour edge-to-edge removed —
+and `network-switch.yaml` dismisses the keyboard (`hideKeyboard`, what the keyboard's own Back/
+Done does) before that one re-submit, since no scroll step can be inferred from a tap.
+
+**3. `packaged-app-smoke` failed before any flow: the free plan's monthly Android build quota
+was exhausted** ("This account has used its Android builds from the Free plan this month, which
+will reset in 20 days"). The job now assembles the release-package APK with Gradle on the
+runner — `build-development-apk`'s recipe verbatim, under `APP_VARIANT: production` so
+`app.config.ts` resolves `sh.picompanion` and `guard-app-id-package-pairing` can still pair the
+job's package with its flow (a job with neither an EAS profile nor an `APP_VARIANT` is one that
+guard must skip, the check-that-cannot-fail shape). The EAS credential gate, cloud build,
+failure explainer (T313) and dry run are gone from this workflow; every `EXPO_TOKEN` and
+EAS-profile claim in its header carries a `CORRECTED (T330)` marker. What the job proves is
+unchanged in substance — package `sh.picompanion`, the production bundle, `app.config.ts`'s
+release branch, launching to onboarding on a clean device — and Expo-managed release signing is
+exercised where an APK is actually published, `android-apk-release.yml`. The job's timeout drops
+from 150 to 90 minutes with the queue gone.
+
+Also folded in: `cold-start-restore-model.test.ts`'s `<ScrollView …>` anchor tolerates the
+array-style `style` prop; `guard-app-id-package-pairing.mjs`'s "still builds an EAS profile"
+comment is corrected. The plugin ships in `apps/android/plugins/`, outside
+`isShippedSourcePath`, so no `CAPABILITIES` entry can see it — the same disclosed gap T329
+recorded for `apps/android/e2e/`.
+
+- [x] The release-variant manifest opts into cleartext; the plugin's core is under test and
+      registered in `app.config.ts`
+- [x] Both form screens shrink their scroll viewport by the live keyboard inset
+- [x] `packaged-app-smoke` builds on the runner and pairs its package through `APP_VARIANT`
+- [ ] A dispatch in which a connect-form flow reaches `"Connected via direct connection"` — the
+      first with a socket that can actually open
