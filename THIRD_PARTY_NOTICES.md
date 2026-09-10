@@ -197,21 +197,27 @@ T13C (docs/issues-from-plan.md "Bundle Inter/Geist Mono and complete
 light-theme values") self-hosts both fonts Beautiful UI's visual language
 names (`docs/beautiful-ui-reference.md` "Fonts"), closing the gap where
 neither shipped with the product and the UI silently fell back to whatever
-sans/mono face happened to be installed on the host OS. Both are licensed
-under the **SIL Open Font License, Version 1.1**; the license text is
-vendored verbatim alongside each family's assets, as OFL requires.
+sans/mono face happened to be installed on the host OS. T345 added a third,
+JetBrains Mono, as Android's mono face. All three are licensed under the
+**SIL Open Font License, Version 1.1**; the license text is vendored
+verbatim alongside each family's assets, as OFL requires.
 
-| Font                 | Source used to vendor                                      | Version                    | License | Vendored at                                                                              |
-| -------------------- | ---------------------------------------------------------- | -------------------------- | ------- | ---------------------------------------------------------------------------------------- |
-| Inter (web)          | `@fontsource/inter` npm package (woff2, latin subset)      | 5.3.0 (upstream Inter 4.1) | OFL-1.1 | `apps/web/src/assets/fonts/inter/` (`Inter-{400,500,600,700}.woff2`, `OFL.txt`)          |
-| Inter (Android)      | `@expo-google-fonts/inter` npm package (ttf)               | 0.4.2                      | OFL-1.1 | `apps/android/assets/fonts/` (`Inter-{400,500,600,700}.ttf`, `OFL-Inter.txt`)            |
-| Geist Mono (web)     | `@fontsource/geist-mono` npm package (woff2, latin subset) | 5.3.0                      | OFL-1.1 | `apps/web/src/assets/fonts/geist-mono/` (`GeistMono-{400,500,600,700}.woff2`, `OFL.txt`) |
-| Geist Mono (Android) | `geist` npm package (Vercel, ttf)                          | 1.7.2                      | OFL-1.1 | `apps/android/assets/fonts/` (`GeistMono-{400,500,600,700}.ttf`, `OFL-GeistMono.txt`)    |
+| Font                     | Source used to vendor                                      | Version                    | License | Vendored at                                                                                   |
+| ------------------------ | ---------------------------------------------------------- | -------------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| Inter (web)              | `@fontsource/inter` npm package (woff2, latin subset)      | 5.3.0 (upstream Inter 4.1) | OFL-1.1 | `apps/web/src/assets/fonts/inter/` (`Inter-{400,500,600,700}.woff2`, `OFL.txt`)               |
+| Inter (Android)          | `@expo-google-fonts/inter` npm package (ttf)               | 0.4.2                      | OFL-1.1 | `apps/android/assets/fonts/` (`Inter-{400,500,600,700}.ttf`, `OFL-Inter.txt`)                 |
+| Geist Mono (web)         | `@fontsource/geist-mono` npm package (woff2, latin subset) | 5.3.0                      | OFL-1.1 | `apps/web/src/assets/fonts/geist-mono/` (`GeistMono-{400,500,600,700}.woff2`, `OFL.txt`)      |
+| JetBrains Mono (Android) | `JetBrainsMono-2.304.zip` GitHub release asset (ttf)       | 2.304                      | OFL-1.1 | `apps/android/assets/fonts/` (`JetBrainsMono-{400,500,600,700}.ttf`, `OFL-JetBrainsMono.txt`) |
 
 - **Inter** — Copyright 2020 The Inter Project Authors
   (<https://github.com/rsms/inter>).
 - **Geist Mono** — Copyright (c) 2023 Vercel, in collaboration with
-  basement.studio (<https://github.com/vercel/geist-font>).
+  basement.studio (<https://github.com/vercel/geist-font>). Web only since
+  T345.
+- **JetBrains Mono** — Copyright 2020 The JetBrains Mono Project Authors
+  (<https://github.com/JetBrains/JetBrainsMono>). Android only: T345 swapped
+  the Android mono face to the one the S7 phone design (plan.md §10.2) sets,
+  and removed the vendored Geist Mono TTFs the app no longer registers.
 - Neither font is fetched from a CDN (Google Fonts or otherwise) at runtime:
   `apps/web/src/styles/fonts.css` declares `@font-face` rules against the
   vendored woff2 files with `font-display: swap`, and

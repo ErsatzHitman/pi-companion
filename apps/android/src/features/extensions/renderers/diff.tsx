@@ -15,7 +15,7 @@
  * `roster.tsx` composes primitives/recipes directly for a kind that
  * doesn't reduce to one existing recipe.
  *
- * Counts use mono tabular figures via `DiffSummary` itself (Geist Mono,
+ * Counts use mono tabular figures via `DiffSummary` itself (the mono family,
  * `theme.typography.variant.code.fontFamily` — the repo's established
  * "tabular figures" treatment, see that recipe's own doc comment and
  * `PromptBar.tsx`/`ThinkingSection.tsx`'s identical notes); this file adds

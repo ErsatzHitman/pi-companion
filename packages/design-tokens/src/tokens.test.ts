@@ -7,6 +7,7 @@ import {
   lightHighContrastTheme,
   lightTheme,
   motion,
+  nativeFontFamilyNames,
   radii,
   reducedMotion,
   resolveMotion,
@@ -156,9 +157,28 @@ describe("Beautiful UI conformance (T13B)", () => {
     }
   });
 
-  it("uses Inter and Geist Mono", () => {
+  it("uses Inter and Geist Mono on the web, JetBrains Mono on Android (T345)", () => {
     expect(typography.fontFamily.sans).toContain("Inter");
     expect(typography.fontFamily.mono).toContain("Geist Mono");
+    expect(nativeFontFamilyNames.sans.regular).toContain("Inter");
+    expect(nativeFontFamilyNames.mono.regular).toContain("JetBrainsMono");
+  });
+
+  it("names the S7 Pi roles in both themes (T345)", () => {
+    for (const theme of [darkTheme, lightTheme]) {
+      for (const role of [
+        "purple",
+        "teal",
+        "tool-success-bg",
+        "tool-error-bg",
+        "extension-bg",
+        "accent-highlight",
+      ] as const) {
+        expect(theme.colors[role], role).toMatch(/^(#[0-9a-f]{6}|rgba\()/);
+      }
+    }
+    expect(darkTheme.colors.purple).not.toBe(lightTheme.colors.purple);
+    expect(darkTheme.colors["extension-bg"]).not.toBe(lightTheme.colors["extension-bg"]);
   });
 
   it("runs a small type scale, with the 21px/600 page heading and -0.02em tracking", () => {

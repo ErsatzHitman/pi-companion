@@ -179,6 +179,31 @@ describe.each([
     expectAA("ink on hover-2", colors.ink, colors["hover-2"]);
   });
 
+  it("T345: the S7 purple and teal roles reach 4.5:1 as text on every backdrop", () => {
+    for (const role of ["purple", "teal"] as const) {
+      for (const bg of TEXT_BACKDROPS) {
+        expectAA(`${role} on ${bg}`, colors[role], colors[bg]);
+      }
+    }
+  });
+
+  it("T345: what a tool/extension block paints on its own fill reaches 4.5:1", () => {
+    // A finished tool block (`tool-success-bg`/`tool-error-bg`) carries the
+    // ink title, ink-2 body/output, a teal path chip and the accent; an
+    // extension block (`extension-bg`) carries its purple label, ink body
+    // and ink-2 detail. ink-3 is deliberately NOT pinned here: it clears
+    // 4.5:1 on none of the three fills in either theme, which is why the
+    // transcript paints muted finish lines in ink-2 inside a block.
+    for (const bg of ["tool-success-bg", "tool-error-bg", "extension-bg"] as const) {
+      for (const fg of ["ink", "ink-2", "accent", "teal"] as const) {
+        expectAA(`${fg} on ${bg}`, colors[fg], colors[bg]);
+      }
+    }
+    expectAA("purple on extension-bg", colors.purple, colors["extension-bg"]);
+    expectAA("green on tool-success-bg", colors.green, colors["tool-success-bg"]);
+    expectAA("red on tool-error-bg", colors.red, colors["tool-error-bg"]);
+  });
+
   it("tooltip foreground and muted text reach 4.5:1 on the tooltip background", () => {
     // apps/web/src/ui/primitives/primitives.css .pc-tooltip and
     // apps/android/src/ui/primitives/Tooltip.tsx paint these two roles on

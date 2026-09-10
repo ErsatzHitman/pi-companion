@@ -45,7 +45,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     language: {
       color: theme.colors["ink-3"],
-      // Geist Mono for "paths, keys and log lines" (docs/beautiful-ui-
+      // The mono family for "paths, keys and log lines" (docs/beautiful-ui-
       // reference.md).
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.caption.fontSize,

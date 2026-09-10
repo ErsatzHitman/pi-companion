@@ -2,8 +2,11 @@ import { nativeFontFamilyNames } from "@picompanion/design-tokens";
 import { useFonts } from "expo-font";
 
 /**
- * Self-hosted Inter / Geist Mono loader (T13C, docs/issues-from-plan.md
- * "Bundle Inter/Geist Mono and complete light-theme values").
+ * Self-hosted Inter / JetBrains Mono loader (T13C, docs/issues-from-plan.md
+ * "Bundle Inter/Geist Mono and complete light-theme values"; T345 swapped
+ * the mono face from Geist Mono to JetBrains Mono, the one the S7 phone
+ * design sets — see `nativeFontFamilyNames`' own note in
+ * `@picompanion/design-tokens`).
  *
  * Registers every bundled TTF (vendored under `assets/fonts/`, SIL Open
  * Font License 1.1 — see `THIRD_PARTY_NOTICES.md` and the `OFL-*.txt` files
@@ -18,7 +21,7 @@ import { useFonts } from "expo-font";
  *
  * `apps/android/src/app/_layout.tsx` gates the app's first paint on this
  * hook's `fontsLoaded` flag so the interface never flashes an
- * un-bundled system face before swapping to Inter/Geist Mono.
+ * un-bundled system face before swapping to Inter/JetBrains Mono.
  *
  * Metro's asset resolution needs a static, literal-string `require(...)`
  * call per font (it cannot follow a variable path), so each asset is
@@ -31,10 +34,10 @@ export function useAppFonts(): { fontsLoaded: boolean; fontError: Error | null }
     [nativeFontFamilyNames.sans.medium]: require("../../../assets/fonts/Inter-500.ttf"),
     [nativeFontFamilyNames.sans.semibold]: require("../../../assets/fonts/Inter-600.ttf"),
     [nativeFontFamilyNames.sans.bold]: require("../../../assets/fonts/Inter-700.ttf"),
-    [nativeFontFamilyNames.mono.regular]: require("../../../assets/fonts/GeistMono-400.ttf"),
-    [nativeFontFamilyNames.mono.medium]: require("../../../assets/fonts/GeistMono-500.ttf"),
-    [nativeFontFamilyNames.mono.semibold]: require("../../../assets/fonts/GeistMono-600.ttf"),
-    [nativeFontFamilyNames.mono.bold]: require("../../../assets/fonts/GeistMono-700.ttf"),
+    [nativeFontFamilyNames.mono.regular]: require("../../../assets/fonts/JetBrainsMono-400.ttf"),
+    [nativeFontFamilyNames.mono.medium]: require("../../../assets/fonts/JetBrainsMono-500.ttf"),
+    [nativeFontFamilyNames.mono.semibold]: require("../../../assets/fonts/JetBrainsMono-600.ttf"),
+    [nativeFontFamilyNames.mono.bold]: require("../../../assets/fonts/JetBrainsMono-700.ttf"),
   });
   return { fontsLoaded, fontError: fontError ?? null };
 }

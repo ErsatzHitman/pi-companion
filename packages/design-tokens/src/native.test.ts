@@ -89,7 +89,7 @@ describe("getNativeTypography", () => {
       expect(nativeFontFamily("sans", weight)).toBe(nativeFontFamilyNames.sans[weight]);
       expect(nativeFontFamily("mono", weight)).toBe(nativeFontFamilyNames.mono[weight]);
       expect(nativeFontFamily("sans", weight)).toContain("Inter");
-      expect(nativeFontFamily("mono", weight)).toContain("GeistMono");
+      expect(nativeFontFamily("mono", weight)).toContain("JetBrainsMono");
     }
   });
 });

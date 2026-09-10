@@ -97,6 +97,12 @@ const beautifulDark = {
   "green-tint": "rgba(60, 187, 114, 0.14)",
   "orange-tint": "rgba(246, 143, 60, 0.14)",
   "red-tint": "rgba(238, 92, 97, 0.14)",
+  purple: "#b88fe6",
+  teal: "#8dc8c0",
+  "tool-success-bg": "#28312e",
+  "tool-error-bg": "#3b2f31",
+  "extension-bg": "#373340",
+  "accent-highlight": "rgba(61, 154, 255, 0.24)",
   "tooltip-bg": "#111214",
   "tooltip-fg": "#f2f3f4",
   "tooltip-muted": "#a5a8ad",
@@ -165,6 +171,12 @@ const beautifulLight = {
   "green-tint": "#e8f5ed",
   "orange-tint": "#fdf1e5",
   "red-tint": "#fcecec",
+  purple: "#6d3fbf",
+  teal: "#0f766e",
+  "tool-success-bg": "#f0f6f1",
+  "tool-error-bg": "#fff1f0",
+  "extension-bg": "#f4f2fc",
+  "accent-highlight": "rgba(0, 109, 211, 0.18)",
   "tooltip-bg": "#25272b",
   "tooltip-fg": "#f6f7f8",
   "tooltip-muted": "#a5a8ad",
@@ -223,6 +235,86 @@ export interface ToneColorTokens {
 }
 
 /** Miscellaneous Beautiful UI roles that don't belong to another group. */
+/**
+ * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
+ * that Beautiful UI's own palette does not name. `purple` is the extension
+ * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
+ * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
+ * `tool-error-bg` are the finished tool-block fills (a pending block sits on
+ * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
+ * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
+ * same construction the design uses, then nudged until
+ * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
+ */
+export interface PiRoleColorTokens {
+  purple: string;
+  teal: string;
+  "tool-success-bg": string;
+  "tool-error-bg": string;
+  "extension-bg": string;
+  "accent-highlight": string;
+}
+
+/**
+ * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
+ * that Beautiful UI's own palette does not name. `purple` is the extension
+ * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
+ * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
+ * `tool-error-bg` are the finished tool-block fills (a pending block sits on
+ * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
+ * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
+ * same construction the design uses, then nudged until
+ * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
+ */
+export interface PiRoleColorTokens {
+  purple: string;
+  teal: string;
+  "tool-success-bg": string;
+  "tool-error-bg": string;
+  "extension-bg": string;
+  "accent-highlight": string;
+}
+
+/**
+ * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
+ * that Beautiful UI's own palette does not name. `purple` is the extension
+ * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
+ * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
+ * `tool-error-bg` are the finished tool-block fills (a pending block sits on
+ * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
+ * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
+ * same construction the design uses, then nudged until
+ * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
+ */
+export interface PiRoleColorTokens {
+  purple: string;
+  teal: string;
+  "tool-success-bg": string;
+  "tool-error-bg": string;
+  "extension-bg": string;
+  "accent-highlight": string;
+}
+
+/**
+ * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
+ * that Beautiful UI's own palette does not name. `purple` is the extension
+ * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
+ * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
+ * `tool-error-bg` are the finished tool-block fills (a pending block sits on
+ * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
+ * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
+ * same construction the design uses, then nudged until
+ * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
+ */
+export interface PiRoleColorTokens {
+  purple: string;
+  teal: string;
+  "tool-success-bg": string;
+  "tool-error-bg": string;
+  "extension-bg": string;
+  "accent-highlight": string;
+}
+
 export interface MiscBeautifulColorTokens {
   "tooltip-bg": string;
   "tooltip-fg": string;
@@ -239,6 +331,7 @@ export interface SemanticColorTokens
     LineColorTokens,
     AccentColorTokens,
     ToneColorTokens,
+    PiRoleColorTokens,
     MiscBeautifulColorTokens {
   // ---- Legacy roles (pre-T13B) -------------------------------------------
   // Kept as compatibility aliases pointing at the Beautiful UI-named fields
@@ -365,6 +458,12 @@ function buildColors(p: typeof beautifulDark | typeof beautifulLight): ColorToke
     "green-tint": p["green-tint"],
     "orange-tint": p["orange-tint"],
     "red-tint": p["red-tint"],
+    purple: p.purple,
+    teal: p.teal,
+    "tool-success-bg": p["tool-success-bg"],
+    "tool-error-bg": p["tool-error-bg"],
+    "extension-bg": p["extension-bg"],
+    "accent-highlight": p["accent-highlight"],
     "tooltip-bg": p["tooltip-bg"],
     "tooltip-fg": p["tooltip-fg"],
     "tooltip-muted": p["tooltip-muted"],
@@ -635,6 +734,15 @@ export const typography: TypographyTokens = {
  * right file by `font-weight` for a single family name ("Inter" / "Geist
  * Mono", the first entry in each `typography.fontFamily` stack above), the
  * way browsers have always resolved custom fonts.
+ *
+ * T345: the two platforms' mono faces DIVERGE on purpose. Web keeps Geist
+ * Mono (the `typography.fontFamily.mono` stack above); Android registers
+ * JetBrains Mono, the face the S7 "Live flow" phone design
+ * (plan.md §10.2) sets every transcript block, path chip, todo row and
+ * pill in. The `mono` names below are therefore NOT the first entry of
+ * the CSS stack the way the `sans` names are — `native.ts` resolves a
+ * theme's mono `fontFamily` through this map, never through the stack, so
+ * nothing on Android ever asks for a "Geist Mono" it no longer bundles.
  */
 export const nativeFontFamilyNames = {
   sans: {
@@ -644,10 +752,10 @@ export const nativeFontFamilyNames = {
     bold: "Inter_700Bold",
   },
   mono: {
-    regular: "GeistMono_400Regular",
-    medium: "GeistMono_500Medium",
-    semibold: "GeistMono_600SemiBold",
-    bold: "GeistMono_700Bold",
+    regular: "JetBrainsMono_400Regular",
+    medium: "JetBrainsMono_500Medium",
+    semibold: "JetBrainsMono_600SemiBold",
+    bold: "JetBrainsMono_700Bold",
   },
 } as const;
 

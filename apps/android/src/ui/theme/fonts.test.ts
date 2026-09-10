@@ -66,17 +66,19 @@ describe("apps/android font bundling (T13C)", () => {
     }
   });
 
-  it("registers four Inter weights and four Geist Mono weights", () => {
+  it("registers four Inter weights and four JetBrains Mono weights (T345)", () => {
     const requirePaths = extractRequirePaths(fontsTsSource);
     const interPaths = requirePaths.filter((p) => p.includes("Inter-"));
-    const monoPaths = requirePaths.filter((p) => p.includes("GeistMono-"));
+    const monoPaths = requirePaths.filter((p) => p.includes("JetBrainsMono-"));
     expect(interPaths.length).toBe(4);
     expect(monoPaths.length).toBe(4);
   });
 
   it("vendors the OFL license text alongside each family's assets", () => {
     expect(existsSync(resolve(fontsTsDir, "../../../assets/fonts/OFL-Inter.txt"))).toBe(true);
-    expect(existsSync(resolve(fontsTsDir, "../../../assets/fonts/OFL-GeistMono.txt"))).toBe(true);
+    expect(existsSync(resolve(fontsTsDir, "../../../assets/fonts/OFL-JetBrainsMono.txt"))).toBe(
+      true,
+    );
   });
 
   it("gates the root layout's first paint on fontsLoaded/fontError", () => {

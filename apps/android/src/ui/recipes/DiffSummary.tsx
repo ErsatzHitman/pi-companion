@@ -49,7 +49,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.bodySmall.fontSize,
     },
-    // Geist Mono with tabular figures for the +/-/~ counters (docs/
+    // The mono family with tabular figures for the +/-/~ counters (docs/
     // beautiful-ui-reference.md "Geist Mono for all numerals ... with
     // tabular-nums on counters and timers").
     stat: {

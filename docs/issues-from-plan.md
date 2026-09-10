@@ -601,6 +601,7 @@ that recomputation has to be domain-specific:
 | T342   | The pinned area's fixed cap hid the loop panel's sections below the fold                                             | phase-9   | android          | P9-U   | T339, T34A4, T338                                                     |
 | T343   | With the keyboard up, the pinned area squeezed the composer down to its heading                                      | phase-9   | android          | P9-U   | T342, T338, T329                                                      |
 | T344   | The composer's measured floor paired stale readings and froze it at full height                                      | phase-9   | android          | P9-U   | T343                                                                  |
+| T345   | S7 foundations: JetBrains Mono on Android and the Pi role colours                                                    | phase-9   | android          | P9-U   | T13C, T13B                                                            |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -642,7 +643,7 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**553 tasks** (distinct IDs counted directly from the table above), recounted at T344 with
+**554 tasks** (distinct IDs counted directly from the table above), recounted at T345 with
 `grep`/`sort -u` over the table's own rows — one past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
@@ -16970,3 +16971,35 @@ rename; the model's and `composer-focus-model.ts`'s docs carry `CORRECTED at T34
 - [x] The floor is a sum of natural heights; no reading can raise it above heading + prompt bar + gaps
 - [x] With the keyboard closed the composer shrinks its controls again and the pinned area keeps its cap
 - [ ] A dispatch in which `extension-sheets` is green end to end (tracked with T334's last box)
+
+#### T345 — S7 foundations: JetBrains Mono on Android and the Pi role colours
+
+`labels: phase-9, area: android` · `depends-on: T13C, T13B`
+
+The owner's S7 "Live flow" design (the phone artifact plan.md §10.2 now names) is to be
+replicated exactly on the Android session screen, and its Sessions/Live/Settings screens
+alongside it. Two things it needs do not exist in the token layer: its mono face is JetBrains
+Mono (every transcript block, path chip, todo row and pill is set in it at 12.5px/1.62), and it
+paints five roles Beautiful UI's palette never named — a purple extension label on a purple-mixed
+block, a teal path chip, and green- and red-mixed fills for finished tool blocks, plus a stronger
+accent highlight for grep hits.
+
+This task lays those foundations so every later S7 task builds on tokens, not hex: JetBrains
+Mono 2.304 (OFL-1.1) is vendored under `apps/android/assets/fonts/` as
+`JetBrainsMono-{400,500,600,700}.ttf` with `OFL-JetBrainsMono.txt`, the Geist Mono TTFs the app
+no longer registers are removed, `nativeFontFamilyNames.mono` names the new faces (the web's
+`typography.fontFamily.mono` stack stays Geist Mono — the divergence is documented on the map
+itself), and `fonts.ts` registers them. `PiRoleColorTokens` adds `purple`, `teal`,
+`tool-success-bg`, `tool-error-bg`, `extension-bg` and `accent-highlight` to both palettes; each
+fill is the design's own oklab mix of the tone over `surface` (the light fills at 7% rather than the
+design's 10–15%, so the accent still clears AA on them), and the dark purple was lifted
+from the design's oklch(0.68 0.13 305) to oklch(0.72 0.13 305) because the original cleared only
+4.17:1 on its own extension fill. `contrast.test.ts` pins purple/teal on every text backdrop and
+ink/ink-2/accent/teal on all three block fills; ink-3 is documented as NOT clearing AA on any of
+them, which is the reason later tasks paint muted finish lines inside a block in ink-2.
+`THIRD_PARTY_NOTICES.md` §3 gains the JetBrains Mono row and copyright line; plan.md §10.2's
+type sentence records the per-platform mono face.
+
+- [x] `useAppFonts()` registers four JetBrains Mono weights and no Geist Mono asset remains under `apps/android/assets/fonts/`
+- [x] Both themes carry the six Pi role colours and every pinned pair reaches 4.5:1
+- [x] `THIRD_PARTY_NOTICES.md` §3 and plan.md §10.2 name the new face and its licence

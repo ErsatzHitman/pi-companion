@@ -95,7 +95,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontSize: theme.typography.variant.label.fontSize,
       fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
     },
-    // Elapsed-time readout: Geist Mono with tabular figures (docs/
+    // Elapsed-time readout: the mono family with tabular figures (docs/
     // beautiful-ui-reference.md "mono elapsed-time readout").
     duration: {
       color: theme.colors["ink-3"],

@@ -843,7 +843,7 @@ Before adapting external code, record its source URL, version, license, and requ
 
 `npm run build:design-tokens` produces the package exports before either application builds. Web consumes generated CSS variables. Android consumes typed theme objects. Component code must not contain product colors as raw hex values.
 
-Shadows are **1px rings, not blurs** (`0 0 0 1px var(--line)` is the workhorse). Radii are chip 6 / control 8 / card 10 / window 14. Type runs small (10.5–13px dominant) in Inter, with Geist Mono and tabular figures for all numerals. The signature easing is `cubic-bezier(.23,1,.32,1)`.
+Shadows are **1px rings, not blurs** (`0 0 0 1px var(--line)` is the workhorse). Radii are chip 6 / control 8 / card 10 / window 14. Type runs small (10.5–13px dominant) in Inter, with a monospace face and tabular figures for all numerals — Geist Mono on the web, JetBrains Mono on Android (T345: the S7 "Live flow" phone design sets every transcript block, path chip, todo row and pill in JetBrains Mono 12.5px/1.62, and Android bundles that face instead). The signature easing is `cubic-bezier(.23,1,.32,1)`.
 
 Support dark and light themes from the start. Test reduced motion and high contrast. Do not build multiple visual variants for the same component. Select one product-approved treatment.
 

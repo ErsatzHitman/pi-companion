@@ -24,7 +24,7 @@ import { ThemeProvider } from "../ui/theme/theme-context";
  * into one (`apps/android/src/app/`, this file's new home) rather than
  * keep a split the tooling does not honour.
  *
- * Gates the first paint on `useAppFonts()` (T13C): Inter/Geist Mono must be
+ * Gates the first paint on `useAppFonts()` (T13C): Inter/JetBrains Mono must be
  * the fonts on screen from the first frame, not a system face that swaps
  * out once loading finishes, so nothing renders until `fontsLoaded` (or a
  * load `fontError`, which falls through to the token layer's system

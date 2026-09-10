@@ -51,7 +51,7 @@ export interface TerminalTheme extends TerminalAnsiPalette {
   readonly cursor: string;
   readonly cursorAccent: string;
   readonly selectionBackground: string;
-  /** RN font family name for the embedded WebView's terminal font, e.g. `"GeistMono_400Regular"`. */
+  /** RN font family name for the embedded WebView's terminal font, e.g. `"JetBrainsMono_400Regular"`. */
   readonly fontFamily: string;
 }
 

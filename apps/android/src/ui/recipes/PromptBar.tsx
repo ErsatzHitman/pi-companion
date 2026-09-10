@@ -111,7 +111,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       textAlignVertical: "top",
     },
     row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    // Geist Mono with tabular figures for the queued-message counter
+    // The mono family with tabular figures for the queued-message counter
     // (docs/beautiful-ui-reference.md "tabular-nums on counters and
     // timers").
     queued: {
