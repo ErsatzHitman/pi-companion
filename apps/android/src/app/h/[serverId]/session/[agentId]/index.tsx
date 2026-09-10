@@ -727,6 +727,28 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * task's, to fix per that task's own section in `docs/issues-from-
  * plan.md`) — this mount adds a way to arrive, not a second connection
  * check of its own.
+ *
+ * **T339 mount.** Every `agent_stream` consumer this route mounts —
+ * `SessionTranscript`'s batcher through `core.subscribeAgentStream`, the
+ * turn-running signal below, `PinnedLiveExtensionArea`/
+ * `SessionSheetExtensions` through `piUiSession.store` — only ever
+ * receives a push once this connection has marked the agent as viewed:
+ * the daemon's selective timeline delivery
+ * (`packages/server/src/server/session.ts`, `forwardAgentStream`)
+ * withholds every `agent_stream` for an agent nobody has registered, and
+ * `packages/frontend-core/src/connection/client-capabilities.ts` opts
+ * every hello into that mode. Until T339 nothing on Android issued that
+ * registration (`apps/web`'s `host-session-screen.tsx` had, since T31B3),
+ * which is why Maestro run 34477213142's `extension-sheets` sent its
+ * prompt, watched the daemon accept it, and never saw
+ * `pi-roster-subagents-fleet`. This route now calls
+ * `core.setViewedAgentTimeline([agentId])` from an effect keyed on the
+ * connection `phase`, only while it is `"connected"` (the lifecycle maps
+ * that from `DaemonClient`'s own `HELLO_SERVER_INFO` transition, and the
+ * client's method silently no-ops before `server_info` has arrived), and
+ * `[]` on cleanup — so leaving the route stops the feed, and a reconnect
+ * (phase leaves and re-enters `"connected"`) re-registers against the
+ * fresh socket, whose membership the daemon starts empty.
  */
 export default function SessionRoute() {
   const { serverId, agentId } = useLocalSearchParams<{ serverId: string; agentId: string }>();
@@ -774,6 +796,17 @@ export default function SessionRoute() {
     return () => signal.dispose();
   }, [core, agentId]);
   const turnRunning = submitting || signalRunning;
+
+  // T339: mark this agent's timeline as viewed for as long as this route
+  // is mounted and connected — see this component's "T339 mount" doc
+  // comment for why nothing above receives a single push without it.
+  useEffect(() => {
+    if (!agentId || phase !== "connected") return;
+    void core.setViewedAgentTimeline([agentId]);
+    return () => {
+      void core.setViewedAgentTimeline([]);
+    };
+  }, [core, agentId, phase]);
 
   // T132: fresh reads off the real AppCore.connection's active lifecycle
   // — see this component's own doc comment ("T132 mount") for why this

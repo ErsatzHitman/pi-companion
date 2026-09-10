@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PortalHost } from "../ui/primitives";
 import { useTheme } from "../ui/theme/theme-context";
+import { useKeyboardInset } from "./keyboard-inset";
 
 const SAFE_AREA_EDGES = ["top", "bottom"] as const;
 
@@ -67,6 +68,14 @@ const SAFE_AREA_EDGES = ["top", "bottom"] as const;
  * included. The `(tabs)` layout passes `safeAreaInsets={{ bottom: 0 }}`
  * to its navigator because the tab bar would otherwise add the bottom
  * inset a second time on top of this view's padding.
+ *
+ * T340: the host is also handed the live keyboard inset
+ * (`./keyboard-inset.ts`'s `useKeyboardInset`, the measurement
+ * `compact-shell.tsx` already pads the shell by). A portaled sheet keeps
+ * the composer focused, so the keyboard stays up when one opens, and
+ * without this its bottom-aligned panel was laid out under the IME
+ * (Maestro run 34477213142's `notification-approval`: scrim visible,
+ * `approvals-dialog` pruned) — see `PortalHost`'s own doc comment.
  */
 export function NavigationShell() {
   const { theme } = useTheme();
@@ -81,9 +90,10 @@ export function NavigationShell() {
     () => StyleSheet.create({ safeArea: { flex: 1, backgroundColor: theme.colors.page } }),
     [theme],
   );
+  const keyboardInset = useKeyboardInset();
 
   return (
-    <PortalHost>
+    <PortalHost bottomInset={keyboardInset}>
       <SafeAreaView edges={SAFE_AREA_EDGES} style={styles.safeArea}>
         <Stack screenOptions={screenOptions} />
       </SafeAreaView>

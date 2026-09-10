@@ -56,7 +56,21 @@ describe("NavigationShell source", () => {
     // Stack a sibling of an empty host, i.e. exactly the defect this
     // test names — still passed. Over `code` only real JSX can satisfy it.
     expect(code).toMatch(/from "\.\.\/ui\/primitives"/);
-    expect(code).toMatch(/<PortalHost>[\s\S]*?<Stack\b[\s\S]*?<\/PortalHost>/);
+    // T340 widened the opening tag to carry the keyboard inset; the
+    // wrapping requirement is unchanged.
+    expect(code).toMatch(
+      /<PortalHost bottomInset=\{keyboardInset\}>[\s\S]*?<Stack\b[\s\S]*?<\/PortalHost>/,
+    );
+  });
+
+  it("T340: reads the live keyboard inset from ./keyboard-inset and hands it to <PortalHost bottomInset>, so a portaled sheet sits above the IME", () => {
+    // A portaled sheet keeps the composer focused, so the keyboard stays
+    // up when one opens; without this the bottom-aligned panel was laid
+    // out under it (Maestro run 34477213142: scrim visible, the approvals
+    // dialog pruned from the accessibility tree).
+    expect(code).toMatch(/import \{ useKeyboardInset \} from "\.\/keyboard-inset";/);
+    expect(code).toMatch(/const keyboardInset = useKeyboardInset\(\);/);
+    expect(code).toMatch(/<PortalHost bottomInset=\{keyboardInset\}>/);
   });
 
   it("T327: applies the top and bottom safe-area insets once, around <Stack>, inside <PortalHost>", () => {
@@ -69,7 +83,7 @@ describe("NavigationShell source", () => {
     expect(code).toMatch(/from "react-native-safe-area-context"/);
     expect(code).toMatch(/SAFE_AREA_EDGES = \["top", "bottom"\] as const/);
     expect(code).toMatch(
-      /<PortalHost>[\s\S]*?<SafeAreaView edges=\{SAFE_AREA_EDGES\}[\s\S]*?<Stack\b[\s\S]*?<\/SafeAreaView>[\s\S]*?<\/PortalHost>/,
+      /<PortalHost bottomInset=\{keyboardInset\}>[\s\S]*?<SafeAreaView edges=\{SAFE_AREA_EDGES\}[\s\S]*?<Stack\b[\s\S]*?<\/SafeAreaView>[\s\S]*?<\/PortalHost>/,
     );
   });
 });

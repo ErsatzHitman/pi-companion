@@ -595,6 +595,8 @@ that recomputation has to be domain-specific:
 | T336   | Tapping a session row loaded the session and stayed on the list                                                      | phase-9   | android          | P9-U   | T335, T32S12                                                          |
 | T337   | A cold start landed on an idle connection: nothing reconnected the saved host                                        | phase-9   | android          | P9-U   | T336, T66, T32S14                                                     |
 | T338   | The composer outgrew the keyboard-shrunk shell and pushed its own send button off screen                             | phase-9   | android          | P9-U   | T337, T329, T33B4                                                     |
+| T339   | Android never marked a session's timeline as viewed, so no agent_stream ever reached it                              | phase-9   | android          | P9-U   | T338, T335, T32S8                                                     |
+| T340   | A portaled sheet laid out under the keyboard and was pruned from the accessibility tree                              | phase-9   | android          | P9-U   | T339, T329, T32S6                                                     |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -636,8 +638,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**547 tasks** (distinct IDs counted directly from the table above), recounted at T338 with
-`grep`/`sort -u` over the table's own rows — two past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**549 tasks** (distinct IDs counted directly from the table above), recounted at T340 with
+`grep`/`sort -u` over the table's own rows — two past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16754,3 +16756,75 @@ the source pin is the check.
 - [x] The composer's controls scroll and its prompt bar stays visible when the shell is shorter than the composer's content
 - [x] The T33B4 pin is replaced, not deleted, and every doc that stated it is corrected in place
 - [ ] A dispatch in which shard-4's `notification-approval` and `extension-sheets` reach their post-send assertions (tracked with T334's last box)
+
+#### T339 — Android never marked a session's timeline as viewed, so no agent_stream ever reached it
+
+`labels: phase-9, area: android` · `depends-on: T338, T335, T32S8`
+
+Maestro run 34477213142 at `ed88fba` (T337/T338): CI green, shards 1/2/3/5, the smoke job and the
+build green; shard-4 red on both flows, one step further than before. `extension-sheets` typed
+its prompt, tapped `composer-send` (now above the keyboard, T338), and failed
+`assertVisible: pi-roster-subagents-fleet` — the daemon log shows the send accepted and the
+scripted `pi` running its turn. The roster is fed from `piUiSession.store`, which `core.ts`'s
+one `client.on("agent_stream")` subscription fills from `pi_ui_delta` pushes — and not one push
+ever arrived. `packages/frontend-core/src/connection/client-capabilities.ts` declares
+`selectiveAgentTimeline` in every hello; under that mode `session.ts`'s `forwardAgentStream`
+forwards an `agent_stream` only for agent ids the connection has marked as viewed through
+`agent.timeline.set_subscription.request`, which `DaemonClient.setAgentTimelineSubscription`
+sends. `apps/web`'s `host-session-screen.tsx` has called it since T31B3 (and documents the same
+diagnosis end to end); on Android nothing called it: not `core.ts`, not the session route, not
+`frontend-core`. Every Android live feed — the transcript batcher, the turn-running signal,
+pinned and sheet extensions — was subscribed to a stream the daemon was withholding.
+`agent_permission_request` is not an `agent_stream` event, which is why the approvals sheet in
+the sibling flow still opened (T340) while the roster never could. T335 had already fixed the
+daemon keying `pi_ui_delta` by Pi's own session id; this is the next gate on the same path, and
+`FakePi`-driven server tests could never see it because they subscribe explicitly.
+
+`AppCore.setViewedAgentTimeline(agentIds)` forwards to the active lifecycle's `DaemonClient`
+through a type-only structural cast (the `AgentStreamCapableClient` pattern; `DaemonClientLike`
+does not declare the method), resolves immediately with no client, and settles a rejected send
+rather than throwing. `SessionRoute` issues `[agentId]` from an effect keyed on `[core, agentId,
+phase]` only while `useConnectionStatus(core.connection).phase === "connected"` — the lifecycle
+maps that from `DaemonClient`'s `HELLO_SERVER_INFO` transition, and the client's method silently
+no-ops until `server_info` has arrived, the trap the web hook documents — and `[]` on cleanup,
+so leaving the route stops the feed and a reconnect (phase leaves and re-enters `"connected"`)
+re-registers against the fresh socket, whose membership the daemon starts empty. `core.test.ts`
+proves the forward, the no-client resolve and the settled rejection against a real
+`DaemonClientLifecycle`; `index.test.ts` pins the effect. A `CAPABILITIES` entry keyed on
+`setViewedAgentTimeline` (unique: a token named after the client's own method would count as
+shipped since T31B3 regardless of Android) was registered and watched firing on a
+scratchpad-backed copy of `docs/legacy-retirement.md`, then restored with a clean status.
+
+- [x] The session route registers its agent as viewed while connected, and clears it on unmount
+- [x] A reconnect re-registers; a rejected send is settled, not thrown
+- [ ] A dispatch in which `extension-sheets` renders `pi-roster-subagents-fleet` (tracked with T334's last box)
+
+#### T340 — A portaled sheet laid out under the keyboard and was pruned from the accessibility tree
+
+`labels: phase-9, area: android` · `depends-on: T339, T329, T32S6`
+
+Run 34477213142's `notification-approval` got past the send too and failed
+`assertVisible: approvals-dialog`. The daemon log shows the `agent_permission_request` going out
+("Sending push notification", token count 0), and the screenshot shows the dimmed scrim over the
+session screen with the keyboard open — so `ApprovalsHost`'s `Sheet` opened, and its panel was
+nowhere. `PortalHost` (`ui/primitives/Portal.tsx`) renders every registered node into a
+`StyleSheet.absoluteFill` overlay, `Sheet.tsx`'s scrim bottom-aligns the panel inside it
+(`justifyContent: "flex-end"`), and the host sits outermost in `navigation-shell.tsx`, outside
+the `SafeAreaView` and the keyboard-padded shell (T329). A portal keeps the composer's
+`TextInput` focused — the reason plan.md §9.3 asks for one instead of a `Modal` — so the keyboard
+stays up when a sheet opens, and on edge-to-edge Android the IME is drawn over the bottom of that
+overlay: the panel was laid out beneath it and the accessibility layer pruned it, the same
+mechanism as T327's status-bar heading and T338's prompt bar, one window over.
+
+`PortalHost` gains an optional `bottomInset` (default 0, the previous layout) and pads each
+overlay's bottom by it, keeping `absoluteFill` and `pointerEvents="box-none"` so the scrim still
+covers the display behind the panel; `navigation-shell.tsx` reads `useKeyboardInset()` (the same
+measurement `compact-shell.tsx` pads the shell by) and passes it. A bottom-aligned panel now
+sits just above the keyboard. `Portal.test.ts` (new) pins the prop and the overlay style;
+`navigation-shell.test.ts`'s T32S6/T327 pins are widened to the new opening tag and a T340 pin
+requires the hook and the prop. No `CAPABILITIES` entry, for T338's reason: a layout, not a
+named symbol.
+
+- [x] A sheet opened while the keyboard is up renders its panel above the keyboard, scrim intact
+- [x] The T32S6/T327 shell pins still hold with the new opening tag
+- [ ] A dispatch in which `notification-approval` sees `approvals-dialog` after the send (tracked with T334's last box)

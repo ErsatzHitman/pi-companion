@@ -141,6 +141,8 @@ const { createTranscriptMessageBatcher } =
  */
 class FakeDaemonClient {
   readFileCalls: Array<{ cwd: string; path: string }> = [];
+  timelineSubscriptionCalls: string[][] = [];
+  rejectTimelineSubscription = false;
   private readonly statusListeners = new Set<(state: ConnectionState) => void>();
 
   async connect(): Promise<void> {
@@ -169,6 +171,10 @@ class FakeDaemonClient {
   async readFile(cwd: string, path: string): Promise<{ path: string }> {
     this.readFileCalls.push({ cwd, path });
     return { path };
+  }
+  async setAgentTimelineSubscription(agentIds: string[]): Promise<void> {
+    this.timelineSubscriptionCalls.push(agentIds);
+    if (this.rejectTimelineSubscription) throw new Error("socket closed");
   }
   /** Records every forwarded `writeFile` input (P5-W12 merge gate). */
   writeFileCalls: Array<{ cwd: string; path: string; content: string }> = [];
@@ -354,6 +360,46 @@ class FakeLifecycle implements AppLifecycle {
     return () => this.listeners.delete(listener);
   }
 }
+
+describe("AppCore.setViewedAgentTimeline (T339)", () => {
+  it("resolves without a client when no lifecycle is adopted, then forwards agentIds to the live client's setAgentTimelineSubscription", async () => {
+    const core = createAppCore();
+    await expect(core.setViewedAgentTimeline(["agt_t339"])).resolves.toBeUndefined();
+
+    const fakeClient = new FakeDaemonClient();
+    const lifecycle = new coreConnection.DaemonClientLifecycle({
+      url: "ws://fixture.invalid/ws",
+      clientId: "clid_test_t339",
+      clientType: "mobile",
+      createDaemonClient: () => fakeClient as unknown as coreConnection.DaemonClientLike,
+    });
+    await lifecycle.connect();
+    await core.connection.adoptLifecycle(lifecycle);
+
+    await core.setViewedAgentTimeline(["agt_t339"]);
+    await core.setViewedAgentTimeline([]);
+    expect(fakeClient.timelineSubscriptionCalls).toEqual([["agt_t339"], []]);
+    await core.shutdown();
+  });
+
+  it("settles a rejected send instead of throwing — the route re-issues on the next connected phase", async () => {
+    const core = createAppCore();
+    const fakeClient = new FakeDaemonClient();
+    fakeClient.rejectTimelineSubscription = true;
+    const lifecycle = new coreConnection.DaemonClientLifecycle({
+      url: "ws://fixture.invalid/ws",
+      clientId: "clid_test_t339b",
+      clientType: "mobile",
+      createDaemonClient: () => fakeClient as unknown as coreConnection.DaemonClientLike,
+    });
+    await lifecycle.connect();
+    await core.connection.adoptLifecycle(lifecycle);
+
+    await expect(core.setViewedAgentTimeline(["agt_t339"])).resolves.toBeUndefined();
+    expect(fakeClient.timelineSubscriptionCalls).toEqual([["agt_t339"]]);
+    await core.shutdown();
+  });
+});
 
 function createFakeSchedulers() {
   let nextHandle = 1;

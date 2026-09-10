@@ -35,6 +35,22 @@ import { StyleSheet, View } from "react-native";
  * a root-mounted host would. That fallback is a deliberate continuity
  * choice, not a bug: a `Sheet` must keep working before any shell task
  * mounts a host.
+ *
+ * **T340: `bottomInset`.** The overlay each registered node renders into
+ * is `StyleSheet.absoluteFill` — the whole display, so a sheet's scrim
+ * covers everything — and a `Sheet` bottom-aligns its panel inside it
+ * (`justifyContent: "flex-end"`). Because a portal keeps the composer's
+ * `TextInput` focused (the whole point of it over a `Modal`), the
+ * keyboard stays up when a sheet opens, and on edge-to-edge Android the
+ * IME is drawn over the bottom of that overlay: Maestro run
+ * 34477213142's `notification-approval` screenshot shows the dimmed
+ * scrim and no panel, the approvals sheet laid out under the keyboard
+ * and pruned from the accessibility tree. The host therefore pads the
+ * overlay's bottom by `bottomInset`; `app-shell/navigation-shell.tsx`
+ * passes it the live keyboard inset (`useKeyboardInset`, the same
+ * measurement `compact-shell.tsx` pads the shell by), so a bottom-aligned
+ * panel sits just above the keyboard while the scrim still covers the
+ * display behind it. Zero (the default) is the pre-T340 layout.
  */
 interface PortalRegistry {
   register: (key: string, node: ReactNode) => void;
@@ -45,10 +61,12 @@ const PortalContext = createContext<PortalRegistry | null>(null);
 
 export interface PortalHostProps {
   children?: ReactNode;
+  /** Bottom padding applied to every portaled overlay — the keyboard inset, from the shell (T340). */
+  bottomInset?: number;
 }
 
 /** Mount once near the root of a screen (or the app shell) so `usePortalOutlet` below it has somewhere to render into. */
-export function PortalHost({ children }: PortalHostProps) {
+export function PortalHost({ children, bottomInset = 0 }: PortalHostProps) {
   const [nodes, setNodes] = useState<Record<string, ReactNode>>({});
 
   const registry = useMemo<PortalRegistry>(
@@ -69,7 +87,11 @@ export function PortalHost({ children }: PortalHostProps) {
     <PortalContext.Provider value={registry}>
       {children}
       {Object.entries(nodes).map(([key, node]) => (
-        <View key={key} style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        <View
+          key={key}
+          style={[StyleSheet.absoluteFill, { paddingBottom: bottomInset }]}
+          pointerEvents="box-none"
+        >
           {node}
         </View>
       ))}

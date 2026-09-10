@@ -2272,6 +2272,29 @@ export const CAPABILITIES = [
       /only (?:a |the )?(?:user|manual) (?:submit|tap|action) (?:on the connect form )?(?:ever )?reconnects (?:a |the )?(?:saved|stored) (?:host )?profile/i,
     ],
   },
+  {
+    // T339: the Android app registers the session it is viewing with the
+    // daemon's selective timeline delivery
+    // (`apps/android/src/app-shell/core.ts`'s `setViewedAgentTimeline`,
+    // issued by the session route while connected), so `agent_stream`
+    // pushes actually reach it. Until Maestro run 34477213142 nothing on
+    // Android did, and every live feed stayed empty. Keyed on the AppCore
+    // member, which is declared nowhere else — `daemon-client.ts`'s
+    // `setAgentTimelineSubscription` has shipped since T31B3 for the web
+    // app and would satisfy a token named after it regardless of whether
+    // Android ever called it. Worded in T339's own voice, lifted from
+    // neither the route's doc comment nor `host-session-screen.tsx`'s
+    // T31B3 narration (which says "never registered the session as
+    // viewed" about the web hook's own past, without a marker).
+    name: "Android marks the viewed session's timeline with the daemon (setViewedAgentTimeline)",
+    methodNames: ["setViewedAgentTimeline"],
+    denyingPhrases: [
+      /(?:nothing|no code|no effect|no route|no screen) (?:in |on )?(?:the |this )?(?:android )?app (?:ever )?(?:registers|marks|declares) (?:a |the |an )?(?:session|agent)(?:'s)? (?:timeline )?as viewed/i,
+      /(?:the |this )?(?:android )?app (?:still )?(?:never|does not|doesn't) (?:send|issue|make) (?:a |an |the )?(?:agent\.)?timeline(?:\.| |-)?(?:set_)?subscription request/i,
+      /agent_stream (?:pushes|events|messages) (?:are )?(?:never|not) (?:forwarded|delivered) to (?:the |this )?android (?:app|client)/i,
+      /(?:the |this )?(?:android )?(?:app|client) (?:has|carries) no (?:agent[- ])?timeline subscription (?:call|request) of its own/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

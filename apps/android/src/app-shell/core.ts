@@ -449,6 +449,33 @@ export interface AppCore {
    */
   subscribeAgentStream: (listener: (message: AgentStreamMessage) => void) => () => void;
   /**
+   * T339: tells the active `DaemonClient` which agents' timelines this
+   * app is looking at right now, via its `setAgentTimelineSubscription`
+   * (`agent.timeline.set_subscription.request` on the wire). The daemon
+   * (`packages/server/src/server/session.ts`, `forwardAgentStream` /
+   * `usesSelectiveTimelineDelivery`) forwards `agent_stream` pushes only
+   * for agent ids a connection has marked this way once
+   * `selectiveAgentTimeline` is negotiated — and
+   * `packages/frontend-core/src/connection/client-capabilities.ts`
+   * declares that capability in every hello, so without this call the
+   * `subscribeAgentStream` feed above and `piUiSession.store` stay empty
+   * for every session, however many turns the provider really runs.
+   * Maestro run 34477213142's `extension-sheets` measured exactly that:
+   * the send resolved, the scripted `pi` raised its roster, and
+   * `pi-roster-subagents-fleet` never rendered because no `pi_ui_delta`
+   * ever reached this process.
+   *
+   * Resolves once the request is acknowledged, or immediately with no
+   * active client. A rejected send is settled here rather than thrown:
+   * the one caller (`SessionRoute`, `app/h/[serverId]/session/[agentId]/
+   * index.tsx`) re-issues it on every `"connected"` phase, which is also
+   * what covers a reconnect — the daemon keys membership by socket, so a
+   * fresh socket starts with nothing viewed, and `DaemonClient` itself
+   * re-establishes only its checkout/terminal/file subscriptions, never
+   * this one. Call it with `[]` to stop viewing.
+   */
+  setViewedAgentTimeline: (agentIds: string[]) => Promise<void>;
+  /**
    * Feeds this app's foreground and connectivity changes into a T46A2
    * `connection.ResumeController` (plan.md §7.4 "Liveness": "the host
    * must feed foreground and connectivity changes into the resume
@@ -1146,6 +1173,12 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
   type AgentStreamCapableClient = {
     on(type: "agent_stream", handler: (message: AgentStreamMessage) => void): () => void;
   };
+  // T339: the other half of the same wire contract — see
+  // `AppCore["setViewedAgentTimeline"]`'s doc comment. Same narrow,
+  // type-only cast; the real `DaemonClient` declares this method.
+  type AgentTimelineSubscriptionCapableClient = {
+    setAgentTimelineSubscription(agentIds: string[]): Promise<void>;
+  };
   const agentStreamListeners = new Set<(message: AgentStreamMessage) => void>();
   let agentStreamClientUnsubscribe: (() => void) | null = null;
   // Compared by reference against whatever `getDaemonClient()` returns
@@ -1381,6 +1414,22 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
       return () => {
         agentStreamListeners.delete(listener);
       };
+    },
+    // T339: see `AppCore["setViewedAgentTimeline"]`'s doc comment. Read
+    // fresh off `connection` on every call, like every other client
+    // narrowing in this file, so a reconnect's new `DaemonClient` is the
+    // one that receives the re-issued subscription.
+    setViewedAgentTimeline: async (agentIds) => {
+      const client = connection.getActiveLifecycle()?.getDaemonClient() ?? null;
+      if (!client) return;
+      try {
+        await (
+          client as unknown as AgentTimelineSubscriptionCapableClient
+        ).setAgentTimelineSubscription(agentIds);
+      } catch {
+        // Settled, not surfaced: the caller re-issues on the next
+        // "connected" phase, and there is nothing else to do with it.
+      }
     },
     attachResumeSignals: (target, options) =>
       attachResumeSignals({ ...options, lifecycle, network, target }),

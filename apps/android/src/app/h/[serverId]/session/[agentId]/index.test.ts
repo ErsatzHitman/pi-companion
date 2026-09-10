@@ -721,3 +721,18 @@ describe("SessionSheetExtensions (T32S12, P5-W18)", () => {
     expect(readCode()).toMatch(/<SessionSheetExtensions agentId=\{agentId \?\? ""\} \/>/);
   });
 });
+
+describe("SessionRoute marks the viewed agent's timeline (T339)", () => {
+  it("calls core.setViewedAgentTimeline([agentId]) only while the connection phase is connected, and [] on cleanup, keyed on [core, agentId, phase]", () => {
+    const code = readCode();
+    expect(code).toMatch(/const \{ phase \} = useConnectionStatus\(core\.connection\);/);
+    expect(code).toMatch(
+      /useEffect\(\(\) => \{\s*if \(!agentId \|\| phase !== "connected"\) return;\s*void core\.setViewedAgentTimeline\(\[agentId\]\);\s*return \(\) => \{\s*void core\.setViewedAgentTimeline\(\[\]\);\s*\};\s*\}, \[core, agentId, phase\]\);/,
+    );
+  });
+
+  it("issues the registration from this route, not from a consumer that could be mounted without it", () => {
+    const code = readCode();
+    expect(code.match(/setViewedAgentTimeline\(/g)).toHaveLength(2);
+  });
+});
