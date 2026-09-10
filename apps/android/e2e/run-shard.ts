@@ -111,6 +111,29 @@ async function main(): Promise<void> {
     return;
   }
 
+  // T328: suppress the system's "isn't responding" / "has stopped" dialogs.
+  // Run 34442086730's shard-1 lost both of its flows at their FIRST
+  // assertion: the hierarchy held nothing but "Quickstep isn't responding",
+  // "Close app", "Wait" — the launcher ANR'd on a freshly booted runner and
+  // its dialog sat over the app Maestro had just launched. The setting is
+  // what Firebase Test Lab and the Android CTS harness set for the same
+  // reason; a crash still fails the flow through logcat (T322), it just no
+  // longer fails a DIFFERENT flow through a modal that outlives the crash.
+  // Non-fatal: an old image without the setting should not stop the shard.
+  const hideDialogsExit = await run("adb", [
+    "shell",
+    "settings",
+    "put",
+    "global",
+    "hide_error_dialogs",
+    "1",
+  ]);
+  if (hideDialogsExit !== 0) {
+    console.warn(
+      `[run-shard] could not set hide_error_dialogs (exit ${hideDialogsExit}); continuing`,
+    );
+  }
+
   // Every flow runs even after one fails, so a single dispatch reports every
   // broken flow in this shard rather than only the first. The shard's own
   // exit code is the first non-zero one. Flow order never matters: each flow

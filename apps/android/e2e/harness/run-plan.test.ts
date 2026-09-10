@@ -69,8 +69,36 @@ describe("buildRunPlan", () => {
       "test",
       "-e",
       `APP_ID=${DEFAULT_APP_ID}`,
+      "-e",
+      "DAEMON_HOST=10.0.2.2",
+      "-e",
+      "DAEMON_PORT=54321",
+      "-e",
+      "DAEMON_ADDRESS=10.0.2.2:54321",
       "/repo/apps/android/maestro/smoke.yaml",
     ]);
+  });
+
+  it("T328: every DAEMON_* value a flow reads is a -e flow variable, not only a child env var", () => {
+    // Maestro substitutes `${DAEMON_ADDRESS}` from `-e` flow variables; it
+    // does not read arbitrary shell environment variables. Run 34442086730
+    // typed `ws://undefined` into the connect form in eight of ten flows
+    // with these exact values present in the child's environment.
+    const plan = buildRunPlan("smoke", "/repo/apps/android/maestro/smoke.yaml", SAFE_ENDPOINT);
+    const flowVariables = plan.maestro.argv
+      .map((arg, index) => (plan.maestro.argv[index - 1] === "-e" ? arg : null))
+      .filter((arg): arg is string => arg !== null);
+    expect(flowVariables).toEqual(
+      expect.arrayContaining([
+        "DAEMON_HOST=10.0.2.2",
+        "DAEMON_PORT=54321",
+        "DAEMON_ADDRESS=10.0.2.2:54321",
+      ]),
+    );
+    // And every one of them agrees with the env copy the harness also sets.
+    for (const name of ["DAEMON_HOST", "DAEMON_PORT", "DAEMON_ADDRESS"] as const) {
+      expect(flowVariables).toContain(`${name}=${plan.maestro.env[name]}`);
+    }
   });
 
   it("defaults the appId override to sh.picompanion.debug — the package maestro-e2e needs, and needed before appId was parameterized (T207)", () => {
@@ -90,6 +118,12 @@ describe("buildRunPlan", () => {
       "test",
       "-e",
       "APP_ID=sh.picompanion",
+      "-e",
+      "DAEMON_HOST=10.0.2.2",
+      "-e",
+      "DAEMON_PORT=54321",
+      "-e",
+      "DAEMON_ADDRESS=10.0.2.2:54321",
       "/repo/apps/android/maestro/smoke.yaml",
     ]);
   });

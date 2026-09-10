@@ -119,7 +119,26 @@ export function buildRunPlan(
       stopArgv: ["daemon", "stop", "--home", endpoint.paseoHome, "--force"],
     },
     maestro: {
-      argv: ["test", "-e", `APP_ID=${appId}`, flowPath],
+      // T328: every `${DAEMON_*}` a flow reads is passed as a `-e` flow
+      // variable, the same way `APP_ID` always was. Maestro does not read
+      // arbitrary shell environment variables into `${...}` substitution:
+      // run 34442086730 — the first dispatch to reach the connect form —
+      // typed `ws://undefined` into it in eight of ten flows, with the
+      // very same values sitting in the child's environment below.
+      // `env` keeps `MAESTRO_DRIVER_STARTUP_TIMEOUT`, which IS a real
+      // environment variable the Maestro CLI itself reads (T321).
+      argv: [
+        "test",
+        "-e",
+        `APP_ID=${appId}`,
+        "-e",
+        `DAEMON_HOST=${emulatorHost ?? ""}`,
+        "-e",
+        `DAEMON_PORT=${emulatorPort ?? ""}`,
+        "-e",
+        `DAEMON_ADDRESS=${endpoint.emulatorAddress}`,
+        flowPath,
+      ],
       env: {
         DAEMON_HOST: emulatorHost ?? "",
         DAEMON_PORT: emulatorPort ?? "",

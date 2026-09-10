@@ -584,6 +584,7 @@ that recomputation has to be domain-specific:
 | T325   | An SDK-57 native module was autolinked into an SDK-54 app and killed it on launch             | phase-9   | android          | P9-U   | T324, T307, T322                                                      |
 | T326   | Every Expo package the app can see must belong to its own SDK, read from the lockfile         | phase-9   | ci/android       | P9-U   | T307, T325, T322                                                      |
 | T327   | Every screen rendered under the status bar, and the heading Maestro asserts was pruned        | phase-9   | android          | P9-U   | T326, T325                                                            |
+| T328   | The flows typed `ws://undefined`: Maestro never saw the harness's DAEMON\_\* variables        | phase-9   | tooling          | P9-U   | T327, T321, T320                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                          | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                              | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                              | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -625,8 +626,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                           | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                           | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**536 tasks** (distinct IDs counted directly from the table above), recounted at T327 with
-`awk`/`sort -u` over the table's own rows — one past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**537 tasks** (distinct IDs counted directly from the table above), recounted at T328 with
+`awk`/`sort -u` over the table's own rows — two past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -16218,5 +16219,56 @@ Both files' source-level tests pin the new shape.
 - [x] The shell applies top and bottom insets once, around every route
 - [x] The tab bar does not double-pad the bottom inset
 - [x] `npm run export --workspace=@picompanion/android` still bundles
-- [ ] A dispatch where the onboarding heading is in the hierarchy and the flows proceed past
-      it — the box T325 and T326 both leave open, now T327's to close
+- [x] A dispatch where the onboarding heading is in the hierarchy and the flows proceed past
+      it — the box T325 and T326 both leave open, now T327's to close. Run 34442086730:
+      `packaged-app-smoke` PASSED, the first green Maestro job in this repository's history,
+      and every shard flow got past onboarding to the connect form or the session screen
+      before failing on T328.
+
+#### T328 — The flows typed `ws://undefined`: Maestro never saw the harness's DAEMON\_\* variables
+
+`labels: phase-9, area: tooling` · `depends-on: T327, T321, T320`
+
+Run 34442086730 was the first dispatch to reach the connect form, and eight of its ten shard
+flows failed there or one screen later for one reason, visible in every failing step's
+hierarchy: the address field held **`ws://undefined`**. The flows write
+`inputText: "ws://${DAEMON_ADDRESS}"`; `run-plan.ts` put `DAEMON_HOST`/`DAEMON_PORT`/
+`DAEMON_ADDRESS` into the Maestro child's ENVIRONMENT and only `APP_ID` on the command line as a
+`-e` flow variable. Maestro substitutes `${...}` from `-e` variables (and a flow's own `env:`
+block); it does not read arbitrary shell environment variables, and an unknown name evaluates
+to JavaScript `undefined` rather than staying literal — which is exactly the string on screen.
+The daemon logs confirm the other side: the only connection each isolated daemon ever received
+was `run-flow.ts`'s own `daemon stop`, seconds after the flow had already failed. Every
+`${DAEMON_*}` a flow reads is now also a `-e` flow variable; `env` keeps
+`MAESTRO_DRIVER_STARTUP_TIMEOUT`, which is a real environment variable the Maestro CLI reads
+(T321). `run-plan.test.ts` pins both the exact argv and that each `-e` value agrees with its env
+copy.
+
+The three "session screen" failures (`background-kill-restore`, `composer-inputs`,
+`offline-cache-outbox`, all `Element not found: composer-send`) are the same defect one screen
+on: each deep-links to a session on a host whose address was `ws://undefined`, the header shows
+`Connecting…` forever, and the composer's send action never enables. No flow in this run
+reached a connected daemon, so nothing past the connect form has been exercised yet.
+
+Two smaller findings from the same run, fixed alongside:
+
+- **`shard-1` lost both flows at their first assertion to a launcher ANR.** The hierarchy at
+  `assertVisible: id: connect-onboarding` held only `"Quickstep isn't responding"`, `"Close app"`,
+  `"Wait"` — the system dialog for a Launcher3 ANR on a freshly booted runner, sitting over the
+  app Maestro had just launched. `run-shard.ts` now runs
+  `adb shell settings put global hide_error_dialogs 1` after `adb install` (non-fatal if the
+  setting is missing), and `packaged-app-smoke`'s script does the same line, since that job calls
+  `run-flow.ts` directly. A crash still fails its own flow through logcat (T322); it just no
+  longer fails a different flow through a modal that outlives it.
+- **`accessibility-audit` asserted a prefix and Maestro matched the whole string.** The flow
+  asserts `"Enter a host address, like ws://192.168.1.10"` because no file under
+  `apps/android/maestro/` may spell out the daemon's default port (`guard-no-production-daemon-
+port`), and the real validation message ends with exactly that port. The hierarchy showed the
+  full message on screen while the assertion failed on it. The assertion now ends in `.*`, which
+  matches the tail without naming it.
+
+- [x] `DAEMON_HOST`/`DAEMON_PORT`/`DAEMON_ADDRESS` are `-e` flow variables, pinned by test
+- [x] ANR/crash dialogs are hidden on the emulator before any flow launches, in both jobs
+- [x] The accessibility flow's placeholder assertion matches the real message
+- [ ] A dispatch in which a flow reaches `"Connected via direct connection"` — the first time a
+      Maestro flow will have exercised a live daemon connection

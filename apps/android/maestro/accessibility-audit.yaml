@@ -196,8 +196,13 @@ tags:
     text: "Add host"
 - tapOn:
     id: "connect-form-submit-button"
+# T328: Maestro matches `text:` against the WHOLE string, and the real
+# validation message goes on to name the daemon's default port, which no
+# file under this directory may spell out (guard-no-production-daemon-port).
+# The trailing `.*` matches that tail without naming it; run 34442086730
+# showed the exact message on screen while this assertion failed on it.
 - assertVisible:
-    text: "Enter a host address, like ws://192.168.1.10"
+    text: "Enter a host address, like ws://192.168.1.10.*"
 
 # =====================================================================
 # COMPOSER (Composer.tsx) — reached via the same deep link
