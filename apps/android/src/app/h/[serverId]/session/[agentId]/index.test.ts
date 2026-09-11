@@ -811,3 +811,29 @@ describe("SessionRoute supplies the S7 app bar what only a route can (T351)", ()
     expect(readCode()).not.toMatch(/cwd="[^"]/);
   });
 });
+
+// --- T360: mounts the redesign's `.ov` todo widget ------------------------
+describe("session route: the todo widget (T360)", () => {
+  it("renders a todo entry through TranscriptTodoRow, in the same interleaved list", () => {
+    const code = readCode();
+    expect(code).toMatch(/entry\.kind === "todo"/);
+    expect(code).toMatch(
+      /<TranscriptTodoRow key=\{entry\.id\} entry=\{entry\} testId=\{testId\} \/>/,
+    );
+  });
+
+  it("imports the row from the feature barrel, like every other row this route mounts", () => {
+    expect(readCode()).toMatch(/TranscriptTodoRow,/);
+  });
+
+  it("branches before the message-row fallback, so a todo never renders as prose", () => {
+    // The final `return` in `renderRow` is the message row. A kind that
+    // reaches it renders its `text` field, which a todo entry has not
+    // got — the shape of bug this ordering prevents.
+    const code = readCode();
+    const todoAt = code.indexOf('entry.kind === "todo"');
+    const fallbackAt = code.indexOf("<TranscriptMessageRow");
+    expect(todoAt).toBeGreaterThan(-1);
+    expect(fallbackAt).toBeGreaterThan(todoAt);
+  });
+});

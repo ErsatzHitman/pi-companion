@@ -20,12 +20,23 @@
  * transcript already has a row for — `CoreMessageEntry` (T33A2's
  * `TranscriptMessageRow`), `ThinkingTranscriptEntry` (T33A3's
  * `TranscriptThinkingRow`), and `ToolCallTranscriptEntry` (T33A4's
- * `TranscriptToolCallRow`) — in one pass, preserving
- * `buildTranscriptEntries`'s own order exactly. Every other kind (`todo`,
- * `error`, `compaction`, `extension-snapshot`, `unknown`) has no Android
+ * `TranscriptToolCallRow`), and `TodoTranscriptEntry` (T360's
+ * `TranscriptTodoRow`) — in one pass, preserving
+ * `buildTranscriptEntries`'s own order exactly. Every other kind
+ * (`error`, `compaction`, `extension-snapshot`, `unknown`) has no Android
  * row yet and is left out rather than rendered wrong — a later task adds
  * its own row and its own case here, not a silent drop of this list's
  * ordering guarantee.
+ *
+ * **T360 mounted `todo`.** CORRECTED: the paragraph above used to name
+ * `todo` among the kinds with no Android row. That was true until T360
+ * shipped `../features/transcript/todo-row.tsx` — the artifact's `.ov`
+ * widget — and this filter was, exactly as that sentence predicted of
+ * `tool-call` one wave earlier, the only thing keeping it off screen.
+ * The todo entry stays IN ORDER here rather than being hoisted to a
+ * pinned position at the top of the transcript: the daemon emits a new
+ * todo row every time the list changes, so where it sits is when the
+ * agent last revised its plan, and moving it would lose that.
  *
  * **T32S6 mounted `tool-call`.** T33A4 (P5-W9) shipped
  * `TranscriptToolCallRow`/`isToolCallEntry`
@@ -54,6 +65,7 @@ import {
   isThinkingEntry,
   type ThinkingTranscriptEntry,
 } from "../features/transcript/thinking-row-model";
+import { isTodoEntry, type TodoTranscriptEntry } from "../features/transcript/todo-row-model";
 import {
   isToolCallEntry,
   type ToolCallTranscriptEntry,
@@ -62,19 +74,26 @@ import {
 export type SessionTranscriptEntry =
   | CoreMessageEntry
   | ThinkingTranscriptEntry
-  | ToolCallTranscriptEntry;
+  | ToolCallTranscriptEntry
+  | TodoTranscriptEntry;
 
-/** `true` for the three entry kinds this route renders a row for. */
+/** `true` for the four entry kinds this route renders a row for. */
 export function isSessionTranscriptEntry(
   entry: timeline.TranscriptEntry,
 ): entry is SessionTranscriptEntry {
-  return isCoreMessageEntry(entry) || isThinkingEntry(entry) || isToolCallEntry(entry);
+  return (
+    isCoreMessageEntry(entry) ||
+    isThinkingEntry(entry) ||
+    isToolCallEntry(entry) ||
+    isTodoEntry(entry)
+  );
 }
 
 /**
  * Filters `entries` (already time-ordered by `buildTranscriptEntries`)
- * down to the message, thinking, and tool-call rows this route knows how
- * to render, in the same order — never re-sorted, never grouped by kind.
+ * down to the message, thinking, tool-call and todo rows this route knows
+ * how to render, in the same order — never re-sorted, never grouped by
+ * kind.
  */
 export function buildSessionTranscriptEntries(
   entries: readonly timeline.TranscriptEntry[],

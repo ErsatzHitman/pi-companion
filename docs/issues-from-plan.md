@@ -616,6 +616,7 @@ that recomputation has to be domain-specific:
 | T357   | The thinking row's head was a rotated text glyph, and a caption beneath it was doing the shimmer's job               | phase-9   | android          | P9-U   | T356, T345                                                            |
 | T358   | A diff was undifferentiated mono text and a search result never said where it matched                                | phase-9   | android          | P9-U   | T356                                                                  |
 | T359   | A shell command was drawn as a file listing, and the artifact's cancel hint names a key Android has not got          | phase-9   | android          | P9-U   | T357, T358, T350                                                      |
+| T360   | The agent's todo list reached Android and was filtered out of the transcript before anything could draw it           | phase-9   | android          | P9-U   | T353, T356                                                            |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -657,8 +658,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**568 tasks** (distinct IDs counted directly from the table above), recounted at T359 with
-`grep`/`sort -u` over the table's own rows — one past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**569 tasks** (distinct IDs counted directly from the table above), recounted at T360 with
+`grep`/`sort -u` over the table's own rows — one past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17890,3 +17891,66 @@ No `CAPABILITIES` entry: nothing here reaches the wire.
 - [x] A cancelled or blocked command dims; a failed one does not
 - [x] The shimmer has one owner, and both of its mechanism pins moved rather than being widened or dropped
 - [x] `ShimmerText`'s exemption from the motion-token rule is recorded where the list is, not left implicit
+
+#### T360 — The agent's todo list reached Android and was filtered out of the transcript before anything could draw it
+
+`labels: phase-9, area: android` · `depends-on: T353, T356`
+
+`buildTranscriptEntries` has emitted `todo` entries for as long as the timeline has existed, and
+`app-shell/session-transcript-model.ts` dropped every one of them — correctly, while nothing
+could render one. `HANDOFF.md` §7.2's `.ov` widget is that row: a raised panel with an 18px
+progress ring, `● Todos (n/m)`, and a `├─`/`└─` tree of items in three states.
+
+**Three visible states out of one wire boolean, stated as a derivation.** The daemon sends
+`{ text, completed }`; the design draws done, current and waiting. `todoItemStates` calls the
+FIRST incomplete item the current one and every later incomplete item waiting. That is a
+heuristic about how agents work a list, not a fact from the wire, and the module says so: when
+it is wrong about an agent working out of order it costs one row tinted teal instead of plain,
+and nothing about which items are DONE depends on it.
+
+**The ring computes `2πr` rather than pinning the artifact's `50.27`.** A rounded literal is
+correct only until the radius changes, and nothing would notice when it stopped being. An empty
+list is `0/0` and is deliberately NOT complete — treating it as complete paints a full green
+ring for a list with nothing in it.
+
+**A third `<Circle>` pair was not written.** T353 drew the arc inside
+`features/composer/ContextRing.tsx`, which was right while the context meter was the only ring;
+the todo widget is the second. The drawing moved to `ui/recipes/ProgressRing.tsx` — including
+the twelve-o'clock rotation, which is easy to get wrong and invisible when you do — and each
+caller keeps what is its own: the tap target, the label, the band-to-colour mapping, and the
+model that produces the numbers. `ProgressRing` computes nothing and resolves no colour; both
+arrive from a caller's already-tested model, so there is no second source for a number two
+models already own.
+
+Three source-regex pins moved with it, from `features/composer/context-ring.test.ts` to
+`ui/recipes/ProgressRing.test.ts`: the two `<Circle>`s, the `react-native-svg` import, and the
+`rotate(-90, …)` transform. Same assertions, new address — not widened to whatever the old file
+still says, and not deleted, which would have dropped the only proof the arc does not start at
+three o'clock. What stays in `context-ring.test.ts` is still that control's own claim: every
+number it hands the ring comes from its model, and it computes no geometry itself.
+
+**`ProgressRing` is deliberately NOT in `recipe-accessibility.test.ts`'s `RECIPE_FILES`.** That
+list asserts every member reads its styling from `useTheme()`, and this one takes both colours
+already resolved, on purpose — it is a drawing, not a themed component, and a caller passing a
+band colour cannot get that from a theme lookup here. Listing it would assert a rule it cannot
+follow. Its own contract test carries the no-raw-hex case instead.
+
+**The artifact's `(form)` tag is not drawn.** The wire's todo item carries nothing that says an
+item is waiting on a form, so drawing the tag would mean inventing the condition. A badge that
+appears for the wrong rows is worse than one that does not appear.
+
+**The entry stays where it arrived in the transcript.** The daemon emits a fresh todo row every
+time the list changes, so its position IS when the agent last revised its plan; hoisting it to
+a pinned position at the top would lose that, and a test asserts two todo entries keep their
+places among the turns between them.
+
+No `CAPABILITIES` entry: the capability is `buildTranscriptEntries`'s, already shipped, and this
+task adds no wire call.
+
+- [x] `todo` entries reach the screen; the "no Android row yet" sentence is corrected where it was written
+- [x] The `.ov` ring, head and `├─`/`└─` tree are drawn, with every glyph and tint from a tested model
+- [x] Three states are derived from one boolean, and the derivation is labelled as one
+- [x] The ring's arc has one drawing, and the three pins that proved it moved rather than being widened or dropped
+- [x] Colour is never the only signal: three distinct glyphs, a `#n`, a printed count, and a spoken summary
+- [x] The `(form)` tag is left out with its reason recorded, not silently omitted
+- [x] A todo row keeps its position in the interleaved list

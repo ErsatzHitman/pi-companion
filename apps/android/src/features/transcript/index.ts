@@ -91,6 +91,23 @@ export {
 
 export { TranscriptToolCallRow, isToolCallEntry } from "./tool-call-row";
 export type { ToolCallTranscriptEntry, TranscriptToolCallRowProps } from "./tool-call-row";
+
+// T360: the redesign's `.ov` todo widget.
+export { TranscriptTodoRow, isTodoEntry } from "./todo-row";
+export type { TodoTranscriptEntry, TranscriptTodoRowProps } from "./todo-row";
+export {
+  RING_CIRCUMFERENCE as TODO_RING_CIRCUMFERENCE,
+  RING_RADIUS as TODO_RING_RADIUS,
+  RING_STROKE as TODO_RING_STROKE,
+  buildTodoRows,
+  ringDashOffset as todoRingDashOffset,
+  ringInk as todoRingInk,
+  todoAccessibilityLabel,
+  todoHeadline,
+  todoItemStates,
+  todoProgress,
+} from "./todo-row-model";
+export type { TodoItemState, TodoProgress, TodoRow } from "./todo-row-model";
 export { TranscriptWindowList } from "./transcript-window";
 export type { TranscriptWindowListProps } from "./transcript-window";
 export {

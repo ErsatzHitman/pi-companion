@@ -36,6 +36,8 @@ export { PixelLoader } from "./PixelLoader";
 export type { PixelLoaderProps } from "./PixelLoader";
 export { ScreenBar } from "./ScreenBar";
 export type { ScreenBarAction, ScreenBarProps } from "./ScreenBar";
+export { ProgressRing } from "./ProgressRing";
+export type { ProgressRingProps } from "./ProgressRing";
 export { PromptBar } from "./PromptBar";
 export type { PromptBarProps } from "./PromptBar";
 export { SelectionActions } from "./SelectionActions";

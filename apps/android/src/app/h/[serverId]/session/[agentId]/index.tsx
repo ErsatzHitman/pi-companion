@@ -29,6 +29,7 @@ import {
   TranscriptMessageRow,
   TranscriptStatusStrip,
   TranscriptThinkingRow,
+  TranscriptTodoRow,
   TranscriptToolCallRow,
   TranscriptWindowList,
   createTranscriptMessageBatcher,
@@ -368,6 +369,9 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
           }
           if (entry.kind === "tool-call") {
             return <TranscriptToolCallRow key={entry.id} entry={entry} testId={testId} />;
+          }
+          if (entry.kind === "todo") {
+            return <TranscriptTodoRow key={entry.id} entry={entry} testId={testId} />;
           }
           return (
             <TranscriptMessageRow

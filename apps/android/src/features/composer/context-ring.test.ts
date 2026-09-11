@@ -22,22 +22,30 @@ function readCode(name: string): string {
 }
 
 describe("ContextRing source", () => {
+  // T360 moved the DRAWING to `../../ui/recipes/ProgressRing.tsx`, when
+  // the todo widget became this app's second ring. The three cases that
+  // pinned the two `<Circle>`s and the twelve-o'clock rotation moved
+  // with it, to `ProgressRing.test.ts` — same assertions, new address,
+  // not widened to whatever this file still happens to say and not
+  // deleted, which would have dropped the only proof the arc does not
+  // start at three o'clock.
+  //
+  // What stays here is what is still THIS control's decision: that
+  // every number it hands the ring comes from its own model, and that
+  // it computes no geometry itself.
   it("takes every number from the model, computing no geometry of its own", () => {
     const code = readCode("ContextRing");
     expect(code).toMatch(/buildContextRingViewModel\(usage\)/);
-    expect(code).toMatch(/strokeDasharray=\{model\.circumference\}/);
-    expect(code).toMatch(/strokeDashoffset=\{model\.dashOffset\}/);
+    expect(code).toMatch(/circumference=\{model\.circumference\}/);
+    expect(code).toMatch(/dashOffset=\{model\.dashOffset\}/);
     expect(code).not.toMatch(/Math\.PI/);
   });
 
-  it("draws real SVG circles rather than a rotated box or a text glyph", () => {
+  it("delegates the drawing rather than keeping a second copy of the arc", () => {
     const code = readCode("ContextRing");
-    expect(code).toMatch(/from "react-native-svg"/);
-    expect(code).toMatch(/<Circle\b/);
-  });
-
-  it("starts the arc at the top, not at an unrotated circle's three o'clock", () => {
-    expect(readCode("ContextRing")).toMatch(/transform=\{`rotate\(-90,/);
+    expect(code).toMatch(/<ProgressRing\b/);
+    expect(code).not.toMatch(/<Circle\b/);
+    expect(code).not.toMatch(/from "react-native-svg"/);
   });
 
   it("puts the percentage in visible text, so fill level is never the only signal", () => {

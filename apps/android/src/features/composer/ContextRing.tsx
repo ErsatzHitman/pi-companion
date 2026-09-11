@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
 
+import { ProgressRing } from "../../ui/recipes";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import {
@@ -23,8 +23,17 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
  * used to carry. This is that ring, and the tap target that opens them.
  *
  * `context-ring-model.ts` owns every number and every string; this file
- * draws two `react-native-svg` circles — a track and a progress arc
- * offset by `strokeDashoffset` — and wraps them in a `Pressable`.
+ * wraps the drawing in a `Pressable` and puts the percentage beside it.
+ *
+ * **T360 moved the drawing itself to `ui/recipes/ProgressRing.tsx`.**
+ * It used to be two `react-native-svg` circles here — a track and a
+ * progress arc offset by `strokeDashoffset`, rotated to start at
+ * twelve o'clock. The todo widget became the second ring in this app,
+ * and a second copy of that arc (the rotation in particular, which is
+ * easy to get wrong and invisible when you do) is the duplication
+ * T356, T358 and T359 each removed for a shape. What stays here is
+ * what is this control's own: the tap target, the label, and the
+ * band-to-colour mapping.
  *
  * **The visible ring is 18dp, the touch target is 48dp**, the same
  * split `ui/primitives/IconButton.tsx` and `ui/recipes/ScreenBar.tsx`
@@ -68,33 +77,15 @@ export function ContextRing({ usage, onPress, testId }: ContextRingProps) {
         importantForAccessibility="no-hide-descendants"
         style={styles.ringBox}
       >
-        <Svg width={CONTEXT_RING_SIZE} height={CONTEXT_RING_SIZE} fill="none">
-          <Circle
-            cx={CONTEXT_RING_SIZE / 2}
-            cy={CONTEXT_RING_SIZE / 2}
-            r={CONTEXT_RING_RADIUS}
-            stroke={theme.colors.inset}
-            strokeWidth={CONTEXT_RING_STROKE}
-          />
-          <Circle
-            cx={CONTEXT_RING_SIZE / 2}
-            cy={CONTEXT_RING_SIZE / 2}
-            r={CONTEXT_RING_RADIUS}
-            stroke={bandColors[model.band]}
-            strokeWidth={CONTEXT_RING_STROKE}
-            strokeLinecap="round"
-            strokeDasharray={model.circumference}
-            strokeDashoffset={model.dashOffset}
-            // Start the arc at twelve o'clock instead of three, which is
-            // where an unrotated SVG circle begins. A meter that fills
-            // from the right edge reads as a different quantity at a
-            // glance than the same meter filling from the top. Written
-            // as an SVG transform string rather than the `rotation`/
-            // `originX`/`originY` props, which `react-native-svg` marks
-            // deprecated.
-            transform={`rotate(-90, ${CONTEXT_RING_SIZE / 2}, ${CONTEXT_RING_SIZE / 2})`}
-          />
-        </Svg>
+        <ProgressRing
+          size={CONTEXT_RING_SIZE}
+          radius={CONTEXT_RING_RADIUS}
+          strokeWidth={CONTEXT_RING_STROKE}
+          circumference={model.circumference}
+          dashOffset={model.dashOffset}
+          trackColor={theme.colors.inset}
+          arcColor={bandColors[model.band]}
+        />
       </View>
       <Text
         accessibilityElementsHidden

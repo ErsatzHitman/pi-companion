@@ -45,12 +45,27 @@ function compaction(id: string): timeline.TranscriptEntry {
   return { ...base(id), kind: "compaction", status: "completed" };
 }
 
+function todo(id: string): timeline.TranscriptEntry {
+  return {
+    ...base(id),
+    kind: "todo",
+    items: [
+      { text: "write tests", completed: true },
+      { text: "read plan.md", completed: false },
+    ],
+  };
+}
+
 describe("isSessionTranscriptEntry", () => {
-  it("is true for user-message, assistant-message, thinking, and tool-call entries", () => {
+  it("is true for user-message, assistant-message, thinking, tool-call and todo entries", () => {
     expect(isSessionTranscriptEntry(userMessage("1", "hi"))).toBe(true);
     expect(isSessionTranscriptEntry(assistantMessage("2", "hi"))).toBe(true);
     expect(isSessionTranscriptEntry(thinking("3", "hmm"))).toBe(true);
     expect(isSessionTranscriptEntry(toolCall("4"))).toBe(true);
+    // T360: `todo` was in the "no Android row yet" list until the `.ov`
+    // widget shipped, and this filter was the only thing keeping it off
+    // screen.
+    expect(isSessionTranscriptEntry(todo("5"))).toBe(true);
   });
 
   it("is false for entry kinds this route has no row for", () => {
@@ -105,5 +120,27 @@ describe("buildSessionTranscriptEntries", () => {
   it("returns an empty list when every entry is a kind with no Android row", () => {
     const entries: timeline.TranscriptEntry[] = [compaction("x1"), compaction("x2")];
     expect(buildSessionTranscriptEntries(entries)).toEqual([]);
+  });
+
+  it("T360: keeps a todo entry where it arrived, not hoisted above the turn that produced it", () => {
+    // The daemon emits a fresh todo row every time the list changes, so
+    // its position IS when the agent last revised its plan. Pinning it
+    // to the top of the transcript would lose that.
+    const entries: timeline.TranscriptEntry[] = [
+      userMessage("1", "do the thing"),
+      todo("t1"),
+      assistantMessage("2", "starting"),
+      todo("t2"),
+    ];
+
+    const result = buildSessionTranscriptEntries(entries);
+
+    expect(result.map((entry) => entry.id)).toEqual(["1", "t1", "2", "t2"]);
+    expect(result.map((entry) => entry.kind)).toEqual([
+      "user-message",
+      "todo",
+      "assistant-message",
+      "todo",
+    ]);
   });
 });
