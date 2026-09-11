@@ -157,8 +157,16 @@ TalkBack's speech engine, which is exactly why Part 1 still exists.
   `FilesScreen`) once the resolver could read a dimension written as a named constant or declared
   in a file's second `StyleSheet.create`. And the predicate has been a strict AND since T81's
   follow-up: every declared minimum must itself reach 48, and a `hitSlop` on the same element no
-  longer rescues one that does not. Read the entry list in that file rather than a count here.
-  Adding those six found three real controls under 48dp, fixed in the same change.
+  longer rescues one that does not. Adding those six found three real controls under 48dp, fixed
+  in the same change. CORRECTED again (T378): the sentence "read the entry list in that file
+  rather than a count here" no longer describes anything — there is no entry list. The audited
+  set is discovered by walking `apps/android/src` for every non-test `.tsx` declaring a touchable
+  or typeable tag, so a new interactive file is audited on arrival rather than when someone
+  remembers to list it. Two files are exempted by name, from having a control to measure and not
+  from the 48dp rule: `ui/primitives/Dialog.tsx` and `ui/primitives/Sheet.tsx`, whose only
+  touchable is a full-screen dismiss scrim. Widening to the discovered set found one more control
+  whose 48dp claim its source could not support — `SessionControlsPicker`'s mode pill — fixed in
+  the same change.
 - **Non-color status text.** Several features carry their own tests asserting a status is
   represented as real text, not color alone, including `apps/android/src/features/composer/
 composer-accessibility.test.ts` and `composer-model.test.ts` (turn status labels),

@@ -634,6 +634,7 @@ that recomputation has to be domain-specific:
 | T375   | The authoritative spec described an Android session screen that twenty-three tasks had replaced                      | phase-9   | docs             | P9-U   | T374                                                                  |
 | T376   | The 48dp audit could not read a dimension written as a constant, so three small controls sat outside it              | phase-9   | android          | P9-U   | T375                                                                  |
 | T377   | A recipe left out of the audit on purpose was indistinguishable from one left out by accident                        | phase-9   | android          | P9-U   | T376                                                                  |
+| T378   | The 48dp audit's component list was the last curated list, and a screen shipped tomorrow joined it by memory         | phase-9   | android          | P9-U   | T377                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -675,8 +676,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**586 tasks** (distinct IDs counted directly from the table above), recounted at T377 with
-`grep`/`sort -u` over the table's own rows — one past the **585** at T376, two past the **584** at T375, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**587 tasks** (distinct IDs counted directly from the table above), recounted at T378 with
+`grep`/`sort -u` over the table's own rows — one past the **586** at T377, two past the **585** at T376, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -19047,3 +19048,96 @@ real 48dp fixes under a task whose subject is a different file; it is filed as T
 - [x] Three mutations watched failing by name, restored from scratchpad copies
 - [x] The ledger prose this change falsifies is corrected where it stands
 - [ ] The identical shape in `touch-targets.test.ts`'s component list is closed — filed as T378
+
+#### T378 — The 48dp audit's component list was the last curated list, and a screen shipped tomorrow joined it by memory
+
+`labels: phase-9, area: android` · `depends-on: T377`
+
+`apps/android/src/ui/primitives/touch-targets.test.ts` is the only thing that checks `plan.md`
+§9.3's first rule, and it ran over a hand-typed array. T376 had widened that array by six one
+task earlier — and had to widen the RESOLVER twice to do it, because three of the six were
+reported as violations while being perfectly compliant. That is the tell this task acts on: a
+curated list grows only when somebody goes looking, and the six T376 found had been outside the
+48dp rule for as long as they had existed.
+
+**The six that were missing are not the finding.** The finding is what happens next: a screen
+shipped tomorrow with a 32dp button joins this audit only if its author remembers a file in
+`ui/primitives/`, and produces no failure of any kind if they do not. Measured against the
+audit's own `INTERACTIVE_TAG_PATTERN`, twenty-four non-test `.tsx` files under
+`apps/android/src` declared a touchable or typeable tag; eighteen were listed. This is the
+fourth curated list this run has unwound — T373's TalkBack table against the Maestro flow,
+T375's `plan.md` §9.2 against the router, T377's recipe set against its own directory — and it
+is the one with a user-visible rule behind it.
+
+**The audited set is now discovered.** `tsxFilesUnder(ANDROID_SRC_DIR)` walks the tree, skips
+test files, and keeps every file whose comment-stripped source matches the tag pattern. A file
+is named by its path under `apps/android/src` rather than by its basename, because two
+directories may hold the same file name and a failing case called `Button` that could mean
+either is worse than a long one that can only mean the file it names.
+
+**A separate, non-global copy of the tag pattern does the file filter.** The audit's own pattern
+carries `/g`, so its `lastIndex` persists between calls — testing twenty-four files with one
+object would skip matches according to where the previous file's scan happened to stop.
+`extractInteractiveElements` already resets `lastIndex` by hand for that reason; the filter
+takes a `RAW_INTERACTIVE_TAG_PATTERN` without the flag instead of relying on remembering to.
+
+**Two files are exempt, by name and with a checked claim.** `Dialog.tsx` and `Sheet.tsx` each
+wrap their panel in a `Pressable` carrying `styles.scrim`, an `onPress={onClose}` and an
+`accessibilityLabel`, and deliberately no `accessibilityRole` — the shape
+`extractInteractiveElements` already skips inside every other file, and whose panel is
+`accessibilityRole="none"` by design. A scrim covers the whole screen, so 48dp says nothing
+about it. The exemption is from having a control to measure, never from the 48dp rule: their
+case asserts both that the scrim is really there and that the file really has no control, so it
+fails the day either stops being true — and a control added to one of them is audited like any
+other. A third case asserts both exempt paths are still discovered files, so an exemption cannot
+outlive the file it names, which is the stale-allowlist shape `CLAUDE.md`'s T211/T213 sections
+describe.
+
+**One real control was found, and it is the interesting kind.**
+`features/composer/SessionControlsPicker.tsx`'s Build/Plan mode pill carries `hitSlop={14}` and
+a doc comment saying, in bold, that the touch target is 48dp — citing `Chip`'s removable variant
+as the precedent. `Chip` declares `height: 24` on the child the `Pressable` shrink-wraps, so its
+`hitSlop` pads outward from a size the source states. The pill declared no size at all: only
+`paddingHorizontal`, `paddingVertical` and a border, so its extent came from whatever the
+caption font metric produced. The audit resolved no content size and failed it — which is
+exactly T90's rule that a bare `hitSlop` with nothing to pad from proves nothing.
+
+It was almost certainly over 48dp on a real device. That is not the same as being 48dp, and the
+bolded sentence claimed the stronger thing. `segment` now carries `minHeight: 24`, the floor
+`Chip` has always declared, so `24 + 2 x 14 = 52` is readable in the source; nothing moves on
+screen, because the pill already rendered taller than 24. The doc comment carries a `CORRECTED
+(T378)` note saying what made the claim true rather than intended.
+
+**Three mutations, each watched failing by name, each restored from a scratchpad copy — never
+`git checkout --` — with `git status --porcelain` clean afterwards:**
+
+| Mutation                                                 | Case(s) that failed                                                                                          | What it proves                                                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| the pill's `minHeight: 24` shrunk to `8`                 | `features/composer/SessionControlsPicker declares a 48dp (or hitSlop-padded) touch target`                   | the fix is load-bearing, not a number that happens to sit there                                      |
+| `accessibilityRole="button"` added to `Dialog`'s scrim   | both `ui/primitives/Dialog's only touchable is a dismiss scrim…` AND `ui/primitives/Dialog declares a 48dp…` | the exemption is a live claim, and a file that gains a control is audited rather than staying exempt |
+| `Popover`'s `trigger.minHeight` shrunk from `48` to `32` | `ui/primitives/Popover declares a 48dp (or hitSlop-padded) touch target`                                     | discovery really audits a file the old array never held                                              |
+
+**Floors on the discovery itself**, so this task does not recreate one level up the shape it
+removes: the set must hold at least twenty entries, must contain all six files T376's array did
+not reach, and must contain no test file.
+
+**T124 sweep.** `docs/accessibility-talkback-procedure.md`'s touch-target entry told the reader
+to "read the entry list in that file rather than a count here" — there is no entry list any
+more; it carries a `CORRECTED again (T378)` note naming the discovery, the two exemptions and
+the control this change fixed. `HANDOFF.md`'s "`touch-targets.test.ts` audits every pressable
+for 48dp" needed no correction for the opposite reason worth recording: it was an overclaim when
+written, and this change is what makes it true.
+
+**No `CAPABILITIES` entry**, for the fifth time in this run: the capability is "the 48dp audit
+covers every interactive file", which declares no member anywhere `isShippedSourcePath` can see
+— that predicate excludes test files, and this capability lives entirely in one. The pill's
+`minHeight` is a style value, not a declared member. An entry would be inert on both sides.
+
+- [x] The audited set is discovered by walking the tree, so a new interactive file is audited on arrival
+- [x] The file filter uses a non-global pattern, so `lastIndex` cannot skip a file
+- [x] Both exemptions are named, scoped to the one case each disputes, and asserted in both directions
+- [x] An exemption naming a file that no longer exists fails
+- [x] The discovery carries floors, so an emptied walk fails rather than passing silently
+- [x] The one control whose 48dp claim its source could not support is fixed, not exempted
+- [x] Three mutations watched failing by name, restored from scratchpad copies
+- [x] The prose describing the old entry list is corrected where it stands

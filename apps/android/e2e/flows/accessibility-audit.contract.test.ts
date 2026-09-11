@@ -153,6 +153,37 @@ function readComponentCode(relativePath: string, name: string): string {
 const BUTTON_TSX = "../../src/ui/primitives/Button.tsx";
 const TEXT_FIELD_TSX = "../../src/ui/primitives/TextField.tsx";
 const TOUCH_TARGETS_TEST_TS = "../../src/ui/primitives/touch-targets.test.ts";
+
+/**
+ * Asserts the shared 48dp audit covers one file (T378).
+ *
+ * These pins used to name an entry in `touch-targets.test.ts`'s
+ * `CRITICAL_INTERACTIVE_PRIMITIVES` array — `name: "ComposerIconAction"`
+ * and the literal string `ScreenBar`. T378 replaced that array with a
+ * walk of `apps/android/src`, so both anchors stopped resolving. The
+ * pins are re-anchored at the new address rather than widened or
+ * deleted: coverage is no longer a line in a list, it is a property of
+ * the file, so that is what these assert.
+ *
+ * Three parts, because "the audit covers this file" is now three facts:
+ * the audit really discovers its set; this file really satisfies the
+ * discovery predicate (it declares a touchable or typeable tag); and
+ * this file is not one of the audit's named exemptions. Asserting only
+ * the first would pass for a file the audit never sees.
+ */
+function expectTouchTargetAuditCovers(pathUnderSrc: string, sourcePath: string): void {
+  const suite = readCode(TOUCH_TARGETS_TEST_TS);
+  expect(suite).toMatch(/tsxFilesUnder\(ANDROID_SRC_DIR\)/);
+  expect(suite).toMatch(/RAW_INTERACTIVE_TAG_PATTERN\.test\(/);
+
+  expect(readCode(sourcePath)).toMatch(
+    /(?<![\w$])<(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|TextInput)\b/,
+  );
+
+  const exemptions = /const SCRIM_ONLY_FILES = new Set\(\[([\s\S]*?)\]\)/.exec(suite)?.[1];
+  expect(exemptions).toBeDefined();
+  expect(exemptions).not.toContain(pathUnderSrc);
+}
 const ICON_ACTION_TSX = "../../src/features/composer/composer-icon-action.tsx";
 const CONNECT_TSX = "../../src/app/connect.tsx";
 const ONBOARDING_GATE_TSX = "../../src/features/connect/OnboardingGate.tsx";
@@ -192,24 +223,19 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
       expect(code).toMatch(/input: \{\s*minHeight: 48,/);
     });
 
-    it("T81 closed the gap this test used to document: touch-targets.test.ts now audits composer-icon-action.tsx (mic/attach) by path, even though the file lives outside ui/primitives/", () => {
+    it("the shared 48dp audit covers composer-icon-action.tsx (mic/attach), which lives outside ui/primitives/", () => {
       // touch-targets.test.ts (T26A/T57B) used to read only
       // `./${name}.tsx`, relative to its own directory
       // (ui/primitives/), so a component outside that directory could
-      // never join CRITICAL_INTERACTIVE_PRIMITIVES — this file's own
-      // "the one gap ..." test used to pin that absence shut. T81
-      // (P5-W21) changed the loop to take a path per entry and added
-      // ComposerIconAction pointing at composer-icon-action.tsx; this
-      // now proves the fix's presence instead of the old gap's absence.
-      const suite = readCode(TOUCH_TARGETS_TEST_TS);
-      expect(suite).toMatch(/name: "ComposerIconAction"/);
-      expect(suite).toMatch(/path: "\.\.\/\.\.\/features\/composer\/composer-icon-action\.tsx"/);
-      const list =
-        /const CRITICAL_INTERACTIVE_PRIMITIVES: AuditedComponent\[\] = (\[[\s\S]*?\]);/.exec(
-          suite,
-        )?.[1];
-      expect(list).toBeDefined();
-      expect(list).toMatch(/name: "ComposerIconAction"/);
+      // never join the audited set — this file's own "the one gap ..."
+      // test used to pin that absence shut. T81 (P5-W21) changed the
+      // loop to take a path per entry and listed this component; T378
+      // replaced the list with a walk of apps/android/src, so a file
+      // outside ui/primitives/ is now covered by construction rather
+      // than by being named. This proves the fix's presence either way
+      // — see `expectTouchTargetAuditCovers` for why coverage takes
+      // three assertions now instead of one.
+      expectTouchTargetAuditCovers("features/composer/composer-icon-action.tsx", ICON_ACTION_TSX);
 
       const iconAction = readCode(ICON_ACTION_TSX);
       expect(iconAction).toMatch(/touchArea: \{\s*minWidth: 48,\s*minHeight: 48,/);
@@ -410,8 +436,9 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
       expect(code).toMatch(/touchArea: \{[^}]*minHeight: 48/);
       expect(code).toMatch(/touchArea: \{[^}]*minWidth: 48/);
       // Pointed at, not re-derived here — the same split every other
-      // control in this file uses.
-      expect(readSource(TOUCH_TARGETS_TEST_TS)).toMatch(/ScreenBar/);
+      // control in this file uses. T378: the audit no longer names this
+      // file, so the pin asserts the property that replaced the name.
+      expectTouchTargetAuditCovers("ui/recipes/ScreenBar.tsx", SCREEN_BAR_TSX);
     });
 
     it("live-screen.tsx names the back action and the run pill exactly as the yaml asserts them", () => {

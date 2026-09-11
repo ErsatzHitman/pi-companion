@@ -42,7 +42,12 @@ import {
  * **The visible pill is small, the touch target is 48dp.** Like
  * `../../ui/primitives/Chip.tsx`'s removable variant, the pill keeps the
  * artifact's tight footprint and grows its bounds with `hitSlop` rather
- * than inflating the pill itself (plan.md §9.3, T26C).
+ * than inflating the pill itself (plan.md §9.3, T26C). CORRECTED
+ * (T378): that sentence was written before this file was inside the
+ * shared 48dp audit, and the pill declared no size of its own, so
+ * `hitSlop={14}` padded outward from nothing a reader or a test could
+ * check. `segment` now carries the `minHeight: 24` floor `Chip`
+ * declares, which is what makes the claim true rather than intended.
  *
  * ## The switch is not drawn when nobody knows its value
  *
@@ -162,6 +167,16 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     segments: { flexDirection: "row", gap: theme.spacing[2] },
     segment: {
+      // T378: an explicit floor, so the 48dp claim in this file's doc
+      // comment is something the touch-target audit can resolve. The
+      // pill already rendered taller than this — caption text plus its
+      // padding and border — so nothing moves; what changes is that
+      // `hitSlop={14}` now pads outward from a size declared in the
+      // source (24 + 2 x 14 = 52) instead of from whatever the font
+      // metric happened to produce. `Chip`, which the comment above
+      // cites as the precedent, has always declared its `height: 24`
+      // for exactly this reason.
+      minHeight: 24,
       paddingHorizontal: theme.spacing[3],
       paddingVertical: theme.spacing[1],
       borderRadius: theme.radii.chip,

@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -115,36 +116,51 @@ interface AuditedComponent {
   path: string;
 }
 
-const CRITICAL_INTERACTIVE_PRIMITIVES: AuditedComponent[] = [
-  { name: "Button", path: "./Button.tsx" },
-  { name: "IconButton", path: "./IconButton.tsx" },
-  { name: "Link", path: "./Link.tsx" },
-  { name: "Toggle", path: "./Toggle.tsx" },
-  { name: "Chip", path: "./Chip.tsx" },
-  { name: "SearchField", path: "./SearchField.tsx" },
-  { name: "TextField", path: "./TextField.tsx" },
-  { name: "TextArea", path: "./TextArea.tsx" },
-  { name: "Select", path: "./Select.tsx" },
-  { name: "Banner", path: "./Banner.tsx" },
-  // T81: composer-icon-action.tsx lives under features/composer/, not
-  // ui/primitives/ — this is the component the loop previously could not
-  // reach without a path.
-  { name: "ComposerIconAction", path: "../../features/composer/composer-icon-action.tsx" },
-  // T350: the redesign's shared top bar draws a 36dp circle inside a
-  // 48dp Pressable, the same split IconButton above already uses.
-  { name: "ScreenBar", path: "../recipes/ScreenBar.tsx" },
-  // T376: six feature-level components that declare interactive elements
-  // of their own and were outside this audit until the resolver could
-  // read a dimension written as a named constant, and a style declared
-  // in a file's second `StyleSheet.create`. Every one of them is a
-  // control a user taps on a redesigned screen.
-  { name: "ContextRing", path: "../../features/composer/ContextRing.tsx" },
-  { name: "ThinkingSection", path: "../recipes/ThinkingSection.tsx" },
-  { name: "SessionsScreen", path: "../../features/sessions/sessions-screen.tsx" },
-  { name: "SettingsScreen", path: "../../features/settings/SettingsScreen.tsx" },
-  { name: "SessionTreeSheet", path: "../../features/sessions/session-tree-sheet.tsx" },
-  { name: "FilesScreen", path: "../../features/files/files-screen.tsx" },
-];
+/**
+ * The root the audited set is discovered under (T378).
+ *
+ * This was a hand-maintained array of eighteen entries, and it is the
+ * last of four curated lists this run has unwound (T373's TalkBack
+ * table, T375's spec screen list, T377's recipe set). Measured against
+ * this audit's own `INTERACTIVE_TAG_PATTERN` at the time of the change,
+ * twenty-four non-test `.tsx` files under `apps/android/src` declared a
+ * touchable or typeable tag and eighteen were listed.
+ *
+ * T376 had widened the array by six one task earlier, and had to widen
+ * the RESOLVER twice to do it. That is the tell: a curated list grows
+ * only when somebody goes looking, and the six it found had been
+ * outside the 48dp rule for as long as they had existed.
+ *
+ * The direction that matters is not the six that were missing, though.
+ * It is that a screen shipped tomorrow with a 32dp button joins this
+ * audit only if its author remembers a file in `ui/primitives/`, and
+ * produces no failure of any kind if they do not. Discovering the set
+ * removes the remembering: a new interactive file is audited on
+ * arrival, and a file that should not be audited has to say so by name,
+ * with a claim a test can fail.
+ */
+const ANDROID_SRC_DIR = fileURLToPath(new URL("../../", import.meta.url));
+
+/**
+ * Files whose only touchable is a full-screen dismiss scrim, which is
+ * deliberately not a control.
+ *
+ * `Dialog` and `Sheet` each wrap their panel in a `Pressable` carrying
+ * `styles.scrim`, an `onPress={onClose}` and an `accessibilityLabel`,
+ * and deliberately NO `accessibilityRole` — the same shape
+ * `extractInteractiveElements` already skips inside every other file
+ * (its doc comment names `Select`'s dismiss scrim as the example). A
+ * scrim covers the whole screen, so a 48dp minimum says nothing about
+ * it, and the panel inside is `accessibilityRole="none"` by design.
+ *
+ * The exemption is from the "has at least one interactive touch
+ * element" case ALONE. If either file ever gains a real control, that
+ * control is audited like every other one — this exempts a file from
+ * having to own a control, never from the 48dp rule. The case below
+ * asserts exactly that, so the exemption fails the day it stops being
+ * true.
+ */
+const SCRIM_ONLY_FILES = new Set(["ui/primitives/Dialog.tsx", "ui/primitives/Sheet.tsx"]);
 
 /**
  * T362: the leading `(?<![\w$])` is what keeps a TYPE from being read
@@ -158,6 +174,19 @@ const CRITICAL_INTERACTIVE_PRIMITIVES: AuditedComponent[] = [
  */
 const INTERACTIVE_TAG_PATTERN =
   /(?<![\w$])<(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|TextInput)\b/g;
+
+/**
+ * The same pattern without `g`, for deciding whether a FILE belongs in
+ * the audited set (T378).
+ *
+ * Deliberately a separate constant rather than a `.test()` against the
+ * one above: a `/g` regex carries `lastIndex` between calls, so testing
+ * many files with one object would skip matches depending on where the
+ * previous file's scan happened to stop. `extractInteractiveElements`
+ * already has to reset `lastIndex` by hand for that reason.
+ */
+const RAW_INTERACTIVE_TAG_PATTERN =
+  /(?<![\w$])<(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|TextInput)\b/;
 
 /** Strips block and line comments so a doc comment can never satisfy a source-text assertion. */
 function stripComments(source: string): string {
@@ -516,8 +545,91 @@ function elementMeetsTouchTarget(
   return heightOk && widthOk;
 }
 
+/** Every `.tsx` under `dir`, recursively, excluding test files. */
+function tsxFilesUnder(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      found.push(...tsxFilesUnder(full));
+      continue;
+    }
+    if (!entry.name.endsWith(".tsx")) continue;
+    if (entry.name.includes(".test.")) continue;
+    found.push(full);
+  }
+  return found;
+}
+
+/** Path relative to `apps/android/src`, in forward slashes, so a test name reads the same on every platform. */
+function relativeToSrc(absolutePath: string): string {
+  return relative(ANDROID_SRC_DIR, absolutePath).split(sep).join("/");
+}
+
+interface DiscoveredComponent extends AuditedComponent {
+  /** The file's own path under `apps/android/src`, which is also its display name's source. */
+  relativePath: string;
+}
+
+const CRITICAL_INTERACTIVE_PRIMITIVES: DiscoveredComponent[] = tsxFilesUnder(ANDROID_SRC_DIR)
+  .filter((absolutePath) =>
+    RAW_INTERACTIVE_TAG_PATTERN.test(stripComments(readFileSync(absolutePath, "utf8"))),
+  )
+  .map((absolutePath) => {
+    const relativePath = relativeToSrc(absolutePath);
+    return {
+      // The path, not the basename: two directories may hold the same
+      // file name, and a test called `Button` that could mean either is
+      // worse than a long one that can only mean the file it names.
+      name: relativePath.replace(/\.tsx$/, ""),
+      path: absolutePath,
+      relativePath,
+    };
+  })
+  .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+
+describe("the audited set is discovered, not typed out (T378)", () => {
+  it("finds every interactive file under apps/android/src, and still finds many", () => {
+    // A floor, so a walk that silently stopped returning files would
+    // empty the audit below into a passing run with nothing in it —
+    // which is the shape this task exists to remove, not to recreate
+    // one level up.
+    expect(CRITICAL_INTERACTIVE_PRIMITIVES.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("audits the six files T376's hand-maintained list did not reach", () => {
+    const found = new Set(CRITICAL_INTERACTIVE_PRIMITIVES.map((c) => c.relativePath));
+    for (const path of [
+      "features/composer/SessionControlsPicker.tsx",
+      "ui/primitives/Dialog.tsx",
+      "ui/primitives/Popover.tsx",
+      "ui/primitives/Sheet.tsx",
+      "ui/recipes/CommandSearch.tsx",
+      "ui/recipes/PromptBar.tsx",
+    ]) {
+      expect(found).toContain(path);
+    }
+  });
+
+  it("names only files that really exist, so an exemption cannot outlive its file", () => {
+    // A stale exemption is the "allowlist entry naming something that is
+    // gone" shape `CLAUDE.md`'s T211/T213 sections describe: it silently
+    // exempts nothing and nobody notices.
+    const found = new Set(CRITICAL_INTERACTIVE_PRIMITIVES.map((c) => c.relativePath));
+    for (const exempt of SCRIM_ONLY_FILES) {
+      expect(found).toContain(exempt);
+    }
+  });
+
+  it("skips test files, which declare touchables only as fixtures", () => {
+    expect(CRITICAL_INTERACTIVE_PRIMITIVES.every((c) => !c.relativePath.includes(".test."))).toBe(
+      true,
+    );
+  });
+});
+
 describe("48dp touch targets", () => {
-  for (const { name, path } of CRITICAL_INTERACTIVE_PRIMITIVES) {
+  for (const { name, path, relativePath } of CRITICAL_INTERACTIVE_PRIMITIVES) {
     // A path that fails to resolve must fail loudly and by name, not be
     // silently dropped from the audited set (T81). Reading eagerly here
     // (rather than inside an `it`) would crash the whole file's
@@ -529,7 +641,7 @@ describe("48dp touch targets", () => {
     let source: string | null = null;
     let readError: unknown = null;
     try {
-      source = readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
+      source = readFileSync(path, "utf8");
     } catch (error) {
       readError = error;
     }
@@ -549,9 +661,20 @@ describe("48dp touch targets", () => {
     const ambiguousStyleKeys = duplicateStyleKeys(code);
     const elements = extractInteractiveElements(code);
 
-    it(`${name} has at least one interactive touch element to check`, () => {
-      expect(elements.length).toBeGreaterThan(0);
-    });
+    if (SCRIM_ONLY_FILES.has(relativePath)) {
+      // T378: exempt from OWNING a control, never from the 48dp rule.
+      // Both halves are asserted, so the exemption cannot quietly
+      // become false in either direction: the file must really declare
+      // a scrim-shaped touchable, and must really have no control.
+      it(`${name}'s only touchable is a dismiss scrim, so it has no control to measure`, () => {
+        expect(code).toMatch(/styles\.scrim/);
+        expect(elements).toHaveLength(0);
+      });
+    } else {
+      it(`${name} has at least one interactive touch element to check`, () => {
+        expect(elements.length).toBeGreaterThan(0);
+      });
+    }
 
     elements.forEach((element, index) => {
       const label =
