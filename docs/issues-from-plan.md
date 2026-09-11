@@ -635,6 +635,7 @@ that recomputation has to be domain-specific:
 | T376   | The 48dp audit could not read a dimension written as a constant, so three small controls sat outside it              | phase-9   | android          | P9-U   | T375                                                                  |
 | T377   | A recipe left out of the audit on purpose was indistinguishable from one left out by accident                        | phase-9   | android          | P9-U   | T376                                                                  |
 | T378   | The 48dp audit's component list was the last curated list, and a screen shipped tomorrow joined it by memory         | phase-9   | android          | P9-U   | T377                                                                  |
+| T379   | The handoff still described the tree as it stood seven tasks ago, and named no successor to the work                 | phase-9   | docs             | P9-U   | T378                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -676,8 +677,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**587 tasks** (distinct IDs counted directly from the table above), recounted at T378 with
-`grep`/`sort -u` over the table's own rows — one past the **586** at T377, two past the **585** at T376, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**588 tasks** (distinct IDs counted directly from the table above), recounted at T379 with
+`grep`/`sort -u` over the table's own rows — one past the **587** at T378, two past the **586** at T377, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -19141,3 +19142,64 @@ covers every interactive file", which declares no member anywhere `isShippedSour
 - [x] The one control whose 48dp claim its source could not support is fixed, not exempted
 - [x] Three mutations watched failing by name, restored from scratchpad copies
 - [x] The prose describing the old entry list is corrected where it stands
+
+#### T379 — The handoff still described the tree as it stood seven tasks ago, and named no successor to the work
+
+`labels: phase-9, area: docs` · `depends-on: T378`
+
+`HANDOFF.md` is the file a next agent with no prior context is told to read first, and its §1 is
+the table that agent re-derives live state from. T372 wrote it at `6cafdb1`. Seven tasks later
+it still named `6cafdb1` as HEAD, `34560157100` as the CI run, `34558058662` as the last Maestro
+dispatch and 580 as the ledger total — against `6c55c13`, `34572169390`, `34573541455` and 587.
+
+None of those is catastrophic on its own; the `Re-derive before acting` block directly beneath
+the table exists precisely because a snapshot goes stale. What made the refresh worth a task is
+the two things a stale table cannot carry: **the run ids a later reader needs to check a claim**
+(two green dispatches happened in this wave and neither was recorded anywhere but a commit
+message), and **what the wave was actually about**, which §9's planned-row map could not say
+because T372–T378 delivered no planned row at all.
+
+**What §1 says now.** HEAD, the CI run, both dispatches with their real job timings read from
+`gh run view --json jobs`, the ledger total recounted from the table's own rows, and the open
+boxes split into the one that is ours (T313's) and the three that are the owner's (T44B1, a
+human TalkBack pass, and §4 steps 2/4/5 of the APK runbook). Plus a paragraph naming the defect
+shape T373, T375, T377 and T378 each closed — a curated list whose omissions produce no failure
+— and the five-step pattern that worked on all four, so the next reader can apply it rather than
+re-derive it.
+
+**§10 gained an item and lost a false premise.** Its opening said the artifact's S7 was built;
+it did not say the owner's own amendment to that artifact was built, which is the part a reader
+would most want confirmed. It is: the per-session controls are not above the prompt bar, the
+context ring sits right of the attachment action, and its menu holds MODE, MODEL & EFFORT, QUEUE
+and CONTEXT — verified by reading `features/composer/PromptControlsMenu.tsx`'s own groups, not
+assumed from the task titles. Rule 1 now carries this wave's own evidence for it: two separate
+dispatches for one wave, because two different tasks touched two different screens that two
+different flows drive.
+
+**A guard was considered for §1's count claim and deliberately not built.** The claim went
+genuinely stale — 580 against 587 — which is exactly the kind of hit `CLAUDE.md`'s T217 section
+names as the one thing that would reopen the question it closed. It does not meet T217's own
+re-trigger condition, and this was checked rather than assumed: that condition is a live count
+claim at a path `isAppSourcePath` returns `true` for, and `HANDOFF.md` is not one — the same
+measurement T269 already recorded for `plan.md`. So a guard built on the `guard-capability-prose`
+family could never have seen this file, and building a wider one means re-opening a question
+T217 settled by measuring 867 hits at a 100% false-positive rate.
+
+What protects this claim instead is the thing T217 found already protecting every other
+candidate site: the figure is **dated**. §1's header names the commit and task it was written
+at, and the table sits directly above a `Re-derive before acting` block with the four commands
+that produce the current values. A reader who trusts the number without running them has ignored
+an instruction, not been misled by a missing check. §10's new item 3 says so explicitly, so the
+next agent tempted to answer a stale list with a fifth guard reads the argument before writing
+one.
+
+**No `CAPABILITIES` entry**, for the sixth time in this run, and here the reason is the simplest
+of the six: this task ships no capability at all. It edits one untracked-by-any-guard Markdown
+file and the ledger. `isAppSourcePath` returns `false` for `HANDOFF.md` on both sides.
+
+- [x] §1 names the real HEAD, CI run, both Maestro dispatches and the recounted ledger total
+- [x] Job timings come from `gh run view --json jobs`, not from a previous table
+- [x] The open boxes are split into ours and the owner's, so neither looks like the other's job
+- [x] The wave's defect shape and the pattern that closed it are written down, not left in commits
+- [x] §10 records that the owner's artifact amendment is delivered, verified by reading the menu
+- [x] The guard question is answered against T217's real condition rather than re-litigated

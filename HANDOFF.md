@@ -1,8 +1,8 @@
 # HANDOFF — Pi Companion, the S7 redesign and the green Maestro suite
 
 **Written:** 2026-09-10 at `f75bbd8` (T345) · **Refreshed:** 2026-09-11 at `6cafdb1` (T371),
-as T372 · **Branch:** `main` · **For:** the next agent continuing this work with no prior
-context
+as T372 · **Refreshed again:** 2026-09-11 at `6c55c13` (T378), as T379 · **Branch:** `main` ·
+**For:** the next agent continuing this work with no prior context
 
 Read this end to end before touching anything. It replaces the 2026-09-05 handoff in full.
 Everything below was true at the moment of writing; re-derive live state (HEAD, CI, working
@@ -60,24 +60,48 @@ And the one amendment to S7, which supersedes the artifact for the prompt-bar co
 
 ## 1. Where things stand right now
 
-| Fact                  | Value                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HEAD                  | `6cafdb1` — "T371: the suite finally ran end to end, and four files still said it never had", pushed to `origin/main`                                                                                                                                                                                                                                                                                                      |
-| CI for `6cafdb1`      | run `34560157100`, success. Every commit from T346 to T371 has its own green push run; each task's ledger section records the id                                                                                                                                                                                                                                                                                           |
-| Last Maestro dispatch | run `34558058662` at `51e2fa8`, **every job green** — `build-development-apk` 15m 22s, the five `maestro-e2e` shards at 5m 02s / 6m 15s / 5m 15s / 6m 32s / 6m 36s, `packaged-app-smoke` 22m 33s                                                                                                                                                                                                                           |
-| The ten §14.4 flows   | all `PASS` in that dispatch: `pairing`, `network-switch`, `cold-start-restore`, `background-kill-restore`, `composer-inputs`, `offline-cache-outbox`, `notification-approval`, `extension-sheets`, `files-and-terminal`, `accessibility-audit`. That is `plan.md`'s Phase 5 exit-gate criterion, met for the first time                                                                                                    |
-| Working tree          | clean. `react-native-svg@15.12.1` was committed at T349, the first commit that imported it — the two files this table used to list as uncommitted are on `main`                                                                                                                                                                                                                                                            |
-| Ledger                | `docs/issues-from-plan.md` has rows and sections through T371 (580 tasks). The dispatch boxes under T208, T310, T314, T318, T334, T336–T344, T368 and T370 are all ticked, each naming the run that closes it                                                                                                                                                                                                              |
-| The one open box      | T313's, deliberately. "A real failing dispatch shows the reason in the CI log without anyone opening expo.dev": its subject is the `if: failure()` `eas build:list` diagnostic beside an EAS build step, and after T315 and T330 the only EAS build left in this repository is `android-apk-release.yml`'s `publish-android-apk`. Closing it needs a real release run whose EAS build fails — not something to manufacture |
-| "Geist Mono" prose    | swept. T356 fixed six of §9.3's seven comments and T367 the last, and `apps/android/src/ui/theme/fonts.test.ts` now fails if a live comment anywhere under `apps/android/src` explains an Android style by naming that face                                                                                                                                                                                                |
+| Fact                             | Value                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HEAD                             | `6c55c13` — "T378: the 48dp audit's component list was the last curated list, and a screen shipped tomorrow joined it by memory", pushed to `origin/main`                                                                                                                                                                                                                                                                  |
+| CI for `6c55c13`                 | run `34572169390`, success. Every commit from T346 to T378 has its own green push run; each task's ledger section records the id                                                                                                                                                                                                                                                                                           |
+| Last Maestro dispatch            | run `34573541455` at `6c55c13`, **every job green** — `build-development-apk` 19m 53s, the five `maestro-e2e` shards at 5m 59s / 7m 59s / 6m 12s / 7m 47s / 6m 03s, `packaged-app-smoke` 18m 00s                                                                                                                                                                                                                           |
+| The dispatch before it           | run `34569070497` at `aba232a` (T376 + T377), every job green. Two dispatches in this wave, because rule 1 of §10 says a wave that touches a screen a flow drives gets its own                                                                                                                                                                                                                                             |
+| The ten §14.4 flows              | all `PASS` in both dispatches: `pairing`, `network-switch`, `cold-start-restore`, `background-kill-restore`, `composer-inputs`, `offline-cache-outbox`, `notification-approval`, `extension-sheets`, `files-and-terminal`, `accessibility-audit`. That is `plan.md`'s Phase 5 exit-gate criterion, still met                                                                                                               |
+| Working tree                     | clean                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Ledger                           | `docs/issues-from-plan.md` has rows and sections through T379 (588 tasks), counted from the table's own rows at the commit this refresh landed in                                                                                                                                                                                                                                                                          |
+| The one open box                 | T313's, deliberately. "A real failing dispatch shows the reason in the CI log without anyone opening expo.dev": its subject is the `if: failure()` `eas build:list` diagnostic beside an EAS build step, and after T315 and T330 the only EAS build left in this repository is `android-apk-release.yml`'s `publish-android-apk`. Closing it needs a real release run whose EAS build fails — not something to manufacture |
+| Also open, and not ours to close | T44B1 (the owner must create an EAS signing keystore and dispatch the release workflow), T373's final box (a human TalkBack pass on a real device) and T374's (the owner running §4 steps 2, 4 and 5 of `docs/android-apk-release.md`)                                                                                                                                                                                     |
+| "Geist Mono" prose               | swept. T356 fixed six of §9.3's seven comments and T367 the last, and `apps/android/src/ui/theme/fonts.test.ts` now fails if a live comment anywhere under `apps/android/src` explains an Android style by naming that face                                                                                                                                                                                                |
+
+**What T372–T378 did, and why it is one thing rather than seven.** T372 refreshed this file;
+T373, T374 and T375 corrected four documents and the authoritative spec, each of which carried
+claims the T349–T371 redesign had falsified. Then the same defect SHAPE turned up four times in
+a row and was closed four times: **a curated list whose omissions produce no failure.** The
+TalkBack table against the Maestro flow it documents (T373), `plan.md` §9.2's screen list
+against the router's real routes (T375), the recipe audit's file list against its own directory
+(T377), and the 48dp audit's component list against `apps/android/src` (T378). T376 sits in the
+middle of that run as the reason it was worth chasing: widening one of those lists by six
+entries reported three compliant controls as violations, because the resolver could not read a
+dimension written as a named constant or declared in a file's second `StyleSheet.create` — a
+check that cannot tell a violation from a blind spot.
+
+Three real defects came out of it, none of which any test would ever have reported:
+`session-tree-sheet.tsx`'s 28dp chevron and two `files-screen.tsx` breadcrumb links (T376), and
+`SessionControlsPicker.tsx`'s Build/Plan pill, whose doc comment claimed 48dp in bold while the
+pill declared no size for its `hitSlop` to pad outward from (T378).
+
+**If you find another list, this is the pattern that worked**: derive the set from the tree,
+name each exemption instead of omitting it, scope an exemption to the one rule it disputes
+rather than all of them, assert the exemption's own claim so it fails when it stops being true,
+and give the derived set a floor so an emptied walk fails rather than passing silently.
 
 Re-derive before acting:
 
 ```bash
 cd D:/pi-companion && git rev-parse --short HEAD && git status --short
 gh run list --branch main --limit 5
-gh run view 34560157100 --json status,conclusion
-gh run view 34558058662 --json jobs -q '.jobs[] | "\(.name): \(.conclusion)"'
+gh run view 34572169390 --json status,conclusion
+gh run view 34573541455 --json jobs -q '.jobs[] | "\(.name): \(.conclusion)"'
 ```
 
 ---
@@ -669,6 +693,22 @@ records a trap rather than a feature:
 | T365 | A calibrated self-heal phase that turned `main` red, and failed 15 seconds short of the thing it was calibrated against              |
 | T369 | A capability that shipped with no `CAPABILITIES` entry protecting it, three tasks after the rule saying register it at once          |
 
+**The wave after that one (T372–T379) delivered no planned row, and that is the point.** §9's
+task split was complete at T371; everything since has been correcting what the redesign
+falsified and closing the defect shape that kept producing it. Read them in order if you are
+picking up the same kind of work:
+
+| Task | What it was                                                                                                                                                                 |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T372 | This file, refreshed at `6cafdb1` — including a §3 path that had never existed                                                                                              |
+| T373 | The TalkBack procedure's audit table against the Maestro flow it documents: three false status claims, and a table missing every control the redesign added                 |
+| T374 | The APK release runbook asking the owner for a secret that already exists, and two steps already done                                                                       |
+| T375 | `plan.md` §9.2 — the authoritative spec still describing the pre-T349 session screen — pinned against the router's real routes                                              |
+| T376 | The 48dp resolver: a dimension written as a named constant, or declared in a second `StyleSheet.create`, read as no dimension at all. Three real controls under 48dp, fixed |
+| T377 | The recipe audit's file list, derived from its directory; a deliberate exemption made a named, checked claim instead of an omission                                         |
+| T378 | The 48dp audit's component list, derived from `apps/android/src`; one more control whose 48dp claim its source could not support                                            |
+| T379 | This file again, and §10 rewritten around what is actually left                                                                                                             |
+
 ### 9.1 CAPABILITIES entries to register (T124)
 
 Each of these ships a capability that prose somewhere could deny. Register an entry in
@@ -727,20 +767,42 @@ quotation.
 
 ## 10. Next Steps
 
-Both of the steps this section used to open with are done: the Maestro suite is green (dispatch
-34558058662, all ten flows), and S7 with A1, A2 and A3 are built (§9.0). What follows is what is
-actually left.
+Both of the steps this section used to open with are done: the Maestro suite is green, and S7
+with A1, A2 and A3 are built (§9.0). The owner's own amendment to the artifact is delivered too
+— the per-session controls are not laid out above the prompt bar; a context ring sits right of
+the attachment action and its menu holds MODE (Build/Plan), MODEL & EFFORT, QUEUE and CONTEXT
+(`features/composer/PromptControlsMenu.tsx`). Three dispatches have been green since: `34558058662`
+(T371), `34569070497` (T376 + T377) and `34573541455` (T378). What follows is what is actually
+left.
 
 1. **Keep the suite honest as the UI keeps moving.** A dispatch is the only proof that a screen
    works on a device, and it is cheap to invalidate: T370's defect was latent behind a passing
    selector for many dispatches and turned red only when T363 changed which candidate node
    Maestro happened to pick. So dispatch `android-maestro-e2e.yml` (§5.3) after any wave that
    touches a screen a flow drives, read every shard, and treat "it was green last time with the
-   same selector" as no evidence at all.
+   same selector" as no evidence at all. T376–T378 followed this literally: two separate
+   dispatches for one wave, because T376 changed `files-screen.tsx` (which shard-5's
+   `files-and-terminal.yaml` asserts) and T378 changed `SessionControlsPicker.tsx` (the ring
+   menu `composer-inputs.yaml` drives). Both were green; neither was assumed.
 2. **The one deliberately open acceptance box is T313's**, and it needs a real
    `android-apk-release.yml` run whose EAS build fails — see §1. Do not manufacture one, and do
    not tick it on the strength of a Maestro dispatch, which never exercises that workflow.
-3. **If you extend the design past §7**, the same discipline applies as to every task above:
+3. **The defect shape this wave kept finding is not exhausted — look for it before inventing
+   work.** A curated list whose omissions produce no failure: a table, an array, a spec section
+   or an allowlist that something real is supposed to agree with, where nothing compares the
+   two. Four were closed at T373, T375, T377 and T378, and every one of them was found the same
+   way — take the list, take the thing it claims to describe, and diff them mechanically
+   (`readdirSync` against the array, `grep -rlE` against the audited set, the router's routes
+   against the spec's screen names). Three real user-facing defects fell out of four lists.
+
+   **Do not answer this with a generic guard.** `CLAUDE.md`'s T217 section already measured that
+   idea against the whole tree — 867 hits, a 100% false-positive rate on every hit classified —
+   and rejected it, with a narrow re-trigger condition this work does not meet: `HANDOFF.md` is
+   not a path `isAppSourcePath` returns `true` for, so a count claim going stale in THIS file
+   (as §1's did before T379) could never have satisfied it. The fix for a stale list is to
+   derive the list, or to fix the claim by hand. It is not a fifth guard.
+
+4. **If you extend the design past §7**, the same discipline applies as to every task above:
    - Keep `git status` clean at every gate, and read the real CI run after each push, recording
      its id and conclusion (T93).
    - A ledger row and section per task, rows all the same width, the header total recounted from
