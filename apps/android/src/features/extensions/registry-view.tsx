@@ -49,12 +49,8 @@ import { extensions } from "@picompanion/frontend-core";
 import type { Logger, LogFields } from "@picompanion/frontend-core";
 import type { PiUiAction, PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
-import {
-  BLOCK_PADDING_HORIZONTAL,
-  BLOCK_PADDING_VERTICAL,
-  BLOCK_RADIUS,
-  blockSurface,
-} from "../../ui/theme/block-shape";
+import { BLOCK_PADDING_VERTICAL, BLOCK_RADIUS, blockSurface } from "../../ui/theme/block-shape";
+import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import { DangerousActionConfirmDialog } from "./registry-confirm";
 import { ExtensionDiagnostic } from "./registry-diagnostic";
@@ -68,6 +64,7 @@ import {
   type PiUiDispatchActionOptions,
 } from "./registry";
 import { ExtensionElementBoundary } from "./registry-boundary";
+import { askUserTagLabel } from "./renderers/ask-user-model";
 
 /** `Logger` backed by `console`, used only when a caller doesn't supply its own. */
 function createConsoleLogger(baseFields: LogFields = {}): Logger {
@@ -234,9 +231,26 @@ export function PiUiElementView({
   }
 
   const Renderer = decision.Renderer;
+  // T387: a sheet-placement panel draws its own `[ns]` tag inside the
+  // Sheet (the reference's `ask_user` popup carries the channel as a pill
+  // in its header), and the wrapper's copy would sit BEHIND that modal —
+  // visible only as a stray line under the trigger. So the wrapper draws
+  // the tag once for every placement whose content is in flow, and the
+  // sheet keeps its own.
+  const drawsWrapperTag = element.placement !== "sheet";
 
   return (
     <View style={styles.wrapper} testID={testId}>
+      {/*
+       * The artifact's `[ns]` tag (`.xl`, purple + bold, mono) for every
+       * in-flow placement, drawn HERE once rather than by each registered
+       * kind.
+       */}
+      {drawsWrapperTag ? (
+        <Text style={styles.nsTag} testID={testId ? `${testId}-ns-tag` : undefined}>
+          {askUserTagLabel(element.ns)}
+        </Text>
+      ) : null}
       <ExtensionElementBoundary
         ns={element.ns}
         elementId={element.id}
@@ -273,16 +287,34 @@ export function PiUiElementView({
   );
 }
 
+/**
+ * `.blk`'s own padding in the reference artboard is `9px 11px`
+ * (`docs/ui-reference/pi-companion-app.html`, `.blk { ...; padding: 9px
+ * 11px; ... }`). `block-shape.ts`'s `BLOCK_PADDING_HORIZONTAL` is 12 for
+ * the transcript's other blocks, so the extension block declares the
+ * artifact's own 11 here instead of reusing 12.
+ */
+const EXTENSION_BLOCK_PADDING_HORIZONTAL = 11;
+
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     // T356: the `.blk.ext` block. `blockSurface("extension")` is never
     // `null` — only `assistant` is — so this reads the token directly.
+    // The `.blk` hairline (`--sh-hairline`) is drawn as the card-tier
+    // ring, whose colour is the theme's `line` token.
     wrapper: {
       gap: theme.spacing[1],
       borderRadius: BLOCK_RADIUS,
       paddingVertical: BLOCK_PADDING_VERTICAL,
-      paddingHorizontal: BLOCK_PADDING_HORIZONTAL,
+      paddingHorizontal: EXTENSION_BLOCK_PADDING_HORIZONTAL,
       backgroundColor: theme.colors[blockSurface("extension") ?? "extension-bg"],
+      ...ringShadow(theme, "card"),
+    },
+    nsTag: {
+      color: theme.colors.purple,
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: theme.typography.variant.caption.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.bold),
     },
     revBadge: {
       alignSelf: "flex-end",

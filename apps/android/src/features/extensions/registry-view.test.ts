@@ -29,11 +29,28 @@ describe("registry-view.tsx: every extension element draws in the .blk.ext block
     expect(code).not.toMatch(/rgba?\(/);
   });
 
-  it("takes the geometry from block-shape.ts rather than re-typing the artifact's numbers", () => {
+  it("draws the reference's own 9/11 padding and card-tier line ring", () => {
     const code = readCode();
     expect(code).toMatch(/borderRadius: BLOCK_RADIUS/);
     expect(code).toMatch(/paddingVertical: BLOCK_PADDING_VERTICAL/);
-    expect(code).toMatch(/paddingHorizontal: BLOCK_PADDING_HORIZONTAL/);
+    expect(code).toMatch(/paddingHorizontal: EXTENSION_BLOCK_PADDING_HORIZONTAL/);
+    // The reference's `.blk { padding: 9px 11px }`; `block-shape.ts` has 12.
+    expect(code).toMatch(/const EXTENSION_BLOCK_PADDING_HORIZONTAL = 11;/);
+    // `--sh-hairline` drawn as the card-tier ring, in the theme's `line`.
+    expect(code).toMatch(/ringShadow\(theme, "card"\)/);
+  });
+
+  it("draws the artifact's [ns] tag for every placement that is not a sheet", () => {
+    const code = readCode();
+    expect(code).toMatch(/askUserTagLabel\(element\.ns\)/);
+    expect(code).toMatch(/color: theme\.colors\.purple/);
+    expect(code).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
+    expect(code).toMatch(/testID=\{testId \? `\$\{testId\}-ns-tag` : undefined\}/);
+    // T387: a sheet-placement panel draws its own copy inside the Sheet (the
+    // reference's `ask_user` popup carries the channel in its own header), so
+    // the wrapper must skip exactly that placement — otherwise the tag would
+    // be drawn twice, or once behind the scrim.
+    expect(code).toMatch(/drawsWrapperTag = element\.placement !== "sheet"/);
   });
 
   it("wraps every render path in the one styled container, diagnostics included", () => {

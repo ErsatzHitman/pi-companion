@@ -42,8 +42,15 @@ export interface SheetProps {
   testId?: string;
 }
 
-/** `.pop`'s inset from each side. */
-const POP_INSET = 10;
+/**
+ * `.pop`'s inset from each side and its own padding — quoted from the
+ * reference's CSS: `.pop { left: 12px; right: 12px; border-radius: 16px;
+ * padding: 13px 14px }`.
+ */
+const POP_INSET = 12;
+const POP_RADIUS = 16;
+const POP_PADDING_VERTICAL = 13;
+const POP_PADDING_HORIZONTAL = 14;
 /**
  * `.pop`'s clearance above the bottom edge. The artifact's 78px
  * clears its own prompt bar; on Android the `<PortalHost>` already
@@ -148,12 +155,15 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       ...ringShadow(theme, "overlay"),
     },
     // `.pop`: the same panel lifted off the edge and closed on all
-    // four corners. `radii.window` is this app's largest corner and
-    // is what the artifact's `--r-lg` resolves to.
+    // four corners. T387 took the reference's own figures — radius 16,
+    // `13px 14px` padding — because a floating panel's corner is one of
+    // the few places a two-pixel difference is visible against a
+    // screenshot; `radii.window` (14) is the nearest token and is what
+    // the edge variant still uses.
     panelFloating: {
-      borderRadius: theme.radii.window,
-      paddingVertical: theme.spacing[3],
-      paddingHorizontal: theme.spacing[4],
+      borderRadius: POP_RADIUS,
+      paddingVertical: POP_PADDING_VERTICAL,
+      paddingHorizontal: POP_PADDING_HORIZONTAL,
     },
     title: {
       color: theme.colors.ink,

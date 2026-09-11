@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useWindowDimensions } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 
 import { timeline as coreTimeline } from "@picompanion/frontend-core";
 
@@ -19,6 +19,7 @@ import {
   PiUiElementView,
   PinnedLiveExtensionArea,
   resolvePinnedAreaVisibility,
+  selectInlineElements,
   usePiUiElements,
 } from "../../../../../features/extensions/registry-index";
 import { resolveComposerSlotMaxHeightDp } from "../../../../../app-shell/composer-slot-cap-model";
@@ -67,6 +68,7 @@ import {
   type StalenessAnnouncement,
 } from "../../../../../platform/offline";
 import { Banner } from "../../../../../ui/primitives";
+import { useTheme } from "../../../../../ui/theme/theme-context";
 import { useAppCore } from "../../../../core-context";
 import {
   resolveAgentSnapshotClient,
@@ -397,6 +399,7 @@ function SessionTranscript({
       <TranscriptWindowList
         entries={entries}
         testId="session-transcript"
+        footer={<SessionInlineExtensions agentId={agentId} />}
         renderRow={(entry, testId) => {
           if (entry.kind === "thinking") {
             return (
@@ -517,6 +520,50 @@ function SessionSheetExtensions({ agentId }: { agentId: string }) {
       ))}
     </>
   );
+}
+
+/**
+ * The third live Pi UI mount point: `placement === "inline"` elements,
+ * rendered as the transcript's own trailing content rather than in a slot
+ * of their own. The reference draws an inline extension block IN the
+ * transcript (E2/E3/E4's "An extension block in the transcript"); passing
+ * this as `TranscriptWindowList`'s `footer` is what makes it flow content
+ * that scrolls with the rows, after them and in store (arrival) order.
+ *
+ * `pinned` elements stay with `SessionLiveExtension` and `sheet` elements
+ * stay with `SessionSheetExtensions` — this component only selects the
+ * third placement (`selectInlineElements`), then hands each element to the
+ * same `PiUiElementView` pipeline every other placement uses.
+ */
+function SessionInlineExtensions({ agentId }: { agentId: string }) {
+  const core = useAppCore();
+  const { theme } = useTheme();
+  const { elements, revision } = usePiUiElements(core.piUiSession.store, agentId);
+  const inlineElements = useMemo(() => selectInlineElements(elements), [elements]);
+  const styles = useMemo(() => createInlineExtensionStyles(theme), [theme]);
+
+  if (inlineElements.length === 0) return null;
+
+  return (
+    <View style={styles.list} testID="session-inline-extensions">
+      {inlineElements.map((element) => (
+        <PiUiElementView
+          key={element.id}
+          element={element}
+          agentId={agentId}
+          actionController={core.piUiSession.actionController}
+          revision={revision}
+          testId={`session-inline-extension-${element.ns}-${element.id}`}
+        />
+      ))}
+    </View>
+  );
+}
+
+function createInlineExtensionStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+  return StyleSheet.create({
+    list: { gap: theme.spacing[3] },
+  });
 }
 
 /**

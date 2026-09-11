@@ -316,6 +316,7 @@ export {
   type PinnedAreaLayoutContract,
   type PinnedAreaVisibility,
 } from "./pinned-model";
+export { selectInlineElements } from "./inline-model";
 export {
   PinnedLiveExtensionArea,
   type PinnedLiveExtensionAreaProps,

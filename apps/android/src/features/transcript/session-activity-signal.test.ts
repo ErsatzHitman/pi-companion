@@ -36,10 +36,10 @@ function createFakeSource(): FakeActivitySource {
         type: "agent_stream",
         payload: { agentId, event: { type: eventType, ...extra } },
       };
-      for (const handler of [...handlers]) handler(message);
+      for (const handler of handlers) handler(message);
     },
     transitionConnectionStatus(status) {
-      for (const handler of [...disconnectedHandlers]) handler({ status });
+      for (const handler of disconnectedHandlers) handler({ status });
     },
   };
   return fake;

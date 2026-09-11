@@ -17,6 +17,14 @@ Nothing here is imported, bundled, tested, or served. `apps/android` and
 is right and the page is stale. Never cite a file in this directory as
 authority for how a screen behaves — read the component, or `plan.md`.
 
+**The Android page's five extension frames are not routes.** `todo`, `advisor`,
+`pi-herdr-delegate`, `pi-herdr-peer` and `ask-user · btw` draw on screens the app already
+has — the pinned slot above the composer, the transcript column, and a bottom sheet — and
+each frame's own "Where it draws" card says which. `plan.md` §9.2 lists the screens that
+ship, and it lists four; a reader who takes the extension frames as five more screens has
+misread them. What they do specify is the _drawing_ of an extension element in each of
+those three destinations, which is what the apps implement.
+
 They exist because a still screenshot cannot carry motion, and most of what
 distinguishes these two surfaces is motion: how a turn arrives, how a tool
 block resolves, how the todo ring fills, how the context ring reacts to a

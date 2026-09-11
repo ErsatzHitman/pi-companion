@@ -19683,3 +19683,55 @@ The gear added above is what makes that route reachable.
 - [x] The composer is the reference's single row with a real context ring, and its footer states the steering mode and the keyboard contract
 - [x] The task dock renders the latest todo entry above the prompt bar, and it is rendered nowhere else
 - [x] System/Light/Dark is a real, persisted control; the settings route keeps its tested shape and gains its first inbound link
+
+#### T387 — An inline extension element had no surface to draw on, so four of the reference's five blocks could never appear
+
+`labels: phase-9, area: android` · `depends-on: T385`
+
+`docs/ui-reference/pi-companion-app.html`'s `advisor`, `pi-herdr-delegate` and
+`pi-herdr-peer` frames all say the same thing in their own "Where it draws" card: "An extension
+block in the transcript". The app could not draw one. `placement` selects a destination
+everywhere it is read — `features/extensions/pinned-model.ts` takes `pinned`,
+`app-shell/sheet-extension-model.ts` takes `sheet` — and **no selector anywhere took `inline`**,
+so an element with that placement reached no screen at all.
+
+**The third destination now exists.** `selectInlineElements` returns the `inline` elements and
+the session route renders them as the transcript list's footer component, in arrival order: they
+are flow content and scroll with the turn, unlike the pinned slot. The pinned and sheet paths are
+untouched.
+
+**The block they draw is the reference's `.blk.ext`.** `[ns]` in the drawing's own `.xl` —
+purple, bold, mono, bracketed — drawn once by the shared wrapper for every in-flow placement.
+The wrapper's box takes `.blk.ext`'s `9px 11px` padding and a 1px `line` ring on
+`extension-bg`; a non-sheet panel no longer nests a `Card` inside it and the log renderer no
+longer draws its own bordered `codeBackground` well, so the block is one surface rather than
+two. A widget's rows are a single mono line — muted label padded to the longest label in the
+block, value in `ink` — which is what the drawing's `reason   completed · 9 turns · 71k` is, and
+a log or markdown body leads with its tone's glyph (`!` warn, `✕` block, `✓` clean) in the tone's
+colour while `toneChipLabel`'s word stays drawn, so severity is never glyph-only (plan.md §10.5).
+
+**One placement rule the frames settle.** A `sheet`-placement panel draws its `[ns]` tag inside
+the sheet, because the reference's `ask_user` popup carries the channel in its own header
+(`.pop .h`); the shared wrapper draws the tag for every placement that is NOT a sheet
+(`drawsWrapperTag`), so the tag is never drawn twice and never left behind a scrim. The same
+commit takes `.pop`'s own figures for the floating Sheet — `border-radius: 16px`, `padding:
+13px 14px`, and the `12px` inset its `left`/`right` declare — replacing the 14/12×16/10 the
+variant shipped with.
+
+**What is deliberately NOT built.** The five extension frames are a picture of _where each
+extension draws_, not five more screens: `plan.md` §9.2 lists the surfaces that ship (the
+session screen, Sessions, Live, Settings) and its new paragraph says so, and
+`docs/ui-reference/README.md` now says it too. Their "Where it draws", "as it appears now" and
+"CONTRACT" blocks are the frame's own documentation device, and the drawing each one shows is
+implemented above.
+
+**Owns:** `apps/android/src/features/extensions/**`, `apps/android/src/features/transcript/`
+(the session-activity signal's test and the transcript list's footer slot), the session route,
+and `apps/android/src/ui/primitives/Sheet.tsx` for the `.pop` figures.
+
+- [x] `inline`-placed elements are selected and drawn in the transcript, in arrival order
+- [x] Every in-flow extension block draws its `[ns]` tag once, and a sheet draws its own inside the popup
+- [x] The block is one `.blk.ext` surface: 9/11 padding, hairline ring, no nested card or code well
+- [x] Widget rows are one aligned mono line, and log/markdown severity is a glyph plus its word
+- [x] The floating Sheet takes `.pop`'s own radius, padding and inset
+- [x] The frames are recorded as drawings, not routes, in `plan.md` §9.2 and the mockup README

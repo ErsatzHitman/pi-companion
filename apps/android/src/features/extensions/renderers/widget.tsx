@@ -24,12 +24,21 @@ import { asFontWeight } from "../../../ui/theme/native-style-helpers";
 import { useTheme } from "../../../ui/theme/theme-context";
 import type { PiUiElementRendererProps } from "../registry";
 import { ElementActionsRow } from "./element-actions";
-import { buildWidgetRenderModel, type PiUiWidgetBodyModel } from "./widget-model";
+import {
+  buildWidgetRenderModel,
+  padWidgetRowLabel,
+  widgetRowLabelColumnLength,
+  type PiUiWidgetBodyModel,
+} from "./widget-model";
 
 type Styles = ReturnType<typeof createStyles>;
 
 function WidgetBody({ body, styles }: { body: PiUiWidgetBodyModel; styles: Styles }) {
   if (body.type === "rows") {
+    // E3/E4 draw each key/value pair on ONE mono line with the key padded
+    // to the block's longest label (`reason   completed · 9 turns · 71k`),
+    // so every value in a block starts on the same column.
+    const labelColumnLength = widgetRowLabelColumnLength(body.rows);
     return (
       <View style={styles.rows}>
         {body.rows.map((row) => (
@@ -39,7 +48,7 @@ function WidgetBody({ body, styles }: { body: PiUiWidgetBodyModel; styles: Style
             accessible
             accessibilityLabel={row.accessibilityLabel}
           >
-            <Text style={styles.rowLabel}>{row.label}</Text>
+            <Text style={styles.rowLabel}>{padWidgetRowLabel(row.label, labelColumnLength)}</Text>
             <View style={styles.rowValue}>
               {row.value ? <Text style={styles.rowValueText}>{row.value}</Text> : null}
               {row.toneChipLabel ? <Chip label={row.toneChipLabel} tone={row.tone} /> : null}
@@ -103,13 +112,25 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
     },
     rows: { gap: theme.spacing[2] },
-    row: { gap: theme.spacing[1] },
+    // One line per row: the padded mono label, then the value.
+    row: { flexDirection: "row", alignItems: "flex-start", gap: theme.spacing[2] },
     rowLabel: {
       color: theme.colors["ink-2"],
-      fontSize: theme.typography.variant.caption.fontSize,
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: theme.typography.variant.code.fontSize,
     },
-    rowValue: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
-    rowValueText: { color: theme.colors.ink, fontSize: theme.typography.variant.body.fontSize },
+    rowValue: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: theme.spacing[2],
+    },
+    rowValueText: {
+      flexShrink: 1,
+      color: theme.colors.ink,
+      fontSize: theme.typography.variant.body.fontSize,
+    },
     rowDetail: {
       color: theme.colors["ink-3"],
       fontSize: theme.typography.variant.caption.fontSize,

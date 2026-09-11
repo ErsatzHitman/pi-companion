@@ -740,6 +740,25 @@ describe("SessionSheetExtensions (T32S12, P5-W18)", () => {
   });
 });
 
+// --- inline placement: the transcript's trailing extension stack ---
+
+describe("SessionInlineExtensions", () => {
+  it("selects only inline-placement elements via features/extensions/inline-model, and renders each through PiUiElementView", () => {
+    const code = readComponentCode("SessionInlineExtensions");
+    expect(code).toMatch(
+      /const inlineElements = useMemo\(\(\) => selectInlineElements\(elements\), \[elements\]\);/,
+    );
+    expect(code).toMatch(/inlineElements\.map\(\(element\) => \(/);
+    expect(code).toMatch(/<PiUiElementView\b/);
+    expect(code).toMatch(/element=\{element\}/);
+    expect(code).toMatch(/actionController=\{core\.piUiSession\.actionController\}/);
+  });
+
+  it("draws them as TranscriptWindowList's footer — flow content after the rows, not a fixed sibling", () => {
+    expect(readCode()).toMatch(/footer=\{<SessionInlineExtensions agentId=\{agentId\} \/>\}/);
+  });
+});
+
 describe("SessionRoute marks the viewed agent's timeline (T339)", () => {
   it("calls core.setViewedAgentTimeline([agentId]) only while the connection phase is connected, and [] on cleanup, keyed on [core, agentId, phase]", () => {
     const code = readCode();
@@ -758,7 +777,7 @@ describe("SessionRoute marks the viewed agent's timeline (T339)", () => {
 describe("SessionRoute bounds the composer slot beside a drawing pinned area (T346)", () => {
   it("resolves the cap from the real window height and the real pinned-area visibility, never a guess", () => {
     const code = readCode();
-    expect(code).toMatch(/import \{ useWindowDimensions \} from "react-native";/);
+    expect(code).toMatch(/import \{ StyleSheet, View, useWindowDimensions \} from "react-native";/);
     expect(code).toMatch(
       /import \{ resolveComposerSlotMaxHeightDp \} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/composer-slot-cap-model";/,
     );

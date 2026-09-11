@@ -89,6 +89,23 @@ function buildBodyModel(payload: PiUiPayloadForKind<"widget">): PiUiWidgetBodyMo
   return { type: "empty", text: WIDGET_EMPTY_TEXT };
 }
 
+/**
+ * The longest label in a rows body — the column every row's label pads to
+ * (`padWidgetRowLabel`), so a block's values line up on one mono column.
+ */
+export function widgetRowLabelColumnLength(rows: readonly PiUiWidgetRowModel[]): number {
+  return rows.reduce((longest, row) => Math.max(longest, row.label.length), 0);
+}
+
+/**
+ * Pads a row label with spaces to the block's label column. The renderer
+ * draws labels in the mono face, so the padding is real alignment, exactly
+ * like the artifact's `reason   completed · 9 turns · 71k`.
+ */
+export function padWidgetRowLabel(label: string, columnLength: number): string {
+  return label.padEnd(columnLength, " ");
+}
+
 export function buildWidgetRenderModel(
   element: Pick<PiUiElement, "title">,
   payload: PiUiPayloadForKind<"widget">,

@@ -2616,6 +2616,104 @@ export const CAPABILITIES = [
       /(?:the )?elapsed (?:reading|time) (?:is|stays) a (?:fixed|constant) (?:word|number)/i,
     ],
   },
+  {
+    // T386: the web composer's context ring. Before it, context usage was
+    // drawn only by the right rail's `ContextMeter`, and the prompt row had
+    // no ring at all — the ring itself and the hook that feeds it from the
+    // session's own usage stream are what this entry protects.
+    //
+    // Two bare-string members rather than a group: `ContextRing` is
+    // declared for BOTH platforms (Android shipped the ring first), so the
+    // web-only hook is the member that can only exist here, and
+    // `TodoDock`-style file-uniqueness is not claimed for it. Both names
+    // were measured against the tree before this entry was written.
+    name: "The web composer carries a context ring fed by the session's own usage (useSessionContextTelemetry)",
+    methodNames: ["useSessionContextTelemetry"],
+    denyingPhrases: [
+      /(?:the )?(?:web|desktop) composer (?:has|shows|draws) no (?:context|usage) ring/i,
+      /context (?:usage|window) (?:is )?(?:shown|drawn) (?:only|exclusively) in the (?:right )?(?:rail|sidebar)/i,
+      /no ring (?:exists|is drawn) beside the (?:web )?prompt (?:bar|field)/i,
+    ],
+  },
+  {
+    // T386: the web task dock. `{ kind: "todo" }` was excluded from the web
+    // transcript with nothing rendering it anywhere, so a session's task
+    // list never appeared on the desktop console at all.
+    name: "The web console docks a session's todo above the prompt bar (TodoDock)",
+    methodNames: ["TodoDock", "selectLatestTodoEntry"],
+    denyingPhrases: [
+      /(?:a |the )?(?:session'?s )?task list (?:is|renders) nowhere on (?:the )?(?:web|desktop)/i,
+      /(?:the )?web (?:console|transcript) (?:still )?(?:skips|drops|ignores) (?:todo|task[- ]list) entries/i,
+      /no (?:todo|task[- ]list) (?:dock|panel) exists (?:on|in) (?:the )?web/i,
+    ],
+  },
+  {
+    // T386: the web session rail. It was a bare list of buttons — no head,
+    // no search field, no footer.
+    name: "The web session rail has its head, a real search field and a populated foot (SessionRail)",
+    methodNames: ["SessionRail"],
+    denyingPhrases: [
+      /(?:the )?(?:web|desktop) session rail (?:has|offers|provides) no search/i,
+      /no way to (?:search|filter) sessions from the (?:web )?rail/i,
+      /(?:the )?rail (?:draws|shows) neither (?:a )?foot(?:er)? nor (?:a )?head/i,
+    ],
+  },
+  {
+    // T386: the web theme preference. `theme-runtime.ts` mirrored the OS
+    // query and nothing could override it, so the console had exactly one
+    // theme per machine.
+    name: "The web console's theme can be chosen, not only inherited (readThemePreference)",
+    methodNames: ["readThemePreference"],
+    denyingPhrases: [
+      /(?:the )?(?:web|desktop) (?:console|app) (?:has|offers|exposes) no theme (?:preference|control|choice)/i,
+      /light and dark (?:are|is) (?:chosen|decided|selected) (?:only )?by the operating system/i,
+      /(?:a )?user (?:cannot|can'?t) (?:pick|choose|override) (?:a |the )?theme (?:on|in) (?:the )?web/i,
+    ],
+  },
+  {
+    // T385: the session screen's own live activity, which is what the S7
+    // pill's `Thinking`/`Working`/`Needs you` states are derived from.
+    // Before it the pill was derived from the connection phase alone, so a
+    // pending approval had no state to surface at all.
+    name: "The session pill reports Thinking, Working or Needs you from real session activity (deriveSessionActivity)",
+    methodNames: ["deriveSessionActivity", "createSessionActivitySignal"],
+    denyingPhrases: [
+      /(?:the )?(?:android )?(?:session|app) (?:bar|header) pill (?:is|stays) a (?:pure )?connection (?:readout|indicator)/i,
+      /no (?:android )?(?:session )?state ever (?:reads|says|draws) Needs you/i,
+      /a pending (?:approval|question) (?:surfaces|appears) (?:nowhere|in no pill)/i,
+    ],
+  },
+  {
+    // T387: an extension element that arrives with `placement: "inline"`
+    // is drawn in the transcript column. Before this, only `pinned` and
+    // `sheet` placements were selected anywhere, so an inline element — the
+    // advisor log, the delegate monitor, a peer letter — reached no screen
+    // at all.
+    //
+    // `selectInlineElements` is declared in exactly one shipped file
+    // (`features/extensions/inline-model.ts`), measured against the tree.
+    name: "An inline-placed extension element draws in the transcript (selectInlineElements)",
+    methodNames: ["selectInlineElements"],
+    denyingPhrases: [
+      /(?:an? )?inline[- ]placed (?:extension )?element (?:draws|renders) (?:nowhere|nothing)/i,
+      /only pinned and sheet placements are (?:ever )?(?:selected|mounted)/i,
+      /(?:the )?transcript (?:never )?(?:carries|shows) (?:an )?extension block/i,
+    ],
+  },
+  {
+    // T387: the severity glyph on an extension log or markdown body, and
+    // the aligned key/value line a widget row draws — the two pieces of the
+    // reference's `! warn · ✕ block · ✓ clean` and `reason   completed · 9
+    // turns · 71k` treatment. Both are declared once, in `tone.ts` and
+    // `widget-model.ts` respectively.
+    name: "An extension block's severity is a glyph and its key/value rows are aligned (piUiToneGlyph)",
+    methodNames: ["piUiToneGlyph", "padWidgetRowLabel"],
+    denyingPhrases: [
+      /(?:an? )?extension (?:log|report) (?:draws|shows) no severity/i,
+      /severity (?:is|stays) (?:colour|color)[- ]only (?:in|on) (?:an? )?extension block/i,
+      /(?:a )?widget'?s (?:key|label) and (?:its )?value (?:are|is) (?:never|not) (?:aligned|on one line)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

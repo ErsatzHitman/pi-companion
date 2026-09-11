@@ -88,6 +88,14 @@ export interface TranscriptWindowListProps<T extends TranscriptWindowEntry> {
   renderRow: (entry: T, testId: string) => ReactElement | null;
   config?: TranscriptWindowConfig;
   testId?: string;
+  /**
+   * Flow content drawn after the windowed rows, inside this list's own
+   * scrollable content (`ListFooterComponent`) — not a fixed sibling below
+   * the list, so it scrolls with the transcript. `SessionTranscript` uses
+   * it for `inline`-placement extension elements, which the reference
+   * artifact draws in the transcript itself.
+   */
+  footer?: ReactElement | null;
 }
 
 function metricsFromScrollEvent(
@@ -121,6 +129,7 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
   renderRow,
   config = DEFAULT_TRANSCRIPT_WINDOW_CONFIG,
   testId,
+  footer,
 }: TranscriptWindowListProps<T>) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -197,6 +206,7 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
         onScrollBeginDrag={handleScrollBeginDrag}
         onScrollEndDrag={handleScrollEndDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
+        ListFooterComponent={footer ?? undefined}
         testID={testId ? `${testId}-list` : undefined}
       />
       {snapshot.unreadCount > 0 ? (

@@ -23,7 +23,13 @@ import {
 } from "./markdown-model";
 import { buildProgressRenderModel, clampProgressFraction } from "./progress-model";
 import { buildStatusRenderModel } from "./status-model";
-import { WIDGET_EMPTY_TEXT, buildWidgetRenderModel } from "./widget-model";
+import {
+  WIDGET_EMPTY_TEXT,
+  buildWidgetRenderModel,
+  padWidgetRowLabel,
+  widgetRowLabelColumnLength,
+} from "./widget-model";
+import { piUiToneGlyph, readPiUiElementTone } from "./tone";
 
 /**
  * T34A2 — Android `status`, `widget`, and `progress` kinds; extended by
@@ -816,5 +822,75 @@ describe("composer render model (T34A3)", () => {
     const model = buildComposerRenderModel({ title: undefined }, { kind: "composer", text: "x" });
     expect(model.title).toBe("Composer suggestion");
     expect(model.actionsAccessibilityLabel).toBe("Composer suggestion actions");
+  });
+});
+
+/**
+ * E2/E3/E4 inline fidelity (T356 follow-up): the tone glyph/status
+ * mapping and the padded label column are pure decisions, proven here by
+ * execution; the renderer wiring that consumes them is pinned at source
+ * level below (the `.tsx` files cannot render under this vitest setup).
+ */
+function readRendererSource(file: string): string {
+  return readFileSync(fileURLToPath(new URL(`./${file}`, import.meta.url)), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+describe("inline extension fidelity models (E2/E3/E4)", () => {
+  it("reads only the five wire tones from the passthrough element envelope", () => {
+    expect(readPiUiElementTone({ tone: "warning" })).toBe("warning");
+    expect(readPiUiElementTone({ tone: "blocked" })).toBeUndefined();
+    expect(readPiUiElementTone({ tone: 3 })).toBeUndefined();
+    expect(readPiUiElementTone({})).toBeUndefined();
+  });
+
+  it("maps warning/error/success to the artifact's severity glyphs and leaves the rest glyphless", () => {
+    expect(piUiToneGlyph("warning")).toEqual({ glyph: "!", statusKey: "warning" });
+    expect(piUiToneGlyph("error")).toEqual({ glyph: "✕", statusKey: "danger" });
+    expect(piUiToneGlyph("success")).toEqual({ glyph: "✓", statusKey: "success" });
+    expect(piUiToneGlyph("default")).toBeUndefined();
+    expect(piUiToneGlyph("accent")).toBeUndefined();
+    expect(piUiToneGlyph(undefined)).toBeUndefined();
+  });
+
+  it("pads every row label to the block's longest label", () => {
+    const element = fixtureElement("widget", {
+      rows: [
+        { label: "reason", value: "completed · 9 turns · 71k" },
+        { label: "handback", value: "2 files changed, tests green" },
+      ],
+    });
+    const model = buildWidgetRenderModel(element, payloadOf(element, "widget"));
+    if (model.body.type !== "rows") throw new Error("expected a rows body");
+    const column = widgetRowLabelColumnLength(model.body.rows);
+    expect(column).toBe("handback".length);
+    expect(model.body.rows.map((row) => padWidgetRowLabel(row.label, column))).toEqual([
+      "reason  ",
+      "handback",
+    ]);
+  });
+
+  it("log and markdown lead with the tone glyph in the tone's colour, spelling the tone out", () => {
+    const log = readRendererSource("log.tsx");
+    expect(log).toMatch(/piUiToneGlyph\(/);
+    expect(log).toMatch(/theme\.colors\.status\[toneGlyph\.statusKey\]\.foreground/);
+    expect(log).toMatch(/toneChipLabel\(tone\)/);
+
+    const markdown = readRendererSource("markdown.tsx");
+    expect(markdown).toMatch(/piUiToneGlyph\(/);
+    expect(markdown).toMatch(/theme\.colors\.status\[toneGlyph\.statusKey\]\.foreground/);
+    expect(markdown).toMatch(/toneChipLabel\(tone\)/);
+  });
+
+  it("widget draws each row on one mono line with the padded label column", () => {
+    const widget = readRendererSource("widget.tsx");
+    expect(widget).toMatch(/widgetRowLabelColumnLength\(body\.rows\)/);
+    expect(widget).toMatch(/padWidgetRowLabel\(row\.label, labelColumnLength\)/);
+    expect(widget).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
+  });
+
+  it("log no longer draws its own codeBackground well inside the extension block", () => {
+    expect(readRendererSource("log.tsx")).not.toMatch(/codeBackground/);
   });
 });

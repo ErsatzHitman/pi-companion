@@ -11,8 +11,7 @@
  *
  * **T361: a sheet-placement panel is the redesign's `.pop`.** It opens
  * `Sheet`'s `floating` variant — inset from both sides, lifted clear of
- * the prompt bar, fully rounded — with the element's namespace in
- * purple brackets above the body and a footer saying how to answer or
+ * the prompt bar, fully rounded — with a footer saying how to answer or
  * dismiss. §7.2 draws that shape for an ask-user question, and
  * `HANDOFF.md` §6.3 records that ask-user has no wire kind of its own:
  * it arrives as exactly this, a `sheet`-placed `panel` composing a
@@ -36,8 +35,10 @@
  * see this task's report for the filed seam), so it renders the same full
  * content inline, undismissable, rather than losing data behind a route
  * that does not exist yet. Every other placement (`inline`/`pinned`/
- * `status`) renders the same content as a plain inline card — the
- * "inline card" option from the same table cell.
+ * `status`) renders the same content directly in the shared `.blk.ext`
+ * wrapper — no inner `Card`, because the wrapper is already the surface.
+ * The namespace tag for every placement is drawn once by that wrapper
+ * (`registry-view.tsx`), never here.
  *
  * **Fault isolation** ("a failing child does not take down the panel"):
  * each `"ok"` child mounts inside its own `ExtensionElementBoundary`
@@ -228,6 +229,14 @@ export function PanelRenderer(props: PiUiElementRendererProps<"panel">) {
           footerHint={askUserFooterHint(true)}
           testId={`${testId}-sheet`}
         >
+          {/*
+           * T387: the channel tag belongs INSIDE the popup — the
+           * reference's `ask_user` frame carries it in the sheet's own
+           * header (`.pop .h`), not under the trigger behind the scrim.
+           * `registry-view.tsx` therefore draws its in-flow copy only for
+           * placements that are not sheets (see its `drawsWrapperTag`), so
+           * this is the one place a sheet's tag is drawn.
+           */}
           <Text style={styles.nsTag} testID={`${testId}-ns-tag`}>
             {askUserTagLabel(element.ns)}
           </Text>
@@ -238,12 +247,12 @@ export function PanelRenderer(props: PiUiElementRendererProps<"panel">) {
   }
 
   return (
-    <Card style={styles.card} testID={testId}>
+    <View style={styles.card} testID={testId}>
       <Text style={styles.title} accessibilityRole="header">
         {title}
       </Text>
       <PanelBody {...props} styles={styles} testId={testId} />
-    </Card>
+    </View>
   );
 }
 
@@ -255,17 +264,19 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     sheetTrigger: { gap: theme.spacing[2] },
     reopenCard: { gap: theme.spacing[2] },
     body: { gap: theme.spacing[3] },
-    // The artifact's `[ns]` tag: purple, mono, above the body.
-    nsTag: {
-      color: theme.colors.purple,
-      fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: theme.typography.variant.caption.fontSize,
-      fontWeight: asFontWeight(theme.typography.fontWeight.bold),
-    },
     title: {
       color: theme.colors.ink,
       fontSize: theme.typography.variant.title.fontSize,
       fontWeight: asFontWeight(theme.typography.variant.title.fontWeight),
+    },
+    // The artifact's `.xl { color: var(--purple); font-weight: 700 }` in
+    // the mono face — the channel tag a sheet-placement panel draws inside
+    // its own popup (T387).
+    nsTag: {
+      color: theme.colors.purple,
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: theme.typography.variant.code.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.bold),
     },
     text: {
       color: theme.colors["ink-2"],

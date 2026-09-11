@@ -52,3 +52,46 @@ export function humanizeNamespace(ns: string): string {
 export function toneChipLabel(tone: PiUiTone): string {
   return tone.charAt(0).toUpperCase() + tone.slice(1);
 }
+
+const PI_UI_TONES: readonly PiUiTone[] = ["default", "accent", "success", "warning", "error"];
+
+/**
+ * The element envelope schema is `.passthrough()`, so a tone-carrying
+ * element arrives here with `tone` present but typed `unknown`. Accept
+ * only the five wire values; anything else reads as "carries no tone".
+ */
+export function readPiUiElementTone(element: object): PiUiTone | undefined {
+  const tone = (element as { readonly tone?: unknown }).tone;
+  return typeof tone === "string" && (PI_UI_TONES as readonly string[]).includes(tone)
+    ? (tone as PiUiTone)
+    : undefined;
+}
+
+/** The `theme.colors.status` keys a severity glyph may be painted with. */
+export type PiUiToneGlyphStatusKey = "success" | "warning" | "danger";
+
+export interface PiUiToneGlyphModel {
+  /** The artifact's leading glyph for this severity. */
+  glyph: string;
+  /** Which `theme.colors.status` tone paints it. */
+  statusKey: PiUiToneGlyphStatusKey;
+}
+
+/**
+ * The artifact's severity glyphs (E2: `! warn · ✕ block · ✓ clean`).
+ * `default`/`accent` carry none — they are not severities. The glyph is
+ * never the only signal: callers keep `toneChipLabel` visible beside it
+ * (plan.md §10.5).
+ */
+export function piUiToneGlyph(tone: PiUiTone | undefined): PiUiToneGlyphModel | undefined {
+  switch (tone) {
+    case "warning":
+      return { glyph: "!", statusKey: "warning" };
+    case "error":
+      return { glyph: "✕", statusKey: "danger" };
+    case "success":
+      return { glyph: "✓", statusKey: "success" };
+    default:
+      return undefined;
+  }
+}

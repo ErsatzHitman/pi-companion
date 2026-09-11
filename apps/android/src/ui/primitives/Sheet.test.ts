@@ -87,7 +87,11 @@ describe("Sheet: the redesign's floating `.pop` variant (T361)", () => {
 
   it("insets and lifts the floating panel by the artifact's own numbers", () => {
     const code = readCode();
-    expect(code).toMatch(/const POP_INSET = 10;/);
+    // T387: the reference's `.pop` reads `left: 12px; right: 12px;
+    // bottom: calc(100% - 4px)`, so the inset is 12, not the 10 this
+    // file shipped with. `POP_BOTTOM` is unchanged: the artifact's 78px
+    // clears its own prompt bar.
+    expect(code).toMatch(/const POP_INSET = 12;/);
     expect(code).toMatch(/const POP_BOTTOM = 78;/);
     expect(code).toMatch(
       /scrimFloating: \{ paddingHorizontal: POP_INSET, paddingBottom: POP_BOTTOM \}/,
@@ -96,7 +100,14 @@ describe("Sheet: the redesign's floating `.pop` variant (T361)", () => {
 
   it("closes all four corners on the floating panel, not just the top two", () => {
     const code = readCode();
-    expect(code).toMatch(/panelFloating: \{\s*borderRadius: theme\.radii\.window/);
+    // T387: `.pop { border-radius: 16px; padding: 13px 14px }` — the
+    // floating panel's own figures, four pixels rounder than the edge
+    // variant's `radii.window`. Quoted as constants so the difference is
+    // visible in the source rather than rounded to the nearest token.
+    expect(code).toMatch(/panelFloating: \{\s*borderRadius: POP_RADIUS/);
+    expect(code).toMatch(/const POP_RADIUS = 16;/);
+    expect(code).toMatch(/const POP_PADDING_VERTICAL = 13;/);
+    expect(code).toMatch(/const POP_PADDING_HORIZONTAL = 14;/);
   });
 
   it("keeps ONE scrim, portal, focus move and back gesture for both variants", () => {

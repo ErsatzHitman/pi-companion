@@ -24,10 +24,12 @@
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { Chip } from "../../../ui/primitives";
 import { useTheme } from "../../../ui/theme/theme-context";
 import type { PiUiElementRendererProps } from "../registry";
 import { ElementActionsRow } from "./element-actions";
 import { buildLogRenderModel } from "./log-model";
+import { piUiToneGlyph, piUiToneToPrimitiveTone, readPiUiElementTone, toneChipLabel } from "./tone";
 
 /** Height cap that keeps a long log scrollable within its own region rather than the whole screen. */
 const LOG_SCROLL_MAX_HEIGHT = 320;
@@ -42,12 +44,26 @@ export function LogRenderer({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const model = buildLogRenderModel(element, payload);
   const testId = `pi-log-${element.ns}-${element.id}`;
+  // E2: a tone-carrying log leads its first line with the severity glyph,
+  // painted in the tone's colour. The chip beside the title keeps the
+  // wording visible so the glyph is never the only signal (plan.md §10.5).
+  const tone = readPiUiElementTone(element);
+  const toneGlyph = piUiToneGlyph(tone);
 
   return (
     <View style={styles.wrapper} testID={testId}>
-      <Text style={styles.title} accessibilityRole="header">
-        {model.title}
-      </Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title} accessibilityRole="header">
+          {model.title}
+        </Text>
+        {tone ? (
+          <Chip
+            label={toneChipLabel(tone)}
+            tone={piUiToneToPrimitiveTone(tone)}
+            testId={`${testId}-tone`}
+          />
+        ) : null}
+      </View>
       {model.truncatedNotice ? <Text style={styles.notice}>{model.truncatedNotice}</Text> : null}
       <ScrollView
         style={styles.scroll}
@@ -60,6 +76,11 @@ export function LogRenderer({
             // best available key within one render of one payload, exactly
             // as on the web.
             <Text key={index} style={model.mono ? styles.lineMono : styles.line}>
+              {index === 0 && toneGlyph ? (
+                <Text style={{ color: theme.colors.status[toneGlyph.statusKey].foreground }}>
+                  {`${toneGlyph.glyph} `}
+                </Text>
+              ) : null}
               {line}
             </Text>
           ))
@@ -81,7 +102,13 @@ export function LogRenderer({
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     wrapper: { gap: theme.spacing[1] },
+    titleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing[2],
+    },
     title: {
+      flexShrink: 1,
       color: theme.colors.ink,
       fontSize: theme.typography.variant.label.fontSize,
     },
@@ -90,12 +117,10 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontSize: theme.typography.variant.caption.fontSize,
     },
     scroll: {
+      // The well's own `codeBackground` fill, border, radius and padding
+      // are gone: the `.blk.ext` wrapper (`registry-view.tsx`) IS the
+      // surface now, and a second box inside it would draw two.
       maxHeight: LOG_SCROLL_MAX_HEIGHT,
-      backgroundColor: theme.colors.code.codeBackground,
-      borderWidth: 1,
-      borderColor: theme.colors.code.codeBorder,
-      borderRadius: theme.radii.control,
-      padding: theme.spacing[2],
     },
     line: {
       color: theme.colors.ink,

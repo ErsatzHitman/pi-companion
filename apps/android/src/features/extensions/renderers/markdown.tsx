@@ -35,6 +35,7 @@ import {
   type MdBlockNode,
   type MdInlineNode,
 } from "./markdown-model";
+import { piUiToneGlyph, readPiUiElementTone, toneChipLabel } from "./tone";
 
 type Styles = ReturnType<typeof createStyles>;
 
@@ -156,6 +157,11 @@ export function MarkdownRenderer({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const model = buildMarkdownRenderModel(element, payload);
   const testId = `pi-markdown-${element.ns}-${element.id}`;
+  // A tone-carrying markdown block leads with the artifact's severity
+  // glyph, painted in the tone's colour, and spells the tone out beside
+  // it so the meaning is never glyph-only (plan.md §10.5).
+  const tone = readPiUiElementTone(element);
+  const toneGlyph = piUiToneGlyph(tone);
   const onOpenLink = useCallback((href: string) => {
     void Linking.openURL(href).catch(() => undefined);
   }, []);
@@ -168,6 +174,14 @@ export function MarkdownRenderer({
         </Text>
       ) : null}
       <View style={styles.body}>
+        {tone && toneGlyph ? (
+          <Text style={styles.toneLine} testID={`${testId}-tone`}>
+            <Text style={{ color: theme.colors.status[toneGlyph.statusKey].foreground }}>
+              {`${toneGlyph.glyph} `}
+            </Text>
+            {toneChipLabel(tone)}
+          </Text>
+        ) : null}
         {model.blocks.map((block, index) => (
           <Block key={index} block={block} index={index} styles={styles} onOpenLink={onOpenLink} />
         ))}
@@ -192,6 +206,10 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
     },
     body: { gap: theme.spacing[2] },
+    toneLine: {
+      color: theme.colors["ink-2"],
+      fontSize: theme.typography.variant.caption.fontSize,
+    },
     heading: {
       color: theme.colors.ink,
       fontSize: theme.typography.variant.heading.fontSize,

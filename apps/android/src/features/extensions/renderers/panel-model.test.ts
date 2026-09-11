@@ -455,14 +455,17 @@ describe("panel.tsx: a sheet-placement panel is the redesign's .pop (T361)", () 
     expect(readPanelCode()).toMatch(/variant="floating"/);
   });
 
-  it("draws the namespace tag from the element, never a hardcoded string", () => {
+  it("draws the namespace tag inside its own Sheet — the shared wrapper skips sheet placements (T387)", () => {
+    // T387: the reference's `ask_user` frame puts the channel in the
+    // popup's own header (`.pop .h`), so a sheet's tag has to be drawn
+    // INSIDE the sheet. The shared block wrapper draws the tag for every
+    // non-sheet placement and deliberately skips this one
+    // (`registry-view.tsx`'s `drawsWrapperTag`), which is what keeps a
+    // sheet from showing it twice — or, worse, showing it once behind the
+    // scrim.
     const code = readPanelCode();
-    expect(code).toMatch(/\{askUserTagLabel\(element\.ns\)\}/);
-    expect(code).not.toMatch(/"\[ask-user\]"/);
-  });
-
-  it("tints the tag purple from the theme", () => {
-    expect(readPanelCode()).toMatch(/color: theme\.colors\.purple/);
+    expect(code).toMatch(/askUserTagLabel\(element\.ns\)/);
+    expect(code).toMatch(/styles\.nsTag/);
   });
 
   it("passes the touch-worded footer hint, and none of the artifact's keyboard text", () => {
@@ -472,11 +475,13 @@ describe("panel.tsx: a sheet-placement panel is the redesign's .pop (T361)", () 
     expect(code).not.toMatch(/1-2 to answer/);
   });
 
-  it("leaves every other placement on the plain inline card", () => {
-    // Only the `sheet` branch changed; `inline`/`pinned`/`status`/
-    // `screen` still render the same `Card`.
+  it("draws every other placement directly in the shared .blk.ext, with no inner Card", () => {
+    // Only the `sheet` branch is special; `inline`/`pinned`/`status`/
+    // `screen` render straight into the shared extension surface
+    // (`registry-view.tsx`'s wrapper), so a second Card inside it is gone.
     const code = readPanelCode();
     expect(code).toMatch(/element\.placement === "sheet"/);
-    expect(code).toMatch(/<Card style=\{styles\.card\} testID=\{testId\}>/);
+    expect(code).toMatch(/<View style=\{styles\.card\} testID=\{testId\}>/);
+    expect(code).not.toMatch(/<Card style=\{styles\.card\}/);
   });
 });
