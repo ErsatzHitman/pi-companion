@@ -13,8 +13,14 @@ below is meant to be re-run by the reader, not trusted from this page.
 
 **No signed APK was produced by this task, and none of this task's commits claim
 otherwise.** T44B1's first acceptance criterion needs an `EXPO_TOKEN` repository
-secret plus EAS-held Android signing credentials, both owner-supplied and both
-absent (§4). This task never pushes, fetches, touches the remote, or dispatches a
+secret plus EAS-held Android signing credentials, both owner-supplied.
+CORRECTED (T374): this said "both owner-supplied and **both absent** (§4)". Only one
+half is still absent. `EXPO_TOKEN` was configured as a repository secret at T208, and
+the EAS project it authenticates against exists and is linked
+(`apps/android/app.config.ts`'s `extra.eas.projectId`, owned by the `ersatzhitman`
+account). What is still missing is the EAS-held Android signing keystore — §4 step 2 —
+and a dispatched run: `gh run list --workflow android-apk-release.yml` returns no runs
+at all, so nothing has ever exercised steps 5–9 below. This task never pushes, fetches, touches the remote, or dispatches a
 workflow (CLAUDE.md), so it could not trigger a real EAS build even if the secret
 existed. §2 and §3 record what this task DID close: criterion two ("signing material
 is not present in the repository") had zero enforcement before this task and now
@@ -56,12 +62,17 @@ short enough to read in full.
 9. `gh release upload <tag> <apk> --clobber`.
 
 Every one of steps 5–9 is real, unconditional CI machinery today — it is not itself
-gated on anything this task added — it is simply never REACHED, in any run to date,
-because step 4 has always resolved `configured=false` (no `EXPO_TOKEN` secret has
-ever existed on this repository — confirmed by T208's own record in `docs/issues-
-from-plan.md`, still unchecked at this commit: `grep -n '#### T208' docs/issues-
-from-plan.md` to find its current line, since line numbers in that file shift as
-other tasks are added).
+gated on anything this task added — and none of it has ever been REACHED.
+CORRECTED (T374): the reason given here was "because step 4 has always resolved
+`configured=false` (no `EXPO_TOKEN` secret has ever existed on this repository —
+confirmed by T208's own record in `docs/issues-from-plan.md`, still unchecked at this
+commit)". That was true when written and is now false in both halves: the secret was
+configured at T208, whose boxes T371 ticked, so step 4 resolves `configured=true`
+today. The reason steps 5–9 remain unreached is simpler and was always the other
+half — **this workflow has never been dispatched.** Measured, not assumed:
+`gh run list --workflow android-apk-release.yml --limit 10` returns an empty list.
+Step 4's `configured=false` branch is therefore not the thing standing in the way;
+§4 step 2 (the signing keystore) and §4 step 4 (somebody dispatching a run) are.
 
 ---
 
@@ -405,7 +416,12 @@ just built the dist output, with no remote-archive boundary in between.
 T236 was filed by this section to settle the open question above with a real
 `eas build:inspect --stage archive` run. **That run needs `EXPO_TOKEN`, `eas` was
 not run, and the first outcome above is unchanged: this cannot be determined from
-this tree.** Everything below is what T236 re-confirmed at `bc6c303e7c51274879d4444631e0bc13ea64e7e9`,
+this tree.**
+CORRECTED (T374): the token is no longer the missing piece — T208 configured it. The
+question is still open, for a reason that has not changed and does not depend on the
+secret: running `eas` at all is forbidden to an agent session by this repository's
+CLAUDE.md, and the one CI path that would run it (`android-apk-release.yml`) has never
+been dispatched. Whoever runs §4 step 4 can settle this in the same run. Everything below is what T236 re-confirmed at `bc6c303e7c51274879d4444631e0bc13ea64e7e9`,
 plus what it could newly establish; none of it closes the question above.
 
 Re-measured, unchanged since the paragraphs above were written:
@@ -531,9 +547,20 @@ step (no `env:` block).
 
 Nothing below can be done by an agent session (CLAUDE.md: no remote access, no
 `npm install`/`eas`/`expo`/`gradle`, never push/fetch/dispatch). This is the
-executable checklist for whoever (the repository owner) can:
+executable checklist for whoever (the repository owner) can.
 
-1. **Verify or create the EAS project.** `docs/frontend-data-migration.md` §4.2
+**Two of the five steps are done (T374 checked each against the tree, rather than
+against this page).** Step 1 is closed: `apps/android/app.config.ts` carries
+`extra.eas.projectId: "84d81907-8d9c-4096-9c66-5a3db488192c"`, written by hand at T208
+because `eas init` refuses to edit a dynamic config, with the project owned by the
+`ersatzhitman` account — a durable, authoritative record in committed config, which is
+exactly what step 1 asks for and not the reference-only document it warns against
+editing. Step 3 is closed: the `EXPO_TOKEN` repository secret was added at T208, and
+T371 ticked that task's boxes. **Steps 2, 4 and 5 are the live checklist**: no signing
+keystore is known to exist, and `gh run list --workflow android-apk-release.yml`
+returns no runs, so nothing has been dispatched or read.
+
+1. **DONE (T208). Verify or create the EAS project.** `docs/frontend-data-migration.md` §4.2
    records the reference project id (`0e7f65ce-0367-46c8-a238-2b65963d235a`, owner
    `getpaseo`) as UNVERIFIED for this new repository. Run `npx expo whoami` (from
    `apps/android`, logged in as the intended Expo account) and either confirm
@@ -548,7 +575,7 @@ executable checklist for whoever (the repository owner) can:
    project keystore or offers to generate one. Expected output: a keystore entry
    listed under the verified project, with EAS holding the private key — nothing
    downloaded to this machine.
-3. **Add the `EXPO_TOKEN` repository secret.** GitHub repository Settings → Secrets
+3. **DONE (T208). Add the `EXPO_TOKEN` repository secret.** GitHub repository Settings → Secrets
    and variables → Actions → New repository secret, name `EXPO_TOKEN`, value from
    `npx expo login` + a generated access token
    (https://expo.dev/accounts/[account]/settings/access-tokens) for the account
@@ -565,8 +592,8 @@ list --branch main --limit 3` / the tag's own workflow run, `gh run view <id>`,
    and record the run id and conclusion — in this file, or in T208's own record —
    rather than trusting a description of what "should" happen.
 
-Steps 1–3 are `docs/frontend-data-migration.md` §4.6's own unchecked checklist,
-carried forward here in executable form; that document is reference-only per this
+Steps 1–3 were `docs/frontend-data-migration.md` §4.6's own unchecked checklist,
+carried forward here in executable form (two of the three are now done, marked above); that document is reference-only per this
 repository's CLAUDE.md (it describes Paseo's old migration audit) and is not edited
 by this task, but its checklist items are still the right ones to execute — this
 section restates them as commands rather than editing that file.

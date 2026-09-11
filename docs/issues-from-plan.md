@@ -630,6 +630,7 @@ that recomputation has to be domain-specific:
 | T371   | The suite finally ran end to end, and four files still said it never had                                             | phase-9   | ci               | P9-U   | T370                                                                  |
 | T372   | A handoff told the next agent to fix a shard that had been green for twenty-five tasks                               | phase-9   | docs             | P9-U   | T371                                                                  |
 | T373   | The TalkBack procedure's own audit flow had just passed on five emulators, and it said none ever had                 | phase-9   | docs             | P9-U   | T372                                                                  |
+| T374   | The owner's release checklist still asked for a secret that had been configured, and named no project id             | phase-9   | docs             | P9-U   | T373                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -671,8 +672,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**582 tasks** (distinct IDs counted directly from the table above), recounted at T373 with
-`grep`/`sort -u` over the table's own rows — one past the **581** at T372, two past the **580** at T371, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**583 tasks** (distinct IDs counted directly from the table above), recounted at T374 with
+`grep`/`sort -u` over the table's own rows — one past the **582** at T373, two past the **581** at T372, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18752,3 +18753,69 @@ Checked by reading that predicate, not assumed.
 - [x] Both new failure directions were watched failing, then restored from a scratchpad copy
 - [x] Nothing here claims to be evidence about what TalkBack speaks
 - [ ] A human runs the pass against a signed release candidate and appends a Pass log entry
+
+#### T374 — The owner's release checklist still asked for a secret that had been configured, and named no project id
+
+`labels: phase-9, area: docs` · `depends-on: T373`
+
+`docs/android-apk-release.md` §4 is the one document in this repository written for the **owner**
+rather than for an agent: an executable checklist of the five things only they can do to unblock
+T44B1's signed APK. Two of its five steps were done and it still asked for them, and the reason
+it gave for the release workflow never having run had stopped being the real one.
+
+**What was false, and what the real blocker is.**
+
+- The header said the two owner-supplied inputs were "both owner-supplied and **both absent**".
+  One half is present: `EXPO_TOKEN` was configured at T208, and the EAS project it authenticates
+  against exists and is linked. The other half — an EAS-held signing keystore — is still missing,
+  which is why T44B1 is still open.
+- §1 explained that steps 5–9 are "never REACHED, in any run to date, because step 4 has always
+  resolved `configured=false` (no `EXPO_TOKEN` secret has ever existed on this repository …
+  still unchecked at this commit)". Both halves are now wrong, and the correct reason is
+  different in kind: **this workflow has never been dispatched.** Measured, not inferred —
+  `gh run list --workflow android-apk-release.yml --limit 10` returns an empty list. Step 4's
+  `configured=false` branch is not standing in the way of anything; a keystore and a dispatch are.
+- §3.3's T236 re-measurement said the settling `eas build:inspect --stage archive` run "needs
+  `EXPO_TOKEN`". It does not need one that is missing. The question is still open for a reason
+  that never depended on the secret: an agent session may not run `eas` at all, and the one CI
+  path that would has never been dispatched. Whoever runs §4 step 4 settles it in the same run.
+- §4 steps 1 and 3 are marked **DONE (T208)** with the evidence a reader can check themselves:
+  `apps/android/app.config.ts` carries the project id under `extra.eas.projectId`
+  (`84d81907-8d9c-4096-9c66-5a3db488192c`), written by hand because `eas init` refuses to edit a
+  dynamic config, with the project owned by the `ersatzhitman` account. That is a durable, authoritative record in
+  committed config — exactly what step 1 asks for, and explicitly not the reference-only document
+  step 1 warns against editing. Steps 2, 4 and 5 are restated as the live checklist.
+
+**Why this matters more than an ordinary stale sentence.** Every other document corrected in this
+wave is read by an agent, who re-derives live state before acting. This one is read by a person
+who has no reason to doubt it and would have spent their time generating a second access token
+for a secret that already exists, while the actual blocker — a keystore — sat two bullets away
+unmarked. A checklist that cannot distinguish its done items from its open ones is worse than a
+shorter one.
+
+**The pin, chosen so the next migration cannot quietly break it.** Before this task the document
+never named the project id at all, so "step 1 is done" was unverifiable from the page. It names
+it now, and `apps/android/app.config.test.ts` pins the two together: the id in the config must be
+uuid-shaped and must appear in the runbook, and the runbook must name no third uuid-shaped id
+beyond this project's and the superseded reference project's. Proven able to fire against a
+scratchpad-backed copy of the document — rewriting the id to a different uuid failed both the
+"is the id … the owner checklist names" and the "names no OTHER uuid-shaped project id" cases —
+then restored from that copy, never `git checkout --`, with `git status --porcelain` clean for it
+afterwards.
+
+Deliberately NOT claimed: that the EAS project still exists on expo.dev, or that the token is
+still valid. Both need `eas`, which no agent session may run. The pin is about this repository
+telling one story, not about the remote's state.
+
+**No `CAPABILITIES` entry.** The capability is "the owner checklist distinguishes its done steps
+from its open ones", which declares no member anywhere `isShippedSourcePath` can see — the same
+inert-entry trap T371 and T373 each recorded. The `docs/**` denial scan could see the prose, but
+with no shippable member there is nothing for an entry to key on.
+
+- [x] Every corrected sentence is quoted, so the owner can see what changed and why
+- [x] The real blocker is named and measured (`gh run list` on the workflow, empty)
+- [x] Steps that are done are marked done, with evidence a reader can check without expo.dev
+- [x] The project id is named in the runbook and pinned to the config by a test
+- [x] The pin was watched failing, then restored from a scratchpad copy
+- [x] Nothing here asserts anything about the remote EAS project's current state
+- [ ] The owner runs §4 steps 2, 4 and 5, and the run id and conclusion are recorded here

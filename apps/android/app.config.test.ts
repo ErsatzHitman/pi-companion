@@ -150,3 +150,59 @@ describe("applying this app's blockedPermissions to the real bundled manifest", 
     expect(byName.get("android.permission.READ_EXTERNAL_STORAGE")?.["tools:node"]).toBeUndefined();
   });
 });
+
+/**
+ * T374 — the EAS project id is a fact three places have to agree on, and
+ * two of them are prose a reader acts on.
+ *
+ * `docs/android-apk-release.md` §4 is an executable checklist for the
+ * repository owner, and its step 1 ("verify or create the EAS project")
+ * is only closed because the id below is committed here. Before T374 that
+ * document did not name the id at all, so a reader had no way to tell
+ * whether step 1 was done, and the same document asserted the
+ * `EXPO_TOKEN` secret "has never existed on this repository" nine months
+ * after it was added.
+ *
+ * These cases pin the id in the config to the id in the document, so a
+ * future project migration cannot leave the owner checklist quietly
+ * pointing at the wrong project. They deliberately prove nothing about
+ * whether the project still EXISTS on expo.dev — that needs `eas`, which
+ * no agent session may run (CLAUDE.md) — only that this repository tells
+ * one story about which project it builds under.
+ */
+describe("the EAS project id agrees across the config and the release runbook (T374)", () => {
+  const RELEASE_DOC_PATH = new URL("../../docs/android-apk-release.md", import.meta.url);
+  const projectId = (config as { extra?: { eas?: { projectId?: string } } }).extra?.eas?.projectId;
+
+  it("is a real uuid-shaped id in app.config.ts, not a placeholder", () => {
+    expect(projectId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+
+  it("is the id docs/android-apk-release.md's owner checklist names", () => {
+    const doc = readFileSync(RELEASE_DOC_PATH, "utf8");
+    expect(
+      doc.includes(projectId ?? "\u0000"),
+      `docs/android-apk-release.md must name the EAS project id app.config.ts actually builds under (${projectId}) -- §4 step 1 is marked done on the strength of that id being committed, and a reader cannot check a claim the document does not state`,
+    ).toBe(true);
+  });
+
+  it("names no OTHER uuid-shaped project id, which would make the runbook ambiguous", () => {
+    const doc = readFileSync(RELEASE_DOC_PATH, "utf8");
+    // The reference checkout's own project id appears in §4 step 1 by
+    // design -- it is the id being superseded, quoted as such -- so the
+    // check is that every uuid in the document is either ours or that
+    // one, not that ours is the only uuid present.
+    const REFERENCE_PROJECT_ID = "0e7f65ce-0367-46c8-a238-2b65963d235a";
+    const uuids = new Set(
+      [...doc.matchAll(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g)].map(
+        (match) => match[0],
+      ),
+    );
+    uuids.delete(projectId ?? "");
+    uuids.delete(REFERENCE_PROJECT_ID);
+    expect(
+      [...uuids],
+      "docs/android-apk-release.md should name only this app's EAS project id and the superseded reference one",
+    ).toEqual([]);
+  });
+});
