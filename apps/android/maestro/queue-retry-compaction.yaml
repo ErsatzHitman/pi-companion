@@ -37,8 +37,10 @@ tags:
 # `listNonExitGateFlowNames`, derived from the tree), which the
 # `maestro-non-gating` job in `android-maestro-e2e.yml` runs on every
 # dispatch via `run-shard.ts non-gating`, outside the exit gate's ten.
-# "Has never been run" holds until that job's first dispatch records its
-# run id in T381's ledger section.
+# First observed run: dispatch 34589238596, both observed flows PASS
+# (`[run-shard] file-download: PASS`, `[run-shard]
+# queue-retry-compaction: PASS` in that dispatch's `maestro-non-gating`
+# job log, T381's ledger section).
 # ---------------------------------------------------------------------
 # WHY THIS FLOW ASSERTS ONLY AN UNAVAILABLE STATE — no round trip, no
 # retry, no compaction banner:

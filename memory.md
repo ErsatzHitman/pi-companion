@@ -686,3 +686,15 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   competing theories about flexbox shrink behaviour.
 - **A node entirely outside its scroll viewport is PRUNED from the hierarchy, not reported zero-height.**
   So "id not visible" can mean "clipped below the fold", not "never rendered". Check the parent's bounds.
+
+## Supernova adoptions (owner-approved 2026-09-11, implement after T381/Maestro green)
+
+- **Source:** `D:\supernova` (MIT, independent project — NOT Paseo; plan §5 ban untouched, but verify no
+  adapted file is itself Paseo-derived). MIT→AGPL needs per-file attribution + `THIRD_PARTY_NOTICES.md` row;
+  prefer reimplementation from behavior, vendor only self-contained pure modules.
+- 1. **Checkpoint/restore** ("undo for agent work"): per-turn workspace snapshots, restore without moving
+  HEAD or touching staged work, conflict detection + rollback. Needs wire + server work.
+- 2. **Timeline upgrade** (pure frontend-core, zero wire change): stable row keys, work grouping, smooth
+  streaming reveal. Both platforms.
+- 3. **Composer parity** (pure core): per-session drafts, @file/@skill refs, attachment previews, honest
+  context ring.

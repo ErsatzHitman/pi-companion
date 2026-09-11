@@ -19295,11 +19295,9 @@ entry would be inert on the shipping side.
 
 `labels: phase-9, area: android` · `depends-on: T380`
 
-**Filed, not done.** T380 corrected the reason `file-download`, `recovered-turn-banner`,
-`session-tree-sheet` and `queue-retry-compaction` give for never having run: not a missing
-device, but that none of them is assigned to a shard. Correcting a reason is not the same as
-removing it, so the four still do not run, and this task is where that is tracked rather than
-left implied by a corrected comment.
+**Done** — as a split, not the all-four sketch below. Dispatch `34589238596` green (push CI
+`34589235657` green); the two observable flows ran and passed, the two unobservable ones are
+recorded as deliberately unobserved with the structural reason, not left implied.
 
 **The constraint that makes this non-trivial, and why the obvious fix is wrong.**
 `apps/android/e2e/harness/shard-plan.ts`'s shard set is `plan.md` §14.4's ten scenarios, and the
@@ -19308,17 +19306,35 @@ MEANS — it would silently widen the definition of "Phase 5 exits green" — wh
 decision, not a shard file's call. T380 kept the exclusion on precisely this reason after
 deleting the circular one beside it. Whatever ships here must not quietly re-open that.
 
-**The shape that satisfies both.** A second, explicitly non-gating shard that runs these four on
-the same booted emulator and reports, so a failure becomes visible without any flow joining the
-exit gate's ten. The exit gate keeps asserting the same set it asserts today; the four stop
-being unobserved. That is a sketch, not a decision — the alternative (leave them unrun, and
-record that they are deliberately unobserved) is cheaper and must be argued against rather than
-skipped past.
+**The decision, and the two alternatives it beat.** The sketch was a non-gating shard running
+all four, with "leave them unrun and record it" as the cheaper alternative to argue against.
+What landed is a split of the four, because measuring the tree showed they are not the same
+case. `file-download` and `queue-retry-compaction` open shipped routes and run on the existing
+release-APK infrastructure with zero new machinery — leaving them dark would have preserved
+exactly the gap T380 named, so the cheaper alternative loses for these two. `recovered-turn-
+banner` and `session-tree-sheet` open `picompanion://dev/…` routes whose wrappers return
+`<Redirect href="/" />` outside `__DEV__`, and CI only builds `assembleRelease` — no dispatch
+can mount their screens, so assigning them would manufacture red, not signal. For these two the
+cheaper alternative wins, and this paragraph is the record of it. The derivation
+(`listNonGatingObservedFlowNames`) detects dev-links from each flow file's own `openLink:`
+step, so a flow that gains a real mount point promotes itself into the observed set with no edit.
 
-- [ ] The four flows run on a real dispatch, with the run id recorded
-- [ ] The Phase 5 exit gate still asserts exactly `plan.md` §14.4's ten scenarios, proven by a test
-- [ ] Whichever way it lands, `NON_EXIT_GATE_FLOW_NAMES`'s per-flow reasons match what is true after it
-- [ ] The four flows' own headers stop saying they have never been run, if they have
+**What shipped** (commit `a94012d`; run-id header close-out in the commit carrying this section):
+`shard-plan.ts` gained `OBSERVED_ELSEWHERE`, `usesDevOnlyRoute`, and `listNonGatingObservedFlowNames`
+with a T381 test block; `run-shard.ts` resolves the synthetic `non-gating` shard from the tree,
+never from `shards.json`; `android-maestro-e2e.yml` gained the `maestro-non-gating` job;
+`shards.json`'s description names the five exceptions; the AVD-resolver and posix-bashism guard
+tests moved their pinned emulator-script counts two-to-three with the third consumer. Evidence:
+the dispatch's `maestro-non-gating` job log reads `[run-shard] non-gating: 2 flow(s) —
+file-download, queue-retry-compaction`, then `[run-shard] file-download: PASS` and
+`[run-shard] queue-retry-compaction: PASS`.
+
+- [x] The four flows run on a real dispatch, with the run id recorded — two ran and passed
+  (`34589238596`); two recorded as deliberately unobserved above
+- [x] The Phase 5 exit gate still asserts exactly `plan.md` §14.4's ten scenarios, proven by a test
+- [x] `NON_EXIT_GATE_FLOW_NAMES`'s per-flow reasons match what is true after it
+- [x] The two observed flows' headers name the run; the two lab flows' "has never been run"
+  stands as accurate state with its why
 
 #### T382 — The two surfaces had no reviewable picture of themselves, only screenshots that cannot carry motion
 
