@@ -195,6 +195,62 @@ export function buildSessionRowModel(session: SessionSummary): SessionRowModel {
   };
 }
 
+/** A minute, an hour and a day in milliseconds — the three thresholds `sessionAgeLabel` steps through. */
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * How long ago a session was last updated, as A1's row draws it: `"now"`
+ * under a minute, then `"28m"`, `"3h"`, `"2d"` — T363.
+ *
+ * `null` rather than a placeholder when `updatedAt` does not parse, or
+ * when it is in the future by more than a minute. A row is allowed to
+ * carry no age; it is not allowed to carry `"NaN"`, or to claim a
+ * session was touched a negative number of minutes ago because two
+ * machines disagree about the clock. One coarse unit, never `"1h 4m"`:
+ * the artifact's `.s` line is one short mono string and the row's job
+ * is to say roughly how stale this session is, which the larger unit
+ * already answers.
+ */
+export function sessionAgeLabel(updatedAt: string, nowMs: number): string | null {
+  const updatedMs = Date.parse(updatedAt);
+  if (Number.isNaN(updatedMs)) return null;
+  const delta = nowMs - updatedMs;
+  if (delta < -MINUTE_MS) return null;
+  if (delta < MINUTE_MS) return "now";
+  if (delta < HOUR_MS) return `${Math.floor(delta / MINUTE_MS)}m`;
+  if (delta < DAY_MS) return `${Math.floor(delta / HOUR_MS)}h`;
+  return `${Math.floor(delta / DAY_MS)}d`;
+}
+
+/**
+ * The row's visible `.s` line with its age appended (T363). Separate
+ * from `buildSessionRowModel`'s `meta` because an age needs a clock and
+ * that model has none — a row model built once and rendered a minute
+ * later would otherwise be quietly wrong.
+ */
+export function sessionRowMetaWithAge(row: SessionRowModel, age: string | null): string {
+  return age === null ? row.meta : `${row.meta} · ${age}`;
+}
+
+/**
+ * The same row's spoken name with the age worked into a sentence.
+ *
+ * Appending the raw `"28m"` to the label would have TalkBack read
+ * "twenty-eight em" at the end of a row with no indication of what the
+ * number counts, so the spoken form says what the visible one shows
+ * tersely. A row with no resolvable age is spoken exactly as before.
+ */
+export function sessionRowAccessibilityLabelWithAge(
+  row: SessionRowModel,
+  age: string | null,
+): string {
+  if (age === null) return row.accessibilityLabel;
+  if (age === "now") return `${row.accessibilityLabel}, updated just now`;
+  return `${row.accessibilityLabel}, updated ${age} ago`;
+}
+
 export interface SessionGroupModel {
   kind: SessionGroupKind;
   label: string;

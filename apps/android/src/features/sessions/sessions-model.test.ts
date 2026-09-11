@@ -33,7 +33,10 @@ import {
   reconcileSessionInList,
   removeSessionFromList,
   requestDeleteSession,
+  sessionAgeLabel,
   sessionListConnectionPathLabel,
+  sessionRowAccessibilityLabelWithAge,
+  sessionRowMetaWithAge,
   sessionStatusPresentation,
   setSessionListConnectionPath,
   writeLastOpenedSessionId,
@@ -928,5 +931,69 @@ describe("delete requires explicit confirmation (T32B4)", () => {
     expect(called).toBe(false);
     expect(result.list).toBe(list);
     expect(result.actions).toEqual(actionsState());
+  });
+});
+
+describe("sessionAgeLabel (T363)", () => {
+  const now = Date.parse("2026-09-11T12:00:00.000Z");
+
+  it("says 'now' for anything inside the last minute", () => {
+    expect(sessionAgeLabel("2026-09-11T11:59:59.000Z", now)).toBe("now");
+    expect(sessionAgeLabel("2026-09-11T12:00:00.000Z", now)).toBe("now");
+  });
+
+  it("steps through one coarse unit at a time", () => {
+    expect(sessionAgeLabel("2026-09-11T11:32:00.000Z", now)).toBe("28m");
+    expect(sessionAgeLabel("2026-09-11T09:00:00.000Z", now)).toBe("3h");
+    expect(sessionAgeLabel("2026-09-09T12:00:00.000Z", now)).toBe("2d");
+  });
+
+  it("rounds down at every boundary, so a row never ages early", () => {
+    expect(sessionAgeLabel("2026-09-11T11:00:01.000Z", now)).toBe("59m");
+    expect(sessionAgeLabel("2026-09-11T11:00:00.000Z", now)).toBe("1h");
+    expect(sessionAgeLabel("2026-09-10T12:00:01.000Z", now)).toBe("23h");
+    expect(sessionAgeLabel("2026-09-10T12:00:00.000Z", now)).toBe("1d");
+  });
+
+  it("gives no age rather than a broken one", () => {
+    // A row is allowed to carry no age; it is not allowed to carry
+    // "NaN", or a negative one because two clocks disagree.
+    expect(sessionAgeLabel("not a timestamp", now)).toBeNull();
+    expect(sessionAgeLabel("2026-09-11T13:00:00.000Z", now)).toBeNull();
+  });
+
+  it("tolerates a clock a few seconds ahead instead of blanking the row", () => {
+    expect(sessionAgeLabel("2026-09-11T12:00:30.000Z", now)).toBe("now");
+  });
+});
+
+describe("sessionRowMetaWithAge / sessionRowAccessibilityLabelWithAge (T363)", () => {
+  const row = buildSessionRowModel({
+    id: "s1",
+    title: "Refactor the composer",
+    provider: "pi",
+    cwd: "/w/pi-companion",
+    status: "idle",
+    updatedAt: "2026-09-11T11:32:00.000Z",
+  });
+
+  it("appends the age to the visible line", () => {
+    expect(sessionRowMetaWithAge(row, "28m")).toBe("pi · /w/pi-companion · 28m");
+  });
+
+  it("leaves both lines exactly as they were when there is no age", () => {
+    expect(sessionRowMetaWithAge(row, null)).toBe(row.meta);
+    expect(sessionRowAccessibilityLabelWithAge(row, null)).toBe(row.accessibilityLabel);
+  });
+
+  it("speaks the age as a sentence, not as the terse string", () => {
+    // "twenty-eight em" at the end of a row says nothing about what is
+    // being counted.
+    expect(sessionRowAccessibilityLabelWithAge(row, "28m")).toBe(
+      "Refactor the composer, Idle, pi · /w/pi-companion, updated 28m ago",
+    );
+    expect(sessionRowAccessibilityLabelWithAge(row, "now")).toBe(
+      "Refactor the composer, Idle, pi · /w/pi-companion, updated just now",
+    );
   });
 });

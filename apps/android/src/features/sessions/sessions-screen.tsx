@@ -78,6 +78,28 @@
  * network resync cannot silently clear the reader's search, and a
  * filtered-empty list gets a banner naming the filter rather than the
  * empty state's "no sessions yet", which would be false.
+ *
+ * **T363 — A1's row.** The row is now the artifact's `.row`: a raised
+ * surface pill with the session's name, one mono `.s` line and a
+ * `StatusPill` on the right, in place of a dashed rule with a bare dot
+ * stacked above a caption. The status word moved into the pill and is
+ * still printed there, so the state is never colour alone. The `.s`
+ * line gains how long ago the session was last updated —
+ * `sessionAgeLabel` resolves it from `updatedAt` against one clock
+ * reading shared by every row, and yields `null` rather than a
+ * placeholder when the timestamp will not parse or sits in the future.
+ *
+ * The artifact's own `.s` reads "18 turns · 184k · 28m". Neither the
+ * turn count nor the token total is on `SessionSummary` — the daemon's
+ * session list does not carry them — so the line says what this screen
+ * actually knows (provider, working directory, age) rather than
+ * printing two figures nobody could stand behind.
+ *
+ * **Archive and Delete stay beneath the row.** The artifact draws no
+ * such affordance because its mock has none; removing two working
+ * controls to match a picture would delete a shipped capability and
+ * leave no way to reach it. The row above them adopts the new shape;
+ * the buttons keep theirs until a later task gives them one.
  */
 import type { KeyValueStorage, NetworkReachability } from "@picompanion/frontend-core";
 import type { NativeTheme } from "@picompanion/design-tokens";
@@ -98,10 +120,11 @@ import {
   LoadingState,
   SearchField,
   Section,
+  StatusPill,
   TextField,
 } from "../../ui/primitives";
 import { ScreenBar } from "../../ui/recipes";
-import { asFontWeight } from "../../ui/theme/native-style-helpers";
+import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import { useKeyboardInset } from "../../app-shell/keyboard-inset";
 import {
@@ -141,7 +164,10 @@ import {
   reconcileSessionInList,
   removeSessionFromList,
   requestDeleteSession,
+  sessionAgeLabel,
   sessionListConnectionPathLabel,
+  sessionRowAccessibilityLabelWithAge,
+  sessionRowMetaWithAge,
   updateCreateSessionDraft,
   writeLastOpenedSessionId,
   type CreateSessionState,
@@ -214,6 +240,11 @@ export interface SessionsScreenProps {
    */
   onClose?: () => void;
 }
+
+/** A1's `.row` geometry. */
+const ROW_RADIUS = 22;
+const ROW_PADDING_VERTICAL = 6;
+const ROW_PADDING_HORIZONTAL = 12;
 
 /** A1's `.chip` height. The touch target around it is 48dp; see `FilterChip`. */
 const FILTER_CHIP_HEIGHT = 30;
@@ -297,6 +328,12 @@ export function SessionsScreen({
   // than in `listState` — they narrow what is drawn and never change
   // what the daemon reported, so a refetch must not reset them and a
   // reconcile must not read them.
+  // T363: one clock reading per render, shared by every row, so two
+  // rows updated in the same second can never disagree about how
+  // long ago that was. Rows do not tick on their own — a list that
+  // re-rendered every minute to move one character would cost more
+  // than it tells anyone; any real change to the list re-reads it.
+  const nowMs = Date.now();
   const [filterChipId, setFilterChipId] = useState<string>(DEFAULT_SESSION_FILTER_CHIP_ID);
   const [query, setQuery] = useState("");
   const searchRef = useRef<TextInput>(null);
@@ -638,6 +675,7 @@ export function SessionsScreen({
                     <SessionRow
                       key={row.id}
                       row={row}
+                      age={rawSession ? sessionAgeLabel(rawSession.updatedAt, nowMs) : null}
                       theme={theme}
                       onOpen={sessionService ? () => handleOpenSession(row.id) : undefined}
                       onArchive={
@@ -783,6 +821,7 @@ function FilterChip({
 
 function SessionRow({
   row,
+  age,
   theme,
   onOpen,
   onArchive,
@@ -793,6 +832,8 @@ function SessionRow({
   testId,
 }: {
   row: SessionRowModel;
+  /** How long ago this session was last updated, or `null` when that cannot be resolved (T363). */
+  age: string | null;
   theme: NativeTheme;
   onOpen: (() => void) | undefined;
   /** Undefined both when there's no `sessionService` and for an already-archived row — archiving an archived session is meaningless (T32B4). */
@@ -805,7 +846,6 @@ function SessionRow({
   testId: string;
 }) {
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const dotStyle = styles[`dot_${row.tone}`];
   const actionsDisabled = archiving || deleting;
 
   return (
@@ -814,22 +854,31 @@ function SessionRow({
         style={styles.row}
         accessible
         accessibilityRole="button"
-        accessibilityLabel={row.accessibilityLabel}
+        accessibilityLabel={sessionRowAccessibilityLabelWithAge(row, age)}
         onPress={onOpen}
         disabled={!onOpen}
         testID={testId}
       >
-        <Text style={styles.title} numberOfLines={1}>
-          {row.title}
-        </Text>
-        <View style={styles.statusRow}>
-          <View style={[styles.dot, dotStyle]} accessibilityElementsHidden />
-          {/* Status shown as visible text alongside the coloured dot — never colour alone (plan.md §10.5). */}
-          <Text style={styles.statusText}>{row.statusText}</Text>
+        <View style={styles.rowText}>
+          <Text style={styles.title} numberOfLines={1}>
+            {row.title}
+          </Text>
+          {/*
+            A1's `.s` line: provider, working directory and age in one
+            mono string. The status is the pill beside it, and the pill
+            carries its own word — so state is never colour alone
+            (plan.md §10.5) even though the dot moved into it.
+          */}
+          <Text style={styles.meta} numberOfLines={1}>
+            {sessionRowMetaWithAge(row, age)}
+          </Text>
         </View>
-        <Text style={styles.meta} numberOfLines={1}>
-          {row.meta}
-        </Text>
+        <StatusPill
+          label={row.statusText}
+          tone={row.tone}
+          showDot={row.tone !== "neutral"}
+          testId={`${testId}-status`}
+        />
       </Pressable>
       {errorMessage ? (
         <Banner tone="danger" message={errorMessage} testId={`${testId}-action-error`} />
@@ -879,15 +928,22 @@ function createStyles(theme: NativeTheme) {
     filterChipTextSelected: { color: theme.colors.accentContrast },
     rows: { gap: theme.spacing[1] },
     rowContainer: { gap: theme.spacing[1] },
+    // A1's `.row`: a raised pill, not a dashed rule. `minHeight` stays
+    // 48 rather than the artifact's 46 — the artifact's figure is below
+    // this platform's own touch minimum (plan.md §9.3), and
+    // `touch-targets.test.ts` audits exactly this control.
     row: {
       minHeight: 48,
-      justifyContent: "center",
-      gap: theme.spacing[1],
-      paddingVertical: theme.spacing[2],
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderStyle: "dashed",
-      borderBottomColor: theme.colors.line,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing[2],
+      paddingVertical: ROW_PADDING_VERTICAL,
+      paddingHorizontal: ROW_PADDING_HORIZONTAL,
+      borderRadius: ROW_RADIUS,
+      backgroundColor: theme.colors.surface,
+      ...ringShadow(theme, "card"),
     },
+    rowText: { flex: 1, gap: 2 },
     rowActions: {
       flexDirection: "row",
       justifyContent: "flex-end",
@@ -897,21 +953,11 @@ function createStyles(theme: NativeTheme) {
     title: {
       color: theme.colors.ink,
       fontSize: theme.typography.variant.body.fontSize,
-      fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
-    },
-    statusRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[1] },
-    dot: { width: 8, height: 8, borderRadius: theme.radii.full },
-    dot_success: { backgroundColor: theme.colors.status.success.icon },
-    dot_warning: { backgroundColor: theme.colors.status.warning.icon },
-    dot_danger: { backgroundColor: theme.colors.status.danger.icon },
-    dot_info: { backgroundColor: theme.colors.status.info.icon },
-    dot_neutral: { backgroundColor: theme.colors.status.neutral.icon },
-    statusText: {
-      color: theme.colors["ink-2"],
-      fontSize: theme.typography.variant.caption.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
     meta: {
-      color: theme.colors["ink-3"],
+      color: theme.colors["ink-2"],
+      fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.caption.fontSize,
     },
   });

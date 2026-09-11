@@ -619,6 +619,7 @@ that recomputation has to be domain-specific:
 | T360   | The agent's todo list reached Android and was filtered out of the transcript before anything could draw it           | phase-9   | android          | P9-U   | T353, T356                                                            |
 | T361   | An ask-user question opened the same edge-welded sheet as a settings picker, and its footer named two keys           | phase-9   | android          | P9-U   | T360                                                                  |
 | T362   | The session list had no way to narrow itself, so a phone-sized screen showed whatever order the daemon sent          | phase-9   | android          | P9-U   | T361                                                                  |
+| T363   | A session row was a dashed rule with a bare dot, and said nothing about how long ago the session was touched         | phase-9   | android          | P9-U   | T362                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -660,8 +661,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**571 tasks** (distinct IDs counted directly from the table above), recounted at T362 with
-`grep`/`sort -u` over the table's own rows — one past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**572 tasks** (distinct IDs counted directly from the table above), recounted at T363 with
+`grep`/`sort -u` over the table's own rows — one past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18075,3 +18076,60 @@ flows that name them still find them.
 - [x] Selection reaches TalkBack as state, and the selected fill comes from a token pair, not a hex literal
 - [x] The bar's search mark focuses the real field; the close action appears only where it can act
 - [x] The touch-target audit no longer reads a type annotation as a control, and both directions are pinned
+
+#### T363 — A session row was a dashed rule with a bare dot, and said nothing about how long ago the session was touched
+
+`labels: phase-9, area: android` · `depends-on: T362`
+
+`HANDOFF.md` §7.3's `.row` is a raised surface pill: the session's name, one mono `.s` line, and
+a status pill on the right. What shipped was a dashed hairline with a hand-drawn 8dp dot stacked
+above a caption above a meta line — three stacked lines per row, and nothing anywhere saying
+whether a session was last touched a minute ago or a week ago.
+
+**The status moved into `StatusPill`, and still prints its word.** The dot the row drew by hand
+is the pill's own, and the pill carries the state as text beside it, so the state is never
+colour alone (plan.md §10.5) even though the separate caption is gone. The dot is drawn only
+where the tone is not neutral — the artifact gives its running and waiting states a dot and its
+idle state none, which is the call `StatusPill`'s own `showDot` prop was written to let a caller
+make.
+
+**The age is derived, and refuses to guess.** `sessionAgeLabel` steps one coarse unit at a time
+— "now", "28m", "3h", "2d" — and returns `null`, not a placeholder, when `updatedAt` will not
+parse or sits more than a minute in the future. A row is allowed to carry no age; it is not
+allowed to carry "NaN", or to claim a session was touched a negative number of minutes ago
+because a phone and a daemon disagree about the clock. Every row on one render reads the SAME
+`Date.now()`, so two sessions updated in the same second cannot print different ages. The list
+does not tick: re-rendering every minute to move one character would cost more than it tells
+anyone, and any real change to the list re-reads the clock anyway.
+
+**Two of the artifact's three `.s` figures are not printed, because they are not on the wire.**
+Its line reads "18 turns · 184k · 28m"; `SessionSummary` carries neither a turn count nor a
+token total, and the daemon's session list does not send them. The line says what this screen
+actually knows — provider, working directory, age — rather than two numbers nobody could stand
+behind. A test pins that neither word reappears.
+
+**The row keeps a 48dp minimum, not the artifact's 46.** That figure is below this platform's
+own touch floor (plan.md §9.3), and `ui/primitives/touch-targets.test.ts` audits this exact
+control — matching the picture there would have been a real regression for a two-pixel gain.
+
+**Archive and Delete stay beneath the row.** The artifact draws no such affordance because its
+mock has none. Removing two working controls to match a picture would delete a shipped
+capability with nothing to replace it; the row above them takes the new shape, and the buttons
+keep theirs until a task gives them one.
+
+Two source pins moved with the drawing, and neither was widened or dropped: the row's combined
+accessibility label is now `sessionRowAccessibilityLabelWithAge(row, age)` — still the model's,
+still combined — and the "state is spoken and printed, never colour alone" claim is re-anchored
+at the `StatusPill` that now carries it. Dropping the second would have left nothing asserting
+the status word is drawn at all.
+
+No `CAPABILITIES` entry: nothing new reaches the wire. Every row testID is unchanged, and the
+new pill's is additive.
+
+- [x] The row is the artifact's raised pill, with one mono `.s` line and a status pill
+- [x] The state is still printed as a word, and the dot appears only where it means something
+- [x] The age is derived from `updatedAt`, shares one clock across the list, and yields nothing rather than a wrong value
+- [x] The two figures the wire does not carry are left out, with a pin that they stay out
+- [x] The touch minimum stays at 48dp
+- [x] Archive and Delete remain reachable
+- [x] Both moved pins are re-anchored at their new addresses with the reason recorded

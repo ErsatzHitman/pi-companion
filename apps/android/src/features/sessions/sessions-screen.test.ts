@@ -59,10 +59,24 @@ describe("SessionsScreen source", () => {
     // node"), so an unanchored regex over raw file text is satisfied by
     // that prose alone and stays green even when the real prop is deleted.
     expect(code).toMatch(/accessible\b/);
-    expect(code).toMatch(/accessibilityLabel=\{row\.accessibilityLabel\}/);
-    // The status dot is decorative once the row carries the combined label; the status word itself stays visible text.
-    expect(code).toMatch(/accessibilityElementsHidden/);
-    expect(code).toMatch(/\{row\.statusText\}/);
+    // CORRECTED (T363): this read `accessibilityLabel={row.accessibilityLabel}`.
+    // The label is still the model's, and still combined — T363 only
+    // works the row's age into it, which the model also owns
+    // (`sessionRowAccessibilityLabelWithAge`). Re-anchored at the new
+    // call rather than loosened to `accessibilityLabel=` alone, which
+    // would pass against a hand-assembled label built in the JSX.
+    expect(code).toMatch(/accessibilityLabel=\{sessionRowAccessibilityLabelWithAge\(row, age\)\}/);
+    // CORRECTED (T363): this read `accessibilityElementsHidden` and
+    // `{row.statusText}`. Both pinned the same claim — the state is
+    // spoken and printed, never colour alone — against a hand-drawn dot
+    // beside a caption. That drawing is gone: the status is now a
+    // `StatusPill`, which prints the word itself and owns its own dot,
+    // and the row's `accessible` wrapper above collapses the whole
+    // thing into one TalkBack stop. The claim is unchanged and is
+    // re-anchored at the pill; it is not dropped, which would have left
+    // nothing asserting the word is drawn at all.
+    expect(code).toMatch(/<StatusPill\s+label=\{row\.statusText\}/);
+    expect(code).toMatch(/tone=\{row\.tone\}/);
   });
 
   it("reads its styling from useTheme() and contains no raw hex colour literal", () => {
@@ -297,5 +311,45 @@ describe("SessionsScreen source: T362 A1's bar, search field and filter chips", 
     // `listState`; none of them may clear what the reader typed.
     expect(code).toMatch(/const \[query, setQuery\] = useState\(""\)/);
     expect(code).not.toMatch(/setListState\([^)]*query/);
+  });
+});
+
+describe("SessionsScreen source: T363 A1's row", () => {
+  const code = readScreenCode();
+
+  it("draws the row as one raised pill, not a dashed rule", () => {
+    expect(code).toMatch(/borderRadius: ROW_RADIUS/);
+    expect(code).toMatch(/backgroundColor: theme\.colors\.surface/);
+    expect(code).toMatch(/\.\.\.ringShadow\(theme, "card"\)/);
+    expect(code).not.toMatch(/borderStyle: "dashed"/);
+  });
+
+  it("keeps the platform's touch minimum rather than the artifact's 46", () => {
+    expect(code).toMatch(/minHeight: 48/);
+  });
+
+  it("prints the age from the model, against one clock reading for the whole list", () => {
+    // Two rows updated in the same second must not disagree about when
+    // that was.
+    expect(code).toMatch(/const nowMs = Date\.now\(\);/);
+    expect(code).toMatch(/sessionAgeLabel\(rawSession\.updatedAt, nowMs\)/);
+    expect(code).toMatch(/\{sessionRowMetaWithAge\(row, age\)\}/);
+  });
+
+  it("invents neither of the artifact's two unavailable figures", () => {
+    // "18 turns · 184k" — `SessionSummary` carries neither.
+    expect(code).not.toMatch(/turns/);
+    expect(code).not.toMatch(/\d+k/);
+  });
+
+  it("gives the pill a dot only where the state is worth one", () => {
+    expect(code).toMatch(/showDot=\{row\.tone !== "neutral"\}/);
+  });
+
+  it("keeps Archive and Delete reachable", () => {
+    // The artifact draws no such affordance; deleting two working
+    // controls to match a picture would remove shipped capability.
+    expect(code).toMatch(/testId=\{`\$\{testId\}-archive`\}/);
+    expect(code).toMatch(/testId=\{`\$\{testId\}-delete`\}/);
   });
 });
