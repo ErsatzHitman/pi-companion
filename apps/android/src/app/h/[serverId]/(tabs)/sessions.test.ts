@@ -133,3 +133,15 @@ describe("sessions route: A1's close action (T362)", () => {
     expect(code).not.toMatch(/router\.replace\(/);
   });
 });
+
+describe("sessions route: A1's gear opens Settings (T364)", () => {
+  it("navigates to the sibling tab rather than pushing it", () => {
+    // Five taps must switch tabs five times, not stack five Settings
+    // screens behind the back gesture.
+    const code = readCode();
+    expect(code).toMatch(
+      /router\.navigate\(destinationHref\(\{ type: "settings", serverId: serverId \?\? "" \}\)\)/,
+    );
+    expect(code).toMatch(/onOpenSettings=\{handleOpenSettings\}/);
+  });
+});

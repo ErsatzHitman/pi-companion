@@ -235,7 +235,11 @@ describe("SessionsScreen source: T337 the cold-start restore waits for the conne
     // destructuring. Re-anchored at its new address rather than
     // loosened to `connected,` alone, which would also pass against a
     // `connected` that had been dropped from the signature entirely.
-    expect(code).toMatch(/onSessionOpened,\s*connected,\s*onClose,\s*\}: SessionsScreenProps\)/);
+    // CORRECTED again (T364): `onOpenSettings` now follows `onClose`.
+    // Re-anchored rather than loosened for the reason T362 gave.
+    expect(code).toMatch(
+      /onSessionOpened,\s*connected,\s*onClose,\s*onOpenSettings,\s*\}: SessionsScreenProps\)/,
+    );
   });
 
   it("the restore effect returns early while connected === false and re-runs when it flips (connected is in its deps)", () => {
@@ -351,5 +355,50 @@ describe("SessionsScreen source: T363 A1's row", () => {
     // controls to match a picture would remove shipped capability.
     expect(code).toMatch(/testId=\{`\$\{testId\}-archive`\}/);
     expect(code).toMatch(/testId=\{`\$\{testId\}-delete`\}/);
+  });
+});
+
+describe("SessionsScreen source: T364 A1's bottom row", () => {
+  const code = readScreenCode();
+
+  it("reveals the create form from the chip instead of leaving it above the list", () => {
+    expect(code).toMatch(/\{createFormVisible \? \(/);
+    expect(code).toMatch(/testID=\{`\$\{testId\}-create-new`\}/);
+  });
+
+  it("forces the form open while a submission has failed", () => {
+    // Otherwise the error banner sits behind a collapsed form the
+    // reader has no reason to reopen.
+    expect(code).toMatch(
+      /const createFormVisible = createFormOpen \|\| createState\.phase === "error";/,
+    );
+  });
+
+  it("closes the form once the session exists", () => {
+    expect(code).toMatch(
+      /setCreateState\(markCreateSessionSucceeded\(\)\);\s*setCreateFormOpen\(false\);/,
+    );
+  });
+
+  it("tells TalkBack whether the form is open, and renames the button accordingly", () => {
+    expect(code).toMatch(/accessibilityState=\{\{ expanded: createFormVisible \}\}/);
+    expect(code).toMatch(/createFormVisible \? "Hide the new session form" : "New session"/);
+  });
+
+  it("draws no home button, whose target this app does not have", () => {
+    // `{ type: "host" }` resolves to `/h/:serverId`, which Expo Router
+    // sends back to this very list.
+    expect(code).not.toMatch(/onOpenHome/);
+    expect(code).not.toMatch(/\u2302/);
+  });
+
+  it("names the gear rather than announcing its glyph", () => {
+    expect(code).toMatch(/accessibilityLabel="Settings"/);
+    expect(code).toMatch(/importantForAccessibility="no-hide-descendants"/);
+  });
+
+  it("keeps both bottom buttons at the platform's touch minimum", () => {
+    expect(code).toMatch(/const ACTION_BUTTON_SIZE = 48;/);
+    expect(code).toMatch(/minHeight: ACTION_BUTTON_SIZE,\s*minWidth: ACTION_BUTTON_SIZE,/);
   });
 });

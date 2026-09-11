@@ -620,6 +620,7 @@ that recomputation has to be domain-specific:
 | T361   | An ask-user question opened the same edge-welded sheet as a settings picker, and its footer named two keys           | phase-9   | android          | P9-U   | T360                                                                  |
 | T362   | The session list had no way to narrow itself, so a phone-sized screen showed whatever order the daemon sent          | phase-9   | android          | P9-U   | T361                                                                  |
 | T363   | A session row was a dashed rule with a bare dot, and said nothing about how long ago the session was touched         | phase-9   | android          | P9-U   | T362                                                                  |
+| T364   | An empty create-session form sat above the list on every visit, and nothing at the bottom of A1 did anything         | phase-9   | android          | P9-U   | T363                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -661,8 +662,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**572 tasks** (distinct IDs counted directly from the table above), recounted at T363 with
-`grep`/`sort -u` over the table's own rows — one past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**573 tasks** (distinct IDs counted directly from the table above), recounted at T364 with
+`grep`/`sort -u` over the table's own rows — one past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18133,3 +18134,51 @@ new pill's is additive.
 - [x] The touch minimum stays at 48dp
 - [x] Archive and Delete remain reachable
 - [x] Both moved pins are re-anchored at their new addresses with the reason recorded
+
+#### T364 — An empty create-session form sat above the list on every visit, and nothing at the bottom of A1 did anything
+
+`labels: phase-9, area: android` · `depends-on: T363`
+
+`HANDOFF.md` §7.3 ends A1 with a bottom row — a "+ New session" chip that reveals the create
+form, a home button and a gear — and gives the list the rest of the screen. What shipped put
+the create form permanently at the top: two text fields and a submit button between the reader
+and every session they came to open, on every single visit.
+
+**The form is revealed, and it reveals itself when it has to.** It is forced open while a
+submission has failed, because an error banner behind a collapsed form is a banner nobody
+reads, and it closes itself the moment a session is created — the row now exists, and an empty
+form standing between the reader and it helps no one. TalkBack hears `expanded` rather than
+inferring anything from the chip's fill, and the chip renames itself when open.
+
+**The three Maestro flows that create a session were changed in the same commit.**
+`cold-start-restore`, `extension-sheets` and `notification-approval` all tapped
+`-create-cwd` directly, which worked only while the form was always mounted. Each now taps
+`-create-new` first, with a `CORRECTED (T364)` note at the edit saying why; the field, the
+submit button and every id are unchanged. A contract case in
+`e2e/flows/cold-start-restore-model.test.ts` reads all three yaml files and asserts the reveal
+tap appears BEFORE the working-directory tap in each, so the source and the flows cannot drift
+apart silently — which is the whole reason `HANDOFF.md` §6.5 says to change them together.
+
+**The artifact's home button is deliberately not drawn.** Its target is a per-host overview
+screen this app does not have: `{ type: "host" }` resolves to `/h/:serverId`, and Expo Router
+sends that straight back to the tab group whose first screen is this very list. The button
+would navigate to the screen it is already on — an affordance a reader cannot act on, the same
+defect class as printing a keyboard hint on a touch device, which T359 and T361 each corrected
+from the other side. A test pins that it stays out.
+
+**The gear navigates, it does not push.** Settings is this host's other tab; five taps must
+switch tabs five times rather than stacking five Settings screens behind the back gesture.
+Both bottom buttons are 48dp rather than the artifact's 44 — this platform's own minimum, and
+what `touch-targets.test.ts` audits.
+
+The T337 signature pin moved a second time (T362 moved it once) as `onOpenSettings` joined the
+destructuring, and was re-anchored at its new address rather than loosened to `connected,`
+alone, which would also pass against a `connected` that had been deleted outright.
+
+No `CAPABILITIES` entry: nothing new reaches the wire.
+
+- [x] The create form is behind A1's chip, and the list gets the screen
+- [x] A failed submission forces the form open; a successful one closes it
+- [x] The three flows that create a session reveal it first, and a contract case proves the ordering in all three
+- [x] The home button is left out with its reason recorded, and pinned to stay out
+- [x] The gear switches tabs rather than stacking them, and both buttons meet the touch minimum

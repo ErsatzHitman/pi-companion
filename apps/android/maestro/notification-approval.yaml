@@ -144,6 +144,14 @@ tags:
 # "BLOCKED by Gap B above (items 1-3)"; see the header's corrected items.
 - assertVisible:
     id: "sessions-screen-.*"
+# --- CORRECTED (T364): this tapped the working-directory field
+# directly, which worked while the create form sat permanently above
+# the list. `HANDOFF.md` §7.3 puts it behind A1's "+ New session"
+# chip so the list gets the whole screen, so the form has to be
+# revealed first. The field, the submit button and their ids are
+# unchanged; only the tap that opens them is new.
+- tapOn:
+    id: "sessions-screen-.*-create-new"
 - tapOn:
     id: "sessions-screen-.*-create-cwd"
 - inputText: "${FLOW_CWD}"

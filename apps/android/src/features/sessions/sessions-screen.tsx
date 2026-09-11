@@ -100,6 +100,17 @@
  * controls to match a picture would delete a shipped capability and
  * leave no way to reach it. The row above them adopts the new shape;
  * the buttons keep theirs until a later task gives them one.
+ *
+ * **T364 — A1's bottom row, and the create form behind it.** The
+ * create-session form no longer sits permanently above the list: it is
+ * revealed by the "+ New session" chip, which is what §7.3 specifies
+ * and which gives the list the whole screen. It is forced open while a
+ * submission has failed, so an error banner is never hidden behind a
+ * collapsed form, and it closes itself once a session is created — the
+ * row now exists, and an empty form between the reader and it helps
+ * nobody. The three Maestro flows that create a session tap the chip
+ * first; source and flows changed together, per this repository's rule
+ * for anything a flow selector names.
  */
 import type { KeyValueStorage, NetworkReachability } from "@picompanion/frontend-core";
 import type { NativeTheme } from "@picompanion/design-tokens";
@@ -239,12 +250,27 @@ export interface SessionsScreenProps {
    * to, and a bar button that does nothing is worse than no button.
    */
   onClose?: () => void;
+  /**
+   * T364: A1's bottom row ends in a gear that opens Settings. Optional
+   * for the same reason `onClose` is — this screen never navigates on
+   * its own, and a caller that cannot reach Settings gets no button
+   * rather than a dead one.
+   */
+  onOpenSettings?: () => void;
 }
 
 /** A1's `.row` geometry. */
 const ROW_RADIUS = 22;
 const ROW_PADDING_VERTICAL = 6;
 const ROW_PADDING_HORIZONTAL = 12;
+
+/**
+ * A1's bottom-row buttons. The artifact draws them at 44dp; 48 is
+ * this platform's own minimum (plan.md §9.3) and is what
+ * `touch-targets.test.ts` audits, so the larger figure wins.
+ */
+const ACTION_BUTTON_SIZE = 48;
+const ACTION_MARK_FONT_SIZE = 16;
 
 /** A1's `.chip` height. The touch target around it is 48dp; see `FilterChip`. */
 const FILTER_CHIP_HEIGHT = 30;
@@ -262,6 +288,7 @@ export function SessionsScreen({
   onSessionOpened,
   connected,
   onClose,
+  onOpenSettings,
 }: SessionsScreenProps) {
   const { theme } = useTheme();
   const keyboardInset = useKeyboardInset();
@@ -350,6 +377,12 @@ export function SessionsScreen({
       : null;
 
   const [createState, setCreateState] = useState<CreateSessionState>(EMPTY_CREATE_SESSION_STATE);
+  // T364: the create form is revealed by A1's "+ New session" chip
+  // rather than sitting permanently above the list. It is forced open
+  // while a submission has failed, so an error banner can never be
+  // hidden behind a collapsed form the reader has no reason to reopen.
+  const [createFormOpen, setCreateFormOpen] = useState(false);
+  const createFormVisible = createFormOpen || createState.phase === "error";
   const [openState, setOpenState] = useState<SessionOpenState>(IDLE_SESSION_OPEN_STATE);
   const openStateRef = useRef(openState);
   openStateRef.current = openState;
@@ -439,6 +472,9 @@ export function SessionsScreen({
       .createSession(begin.state.draft)
       .then((session) => {
         setCreateState(markCreateSessionSucceeded());
+        // T364: the session now exists and has a row; leaving the form
+        // open would put an empty one between the reader and it.
+        setCreateFormOpen(false);
         onSessionCreated?.(session);
       })
       .catch((error: unknown) => {
@@ -588,18 +624,20 @@ export function SessionsScreen({
           />
         ))}
       </View>
-      <CreateSessionForm
-        state={createState}
-        onCwdChange={(cwd) =>
-          setCreateState((current) => updateCreateSessionDraft(current, { cwd }))
-        }
-        onProviderChange={(provider) =>
-          setCreateState((current) => updateCreateSessionDraft(current, { provider }))
-        }
-        onSubmit={handleCreateSubmit}
-        disabled={!sessionService}
-        testId={`${testId}-create`}
-      />
+      {createFormVisible ? (
+        <CreateSessionForm
+          state={createState}
+          onCwdChange={(cwd) =>
+            setCreateState((current) => updateCreateSessionDraft(current, { cwd }))
+          }
+          onProviderChange={(provider) =>
+            setCreateState((current) => updateCreateSessionDraft(current, { provider }))
+          }
+          onSubmit={handleCreateSubmit}
+          disabled={!sessionService}
+          testId={`${testId}-create`}
+        />
+      ) : null}
       {listState.kind === "ready" ? (
         // T32B6, item 3: "the active connection path is visible" — text,
         // never colour alone, honestly "Unknown" until `network` (see
@@ -703,6 +741,44 @@ export function SessionsScreen({
             </Section>
           ))
         : null}
+      {/*
+        A1's bottom row. The artifact's third control, a `home` button,
+        is deliberately absent: its target is a per-host overview screen
+        this app does not have — `{ type: "host" }` resolves to
+        `/h/:serverId`, which Expo Router sends straight back to this
+        very list — so the button would navigate to the screen it is
+        already on. Drawing an affordance a reader cannot act on is the
+        same defect class as printing a keyboard hint on a touch device.
+      */}
+      <View style={styles.actionRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: createFormVisible }}
+          accessibilityLabel={createFormVisible ? "Hide the new session form" : "New session"}
+          onPress={() => setCreateFormOpen((open) => !open)}
+          style={[styles.actionButton, styles.actionButtonWide]}
+          testID={`${testId}-create-new`}
+        >
+          <Text style={styles.actionLabel}>+ New session</Text>
+        </Pressable>
+        {onOpenSettings ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            onPress={onOpenSettings}
+            style={styles.actionButton}
+            testID={`${testId}-open-settings`}
+          >
+            <Text
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={styles.actionMark}
+            >
+              {"\u2699"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
       <Dialog
         open={actionsState.deleteTarget !== null}
         title="Delete this session?"
@@ -912,6 +988,24 @@ function createStyles(theme: NativeTheme) {
     container: { flex: 1 },
     formFields: { gap: theme.spacing[2] },
     filterChips: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[2] },
+    actionRow: { flexDirection: "row", gap: theme.spacing[2], paddingVertical: theme.spacing[2] },
+    actionButton: {
+      minHeight: ACTION_BUTTON_SIZE,
+      minWidth: ACTION_BUTTON_SIZE,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: theme.spacing[3],
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.surface,
+      ...ringShadow(theme, "card"),
+    },
+    actionButtonWide: { flex: 1 },
+    actionLabel: {
+      color: theme.colors.ink,
+      fontSize: theme.typography.variant.body.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+    },
+    actionMark: { color: theme.colors["ink-2"], fontSize: ACTION_MARK_FONT_SIZE },
     filterChip: {
       height: FILTER_CHIP_HEIGHT,
       justifyContent: "center",

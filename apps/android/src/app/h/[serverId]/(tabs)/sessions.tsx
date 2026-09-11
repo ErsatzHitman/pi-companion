@@ -138,6 +138,13 @@ export default function SessionsRoute() {
   // undefined when it says no, so the bar draws no leading button
   // rather than one that does nothing.
   const canClose = router.canGoBack();
+  // T364: A1's bottom row opens Settings, which is this host's other
+  // tab. `navigate`, not `push`: tapping the gear five times must
+  // switch tabs five times, not stack five Settings screens behind the
+  // back gesture.
+  const handleOpenSettings = useCallback(() => {
+    router.navigate(destinationHref({ type: "settings", serverId: serverId ?? "" }));
+  }, [router, serverId]);
   const handleClose = useCallback(() => {
     router.back();
   }, [router]);
@@ -170,6 +177,7 @@ export default function SessionsRoute() {
       onSessionCreated={handleSessionCreated}
       onSessionOpened={handleSessionOpened}
       onClose={canClose ? handleClose : undefined}
+      onOpenSettings={handleOpenSettings}
     />
   );
 }

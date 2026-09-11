@@ -273,6 +273,26 @@ describe("cold-start-restore.yaml's testId anchors exist in source", () => {
     expect(sessionsScreenCode()).toMatch(/testId=\{`\$\{testId\}-submit`\}/);
   });
 
+  it('T364: the create form is behind "${testId}-create-new", and every flow that creates a session taps it first', () => {
+    const screen = sessionsScreenCode();
+    expect(screen).toMatch(/testID=\{`\$\{testId\}-create-new`\}/);
+    expect(screen).toMatch(/\{createFormVisible \? \(/);
+    // Forced open on a failed submission: an error banner behind a
+    // collapsed form is a banner nobody reads.
+    expect(screen).toMatch(
+      /const createFormVisible = createFormOpen \|\| createState\.phase === "error";/,
+    );
+
+    for (const flow of ["cold-start-restore", "extension-sheets", "notification-approval"]) {
+      const yaml = readSource(`../../maestro/${flow}.yaml`);
+      const revealAt = yaml.indexOf('id: "sessions-screen-.*-create-new"');
+      const cwdAt = yaml.indexOf('id: "sessions-screen-.*-create-cwd"');
+      expect(revealAt, `${flow}.yaml reveals the create form`).toBeGreaterThan(-1);
+      expect(cwdAt, `${flow}.yaml still types a working directory`).toBeGreaterThan(-1);
+      expect(revealAt, `${flow}.yaml reveals it before typing`).toBeLessThan(cwdAt);
+    }
+  });
+
   it('sessions-screen.tsx\'s session rows are "${testId}-row-${row.id}", and opening one persists it as the last-opened session', () => {
     expect(sessionsScreenCode()).toMatch(/testId=\{`\$\{testId\}-row-\$\{row\.id\}`\}/);
     expect(sessionsScreenCode()).toMatch(
