@@ -19330,11 +19330,11 @@ file-download, queue-retry-compaction`, then `[run-shard] file-download: PASS` a
 `[run-shard] queue-retry-compaction: PASS`.
 
 - [x] The four flows run on a real dispatch, with the run id recorded — two ran and passed
-  (`34589238596`); two recorded as deliberately unobserved above
+      (`34589238596`); two recorded as deliberately unobserved above
 - [x] The Phase 5 exit gate still asserts exactly `plan.md` §14.4's ten scenarios, proven by a test
 - [x] `NON_EXIT_GATE_FLOW_NAMES`'s per-flow reasons match what is true after it
 - [x] The two observed flows' headers name the run; the two lab flows' "has never been run"
-  stands as accurate state with its why
+      stands as accurate state with its why
 
 #### T382 — The two surfaces had no reviewable picture of themselves, only screenshots that cannot carry motion
 
