@@ -2,16 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
-  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
   withTiming,
 } from "react-native-reanimated";
 
 import { VectorIcon } from "../primitives/vector-icons";
 import { asFontWeight } from "../theme/native-style-helpers";
 import { useTheme } from "../theme/theme-context";
+import { ShimmerText } from "./ShimmerText";
 
 export interface ThinkingSectionProps {
   /**
@@ -68,6 +67,10 @@ export interface ThinkingSectionProps {
  * beneath the disclosure, because this recipe had no `live` prop and
  * could not be edited by the task that needed one. It can now, so the
  * treatment sits where the design puts it: on the head's own words.
+ * T359 moved the animation itself one file over, to
+ * `./ShimmerText.tsx`, when the bash block needed the same treatment
+ * for its "Running…" label; this recipe passes `active` and the
+ * colour it rests at, and owns nothing of the loop.
  * That caption is gone rather than kept alongside — the head now reads
  * the literal word "Thinking", so the state is still carried in text
  * with the animation off, which is the requirement the caption existed
@@ -85,15 +88,6 @@ export interface ThinkingSectionProps {
 const HEAD_FONT_SIZE = 12.5;
 const SPARKLE_SIZE = 14;
 const CHEVRON_SIZE = 11;
-
-/**
- * Beautiful UI's shimmer cycle, the same named constant
- * `./StreamingMessage.tsx` carries and for the same reason: the
- * reference's "1.4s linear" has no corresponding token in
- * `@picompanion/design-tokens`, whose `motion.duration` table tops out
- * at `entrance` = 600ms.
- */
-const SHIMMER_DURATION_MS = 1400;
 
 export function ThinkingSection({
   headline,
@@ -120,22 +114,6 @@ export function ThinkingSection({
     transform: [{ rotate: `${progress.value * 180}deg` }],
   }));
 
-  const shimmer = useSharedValue(0);
-  useEffect(() => {
-    if (!shimmerEnabled) {
-      shimmer.value = 0;
-      return;
-    }
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: SHIMMER_DURATION_MS, easing: Easing.linear }),
-      -1,
-      true,
-    );
-  }, [shimmerEnabled, shimmer]);
-  const headlineStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(shimmer.value, [0, 1], [theme.colors["ink-3"], theme.colors.ink]),
-  }));
-
   const headTint = expanded ? theme.colors["ink-2"] : theme.colors["ink-3"];
 
   return (
@@ -149,12 +127,14 @@ export function ThinkingSection({
         style={styles.trigger}
       >
         <VectorIcon name="sparkle" size={SPARKLE_SIZE} color={headTint} />
-        <Animated.Text
-          style={[styles.headline, { color: headTint }, shimmerEnabled ? headlineStyle : null]}
-          testID={testId ? `${testId}-headline` : undefined}
+        <ShimmerText
+          active={shimmerEnabled}
+          settled={headTint}
+          style={styles.headline}
+          testId={testId ? `${testId}-headline` : undefined}
         >
           {headline}
-        </Animated.Text>
+        </ShimmerText>
         {durationLabel.length > 0 ? <Text style={styles.duration}>{durationLabel}</Text> : null}
         <Animated.View style={chevronStyle} accessibilityElementsHidden>
           <VectorIcon name="chevron-down" size={CHEVRON_SIZE} color={headTint} />

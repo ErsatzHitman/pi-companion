@@ -133,3 +133,42 @@ describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
     expect(readCode()).toMatch(/statusText=\{statusTextFor\(tool\.status\)\}/);
   });
 });
+
+describe("tool-call-row.tsx: the shell call is the artifact's .bash (T359)", () => {
+  it("draws BashBlock rather than the two stacked CodeBlocks it used to", () => {
+    const code = readCode();
+    expect(code).toMatch(/<BashBlock\s+command=\{tool\.command\}/);
+    expect(code).not.toMatch(/<CodeBlock code=\{tool\.command\} language="bash" \/>/);
+  });
+
+  it("bounds the output before handing it over, the same way the old block did", () => {
+    expect(readCode()).toMatch(
+      /output=\{tool\.output === undefined \? undefined : truncateBody\(tool\.output\)\}/,
+    );
+  });
+
+  it("names this platform's own stop control, only while the command is running", () => {
+    const code = readCode();
+    expect(code).toMatch(/cancelHint=\{running \? ABORT_ACTION_LABEL : undefined\}/);
+    // The artifact's desktop-only keyboard hint, which Android cannot
+    // honour and therefore must not print.
+    expect(code).not.toMatch(/esc to cancel/);
+  });
+
+  it("takes the dim variant from the model, not from an inline status check", () => {
+    expect(readCode()).toMatch(/dimmed=\{shellBlockIsDimmed\(tool\.status\)\}/);
+  });
+
+  it("gates the shimmer on reduced motion at the call site, where the theme is", () => {
+    const code = readCode();
+    expect(code).toMatch(/shimmer=\{running && !reduceMotion\}/);
+  });
+
+  it("keeps the exit code and the cwd as plain text beside the block", () => {
+    // Both are facts about the call rather than part of the terminal
+    // output, and the artifact's `.bash` has nowhere to put them.
+    const code = readCode();
+    expect(code).toMatch(/`cwd: \$\{tool\.cwd\}`/);
+    expect(code).toMatch(/`Exit code: \$\{tool\.exitCode \?\? "—"\}`/);
+  });
+});

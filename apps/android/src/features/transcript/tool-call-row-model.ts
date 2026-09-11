@@ -245,6 +245,26 @@ export function diffLinesFor(tool: tools.EditToolCallViewModel): DiffLinesModel 
 /** The compact "N files, M matches[, truncated]" meta line, or
  * `undefined` when the call carries neither count. */
 /**
+ * Whether a shell call draws the artifact's dim `.bash-dim` variant
+ * rather than its green one (T359).
+ *
+ * Green says "this is a command that ran". A call that was cancelled,
+ * or that is still blocked on a permission prompt and has therefore not
+ * run at all, has produced nothing, and colouring it like a command
+ * with output is the same mistake `toolBlockKind` avoids one level up
+ * by refusing to colour a running call as finished.
+ *
+ * A FAILED command is deliberately NOT dim: it ran, it printed
+ * something, and its output is the most interesting thing on the
+ * screen. The card around it already carries `tool-error-bg` and a red
+ * outline, so the failure is stated without dimming the one part the
+ * reader came for.
+ */
+export function shellBlockIsDimmed(status: tools.ToolCallViewStatus): boolean {
+  return status === "canceled" || status === "blocked";
+}
+
+/**
  * The same bounded slice `diffLinesFor` returns, classified into the
  * redesign's own `.dl add|rem|ctx` bands (T358).
  *

@@ -57,15 +57,22 @@ describe("ThinkingSection.tsx: the artifact's .thead (T357)", () => {
     expect(code).toMatch(/accessibilityState=\{\{ expanded \}\}/);
   });
 
-  it("drives the shimmer from react-native-reanimated's interpolateColor/withRepeat, not a CSS-only or one-shot effect", () => {
+  // The two Reanimated-mechanism cases that used to sit here MOVED to
+  // `./ShimmerText.test.ts` at T359, when the bash block needed the
+  // same treatment and the loop became one shared recipe. They are the
+  // same assertions at the new address; see that file's doc comment for
+  // the full path this pair has taken. What stays here is the part that
+  // is still this recipe's decision — that it delegates rather than
+  // keeping a second copy.
+  it("T359: delegates the shimmer to the shared recipe instead of running its own loop", () => {
     const code = readCode();
-    expect(code).toMatch(/from "react-native-reanimated"/);
-    expect(code).toMatch(/interpolateColor\(/);
-    expect(code).toMatch(/withRepeat\(/);
+    expect(code).toMatch(/<ShimmerText\s+active=\{shimmerEnabled\}/);
+    expect(code).not.toMatch(/withRepeat\(/);
+    expect(code).not.toMatch(/interpolateColor\(/);
   });
 
-  it("resets the shared value instead of leaving a stale loop running when the gate turns off", () => {
-    expect(readCode()).toMatch(/if \(!shimmerEnabled\) \{\s*shimmer\.value = 0;/);
+  it("T359: still hands the shimmer the colour the head rests at, so the two agree when it stops", () => {
+    expect(readCode()).toMatch(/settled=\{headTint\}/);
   });
 
   it("takes the gate as a prop rather than re-deriving it from a feature's model", () => {
@@ -73,6 +80,12 @@ describe("ThinkingSection.tsx: the artifact's .thead (T357)", () => {
     expect(code).toMatch(/shimmer: shimmerEnabled = false/);
     expect(code).not.toMatch(/shouldAnimateShimmer/);
     expect(code).not.toMatch(/from "\.\.\/\.\.\/features/);
+  });
+
+  it("still animates the chevron from a motion token, which is the animation it does own", () => {
+    const code = readCode();
+    expect(code).toMatch(/duration: motion\.duration\.fast/);
+    expect(code).toMatch(/rotate: `\$\{progress\.value \* 180\}deg`/);
   });
 
   it("reads every colour from the theme and hardcodes no product colour", () => {

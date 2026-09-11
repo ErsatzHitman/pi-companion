@@ -26,6 +26,7 @@ import {
   resolvedEdits,
   searchCountsLine,
   searchMatchLines,
+  shellBlockIsDimmed,
   statusTextFor,
   truncateBody,
   unrecognizedToolMeta,
@@ -492,5 +493,24 @@ describe("searchMatchLines: what a search card highlights (T358)", () => {
 
   it("returns nothing for content that is only whitespace", () => {
     expect(searchMatchLines("\n \n\t\n")).toEqual([]);
+  });
+});
+
+describe("shellBlockIsDimmed: which shell blocks lose their green (T359)", () => {
+  it("dims a command that never ran", () => {
+    expect(shellBlockIsDimmed("canceled")).toBe(true);
+    expect(shellBlockIsDimmed("blocked")).toBe(true);
+  });
+
+  it("keeps a failed command green, because it ran and its output is the point", () => {
+    // The card around it already carries `tool-error-bg` and a red
+    // outline, so the failure is stated without dimming the one part
+    // the reader came for.
+    expect(shellBlockIsDimmed("failed")).toBe(false);
+  });
+
+  it("keeps a running and a finished command green", () => {
+    expect(shellBlockIsDimmed("running")).toBe(false);
+    expect(shellBlockIsDimmed("completed")).toBe(false);
   });
 });

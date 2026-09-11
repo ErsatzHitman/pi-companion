@@ -47,6 +47,10 @@ const RECIPE_FILES = [
   // T358: the redesign's diff bands, and the search hit that
   // shares their treatment.
   "DiffLines",
+  // T359: the shell command's rules-only container, and the
+  // shimmer both it and ThinkingSection now share.
+  "BashBlock",
+  "ShimmerText",
 ];
 
 function readRecipeSource(name: string): string {
@@ -88,6 +92,12 @@ describe("§10.4 recipes: theme-only colour, no raw hex", () => {
 });
 
 describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
+  // `ShimmerText` is deliberately absent (T359): its 1.4s cycle has
+  // no `motion.duration` token to read — that table tops out at
+  // `entrance` = 600ms — so it carries a named exported constant
+  // instead, pinned by `./ShimmerText.test.ts` along with the
+  // reason. Listing it here would assert a rule it does not follow
+  // and could not.
   const animated = ["ThinkingSection", "StreamingMessage", "PixelLoader"];
   for (const name of animated) {
     it(`${name} drives Reanimated timing from theme motion tokens`, () => {
@@ -106,6 +116,26 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
     const code = readRecipeCode("PixelLoader");
     expect(code).toMatch(/animate=\{!reduceMotion\}/);
     expect(code).toMatch(/if \(!animate\) \{\s*opacity\.value = 1;/);
+  });
+});
+
+describe("BashBlock: the shell block states its state in words (T359)", () => {
+  it("prints a literal $ and the literal word Running, so neither the green nor the shimmer is load-bearing", () => {
+    const code = readRecipeCode("BashBlock");
+    expect(code).toMatch(/\{`\$ \$\{command\}`\}/);
+    expect(code).toMatch(/Running…/);
+  });
+
+  it("names the control that stops the command instead of a key this device has not got", () => {
+    expect(readRecipeCode("BashBlock")).not.toMatch(/esc to cancel/);
+  });
+});
+
+describe("ShimmerText: the words survive the animation being off (T359)", () => {
+  it("renders its children either way, in a theme colour", () => {
+    const code = readRecipeCode("ShimmerText");
+    expect(code).toMatch(/\{children\}/);
+    expect(code).toMatch(/active \? animatedStyle : null/);
   });
 });
 

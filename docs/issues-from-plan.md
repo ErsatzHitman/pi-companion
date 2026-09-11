@@ -615,6 +615,7 @@ that recomputation has to be domain-specific:
 | T356   | The transcript drew four different container shapes where the design draws one, and cited a wrong font               | phase-9   | android          | P9-U   | T355, T345                                                            |
 | T357   | The thinking row's head was a rotated text glyph, and a caption beneath it was doing the shimmer's job               | phase-9   | android          | P9-U   | T356, T345                                                            |
 | T358   | A diff was undifferentiated mono text and a search result never said where it matched                                | phase-9   | android          | P9-U   | T356                                                                  |
+| T359   | A shell command was drawn as a file listing, and the artifact's cancel hint names a key Android has not got          | phase-9   | android          | P9-U   | T357, T358, T350                                                      |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -656,8 +657,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**567 tasks** (distinct IDs counted directly from the table above), recounted at T358 with
-`grep`/`sort -u` over the table's own rows — one past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**568 tasks** (distinct IDs counted directly from the table above), recounted at T359 with
+`grep`/`sort -u` over the table's own rows — one past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17829,3 +17830,63 @@ No `CAPABILITIES` entry: nothing here reaches the wire.
 - [x] Marker text and a spoken "Added"/"Removed"/"Context" mean the wash is never the only signal
 - [x] One cap owns the diff slice, and the search list gains the line cap it was missing
 - [x] The moved pin was re-anchored to the same claim, not weakened
+
+#### T359 — A shell command was drawn as a file listing, and the artifact's cancel hint names a key Android has not got
+
+`labels: phase-9, area: android` · `depends-on: T357, T358, T350`
+
+`HANDOFF.md` §7.2's `.bash` is the one thing in the transcript the design does NOT box: a 1px
+green rule above and below at half strength, `$ ` and the command in bold green, output in
+`ink-2` between them, and — while it runs — a 3×3 pixel loader, a shimmering "Running…", a mono
+elapsed counter and a dim hint saying how to stop it. Android drew two stacked `CodeBlock`s,
+which is the treatment a file listing gets, with nothing at all to say the command was still
+going.
+
+**The rules ARE the container.** `BashBlock` draws no background, no radius and no card, and a
+test fails if one appears. Boxing a shell command would make it read as a tool result, which is
+precisely the distinction the design spends two hairlines to make.
+
+**"esc to cancel" is not shipped, and that is a correction rather than an omission.** The
+artifact is a desktop mock. Android has no `esc` key, so printing that string would be a
+visible instruction the reader cannot follow — the same class of defect `CLAUDE.md`'s T124
+section is about, reached from the other side: prose that is false about what the product can
+do. The hint is a prop, and the transcript passes `ABORT_ACTION_LABEL`, the label on the
+control that really does stop a turn here. A caller with no such control passes nothing and no
+hint is drawn.
+
+**A failed command keeps its green, and that is deliberate.** `shellBlockIsDimmed` returns true
+only for `canceled` and `blocked` — a command that produced nothing. A failure ran, printed
+something, and its output is the most interesting thing on the screen; the card around it
+already carries `tool-error-bg` and a red outline, so dimming the one part the reader came for
+would cost information to repeat a signal that is already there.
+
+**The shimmer got one owner, and the mechanism pins moved with it for the second time.** T357
+put the animation inside `ThinkingSection`; this task needed the same treatment for "Running…",
+and a second copy of a loop that must be reset rather than left running is the duplication T356
+and T358 each removed for a shape. It is now `ShimmerText`, taking `active` and the colour it
+rests at. The two Reanimated cases — that the loop is a real repeating `interpolateColor`/
+`withRepeat`, and that the shared value is reset rather than abandoned — began in
+`features/transcript/thinking-row.test.ts`, moved to `ThinkingSection.test.ts` at T357, and are
+now in `ShimmerText.test.ts`. Same assertions, third address, never widened to whatever the old
+file still happened to say and never deleted. What stays behind in `ThinkingSection.test.ts` is
+the claim that is still ITS decision: that it delegates, proven with a `not.toMatch` on
+`withRepeat` so a re-introduced private copy fails.
+
+**`ShimmerText` is deliberately NOT in `recipe-accessibility.test.ts`'s `animated` list**, and
+the omission is written down beside the list rather than left to be rediscovered: that group
+asserts every member drives its timing from `motion.duration`, and the reference's 1.4s cycle
+has no such token — the table tops out at `entrance` = 600ms. It carries a named exported
+constant instead, pinned with the reason in its own contract test. Listing it would assert a
+rule it cannot follow, which is a check that can only ever be wrong.
+
+The loader is `PixelLoader`, already shipped at T350 and already reduced-motion-safe; this task
+added no second loader and no second shimmer.
+
+No `CAPABILITIES` entry: nothing here reaches the wire.
+
+- [x] `.bash` is two half-strength rules with `$ ` and the command between them, and no box
+- [x] The running row carries the shared pixel loader, a shimmering "Running…", the elapsed time and a stop hint
+- [x] The hint names Android's own control; the artifact's keyboard string is not shipped
+- [x] A cancelled or blocked command dims; a failed one does not
+- [x] The shimmer has one owner, and both of its mechanism pins moved rather than being widened or dropped
+- [x] `ShimmerText`'s exemption from the motion-token rule is recorded where the list is, not left implicit

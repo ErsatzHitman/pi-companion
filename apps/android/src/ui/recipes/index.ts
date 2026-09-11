@@ -4,6 +4,8 @@
  */
 export { ApprovalForm } from "./ApprovalForm";
 export type { ApprovalFormProps } from "./ApprovalForm";
+export { BashBlock } from "./BashBlock";
+export type { BashBlockProps } from "./BashBlock";
 export { CodeListing } from "./CodeListing";
 export type { CodeListingProps } from "./CodeListing";
 export { CommandSearch } from "./CommandSearch";
@@ -38,6 +40,8 @@ export { PromptBar } from "./PromptBar";
 export type { PromptBarProps } from "./PromptBar";
 export { SelectionActions } from "./SelectionActions";
 export type { SelectionAction, SelectionActionsProps } from "./SelectionActions";
+export { ShimmerText } from "./ShimmerText";
+export type { ShimmerTextProps } from "./ShimmerText";
 export { StreamingMessage } from "./StreamingMessage";
 export type { StreamingMessageProps } from "./StreamingMessage";
 export { TaskRows } from "./TaskRows";

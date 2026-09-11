@@ -36,6 +36,13 @@
  * `accent-highlight`. Both keep every signal in text as well as in
  * colour — see those two components' own doc comments.
  *
+ * **T359: a shell call is the artifact's `.bash`.** It used to be two
+ * stacked `CodeBlock`s, which drew a shell command as though it were a
+ * file listing. It is now `BashBlock` — green rules above and below,
+ * `$ ` before the command, output in `ink-2` between them, and, while
+ * it runs, the shared `PixelLoader` with a shimmering "Running…", the
+ * elapsed time and the name of the control that stops it.
+ *
  * §11.6's governing rule: "Never fail the transcript because a plugin
  * returns a new tool detail shape." Every family this file does not
  * explicitly branch on — `tool.family === "generic"`, which is exactly
@@ -50,9 +57,16 @@ import { memo, useCallback } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
 import type { tools } from "@picompanion/frontend-core";
 
+// The one label that names how a reader actually stops a running
+// turn on Android. Imported across features on purpose: a second
+// copy of this string is how the transcript ends up telling the
+// reader to press a button the composer no longer draws.
+import { ABORT_ACTION_LABEL } from "../composer/composer-model";
+
 import { Card, CodeBlock, Link, RecordList, StatusIndicator } from "../../ui/primitives";
 import { blockOutline, blockSurface, type BlockKind } from "../../ui/theme/block-shape";
 import {
+  BashBlock,
   CodeListing,
   DiffLines,
   DiffSummary,
@@ -75,6 +89,7 @@ import {
   isKnownToolCall,
   searchCountsLine,
   searchMatchLines,
+  shellBlockIsDimmed,
   statusTextFor,
   truncateBody,
   unrecognizedToolMeta,
@@ -169,12 +184,43 @@ function ToolCallHeader({ tool, testId }: { tool: tools.ToolCallViewModel; testI
   );
 }
 
-function ShellBody({ tool, styles }: { tool: tools.ShellToolCallViewModel; styles: Styles }) {
+/**
+ * T359: a shell call is the artifact's `.bash`, not a pair of code
+ * blocks.
+ *
+ * `dimmed` is `shellBlockIsDimmed(tool.status)` — the artifact's
+ * `.bash-dim`, for a command that did not run to completion. The
+ * `cancelHint` is `ABORT_ACTION_LABEL`, the real control that stops a
+ * turn on this platform, rather than the artifact's desktop-only "esc
+ * to cancel"; see `BashBlock.tsx`'s own doc comment for why that string
+ * is not shipped.
+ */
+function ShellBody({
+  tool,
+  styles,
+  testId,
+}: {
+  tool: tools.ShellToolCallViewModel;
+  styles: Styles;
+  testId?: string;
+}) {
+  const { reduceMotion } = useTheme();
+  const running = tool.status === "running";
   return (
     <View style={styles.body}>
-      <CodeBlock code={tool.command} language="bash" />
+      <BashBlock
+        command={tool.command}
+        output={tool.output === undefined ? undefined : truncateBody(tool.output)}
+        running={running}
+        elapsedLabel={
+          tool.durationMs === undefined ? undefined : formatToolDuration(tool.durationMs)
+        }
+        cancelHint={running ? ABORT_ACTION_LABEL : undefined}
+        dimmed={shellBlockIsDimmed(tool.status)}
+        shimmer={running && !reduceMotion}
+        testId={testId ? `${testId}-bash` : undefined}
+      />
       {tool.cwd ? <Text style={styles.meta}>{`cwd: ${tool.cwd}`}</Text> : null}
-      {tool.output ? <CodeBlock code={truncateBody(tool.output)} language="text" /> : null}
       {tool.exitCode !== undefined ? (
         <Text style={styles.meta}>{`Exit code: ${tool.exitCode ?? "—"}`}</Text>
       ) : null}
@@ -422,7 +468,7 @@ function KnownToolCard({
         <Text style={[styles.meta, styles.metaError]}>{tool.errorText}</Text>
       ) : null}
       {tool.family === "shell" ? (
-        <ShellBody tool={tool} styles={styles} />
+        <ShellBody tool={tool} styles={styles} testId={testId} />
       ) : tool.family === "read" ? (
         <ReadBody tool={tool} styles={styles} />
       ) : tool.family === "write" ? (
