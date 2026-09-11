@@ -131,6 +131,16 @@ export default function SessionsRoute() {
     },
     [router, serverId],
   );
+  // T362: A1's bar carries a close action, and this route is the only
+  // thing that knows whether there is anywhere to close back TO. As a
+  // tab reached directly there is not; reached from a session's own
+  // bar there is. `canGoBack` answers that, and the prop is left
+  // undefined when it says no, so the bar draws no leading button
+  // rather than one that does nothing.
+  const canClose = router.canGoBack();
+  const handleClose = useCallback(() => {
+    router.back();
+  }, [router]);
   const { phase } = useConnectionStatus(core.connection);
   useEffect(() => {
     if (phase !== "connected") return;
@@ -159,6 +169,7 @@ export default function SessionsRoute() {
       connected={phase === "connected"}
       onSessionCreated={handleSessionCreated}
       onSessionOpened={handleSessionOpened}
+      onClose={canClose ? handleClose : undefined}
     />
   );
 }

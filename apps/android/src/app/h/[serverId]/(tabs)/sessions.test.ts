@@ -117,3 +117,19 @@ describe("SessionsRoute source", () => {
     expect(code).toMatch(/return \(\) => \{\s*cancelled = true;\s*\};/);
   });
 });
+
+describe("sessions route: A1's close action (T362)", () => {
+  it("passes onClose only when there is somewhere to close back to", () => {
+    const code = readCode();
+    expect(code).toMatch(/const canClose = router\.canGoBack\(\);/);
+    expect(code).toMatch(/onClose=\{canClose \? handleClose : undefined\}/);
+  });
+
+  it("closes with back, never a replace onto another route", () => {
+    // Reached from a session's own bar, closing must return to that
+    // session, not push a new entry or swap this one out.
+    const code = readCode();
+    expect(code).toMatch(/const handleClose = useCallback\(\(\) => \{\s*router\.back\(\);/);
+    expect(code).not.toMatch(/router\.replace\(/);
+  });
+});

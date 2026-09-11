@@ -65,11 +65,24 @@
  * `connectionPath` reports what polling can see, not a native path type.
  * The behaviour itself is proven here only against an injected fake
  * `NetworkReachability` (`sessions-screen.test.ts`).
+ *
+ * **T362 — A1's bar, search and filters.** `HANDOFF.md` §7.3 opens this
+ * screen with the shared `ScreenBar`, a search field and a row of
+ * status chips, and prints each group heading as a name and a count.
+ * Every decision behind those — which chip narrows to which group, what
+ * a query matches, what to say when a filter hides everything — lives
+ * in `sessions-filter-model.ts` and is proven by execution there; this
+ * file only draws them, the same split the rest of this screen already
+ * has with `sessions-model.ts`. The filters narrow what is DRAWN and
+ * never touch `listState`, so a refetch, an archive reconcile or a
+ * network resync cannot silently clear the reader's search, and a
+ * filtered-empty list gets a banner naming the filter rather than the
+ * empty state's "no sessions yet", which would be false.
  */
 import type { KeyValueStorage, NetworkReachability } from "@picompanion/frontend-core";
 import type { NativeTheme } from "@picompanion/design-tokens";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useResumeSignals } from "../../app/core-context";
 import {
@@ -83,12 +96,24 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  SearchField,
   Section,
   TextField,
 } from "../../ui/primitives";
+import { ScreenBar } from "../../ui/recipes";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import { useKeyboardInset } from "../../app-shell/keyboard-inset";
+import {
+  DEFAULT_SESSION_FILTER_CHIP_ID,
+  SESSION_FILTER_CHIPS,
+  SESSION_FILTER_GROUP_LABEL,
+  filterSessionGroups,
+  sessionFilterChipAccessibilityLabel,
+  sessionFilterEmptyMessage,
+  sessionGroupLabel,
+  type SessionFilterChip,
+} from "./sessions-filter-model";
 import { SessionListNetworkSync } from "./session-list-network-sync";
 import { createSessionResumeController } from "./session-resume-controller";
 import {
@@ -181,7 +206,17 @@ export interface SessionsScreenProps {
    * which is exactly the pre-T337 behaviour.
    */
   connected?: boolean;
+  /**
+   * T362: A1's top bar closes back to wherever the reader came from.
+   * Optional, and the bar simply has no leading action without it —
+   * this screen is also a tab, where there is nothing to close back
+   * to, and a bar button that does nothing is worse than no button.
+   */
+  onClose?: () => void;
 }
+
+/** A1's `.chip` height. The touch target around it is 48dp; see `FilterChip`. */
+const FILTER_CHIP_HEIGHT = 30;
 
 const DEFAULT_STATE: SessionListState = { kind: "ready", sessions: [] };
 
@@ -195,6 +230,7 @@ export function SessionsScreen({
   onSessionCreated,
   onSessionOpened,
   connected,
+  onClose,
 }: SessionsScreenProps) {
   const { theme } = useTheme();
   const keyboardInset = useKeyboardInset();
@@ -256,6 +292,25 @@ export function SessionsScreen({
       unsubscribe();
     };
   }, [sessionListNetworkSync, network]);
+
+  // T362: A1's search field and filter chips. Both live here rather
+  // than in `listState` — they narrow what is drawn and never change
+  // what the daemon reported, so a refetch must not reset them and a
+  // reconcile must not read them.
+  const [filterChipId, setFilterChipId] = useState<string>(DEFAULT_SESSION_FILTER_CHIP_ID);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<TextInput>(null);
+  const filterInput = useMemo(() => ({ chipId: filterChipId, query }), [filterChipId, query]);
+  // Deliberately not memoised: `model` is rebuilt on every render by
+  // `buildSessionsScreenModel` above, so a `useMemo` keyed on it would
+  // recompute every time anyway and only read as a guarantee it does
+  // not give.
+  const visibleGroups =
+    model.kind === "ready" ? filterSessionGroups(model.groups, filterInput) : [];
+  const filteredEmptyMessage =
+    model.kind === "ready" && visibleGroups.length === 0
+      ? sessionFilterEmptyMessage(filterInput)
+      : null;
 
   const [createState, setCreateState] = useState<CreateSessionState>(EMPTY_CREATE_SESSION_STATE);
   const [openState, setOpenState] = useState<SessionOpenState>(IDLE_SESSION_OPEN_STATE);
@@ -452,6 +507,50 @@ export function SessionsScreen({
       // the default `"never"` would spend that tap dismissing the keyboard.
       keyboardShouldPersistTaps="handled"
     >
+      <ScreenBar
+        title="Sessions"
+        leading={
+          onClose
+            ? {
+                mark: "\u2715",
+                accessibleName: "Close sessions",
+                onPress: onClose,
+                testId: `${testId}-close`,
+              }
+            : undefined
+        }
+        trailing={{
+          mark: "\u2315",
+          accessibleName: "Search sessions",
+          onPress: () => searchRef.current?.focus(),
+          testId: `${testId}-search-action`,
+        }}
+        testId={`${testId}-bar`}
+      />
+      <SearchField
+        ref={searchRef}
+        label="Search sessions"
+        placeholder="Search sessions"
+        value={query}
+        onChangeText={setQuery}
+        testId={`${testId}-search`}
+      />
+      <View
+        accessible={false}
+        accessibilityRole="none"
+        accessibilityLabel={SESSION_FILTER_GROUP_LABEL}
+        style={styles.filterChips}
+      >
+        {SESSION_FILTER_CHIPS.map((chip) => (
+          <FilterChip
+            key={chip.id}
+            chip={chip}
+            selected={chip.id === filterChipId}
+            onPress={() => setFilterChipId(chip.id)}
+            testId={`${testId}-filter-${chip.id}`}
+          />
+        ))}
+      </View>
       <CreateSessionForm
         state={createState}
         onCwdChange={(cwd) =>
@@ -519,9 +618,18 @@ export function SessionsScreen({
           testId={`${testId}-empty`}
         />
       ) : null}
+      {filteredEmptyMessage ? (
+        // T362: never the empty state — that one says there are no
+        // sessions at all, which is false whenever a filter is on.
+        <Banner tone="neutral" message={filteredEmptyMessage} testId={`${testId}-filtered-empty`} />
+      ) : null}
       {model.kind === "ready"
-        ? model.groups.map((group) => (
-            <Section key={group.kind} title={group.label} testId={`${testId}-group-${group.kind}`}>
+        ? visibleGroups.map((group) => (
+            <Section
+              key={group.kind}
+              title={sessionGroupLabel(group)}
+              testId={`${testId}-group-${group.kind}`}
+            >
               <View style={styles.rows}>
                 {group.rows.map((row) => {
                   const rawSession = sessionsById.get(row.id);
@@ -628,6 +736,51 @@ function CreateSessionForm({
   );
 }
 
+/**
+ * One of A1's filter chips (T362). A selectable toggle, which
+ * `ui/primitives/Chip.tsx` is not — that one is a display pill with an
+ * optional remove button, and widening it to carry a selected state
+ * would change every chip already mounted from it.
+ *
+ * Selection reaches TalkBack through `accessibilityState.selected`, and
+ * is drawn as a filled accent background with `accentContrast` text —
+ * the same pair `ui/primitives/Button.tsx` uses for its primary kind,
+ * so a product colour is never written here as a literal. The visible
+ * pill is the artifact's 30dp; `hitSlop` grows the touch bounds to the
+ * 48dp minimum (plan.md §9.3) rather than inflating the pill, the split
+ * `Chip` and `IconButton` already use.
+ */
+function FilterChip({
+  chip,
+  selected,
+  onPress,
+  testId,
+}: {
+  chip: SessionFilterChip;
+  selected: boolean;
+  onPress: () => void;
+  testId: string;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={sessionFilterChipAccessibilityLabel(chip)}
+      onPress={onPress}
+      hitSlop={9}
+      testID={testId}
+      style={[styles.filterChip, selected ? styles.filterChipSelected : null]}
+    >
+      <Text style={[styles.filterChipText, selected ? styles.filterChipTextSelected : null]}>
+        {chip.label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function SessionRow({
   row,
   theme,
@@ -709,6 +862,21 @@ function createStyles(theme: NativeTheme) {
   return StyleSheet.create({
     container: { flex: 1 },
     formFields: { gap: theme.spacing[2] },
+    filterChips: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[2] },
+    filterChip: {
+      height: FILTER_CHIP_HEIGHT,
+      justifyContent: "center",
+      paddingHorizontal: theme.spacing[3],
+      borderRadius: theme.radii.full,
+      backgroundColor: theme.colors.inset,
+    },
+    filterChipSelected: { backgroundColor: theme.colors.accent },
+    filterChipText: {
+      color: theme.colors["ink-2"],
+      fontSize: theme.typography.variant.caption.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+    },
+    filterChipTextSelected: { color: theme.colors.accentContrast },
     rows: { gap: theme.spacing[1] },
     rowContainer: { gap: theme.spacing[1] },
     row: {

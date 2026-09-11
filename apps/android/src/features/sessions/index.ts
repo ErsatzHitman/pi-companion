@@ -48,6 +48,20 @@ export {
   type SessionSummary,
 } from "./sessions-model";
 export {
+  DEFAULT_SESSION_FILTER_CHIP_ID,
+  SESSION_FILTER_CHIPS,
+  SESSION_FILTER_GROUP_LABEL,
+  filterSessionGroups,
+  isSessionFilterActive,
+  matchesSessionQuery,
+  sessionFilterChipAccessibilityLabel,
+  sessionFilterChipById,
+  sessionFilterEmptyMessage,
+  sessionGroupLabel,
+  type SessionFilterChip,
+  type SessionFilterInput,
+} from "./sessions-filter-model";
+export {
   createSessionResumeClock,
   createSessionResumeController,
   type SessionResumeControllerDeps,

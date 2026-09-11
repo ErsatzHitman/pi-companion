@@ -216,7 +216,12 @@ describe("SessionsScreen source: T337 the cold-start restore waits for the conne
 
   it("takes an optional connected prop, absent meaning the pre-T337 'assume connected' behaviour", () => {
     expect(code).toMatch(/connected\?: boolean;/);
-    expect(code).toMatch(/onSessionOpened,\s*connected,\s*\}: SessionsScreenProps\)/);
+    // CORRECTED (T362): the anchor was `connected,\s*\}` — T362 added
+    // `onClose` after it, so the prop is no longer last in the
+    // destructuring. Re-anchored at its new address rather than
+    // loosened to `connected,` alone, which would also pass against a
+    // `connected` that had been dropped from the signature entirely.
+    expect(code).toMatch(/onSessionOpened,\s*connected,\s*onClose,\s*\}: SessionsScreenProps\)/);
   });
 
   it("the restore effect returns early while connected === false and re-runs when it flips (connected is in its deps)", () => {
@@ -229,5 +234,68 @@ describe("SessionsScreen source: T337 the cold-start restore waits for the conne
     expect(effect).toMatch(/readLastOpenedSessionId\(keyValueStorage\)/);
     // The `false` check is strict on purpose: an absent prop must not gate anything.
     expect(effect).not.toMatch(/if \(!connected\) return;/);
+  });
+});
+
+describe("SessionsScreen source: T362 A1's bar, search field and filter chips", () => {
+  const code = readScreenCode();
+
+  it("opens with the shared ScreenBar rather than a header of its own", () => {
+    expect(code).toMatch(/import\s*\{\s*ScreenBar\s*\}\s*from\s*"\.\.\/\.\.\/ui\/recipes"/);
+    expect(code).toMatch(/<ScreenBar\b/);
+    expect(code).toMatch(/title="Sessions"/);
+  });
+
+  it("only offers the close action when a caller gave it somewhere to go", () => {
+    // This screen is also a tab, where there is nothing to close back to.
+    expect(code).toMatch(/leading=\{\s*onClose\s*\?/);
+    expect(code).toMatch(/:\s*undefined\s*\}/);
+  });
+
+  it("makes the bar's search mark move the cursor into the real field", () => {
+    expect(code).toMatch(/onPress:\s*\(\)\s*=>\s*searchRef\.current\?\.focus\(\)/);
+    expect(code).toMatch(/<SearchField\b[\s\S]*?ref=\{searchRef\}/);
+  });
+
+  it("draws the four chips from the model's own list, never a local copy", () => {
+    expect(code).toMatch(/SESSION_FILTER_CHIPS\.map\(\(chip\)\s*=>/);
+    expect(code).not.toMatch(/"Needs you"/);
+  });
+
+  it("reports chip selection to TalkBack as state, not as a colour", () => {
+    expect(code).toMatch(/accessibilityState=\{\{\s*selected\s*\}\}/);
+    expect(code).toMatch(/accessibilityLabel=\{sessionFilterChipAccessibilityLabel\(chip\)\}/);
+  });
+
+  it("paints a selected chip from the theme's own accent pair", () => {
+    expect(code).toMatch(/backgroundColor:\s*theme\.colors\.accent\b/);
+    expect(code).toMatch(/color:\s*theme\.colors\.accentContrast/);
+    expect(code).not.toMatch(/#[0-9a-fA-F]{6}/);
+  });
+
+  it("renders the filtered groups, with the model's name-and-count heading", () => {
+    expect(code).toMatch(/visibleGroups\.map\(\(group\)\s*=>/);
+    expect(code).toMatch(/title=\{sessionGroupLabel\(group\)\}/);
+    // CORRECTED (T362): this pin used to read `title={group.label}` and
+    // `model.groups.map`. The claim is unchanged — the heading still
+    // comes from the group, and every group still renders — only the
+    // heading's shape and the filtering in front of it are new.
+    expect(code).not.toMatch(/model\.groups\.map/);
+  });
+
+  it("keeps every group's testID, so nothing that names one has to change", () => {
+    expect(code).toMatch(/testId=\{`\$\{testId\}-group-\$\{group\.kind\}`\}/);
+  });
+
+  it("says a filter is hiding the rows instead of claiming there are none", () => {
+    expect(code).toMatch(/sessionFilterEmptyMessage\(filterInput\)/);
+    expect(code).toMatch(/testId=\{`\$\{testId\}-filtered-empty`\}/);
+  });
+
+  it("keeps the search and the chip out of listState", () => {
+    // A refetch, an archive reconcile or a network resync all replace
+    // `listState`; none of them may clear what the reader typed.
+    expect(code).toMatch(/const \[query, setQuery\] = useState\(""\)/);
+    expect(code).not.toMatch(/setListState\([^)]*query/);
   });
 });

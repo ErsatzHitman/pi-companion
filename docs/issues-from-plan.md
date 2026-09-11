@@ -618,6 +618,7 @@ that recomputation has to be domain-specific:
 | T359   | A shell command was drawn as a file listing, and the artifact's cancel hint names a key Android has not got          | phase-9   | android          | P9-U   | T357, T358, T350                                                      |
 | T360   | The agent's todo list reached Android and was filtered out of the transcript before anything could draw it           | phase-9   | android          | P9-U   | T353, T356                                                            |
 | T361   | An ask-user question opened the same edge-welded sheet as a settings picker, and its footer named two keys           | phase-9   | android          | P9-U   | T360                                                                  |
+| T362   | The session list had no way to narrow itself, so a phone-sized screen showed whatever order the daemon sent          | phase-9   | android          | P9-U   | T361                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -659,8 +660,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**570 tasks** (distinct IDs counted directly from the table above), recounted at T361 with
-`grep`/`sort -u` over the table's own rows — one past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**571 tasks** (distinct IDs counted directly from the table above), recounted at T362 with
+`grep`/`sort -u` over the table's own rows — one past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18003,3 +18004,74 @@ sheet-placed panel can be styled.
 - [x] The footer hint is touch wording, and neither `esc` nor `1-2` appears in either branch of it
 - [x] The footer renders only when a caller gives one, so `Sheet`'s other callers gain no empty line
 - [x] Both decisions are proven by execution in an RN-free model, with source pins only for the wiring
+
+#### T362 — The session list had no way to narrow itself, so a phone-sized screen showed whatever order the daemon sent
+
+`labels: phase-9, area: android` · `depends-on: T361`
+
+`HANDOFF.md` §7.3 opens A1 with a top bar, a search field and a row of status chips, and prints
+each group heading as a name and a count. None of it existed: the screen rendered every group it
+had, always, under a plain word. On a host with thirty sessions that is a scroll, not a list.
+
+**The chips narrow the grouping this screen already has; they do not replace it.** The artifact
+groups by PROJECT ("pi-companion · 4") and filters by status. `categorizeSession` already groups
+by Needs attention / Active / Idle / Archived, and that is the grouping that changes what a
+reader does next — a session waiting on an answer sits at the top of the screen instead of under
+whichever project heading sorts first. Adopting the artifact's grouping would bury exactly the
+row the reader opened the screen for. What is adopted is the heading's SHAPE, a name and a
+count in the `.lbl` style; the subject stays ours, and the chips are layered over it.
+
+A chip narrows to a group KIND, never to a raw `SessionSummary.status`. `categorizeSession`
+folds `requiresAttention` and an `error` status into "needs attention", so a chip reading status
+itself would have disagreed with the heading directly above the rows it had just filtered.
+
+**A filtered-empty list says which filter emptied it.** Falling through to the empty state would
+have printed "no sessions yet" at a reader who has plenty and has simply typed something —
+false, and it would send them to create a session they already have.
+`sessionFilterEmptyMessage` names the chip, the query, or both, and says how to clear them.
+
+**The filters never touch `listState`.** A refetch, an archive reconcile and a network resync
+all replace that state; none of them may silently clear what the reader typed. The chip id and
+the query are their own `useState`, and the filtering happens between the model and the JSX.
+
+**The count in a heading is of what is drawn.** After filtering, "Idle · 1" over one row is
+true; carrying the group's original size there would have been the worse of the two available
+lies.
+
+**The bar's search mark moves the cursor into the real field** rather than being decoration.
+`SearchField` gained a `ref` prop for it — an ordinary prop on React 19, no `forwardRef`
+wrapper — because A1 puts the mark in the bar and the field in the body below, and a second
+search affordance that did nothing would be worse than none.
+
+**A new `FilterChip`, not a widened `Chip`.** `ui/primitives/Chip.tsx` is a display pill with an
+optional remove button; teaching it a selected state would have changed every chip already
+mounted from it. The new one reports selection through `accessibilityState.selected` rather than
+through its fill, and takes its selected colours from `accent`/`accentContrast` — the pair
+`Button`'s primary kind already uses — so no product colour is written here as a literal.
+
+The close action is the route's call, not this screen's: `onClose` is optional, and
+`(tabs)/sessions.tsx` passes it only when `router.canGoBack()` is true. Reached directly as a
+tab there is nothing to close back to, and the bar then draws no leading button rather than one
+that does nothing.
+
+**One guard defect fell out of the `ref` prop, and was fixed rather than worked around.**
+`touch-targets.test.ts` finds the controls it audits with a regex for an opening tag, and
+`Ref<TextInput>` in a type annotation matched it — so the audit invented a second `TextInput`
+in `SearchField.tsx`, could resolve no dimensions for it (a type has no `style` prop) and
+failed the whole component by name over a control that does not exist. Renaming the type to
+dodge the regex would have left the hole open for the next file. The pattern now refuses a
+match preceded by an identifier character, which a real JSX open tag never is and a generic
+argument always is, and two fixture-level cases pin both directions.
+
+No `CAPABILITIES` entry: nothing new reaches the wire. Every group testID, the create-form
+testIDs, the connection-path banner and every `-row-<id>` are unchanged, so the eight Maestro
+flows that name them still find them.
+
+- [x] A1's bar, search field and four chips are drawn, with every decision behind them proven by execution
+- [x] Chips narrow the existing grouping rather than replacing it, and narrow by group kind rather than raw status
+- [x] A filter that hides everything says so, and never claims there are no sessions
+- [x] A refetch or a reconcile cannot clear the reader's search or chip
+- [x] A group heading's count is of the rows actually under it
+- [x] Selection reaches TalkBack as state, and the selected fill comes from a token pair, not a hex literal
+- [x] The bar's search mark focuses the real field; the close action appears only where it can act
+- [x] The touch-target audit no longer reads a type annotation as a control, and both directions are pinned

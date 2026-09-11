@@ -135,8 +135,18 @@ const CRITICAL_INTERACTIVE_PRIMITIVES: AuditedComponent[] = [
   { name: "ScreenBar", path: "../recipes/ScreenBar.tsx" },
 ];
 
+/**
+ * T362: the leading `(?<![\w$])` is what keeps a TYPE from being read
+ * as an element. `SearchField.tsx` declares `ref?: Ref<TextInput>`,
+ * and without the lookbehind that annotation's own opening bracket
+ * matched here — the audit then reported a second, phantom
+ * `TextInput` element for that file, resolved no dimensions for it (a
+ * type has no `style` prop) and failed the component by name over a
+ * control that does not exist. A real JSX open tag is never preceded
+ * by an identifier character; a generic argument always is.
+ */
 const INTERACTIVE_TAG_PATTERN =
-  /<(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|TextInput)\b/g;
+  /(?<![\w$])<(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback|TextInput)\b/g;
 
 /** Strips block and line comments so a doc comment can never satisfy a source-text assertion. */
 function stripComments(source: string): string {
@@ -436,4 +446,30 @@ describe("48dp touch targets", () => {
       });
     });
   }
+});
+
+describe("the audit reads elements, not type annotations (T362)", () => {
+  it("ignores a generic argument that happens to name an audited tag", () => {
+    // `SearchField.tsx`'s own `ref?: Ref<TextInput>` is the real case
+    // this closes: it was counted as a second TextInput, resolved to no
+    // dimensions, and failed the component over a control that is not
+    // there.
+    const code = "export interface P { ref?: Ref<TextInput>; onPress?: Ref<Pressable> }";
+    expect(extractInteractiveElements(code)).toEqual([]);
+  });
+
+  it("still finds a real open tag in every position JSX puts one in", () => {
+    const code = [
+      "return (",
+      "  <TextInput style={styles.a} />",
+      ");",
+      'const b = cond ? <Pressable accessibilityRole="button" style={styles.a} /> : null;',
+      'const c = <><Pressable accessibilityRole="button" style={styles.a} /></>;',
+    ].join("\n");
+    expect(extractInteractiveElements(code).map((element) => element.tagName)).toEqual([
+      "TextInput",
+      "Pressable",
+      "Pressable",
+    ]);
+  });
 });

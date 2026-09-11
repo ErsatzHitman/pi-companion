@@ -1,10 +1,19 @@
-import { useMemo } from "react";
+import { useMemo, type Ref } from "react";
 import { StyleSheet, TextInput, type TextInputProps } from "react-native";
 
 import { useTheme } from "../theme/theme-context";
 
 export interface SearchFieldProps extends Omit<TextInputProps, "style"> {
   label: string;
+  /**
+   * T362: so a caller's own search affordance can move the cursor
+   * here. A1's top bar carries the artifact's search mark beside the
+   * title while the field itself sits in the body below, and a second
+   * search button that did nothing would be worse than none. React 19
+   * passes `ref` as an ordinary prop, so no `forwardRef` wrapper is
+   * needed.
+   */
+  ref?: Ref<TextInput>;
   testId?: string;
 }
 
@@ -14,11 +23,12 @@ export interface SearchFieldProps extends Omit<TextInputProps, "style"> {
  * `accessibilityLabel` — search fields are conventionally unlabelled
  * visually but must still expose an accessible name (plan.md §10.5).
  */
-export function SearchField({ label, testId, ...rest }: SearchFieldProps) {
+export function SearchField({ label, ref, testId, ...rest }: SearchFieldProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   return (
     <TextInput
+      ref={ref}
       accessibilityLabel={label}
       accessibilityRole="search"
       returnKeyType="search"
