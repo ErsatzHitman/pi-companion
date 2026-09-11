@@ -621,6 +621,7 @@ that recomputation has to be domain-specific:
 | T362   | The session list had no way to narrow itself, so a phone-sized screen showed whatever order the daemon sent          | phase-9   | android          | P9-U   | T361                                                                  |
 | T363   | A session row was a dashed rule with a bare dot, and said nothing about how long ago the session was touched         | phase-9   | android          | P9-U   | T362                                                                  |
 | T364   | An empty create-session form sat above the list on every visit, and nothing at the bottom of A1 did anything         | phase-9   | android          | P9-U   | T363                                                                  |
+| T365   | A calibrated self-heal phase turned main red for the second time, and failed 15s away from the thing that broke      | phase-9   | server           | P9-U   | T309                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -662,8 +663,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**573 tasks** (distinct IDs counted directly from the table above), recounted at T364 with
-`grep`/`sort -u` over the table's own rows — one past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**574 tasks** (distinct IDs counted directly from the table above), recounted at T365 with
+`grep`/`sort -u` over the table's own rows — one past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18182,3 +18183,44 @@ No `CAPABILITIES` entry: nothing new reaches the wire.
 - [x] The three flows that create a session reveal it first, and a contract case proves the ordering in all three
 - [x] The home button is left out with its reason recorded, and pinned to stay out
 - [x] The gear switches tabs rather than stacking them, and both buttons meet the touch minimum
+
+#### T365 — A calibrated self-heal phase turned main red for the second time, and failed 15s away from the thing that broke
+
+`labels: phase-9, area: server` · `depends-on: T309`
+
+CI run 34548895358 turned `server-tests (windows-latest)` red at a commit that touched no
+`packages/server` file at all — every change in it was under `apps/android`. The failure was
+`workspace-git-service.observation.integration.test.ts`'s watcher-handoff phase, with zero
+other assertion failures and the file's own one-line diagnosis printed: the self-heal tick had
+already been spent by the time the test flipped its ignore list.
+
+**The mechanism, and why this is not the shape `CLAUDE.md`'s T240 section describes.** That
+section's remedy — move a contention-sensitive file into `test:unit:serial` — has already been
+applied to this file, on 2026-09-08. Nothing is racing it. What broke is a CALIBRATED PHASE:
+the test injects `getWorkspaceGitSelfHealPhaseMs` to schedule the one self-heal tick its
+budget can contain, and after initial setup `runSelfHealTick` is the ONLY caller that re-reads
+the ignore list and performs the watcher handoff. The tick therefore has to land AFTER the
+test flips `buildIgnored`, and the flip's own time is decided by native-watcher latency, which
+the test does not control. T309 raised the phase from 7s to 12s for exactly this reason after
+run 34352088001; that job took 465s this time, the flip landed past 12s, and the tick was gone.
+
+**Two changes, and the second matters more than the first.** The phase goes to 20s, with the
+handoff window to 25s and the file's own budget to 75s to contain it — the widest margin those
+budgets can carry, at a real cost in local runtime (the handoff now waits about 18s on a
+machine where the flip lands at 1.9s). That is still a calibration, and T309's own note
+already conceded the number "cannot be derived, only calibrated".
+
+So the test now checks, at the flip, that the tick is still pending, and fails there with a
+sentence naming the number to raise. Before, a spent tick made every assertion in the handoff
+phase unreachable, and the file burned a 15s budget before reporting a watcher count — which
+says nothing about the cause and is exactly how the CI log read. The next time the calibration
+is wrong it will say so in one line, at the point it went wrong, instead.
+
+Confirmed by running the file three times in a row locally, all pass. No production code
+changed: raising the injected phase is a change to what the test asks for, not to what the
+service does.
+
+- [x] `main` is green again, and the commit that went red is identified as not the cause
+- [x] The phase, the handoff window and the file's budget are raised together and consistently
+- [x] A spent tick now fails at the flip, in one line, naming the remedy
+- [x] The distinction from T240's contention shape is written down where the number is

@@ -213,20 +213,35 @@ test("native recursive observation updates tracked state and prunes ignored stor
       getCheckoutWorktreeState,
       getCheckoutDiff,
       runGitCommand,
-      // T309. Was `7_000`. The single self-heal tick this schedules is
-      // load-bearing for the watcher-handoff phase below — after initial
-      // setup, `runSelfHealTick` is the ONLY caller that re-reads the ignore
-      // list — so it MUST land after `buildIgnored = false`, and 7s did not
-      // on a slow runner. Measured: `buildIgnored` flips at about +1.9s on
-      // this machine, and at about +7.7s on the CI Windows runner whose
-      // failure (run 34352088001) prompted this, where the tick at 7.0s was
-      // therefore already spent by the time the ignore list changed.
+      // T365. Was `12_000` (T309), and `7_000` before that. The single
+      // self-heal tick this schedules is load-bearing for the
+      // watcher-handoff phase below — after initial setup,
+      // `runSelfHealTick` is the ONLY caller that re-reads the ignore list —
+      // so it MUST land after `buildIgnored = false`. Twice now it has not:
+      // the flip is measured at about +1.9s on this machine and about +7.7s
+      // on the CI Windows runner that broke the 7s value, and CI run
+      // 34548895358 broke the 12s one too, on a commit touching no
+      // `packages/server` file at all (its whole `server-tests
+      // (windows-latest)` job took 465s). The tick was spent before the
+      // flip, so the handoff never happened and the phase below timed out.
       //
-      // 12s is that worst observed flip time plus ~4s of margin. It cannot be
-      // derived, only calibrated, which is why the two `totalIgnoreReloads`
-      // guards below exist: if this value is ever wrong again the test says
-      // so in one line instead of timing out on an unrelated assertion.
-      getWorkspaceGitSelfHealPhaseMs: () => 12_000,
+      // This is NOT the contention shape `CLAUDE.md`'s T240 section is about
+      // and the remedy there — move the file into `test:unit:serial` — does
+      // not apply: this file has been in that lane since 2026-09-08, so
+      // nothing is racing it. What is raised here is a calibrated PHASE, a
+      // number chosen to sit after an event whose time the test does not
+      // control, not a timeout masking a real defect.
+      //
+      // 20s is the widest margin the surrounding budgets can carry, and it
+      // costs local runtime: on this machine the flip lands at ~1.9s, so the
+      // handoff below now waits ~18s for a tick it used to wait ~10s for.
+      // That is deliberate — a fast test that is wrong one run in ten is
+      // worth less than a slow one that is right. The check immediately
+      // after the flip is the other half of the fix: when this value is
+      // wrong again it now fails in one line, at the flip, naming the
+      // remedy, instead of burning the handoff phase's full budget on an
+      // assertion about watcher counts.
+      getWorkspaceGitSelfHealPhaseMs: () => 20_000,
     } as never,
   });
   const diffManager = new CheckoutDiffManager({
@@ -372,6 +387,22 @@ test("native recursive observation updates tracked state and prunes ignored stor
   // reload of its own — `promoteWorkingTreeWatchTarget` calls
   // `refreshWorkingTreeIgnoredDirectories` once, before any tick.
   const reloadsBeforeFlip = totalIgnoreReloads;
+  // T365: the handoff below needs the ONE self-heal tick to still be
+  // pending right now. When it is not, every assertion in that phase is
+  // unreachable and the file spends its whole `vi.waitFor` budget before
+  // reporting a watcher count — which is how CI run 34548895358 read, and
+  // it says nothing about the real cause. Fail here instead, immediately,
+  // naming the number to change.
+  expect(
+    totalIgnoreReloads,
+    "the self-heal tick was already spent before the ignore list changed, so the " +
+      "watcher handoff below can never happen. The earlier phases took longer than " +
+      "the injected getWorkspaceGitSelfHealPhaseMs; raise it (and the handoff " +
+      "vi.waitFor budget and this test's own timeout with it).",
+    // At most the ONE reload initial setup performs of its own
+    // (`promoteWorkingTreeWatchTarget`, see the note just above); a second
+    // means the tick has already run.
+  ).toBeLessThanOrEqual(1);
   buildIgnored = false;
   observedPath = newlyTrackedPath;
   observedRelativePath = "build/tracked.txt";
@@ -416,7 +447,9 @@ test("native recursive observation updates tracked state and prunes ignored stor
         workspaceRefreshQueuedCount: 0,
       });
     },
-    { timeout: 15_000 },
+    // T365: raised from 15s alongside the 20s phase above — the window
+    // this waits in opens at the flip and must still contain the tick.
+    { timeout: 25_000 },
   );
 
   // T309: the handoff above is only meaningful if a reload actually performed
@@ -490,4 +523,7 @@ test("native recursive observation updates tracked state and prunes ignored stor
   expect(getCheckoutWorktreeState).not.toHaveBeenCalled();
   expect(getCheckoutDiff).not.toHaveBeenCalled();
   expect(service.getMetrics().workspaceRefreshQueuedCount).toBe(0);
-}, 30_000);
+  // T365: raised from 30s. A 20s phase plus a 25s handoff window does not
+  // fit in 30, and this test's cost is dominated by waiting for one timer
+  // it deliberately schedules late, not by work.
+}, 75_000);
