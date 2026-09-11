@@ -22,7 +22,6 @@ import { composer as coreComposer } from "@picompanion/frontend-core";
 import {
   Button,
   Chip,
-  Section,
   Select,
   StatusIndicator,
   type ChipTone,
@@ -75,6 +74,7 @@ import {
   ENTRY_BLOCK_PADDING_VERTICAL,
   ENTRY_BLOCK_RADIUS,
   entryBlockIsOutlined,
+  entryBlockRing,
   entryBlockSurface,
 } from "./entry-block-model";
 import {
@@ -1487,12 +1487,21 @@ export function Composer({
 
   return (
     <View style={[styles.root, { minHeight }]} testID={`${composerTestId}-root`}>
-      <Section
-        title={COMPOSER_ACCESSIBILITY_LABEL}
-        testId={composerTestId}
-        style={styles.section}
-        onTitleLayout={handleTitleLayout}
-      >
+      <View style={styles.section} testID={composerTestId}>
+        {/* The reference draws no heading above the composer, but the
+            composer still needs one announced name — see this file's
+            own TalkBack paragraph. This heading is present to assistive
+            tech and clipped to zero height on screen, which is what its
+            `onLayout` reports, so the measured floor stays honest. */}
+        <Text
+          accessibilityRole="header"
+          accessibilityLabel={COMPOSER_ACCESSIBILITY_LABEL}
+          onLayout={handleTitleLayout}
+          style={styles.heading}
+          testID={`${composerTestId}-heading`}
+        >
+          {COMPOSER_ACCESSIBILITY_LABEL}
+        </Text>
         {/* T338: everything but the prompt bar scrolls; see the module doc's
             "What this component *does* control" paragraph. */}
         <ScrollView
@@ -1536,19 +1545,7 @@ export function Composer({
           ) : null}
           <View style={styles.actionsRow}>
             <ComposerIconAction
-              glyph={"\u{1F3A4}"}
-              accessibleName={MIC_ACTION_LABEL}
-              onPress={handleMicPress}
-              testId={`${composerTestId}-mic`}
-            />
-            <ComposerIconAction
-              glyph={"\u{1F4CE}"}
-              accessibleName={ATTACH_ACTION_LABEL}
-              onPress={handleAttachPress}
-              testId={`${composerTestId}-attach`}
-            />
-            <ComposerIconAction
-              glyph={"\u{1F4F7}"}
+              icon="camera"
               accessibleName={CAPTURE_ACTION_LABEL}
               onPress={handleCapturePress}
               testId={`${composerTestId}-capture`}
@@ -1684,7 +1681,7 @@ export function Composer({
         <View onLayout={handlePromptBarLayout}>
           <PromptBar
             label={COMPOSER_INPUT_LABEL}
-            placeholder={placeholder ?? "Message"}
+            placeholder={placeholder ?? "Type a prompt…"}
             value={state.draft}
             canSend={
               canSubmitDraft(state.draft) &&
@@ -1695,10 +1692,26 @@ export function Composer({
             onValueChange={handleValueChange}
             onSend={handleSend}
             leading={
-              <ContextRing
-                usage={usage}
-                onPress={handleOpenControlsMenu}
-                testId={`${composerTestId}-context-ring`}
+              <>
+                <ComposerIconAction
+                  icon="plus"
+                  accessibleName={ATTACH_ACTION_LABEL}
+                  onPress={handleAttachPress}
+                  testId={`${composerTestId}-attach`}
+                />
+                <ContextRing
+                  usage={usage}
+                  onPress={handleOpenControlsMenu}
+                  testId={`${composerTestId}-context-ring`}
+                />
+              </>
+            }
+            trailing={
+              <ComposerIconAction
+                icon="mic"
+                accessibleName={MIC_ACTION_LABEL}
+                onPress={handleMicPress}
+                testId={`${composerTestId}-mic`}
               />
             }
             testId={composerTestId}
@@ -1735,7 +1748,7 @@ export function Composer({
           }
           testId={`${composerTestId}-controls-menu`}
         />
-      </Section>
+      </View>
     </View>
   );
 }
@@ -1770,6 +1783,7 @@ function ComposerEntryRow({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const surface = theme.colors[entryBlockSurface(entry.status)];
   const outlined = entryBlockIsOutlined(entry.status);
+  const ring = entryBlockRing(entry.status);
 
   // Deliberately not wrapped in an `accessible` View: that would collapse
   // every child (including the failed-state Retry button) into a single
@@ -1780,7 +1794,11 @@ function ComposerEntryRow({
       style={[
         styles.entryBlock,
         { backgroundColor: surface },
-        outlined ? { borderWidth: 1, borderColor: theme.colors.red } : null,
+        outlined
+          ? { borderWidth: 1, borderColor: theme.colors.red }
+          : ring !== null
+            ? { borderWidth: 1, borderColor: theme.colors[ring] }
+            : null,
       ]}
       testID={testId}
     >
@@ -1921,7 +1939,17 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     // T338: root, section and scroll all give way; the prompt bar (outside
     // the ScrollView, default `flexShrink: 0`) does not.
     root: { flexShrink: 1, minHeight: 0 },
-    section: { flexShrink: 1, minHeight: 0 },
+    // This container used to be `Section`'s own; the primitive is no
+    // longer used here because the reference draws no visible heading
+    // above the composer (see `styles.heading`), and the primitive offers
+    // no way to hide its title. The gap is the same `theme.spacing[3]`
+    // `resolveComposerMinHeight` is given.
+    section: { gap: theme.spacing[3], flexShrink: 1, minHeight: 0 },
+    // The reference has no heading here; this one exists so TalkBack still
+    // gets a named "header" node (plan.md §10.5) and is clipped to zero
+    // height so nothing is drawn. `onTitleLayout` reports that same 0, so
+    // the measured floor never counts a heading nobody can see.
+    heading: { height: 0 },
     scroll: { flexGrow: 0, flexShrink: 1 },
     scrollContent: { gap: theme.spacing[3] },
     // T355: the block stack. `ENTRY_BLOCK_GAP` is the artifact's own

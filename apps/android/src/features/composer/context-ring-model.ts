@@ -7,11 +7,20 @@
  * same number, so both go through `../telemetry`'s
  * `buildContextCardViewModel` and `contextUsageBand` rather than
  * deriving their own — this module adds only what a RING needs and a
- * bar does not: a circumference, a stroke dash offset, and a label
- * short enough to sit inside 26dp.
+ * bar does not: a circumference, a stroke dash offset, and the short
+ * integer the artifact draws INSIDE the ring.
  *
  * RN-free, so every number below is proven by execution. `ContextRing.tsx`
  * is the thin `react-native-svg` drawing of it.
+ *
+ * **The artifact's own geometry.** Quoting the reference:
+ * `.ctxbtn { width: 34px; height: 34px }` holding a 28×28 SVG,
+ * `<circle class="p" cx="14" cy="14" r="12" stroke-dasharray="75.40">`,
+ * `.ctx-ring .p { stroke-width: 2.5 }` and
+ * `.ctx-ring .pct { font-size: 8px; font-weight: 700; fill: var(--ink-2) }`
+ * with the integer drawn at `x=14 y=17`. The radius is written as the
+ * reference's own 12 rather than derived from the box and stroke, which
+ * would give 12.75.
  *
  * **Why a dash offset rather than an arc path.** `react-native-svg`'s
  * `Circle` takes `strokeDasharray`/`strokeDashoffset` directly, and the
@@ -24,14 +33,14 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
 
 import { buildContextCardViewModel, type ContextUsageBand } from "../telemetry";
 
-/** The artifact's ring: 18dp across with a 2dp stroke. */
-export const CONTEXT_RING_SIZE = 18;
-export const CONTEXT_RING_STROKE = 2;
+/** The artifact's ring: 28dp across, `r=12`, with a 2.5dp stroke. */
+export const CONTEXT_RING_SIZE = 28;
+export const CONTEXT_RING_STROKE = 2.5;
 
-/** The radius the stroke's own centre line follows — half the stroke sits either side of it. */
-export const CONTEXT_RING_RADIUS = (CONTEXT_RING_SIZE - CONTEXT_RING_STROKE) / 2;
+/** `.ctx-ring circle.p { r: 12 }` — stated as the reference states it, not derived. */
+export const CONTEXT_RING_RADIUS = 12;
 
-/** `2πr` for the radius above. The artifact's own `50.27` for an r=8 ring. */
+/** `2πr` for the radius above. The reference's own `75.40` dasharray on an r=12 ring. */
 export const CONTEXT_RING_CIRCUMFERENCE = 2 * Math.PI * CONTEXT_RING_RADIUS;
 
 export interface ContextRingViewModel {
@@ -42,7 +51,7 @@ export interface ContextRingViewModel {
   circumference: number;
   /** `circumference × (1 − fraction)`, for `strokeDashoffset`. Equals the circumference when unknown. */
   dashOffset: number;
-  /** The whole-percent label, e.g. `"41%"`, or `"–"` when unknown. Sized for a 18dp ring's neighbour. */
+  /** The whole-percent integer the artifact draws inside the ring, e.g. `"41"`, or `"–"` when unknown. No `%`: the reference's `.pct` is the number alone. */
   shortLabel: string;
   /** What the button announces, which is the full sentence — never just a number. */
   accessibilityLabel: string;
@@ -85,7 +94,7 @@ export function buildContextRingViewModel(
     band: card.band,
     circumference: CONTEXT_RING_CIRCUMFERENCE,
     dashOffset: CONTEXT_RING_CIRCUMFERENCE * (1 - fraction),
-    shortLabel: `${Math.round(fraction * 100)}%`,
+    shortLabel: `${Math.round(fraction * 100)}`,
     accessibilityLabel: card.accessibilityLabel,
     accessibilityHint: RING_HINT,
   };

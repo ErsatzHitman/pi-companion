@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  SESSION_ACTIVITY_PILL_STATES,
   SESSION_PILL_STATES,
   buildTranscriptHeaderViewModel,
   deriveCwdBasename,
@@ -119,6 +120,78 @@ describe("buildTranscriptHeaderViewModel", () => {
     for (const state of Object.values(SESSION_PILL_STATES)) {
       expect(state.word.trim().length).toBeGreaterThan(0);
     }
+    for (const state of Object.values(SESSION_ACTIVITY_PILL_STATES)) {
+      expect(state.word.trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("buildTranscriptHeaderViewModel: the session's own activity (S7 pill cycle)", () => {
+  const base = { hostLabel: "macbook-pro.local", sessionTitle: "Refactor auth module" };
+
+  it("falls through to the connection states while the session is idle", () => {
+    const model = buildTranscriptHeaderViewModel({
+      ...base,
+      status: "connected",
+      activity: "idle",
+    });
+    expect(model.chipLabel).toBe("Idle");
+    expect(model.tone).toBe("neutral");
+    expect(model.showDot).toBe(false);
+  });
+
+  it("draws Thinking while a turn is running with nothing visible in flight", () => {
+    const model = buildTranscriptHeaderViewModel({
+      ...base,
+      status: "connected",
+      activity: "thinking",
+    });
+    expect(model.chipLabel).toBe("Thinking");
+    expect(model.tone).toBe("info");
+    expect(model.showDot).toBe(true);
+  });
+
+  it("draws Working while a tool call is in flight", () => {
+    const model = buildTranscriptHeaderViewModel({
+      ...base,
+      status: "connected",
+      activity: "working",
+    });
+    expect(model.chipLabel).toBe("Working");
+    expect(model.showDot).toBe(true);
+  });
+
+  it("draws the artifact's orange Needs you for a pending approval, and says it in the announced sentence too", () => {
+    const model = buildTranscriptHeaderViewModel({
+      ...base,
+      status: "connected",
+      activity: "needs-you",
+    });
+    expect(model.chipLabel).toBe("Needs you");
+    expect(model.tone).toBe("warning");
+    expect(model.showDot).toBe(true);
+    expect(model.accessibilityLabel).toContain("Waiting for your approval");
+  });
+
+  it("lets the session's activity win over the connection while it is active — the pill answers what the session is DOING", () => {
+    const model = buildTranscriptHeaderViewModel({
+      ...base,
+      status: "reconnecting",
+      activity: "needs-you",
+    });
+    expect(model.chipLabel).toBe("Needs you");
+  });
+
+  it("keeps the connection's own detail in the announced sentence, even when the activity supplies the pill", () => {
+    const model = buildTranscriptHeaderViewModel({
+      ...base,
+      status: "error",
+      statusDetail: "socket closed",
+      activity: "working",
+    });
+    expect(model.accessibilityLabel).toContain("socket closed");
+    expect(model.chipLabel).toBe("Working");
+    expect(model.chipLabel).not.toContain("socket closed");
   });
 });
 

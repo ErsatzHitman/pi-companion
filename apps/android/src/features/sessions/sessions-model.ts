@@ -110,18 +110,31 @@ export type SessionListState =
       connectionPath?: NetworkConnectionKind;
     };
 
+/**
+ * A1's `.pill.run` draws the word `Working` for a running session, not
+ * `Running` (T385); every other word is unchanged, including the ones
+ * the artifact does not draw (a session that failed has no `.pill` of
+ * its own, and inventing a new word would be guessing at a state the
+ * mock never shows).
+ */
 const STATUS_LABEL: Record<SessionStatus, string> = {
   initializing: "Initializing",
   idle: "Idle",
-  running: "Running",
+  running: "Working",
   error: "Error",
   closed: "Closed",
 };
 
+/**
+ * `running` is the artifact's `.pill.run`, i.e. its accent (`info`)
+ * tone — not the green `success` this app used to paint it (T385).
+ * `success` remains in the palette for genuinely successful end
+ * states; a turn in flight is accent, per the artifact.
+ */
 const STATUS_TONE: Record<SessionStatus, StatusTone> = {
   initializing: "info",
   idle: "neutral",
-  running: "success",
+  running: "info",
   error: "danger",
   closed: "neutral",
 };
@@ -130,18 +143,35 @@ export interface SessionStatusPresentation {
   tone: StatusTone;
   /** Always non-empty, visible text — never rely on `tone` alone (plan.md §10.5). */
   text: string;
+  /**
+   * The full status sentence for TalkBack, which may say more than the
+   * pill draws (T385: an attention-needing session shows the artifact's
+   * short `Needs you` but is announced as "Working · needs attention",
+   * so the underlying status word is never dropped).
+   */
+  accessibilityText: string;
 }
 
 /**
  * Maps a session's raw `status` (plus `requiresAttention`) to a
  * tone/text pair. `text` is always populated so status is legible
- * without colour.
+ * without colour, and `accessibilityText` always carries the same
+ * claim in words — the pill's short label never replaces it.
  */
 export function sessionStatusPresentation(session: SessionSummary): SessionStatusPresentation {
   if (session.requiresAttention) {
-    return { tone: "warning", text: `${STATUS_LABEL[session.status]} · needs attention` };
+    return {
+      tone: "warning",
+      // A1's `.pill.wait` word, drawn short so it fits beside the row.
+      text: "Needs you",
+      accessibilityText: `${STATUS_LABEL[session.status]} · needs attention`,
+    };
   }
-  return { tone: STATUS_TONE[session.status], text: STATUS_LABEL[session.status] };
+  return {
+    tone: STATUS_TONE[session.status],
+    text: STATUS_LABEL[session.status],
+    accessibilityText: STATUS_LABEL[session.status],
+  };
 }
 
 /** A session's *group* answers "does this need my attention"; its row status answers "what is Pi doing right now". */
@@ -182,7 +212,7 @@ export interface SessionRowModel {
 
 /** Builds one row's full presentation, including its combined accessibility label. */
 export function buildSessionRowModel(session: SessionSummary): SessionRowModel {
-  const { tone, text } = sessionStatusPresentation(session);
+  const { tone, text, accessibilityText } = sessionStatusPresentation(session);
   const title = session.title ?? "Untitled session";
   const meta = `${session.provider} · ${session.cwd}`;
   return {
@@ -191,7 +221,7 @@ export function buildSessionRowModel(session: SessionSummary): SessionRowModel {
     tone,
     statusText: text,
     meta,
-    accessibilityLabel: `${title}, ${text}, ${meta}`,
+    accessibilityLabel: `${title}, ${accessibilityText}, ${meta}`,
   };
 }
 

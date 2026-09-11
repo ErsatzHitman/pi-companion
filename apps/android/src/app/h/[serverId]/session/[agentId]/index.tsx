@@ -32,12 +32,16 @@ import {
   TranscriptTodoRow,
   TranscriptToolCallRow,
   TranscriptWindowList,
+  createSessionActivitySignal,
   createTranscriptMessageBatcher,
   fireTranscriptStatusHaptic,
   selectRecoveredTurnsForSession,
   useAgentCwd,
   useAttachmentImageResolver,
   type AwaitingConfirmationTurn,
+  type DaemonActivityStreamSource,
+  type SessionActivity,
+  type TodoTranscriptEntry,
   type TranscriptStatus,
 } from "../../../../../features/transcript";
 import { buildDaemonHttpOrigin } from "../../../../../features/connect/daemon-connection-store.js";
@@ -50,6 +54,7 @@ import {
 } from "../../../../../app-shell/session-nav-actions-model";
 import {
   buildSessionTranscriptEntries,
+  selectLatestTodoEntry,
   type SessionTranscriptEntry,
 } from "../../../../../app-shell/session-transcript-model";
 import {
@@ -207,7 +212,26 @@ function handleAttachPress() {}
  * from, the identical limitation that route's own doc comment names) or
  * with no connection yet.
  */
-function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agentId: string }) {
+function SessionTranscript({
+  status,
+  agentId,
+  onTodoEntryChange,
+}: {
+  status: TranscriptStatus;
+  agentId: string;
+  /**
+   * Reports the newest `todo` entry on every batch, so the pinned `.ov`
+   * widget above the composer can draw it. `null` when this timeline
+   * has none.
+   *
+   * A callback rather than a hoisted batcher: this component already
+   * owns the ONE live batcher and its one `agent_stream` subscription
+   * (see this component's doc comment), and lifting either into the
+   * route would mean a second one for the same feed. The route keeps the
+   * reported value in `useState` and hands it to the pinned slot.
+   */
+  onTodoEntryChange?: (entry: TodoTranscriptEntry | null) => void;
+}) {
   const core = useAppCore();
   const batcher = useMemo(
     () =>
@@ -223,15 +247,19 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
   );
   const readEntries = () =>
     buildSessionTranscriptEntries(coreTimeline.buildTranscriptEntries(batcher.getState()));
+  const readTodo = () =>
+    selectLatestTodoEntry(coreTimeline.buildTranscriptEntries(batcher.getState()));
   const readStaleness = (): StalenessAnnouncement | null => {
     const state = batcher.getState();
     return describeTimelineStaleness({ stale: state.stale, gap: state.gap });
   };
   const [entries, setEntries] = useState<SessionTranscriptEntry[]>(() => readEntries());
+  const [todoEntry, setTodoEntry] = useState<TodoTranscriptEntry | null>(() => readTodo());
   const [staleness, setStaleness] = useState<StalenessAnnouncement | null>(() => readStaleness());
 
   useEffect(() => {
     setEntries(readEntries());
+    setTodoEntry(readTodo());
     setStaleness(readStaleness());
     // `batcher.subscribe`'s own argument is filtered to just
     // `CoreMessageEntry[]` (see this component's doc comment), so this
@@ -240,6 +268,7 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
     // every applied batch instead.
     const unsubscribeBatcher = batcher.subscribe(() => {
       setEntries(readEntries());
+      setTodoEntry(readTodo());
       setStaleness(readStaleness());
     });
     // T32S8: forwards every live `agent_stream` message to this mount's
@@ -349,6 +378,13 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
     entries,
   });
 
+  // The pinned `.ov` widget's data, reported upward on every change — see
+  // this component's `onTodoEntryChange` prop doc for why the batcher
+  // stays here and only the value travels.
+  useEffect(() => {
+    onTodoEntryChange?.(todoEntry);
+  }, [todoEntry, onTodoEntryChange]);
+
   return (
     <>
       {staleness ? (
@@ -369,9 +405,6 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
           }
           if (entry.kind === "tool-call") {
             return <TranscriptToolCallRow key={entry.id} entry={entry} testId={testId} />;
-          }
-          if (entry.kind === "todo") {
-            return <TranscriptTodoRow key={entry.id} entry={entry} testId={testId} />;
           }
           return (
             <TranscriptMessageRow
@@ -401,17 +434,42 @@ function SessionTranscript({ status, agentId }: { status: TranscriptStatus; agen
  * `pi.ui.action.request` transport in `@picompanion/client` yet, and no
  * live `agent_stream` feed into the store yet) — but the mount itself,
  * and every element that store already holds, are real.
+ *
+ * **The todo widget docks here too.** The artifact's `.ovslot` (its CSS:
+ * `.ovslot { flex: none; padding: 0 12px }`) holds BOTH the pinned Pi UI
+ * elements and the `.ov` todo widget — the todo widget is not a
+ * transcript row (see `app-shell/session-transcript-model.ts` and
+ * `features/transcript/todo-row.tsx`), so `SessionTranscript` reports
+ * the newest todo entry upward and this slot draws it beside the pinned
+ * area. The area collapses only when it has NOTHING to draw: no pinned
+ * element AND no todo entry.
  */
-function SessionLiveExtension({ agentId }: { agentId: string }) {
+function SessionLiveExtension({
+  agentId,
+  todoEntry,
+}: {
+  agentId: string;
+  /** The newest `todo` entry in this session's timeline, or `null`. */
+  todoEntry: TodoTranscriptEntry | null;
+}) {
   const core = useAppCore();
   const { elements, revision } = usePiUiElements(core.piUiSession.store, agentId);
+  const pinnedVisible = resolvePinnedAreaVisibility(elements) === "visible";
+  if (!pinnedVisible && todoEntry === null) {
+    return null;
+  }
   return (
-    <PinnedLiveExtensionArea
-      elements={elements}
-      agentId={agentId}
-      actionController={core.piUiSession.actionController}
-      revision={revision}
-    />
+    <>
+      {todoEntry !== null ? (
+        <TranscriptTodoRow entry={todoEntry} testId="session-todo-overlay" />
+      ) : null}
+      <PinnedLiveExtensionArea
+        elements={elements}
+        agentId={agentId}
+        actionController={core.piUiSession.actionController}
+        revision={revision}
+      />
+    </>
   );
 }
 
@@ -859,6 +917,40 @@ export default function SessionRoute() {
   }, [core, agentId]);
   const turnRunning = submitting || signalRunning;
 
+  // The app bar's own live activity — the artifact's Idle → Thinking →
+  // Working → Needs you cycle. It reads the SAME single `agent_stream`
+  // fan-out the transcript batcher and the turn-running signal above
+  // read (never a second `client.on`), and the same connection snapshot
+  // for its reconnect reset. See `features/transcript/session-activity-
+  // signal.ts` for the wire shapes and the priority order.
+  const [activity, setActivity] = useState<SessionActivity>("idle");
+  useEffect(() => {
+    if (!agentId) return;
+    const daemonSource: DaemonActivityStreamSource = {
+      on: (_type, handler) =>
+        core.subscribeAgentStream(
+          handler as unknown as Parameters<typeof core.subscribeAgentStream>[0],
+        ),
+    };
+    const connectionStatusSource: ConnectionStatusSource = {
+      subscribeConnectionStatus: (listener) =>
+        core.connection.subscribe((snapshot) => listener({ status: snapshot.phase })),
+    };
+    const signal = createSessionActivitySignal(
+      daemonSource,
+      agentId,
+      setActivity,
+      connectionStatusSource,
+    );
+    setActivity(signal.getActivity());
+    return () => signal.dispose();
+  }, [core, agentId]);
+
+  // The pinned `.ov` widget's newest todo entry, reported upward by
+  // `SessionTranscript` — see that component's `onTodoEntryChange` doc for
+  // why the batcher stays there and only the value travels.
+  const [latestTodo, setLatestTodo] = useState<TodoTranscriptEntry | null>(null);
+
   // T339: mark this agent's timeline as viewed for as long as this route
   // is mounted and connected — see this component's "T339 mount" doc
   // comment for why nothing above receives a single push without it.
@@ -911,7 +1003,12 @@ export default function SessionRoute() {
   );
   const composerMaxHeight = resolveComposerSlotMaxHeightDp({
     windowHeightDp,
-    liveExtensionOccupied: resolvePinnedAreaVisibility(liveExtensionElements) === "visible",
+    // The pinned slot is occupied when EITHER the Pi UI elements draw OR
+    // the todo widget is present — the todo now lives in the same
+    // `.ovslot`, so a drawing todo must cap the composer exactly as a
+    // pinned element does.
+    liveExtensionOccupied:
+      resolvePinnedAreaVisibility(liveExtensionElements) === "visible" || latestTodo !== null,
   });
   const [composerContentMinHeight, setComposerContentMinHeight] = useState(0);
 
@@ -963,13 +1060,20 @@ export default function SessionRoute() {
             sessionTitle={agentId ?? ""}
             cwd={cwd}
             status={status}
+            activity={activity}
             onOpenSessions={openSessions}
             onOpenLive={openLive}
           />
         }
         statusStrip={<TranscriptStatusStrip status={status} />}
-        transcript={<SessionTranscript status={status} agentId={agentId ?? ""} />}
-        liveExtension={<SessionLiveExtension agentId={agentId ?? ""} />}
+        transcript={
+          <SessionTranscript
+            status={status}
+            agentId={agentId ?? ""}
+            onTodoEntryChange={setLatestTodo}
+          />
+        }
+        liveExtension={<SessionLiveExtension agentId={agentId ?? ""} todoEntry={latestTodo} />}
         composer={
           <Composer
             sessionId={agentId ?? ""}

@@ -28,6 +28,7 @@ import {
   searchMatchLines,
   shellBlockIsDimmed,
   statusTextFor,
+  toolHeaderChipLabel,
   truncateBody,
   unrecognizedToolMeta,
   worktreeCommandStepStatus,
@@ -394,6 +395,68 @@ describe("the safe generic card: redaction never surfaces the raw payload", () =
     expect(unrecognizedToolMeta({ ...GENERIC_TOOL, source: undefined })).toBe(
       "Unrecognized tool: mcp.custom_future_tool",
     );
+  });
+});
+
+describe("toolHeaderChipLabel: the one path or argument the header's `.tchip` names", () => {
+  it("names the file for every file-family call", () => {
+    for (const family of ["read", "write", "edit"] as const) {
+      expect(
+        toolHeaderChipLabel({
+          family,
+          callId: "c",
+          toolName: family,
+          status: "completed",
+          displayName: family,
+          updateCount: 1,
+          filePath: "src/Button.tsx",
+        } as tools.ToolCallViewModel),
+      ).toBe("src/Button.tsx");
+    }
+  });
+
+  it("names the query/url/command/branch for the families whose argument is the fact", () => {
+    expect(toolHeaderChipLabel(SHELL_TOOL)).toBe("pnpm test");
+    expect(
+      toolHeaderChipLabel({
+        family: "search",
+        callId: "c",
+        toolName: "grep",
+        status: "completed",
+        displayName: "Searched",
+        updateCount: 1,
+        query: "/variant/",
+      } as tools.ToolCallViewModel),
+    ).toBe("/variant/");
+    expect(
+      toolHeaderChipLabel({
+        family: "fetch",
+        callId: "c",
+        toolName: "fetch",
+        status: "completed",
+        displayName: "Fetched",
+        updateCount: 1,
+        url: "https://example.com",
+      } as tools.ToolCallViewModel),
+    ).toBe("https://example.com");
+    expect(
+      toolHeaderChipLabel({
+        family: "worktree_setup",
+        callId: "c",
+        toolName: "worktree",
+        status: "completed",
+        displayName: "Set up a worktree",
+        updateCount: 1,
+        worktreePath: "/tmp/wt",
+        branchName: "phase3/t25a",
+        log: "",
+        commands: [],
+      } as tools.ToolCallViewModel),
+    ).toBe("phase3/t25a");
+  });
+
+  it("draws nothing for a family with no single such fact, rather than inventing one", () => {
+    expect(toolHeaderChipLabel(GENERIC_TOOL)).toBeUndefined();
   });
 });
 

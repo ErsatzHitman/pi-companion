@@ -14,17 +14,23 @@
  * a live update to one call does not re-render every already-settled
  * tool-call row already in the list.
  *
- * **T356: the card carries the redesign's own tool surfaces.** §7.2
- * gives a finished tool call `tool-success-bg` and a failed one
- * `tool-error-bg`, which is what `toolBlockKind` below maps a
- * `ToolCallViewModel.status` onto. `Card` still supplies the radius,
- * the padding and the 1px ring; only the fill (and, for a failure, a
- * red outline) is overridden, so a tool call still reads as the same
- * kind of object as every other card in this app. A running call keeps
- * the neutral `surface` it always had: it has no outcome yet, and
- * colouring it as though it did is the thing this whole table exists to
- * avoid. `StatusIndicator` above still spells the status out in words,
- * so none of this is colour alone (plan.md §10.5).
+ * **T356: the card carries the redesign's own tool surfaces.** The
+ * artifact draws a finished tool call on `tool-success-bg` and a failed
+ * one on `tool-error-bg`, which is what `toolBlockKind` below maps a
+ * `ToolCallViewModel.status` onto. The frame itself is the shared
+ * `.blk` — radius 14, padding 9×11, and its 1px `line` hairline — so a
+ * tool call reads as the same kind of object as every other block in
+ * the transcript. A running call keeps `.blk`'s own `inset` resting
+ * fill: it has no outcome yet, and colouring it as though it did is the
+ * thing this whole table exists to avoid. `StatusIndicator` above still
+ * spells the status out in words, so none of this is colour alone
+ * (plan.md §10.5).
+ *
+ * **The header is the artifact's own line.** `.tt` names the tool in
+ * bold `ink`, `.tchip` carries the one path or argument this call
+ * touched in `accent-ink` (see `toolHeaderChipLabel`), and the mono
+ * duration sits at the right edge beside the status. A tool family with
+ * no single such fact simply draws no chip.
  *
  * **T358: the edit and search cards draw the redesign's own bands.** An
  * edit's diff was a `CodeBlock` of plain mono text with a `diff`
@@ -63,8 +69,16 @@ import type { tools } from "@picompanion/frontend-core";
 // reader to press a button the composer no longer draws.
 import { ABORT_ACTION_LABEL } from "../composer/composer-model";
 
-import { Card, CodeBlock, Link, RecordList, StatusIndicator } from "../../ui/primitives";
-import { blockOutline, blockSurface, type BlockKind } from "../../ui/theme/block-shape";
+import { CodeBlock, Link, RecordList, StatusIndicator } from "../../ui/primitives";
+import {
+  BLOCK_PADDING_HORIZONTAL,
+  BLOCK_PADDING_VERTICAL,
+  BLOCK_RADIUS,
+  blockOutline,
+  blockRing,
+  blockSurface,
+  type BlockKind,
+} from "../../ui/theme/block-shape";
 import {
   BashBlock,
   CodeListing,
@@ -91,6 +105,7 @@ import {
   searchMatchLines,
   shellBlockIsDimmed,
   statusTextFor,
+  toolHeaderChipLabel,
   truncateBody,
   unrecognizedToolMeta,
   worktreeCommandStepStatus,
@@ -103,11 +118,20 @@ export { isToolCallEntry } from "./tool-call-row-model";
 
 const MAX_LIST_ROWS = 20;
 
+/** The transcript line's own mono metrics: `.ln { font-size: 12px; line-height: 1.62 }`. */
+const LINE_FONT_SIZE = 12;
+const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
+/** `.tchip { border-radius: 5px; padding: 0 4px }` — no token at 5 or 4, so both are stated with the reference. */
+const TOOL_CHIP_RADIUS = 5;
+const TOOL_CHIP_PADDING_HORIZONTAL = 4;
+
 /**
- * Which `.blk` a tool call is. `running` and every other in-flight
- * status is deliberately absent from the mapping — see this file's own
- * T356 paragraph for why an outcome-coloured card before there is an
- * outcome is the failure mode this avoids.
+ * Which `.blk` a tool call is. `running`, `blocked` and `canceled` are
+ * deliberately absent from the mapping: the artifact's `.blk` default
+ * fill is `inset`, which is exactly the resting surface an unfinished
+ * call should sit on, and tinting it as though it already had an
+ * outcome is the failure mode this avoids. Only a finished call gets
+ * `tool-ok`/`tool-error`, and only a failure gets the red outline.
  */
 function toolBlockKind(status: tools.ToolCallViewModel["status"]): BlockKind | null {
   if (status === "completed") return "tool-ok";
@@ -115,32 +139,60 @@ function toolBlockKind(status: tools.ToolCallViewModel["status"]): BlockKind | n
   return null;
 }
 
-/** The `Card` style override for one tool call's status, or `undefined` while it is still running. */
-function useToolCardStyle(status: tools.ToolCallViewModel["status"]) {
+/** The block frame's fill, ring and outline for one tool call's status. */
+function useToolBlockStyle(status: tools.ToolCallViewModel["status"]) {
   const { theme } = useTheme();
   const kind = toolBlockKind(status);
-  if (kind === null) return undefined;
-  const surface = blockSurface(kind);
-  const outline = blockOutline(kind);
+  const surface = kind === null ? "inset" : (blockSurface(kind) ?? "inset");
+  const ring = kind === null ? "line" : blockRing(kind);
+  const outline = kind === null ? null : blockOutline(kind);
   return {
-    backgroundColor: surface === null ? undefined : theme.colors[surface],
-    ...(outline === null ? {} : { borderWidth: 1, borderColor: theme.colors[outline] }),
+    backgroundColor: theme.colors[surface],
+    borderWidth: 1,
+    borderColor: theme.colors[outline ?? ring ?? "line"],
   };
 }
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
+    // `.blk { border-radius: 14px; padding: 9px 11px }` — the same block
+    // every other transcript element is drawn in. The fill, ring and
+    // outline come from `useToolBlockStyle` above.
+    block: {
+      gap: theme.spacing[1],
+      borderRadius: BLOCK_RADIUS,
+      paddingVertical: BLOCK_PADDING_VERTICAL,
+      paddingHorizontal: BLOCK_PADDING_HORIZONTAL,
+    },
     header: {
       flexDirection: "row",
       alignItems: "center",
       flexWrap: "wrap",
-      gap: theme.spacing[2],
-      marginBottom: theme.spacing[2],
+      gap: theme.spacing[1],
+      marginBottom: theme.spacing[1],
     },
+    // `.tt { color: var(--ink); font-weight: 700 }` on a `.ln`.
     name: {
       color: theme.colors.ink,
-      fontSize: theme.typography.variant.body.fontSize,
-      fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: LINE_FONT_SIZE,
+      lineHeight: LINE_HEIGHT,
+      fontWeight: asFontWeight(theme.typography.fontWeight.bold),
+    },
+    // `.tchip { background: var(--surface); border-radius: 5px; padding:
+    // 0 4px; box-shadow: var(--sh-hairline) }`, text `accent-ink`.
+    chip: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: TOOL_CHIP_RADIUS,
+      paddingHorizontal: TOOL_CHIP_PADDING_HORIZONTAL,
+      borderWidth: 1,
+      borderColor: theme.colors.line,
+    },
+    chipText: {
+      color: theme.colors["accent-ink"],
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: LINE_FONT_SIZE,
+      lineHeight: LINE_HEIGHT,
     },
     duration: {
       marginLeft: "auto",
@@ -168,18 +220,26 @@ type Styles = ReturnType<typeof createStyles>;
 function ToolCallHeader({ tool, testId }: { tool: tools.ToolCallViewModel; testId?: string }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
+  const chipLabel = toolHeaderChipLabel(tool);
   return (
     <View style={styles.header}>
       <Text style={styles.name}>{tool.displayName}</Text>
+      {chipLabel !== undefined && chipLabel.length > 0 ? (
+        <View style={styles.chip} testID={testId ? `${testId}-arg-chip` : undefined}>
+          <Text style={styles.chipText} numberOfLines={1}>
+            {chipLabel}
+          </Text>
+        </View>
+      ) : null}
+      {tool.durationMs !== undefined ? (
+        <Text style={styles.duration}>{formatToolDuration(tool.durationMs)}</Text>
+      ) : null}
       <StatusIndicator
         label="Tool call"
         tone={STATUS_TONE[tool.status]}
         statusText={statusTextFor(tool.status)}
         testId={testId ? `${testId}-status` : undefined}
       />
-      {tool.durationMs !== undefined ? (
-        <Text style={styles.duration}>{formatToolDuration(tool.durationMs)}</Text>
-      ) : null}
     </View>
   );
 }
@@ -426,12 +486,12 @@ function UnknownToolCard({
   styles: Styles;
   testId?: string;
 }) {
-  const cardStyle = useToolCardStyle(tool.status);
+  const blockStyle = useToolBlockStyle(tool.status);
   const resultLabel = tool.status === "failed" ? "Error" : "Result";
   const showResultPanel =
     tool.status === "failed" ? tool.rawError !== undefined : tool.result !== undefined;
   return (
-    <Card style={cardStyle} testID={testId}>
+    <View style={[styles.block, blockStyle]} testID={testId}>
       <ToolCallHeader tool={tool} testId={testId} />
       <View style={styles.body}>
         <Text style={[styles.meta, tool.status === "failed" ? styles.metaError : null]}>
@@ -446,7 +506,7 @@ function UnknownToolCard({
         <Text style={styles.panelLabel}>Input</Text>
         <CodeBlock code={genericInputSummary(tool)} language="json" />
       </View>
-    </Card>
+    </View>
   );
 }
 
@@ -459,9 +519,9 @@ function KnownToolCard({
   styles: Styles;
   testId?: string;
 }) {
-  const cardStyle = useToolCardStyle(tool.status);
+  const blockStyle = useToolBlockStyle(tool.status);
   return (
-    <Card style={cardStyle} testID={testId}>
+    <View style={[styles.block, blockStyle]} testID={testId}>
       <ToolCallHeader tool={tool} testId={testId} />
       {tool.summary ? <Text style={styles.meta}>{tool.summary}</Text> : null}
       {tool.status === "failed" && tool.errorText ? (
@@ -488,7 +548,7 @@ function KnownToolCard({
       ) : (
         <PlainTextBody tool={tool} styles={styles} />
       )}
-    </Card>
+    </View>
   );
 }
 

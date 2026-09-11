@@ -72,12 +72,15 @@ describe("the per-state glyph and tints name roles, never colours (T360)", () =>
   });
 
   it("tints the glyph and the subject from token keys", () => {
+    // The artifact: the done glyph is `ok-t` green, the current one
+    // `var(--accent)`, a waiting one `dim`; the subject is `dim` and
+    // struck for done, `ink`/500 for current, `ink-2` otherwise.
     expect(todoGlyphInk("done")).toBe("green");
-    expect(todoGlyphInk("current")).toBe("orange");
+    expect(todoGlyphInk("current")).toBe("accent");
     expect(todoGlyphInk("waiting")).toBe("ink-3");
-    expect(todoSubjectInk("done")).toBe("ink-2");
-    expect(todoSubjectInk("current")).toBe("teal");
-    expect(todoSubjectInk("waiting")).toBe("ink");
+    expect(todoSubjectInk("done")).toBe("ink-3");
+    expect(todoSubjectInk("current")).toBe("ink");
+    expect(todoSubjectInk("waiting")).toBe("ink-2");
     for (const state of ["done", "current", "waiting"] as const) {
       expect(todoGlyphInk(state)).not.toMatch(/^#|^rgb/);
       expect(todoSubjectInk(state)).not.toMatch(/^#|^rgb/);
@@ -85,18 +88,14 @@ describe("the per-state glyph and tints name roles, never colours (T360)", () =>
   });
 });
 
-describe("buildTodoRows: the artifact's tree (T360)", () => {
-  it("numbers from one and closes the tree on the last row", () => {
+describe("buildTodoRows: the artifact's flat rows (T360)", () => {
+  it("draws no tree connector and no `#n` — the artifact's `.ov-row` is a glyph and a subject", () => {
     const rows = buildTodoRows(items(["a", true], ["b", false], ["c", false]));
-    expect(rows.map((row) => [row.number, row.connector])).toEqual([
-      [1, "├─"],
-      [2, "├─"],
-      [3, "└─"],
+    expect(rows).toEqual([
+      { state: "done", subject: "a", struck: true },
+      { state: "current", subject: "b", struck: false },
+      { state: "waiting", subject: "c", struck: false },
     ]);
-  });
-
-  it("closes the tree on a single-item list too", () => {
-    expect(buildTodoRows(items(["only", false])).map((row) => row.connector)).toEqual(["└─"]);
   });
 
   it("strikes through exactly the done rows", () => {
@@ -120,6 +119,7 @@ describe("todoProgress and the ring (T360)", () => {
       total: 3,
       fraction: 2 / 3,
       complete: false,
+      active: true,
     });
   });
 
@@ -127,7 +127,13 @@ describe("todoProgress and the ring (T360)", () => {
     expect(todoProgress(items(["a", true])).complete).toBe(true);
     // An empty list is 0/0. Calling that complete would paint a full
     // green ring for a list with nothing in it.
-    expect(todoProgress([])).toEqual({ done: 0, total: 0, fraction: 0, complete: false });
+    expect(todoProgress([])).toEqual({
+      done: 0,
+      total: 0,
+      fraction: 0,
+      complete: false,
+      active: false,
+    });
   });
 
   it("derives the circumference rather than pinning the artifact's rounded literal", () => {
@@ -161,11 +167,16 @@ describe("the head says the count in words (T360)", () => {
     expect(todoHeadline(todoProgress([]))).toBe("Todos (0/0)");
   });
 
-  it("hollows the head glyph and dims it once nothing is active", () => {
-    expect(todoHeadGlyph(todoProgress(items(["a", false])))).toBe("●");
-    expect(todoHeadInk(todoProgress(items(["a", false])))).toBe("teal");
-    expect(todoHeadGlyph(todoProgress(items(["a", true])))).toBe("○");
-    expect(todoHeadInk(todoProgress(items(["a", true])))).toBe("ink-3");
+  it("prints the artifact's own head mark: ✓ done, ◐ active, ○ empty", () => {
+    expect(todoHeadGlyph(todoProgress(items(["a", false])))).toBe("◐");
+    expect(todoHeadGlyph(todoProgress(items(["a", true])))).toBe("✓");
+    expect(todoHeadGlyph(todoProgress([]))).toBe("○");
+  });
+
+  it("colours the head green when finished and quiet while open", () => {
+    expect(todoHeadInk(todoProgress(items(["a", false])))).toBe("ink-2");
+    expect(todoHeadInk(todoProgress(items(["a", true])))).toBe("green");
+    expect(todoHeadInk(todoProgress([]))).toBe("ink-3");
   });
 });
 

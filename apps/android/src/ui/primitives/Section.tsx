@@ -45,9 +45,11 @@ export interface SectionProps {
   variant?: SectionVariant;
 }
 
-/** The artifact's `.lbl`: 10px, uppercase, with its tracking in dp at that size. */
-const LABEL_FONT_SIZE = 10;
-const LABEL_LETTER_SPACING = 0.9;
+/** The artifact's `.lbl`: 9.5px, uppercase, with its tracking in dp at that size. */
+const LABEL_FONT_SIZE = 9.5;
+const LABEL_LETTER_SPACING = 0.95;
+/** The artifact's `.lbl { padding: 8px 2px 0 }`. */
+const LABEL_PADDING_TOP = 8;
 
 /**
  * Section primitive (plan.md §10.3): a labelled grouping. Native TalkBack
@@ -93,8 +95,9 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       color: theme.colors["ink-3"],
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: LABEL_FONT_SIZE,
-      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+      fontWeight: asFontWeight(theme.typography.fontWeight.bold),
       letterSpacing: LABEL_LETTER_SPACING,
+      paddingTop: LABEL_PADDING_TOP,
       textTransform: "uppercase",
     },
   });

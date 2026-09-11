@@ -33,6 +33,17 @@ describe("VectorIcon source", () => {
     expect(code).toMatch(/d="M21 21l-4\.3-4\.3"/);
   });
 
+  it("draws the composer's camera mark as a stroked path in the same 24 viewBox language", () => {
+    // The S7 frame draws no camera, so this is this set's own drawing —
+    // pinned so a typo in its path data cannot slip through a typecheck.
+    const code = readCode();
+    expect(code).toMatch(/case "camera":/);
+    expect(code).toMatch(
+      /d="M4 8h3l1\.5-2\.5h7L17 8h3a1\.5 1\.5 0 0 1 1\.5 1\.5v8a1\.5 1\.5 0 0 1-1\.5 1\.5H4a1\.5 1\.5 0 0 1-1\.5-1\.5v-8A1\.5 1\.5 0 0 1 4 8z"/,
+    );
+    expect(code).toMatch(/<Circle[\s\S]*?cx=\{12\}[\s\S]*?cy=\{13\}[\s\S]*?r=\{3\.5\}/);
+  });
+
   it("keeps the artifact's per-icon stroke weights, which differ and are not interchangeable", () => {
     const code = readCode();
     // plus 2.2, mic 2, send 2.4, chevron 2.2, check 2.6, search 2.

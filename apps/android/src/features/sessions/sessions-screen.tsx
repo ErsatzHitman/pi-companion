@@ -111,6 +111,19 @@
  * nobody. The three Maestro flows that create a session tap the chip
  * first; source and flows changed together, per this repository's rule
  * for anything a flow selector names.
+ *
+ * **T385 — full A1 fidelity.** The frame's fixed chrome and body are
+ * now drawn the way the artifact draws them: the bar and the bottom
+ * action row are siblings above and below the one scrolling `.pad`,
+ * the body carries the artifact's 12dp padding and 8dp gap, the row
+ * is its 52dp/12-radius raised pill with an `ink-3` mono `.s` line,
+ * the status pill prints the artifact's words (`Working`, `Needs you`)
+ * with the fuller sentence kept for TalkBack, the filter chips use its
+ * `surface`/`accent-tint` fills, and the gear is its bare `.ic` button
+ * rather than a second surface card. The `.s` line still says what
+ * `SessionSummary` actually carries (provider, working directory, age)
+ * rather than the mock's invented turn count and token total — see the
+ * T363 paragraph above, which is unchanged.
  */
 import type { KeyValueStorage, NetworkReachability } from "@picompanion/frontend-core";
 import type { NativeTheme } from "@picompanion/design-tokens";
@@ -133,6 +146,7 @@ import {
   Section,
   StatusPill,
   TextField,
+  VectorIcon,
 } from "../../ui/primitives";
 import { ScreenBar } from "../../ui/recipes";
 import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
@@ -259,9 +273,16 @@ export interface SessionsScreenProps {
   onOpenSettings?: () => void;
 }
 
-/** A1's `.row` geometry. */
-const ROW_RADIUS = 22;
-const ROW_PADDING_VERTICAL = 6;
+/**
+ * A1's `.row` geometry (T385). The artifact's radius is 12; the nearest
+ * named token, `theme.radii.card`, is 10, so the artifact's own figure
+ * stays a named constant rather than being rounded to a shape a reader
+ * would see as different. `minHeight` is the artifact's 52 — comfortably
+ * above this platform's 48dp touch minimum (plan.md §9.3).
+ */
+const ROW_RADIUS = 12;
+const ROW_MIN_HEIGHT = 52;
+const ROW_PADDING_VERTICAL = 9;
 const ROW_PADDING_HORIZONTAL = 12;
 
 /**
@@ -270,10 +291,22 @@ const ROW_PADDING_HORIZONTAL = 12;
  * `touch-targets.test.ts` audits, so the larger figure wins.
  */
 const ACTION_BUTTON_SIZE = 48;
-const ACTION_MARK_FONT_SIZE = 16;
+/** The artifact's `.ic { font-size: 15px }`, the same mark size `ScreenBar` uses. */
+const ACTION_MARK_FONT_SIZE = 15;
+/** The artifact's `.newbtn { font-size: 11.5px }`, A1's own label size. */
+const NEW_SESSION_FONT_SIZE = 11.5;
+/** The artifact's `.actbar { padding: 0 12px 14px }`; 14 is not on the spacing scale. */
+const ACTION_ROW_PADDING_BOTTOM = 14;
 
-/** A1's `.chip` height. The touch target around it is 48dp; see `FilterChip`. */
-const FILTER_CHIP_HEIGHT = 30;
+/**
+ * A1's `.chip { height: 28px; padding: 0 11px; font-size: 11.5px }`.
+ * The touch target around it is 48dp; see `FilterChip`.
+ */
+const FILTER_CHIP_HEIGHT = 28;
+const FILTER_CHIP_PADDING_HORIZONTAL = 11;
+const FILTER_CHIP_FONT_SIZE = 11.5;
+/** A1's `.sbar` magnifier, 14px in the artifact. */
+const SEARCH_MARK_SIZE = 14;
 
 const DEFAULT_STATE: SessionListState = { kind: "ready", sessions: [] };
 
@@ -571,15 +604,13 @@ export function SessionsScreen({
   }, [listState]);
 
   return (
-    <ScrollView
-      // T330: same viewport shrink as `connection-shell.tsx`'s ScrollView.
-      style={[styles.container, { marginBottom: keyboardInset }]}
-      testID={testId}
-      // T329: same reason as `connection-shell.tsx`'s ScrollView — the
-      // create-session form's submit is tapped straight after typing, and
-      // the default `"never"` would spend that tap dismissing the keyboard.
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={styles.screen}>
+      {/*
+        A1 draws the bar as a sibling ABOVE the scrolling body (`.bar`
+        followed by `.pad`), so it stays put while the list moves under
+        it, and the body's own 12dp padding — not the screen edges —
+        frames every row, chip and field (T385).
+      */}
       <ScreenBar
         title="Sessions"
         leading={
@@ -600,156 +631,190 @@ export function SessionsScreen({
         }}
         testId={`${testId}-bar`}
       />
-      <SearchField
-        ref={searchRef}
-        label="Search sessions"
-        placeholder="Search sessions"
-        value={query}
-        onChangeText={setQuery}
-        testId={`${testId}-search`}
-      />
-      <View
-        accessible={false}
-        accessibilityRole="none"
-        accessibilityLabel={SESSION_FILTER_GROUP_LABEL}
-        style={styles.filterChips}
+      <ScrollView
+        // T330: same viewport shrink as `connection-shell.tsx`'s ScrollView.
+        style={[styles.container, { marginBottom: keyboardInset }]}
+        contentContainerStyle={styles.body}
+        testID={testId}
+        // T329: same reason as `connection-shell.tsx`'s ScrollView — the
+        // create-session form's submit is tapped straight after typing, and
+        // the default `"never"` would spend that tap dismissing the keyboard.
+        keyboardShouldPersistTaps="handled"
       >
-        {SESSION_FILTER_CHIPS.map((chip) => (
-          <FilterChip
-            key={chip.id}
-            chip={chip}
-            selected={chip.id === filterChipId}
-            onPress={() => setFilterChipId(chip.id)}
-            testId={`${testId}-filter-${chip.id}`}
+        {/*
+          A1's `.sbar` draws its 14dp magnifier inside the field's own
+          chrome; `SearchField` owns that chrome and is not this task's
+          to reshape, so the mark sits beside the field instead — the
+          drawing the artifact specifies, without reaching into another
+          feature's primitive (T385).
+        */}
+        <View style={styles.searchRow}>
+          <VectorIcon name="search" size={SEARCH_MARK_SIZE} color={theme.colors["ink-3"]} />
+          <View style={styles.searchFieldSlot}>
+            <SearchField
+              ref={searchRef}
+              label="Search sessions"
+              placeholder="Search sessions"
+              value={query}
+              onChangeText={setQuery}
+              testId={`${testId}-search`}
+            />
+          </View>
+        </View>
+        <View
+          accessible={false}
+          accessibilityRole="none"
+          accessibilityLabel={SESSION_FILTER_GROUP_LABEL}
+          style={styles.filterChips}
+        >
+          {SESSION_FILTER_CHIPS.map((chip) => (
+            <FilterChip
+              key={chip.id}
+              chip={chip}
+              selected={chip.id === filterChipId}
+              onPress={() => setFilterChipId(chip.id)}
+              testId={`${testId}-filter-${chip.id}`}
+            />
+          ))}
+        </View>
+        {createFormVisible ? (
+          <CreateSessionForm
+            state={createState}
+            onCwdChange={(cwd) =>
+              setCreateState((current) => updateCreateSessionDraft(current, { cwd }))
+            }
+            onProviderChange={(provider) =>
+              setCreateState((current) => updateCreateSessionDraft(current, { provider }))
+            }
+            onSubmit={handleCreateSubmit}
+            disabled={!sessionService}
+            testId={`${testId}-create`}
           />
-        ))}
-      </View>
-      {createFormVisible ? (
-        <CreateSessionForm
-          state={createState}
-          onCwdChange={(cwd) =>
-            setCreateState((current) => updateCreateSessionDraft(current, { cwd }))
-          }
-          onProviderChange={(provider) =>
-            setCreateState((current) => updateCreateSessionDraft(current, { provider }))
-          }
-          onSubmit={handleCreateSubmit}
-          disabled={!sessionService}
-          testId={`${testId}-create`}
-        />
-      ) : null}
-      {listState.kind === "ready" ? (
-        // T32B6, item 3: "the active connection path is visible" — text,
-        // never colour alone, honestly "Unknown" until `network` (see
-        // `SessionsScreenProps`) has fed at least one `NetworkStatus`.
-        <Banner
-          tone="neutral"
-          message={`Connection: ${sessionListConnectionPathLabel(listState.connectionPath)}`}
-          testId={`${testId}-connection-path`}
-        />
-      ) : null}
-      {listStaleness ? (
-        // T32B6, item 4: T37B's own staleness sentence, not a second,
-        // locally-invented one — see `listStaleness`'s doc above.
-        <Banner tone="warning" message={listStaleness.text} testId={`${testId}-list-stale`} />
-      ) : null}
-      {openState.status === "loading" ? (
-        <Banner
-          tone="info"
-          message={`Opening session ${openState.sessionId}…`}
-          testId={`${testId}-open-loading`}
-        />
-      ) : null}
-      {openState.status === "error" ? (
-        <Banner tone="danger" message={openState.message} testId={`${testId}-open-error`} />
-      ) : null}
-      {openState.status === "ready" && openState.stale ? (
-        // T32B3, plan.md §7.4: a restored cached tail is shown, but never
-        // presented as authoritative until a resume reconcile confirms it.
-        <Banner
-          tone="warning"
-          message="Restored from the last time this session was open — catching up with the daemon…"
-          testId={`${testId}-open-stale`}
-        />
-      ) : null}
-      {model.kind === "loading" ? (
-        <LoadingState
-          title={model.title}
-          description={model.description}
-          testId={`${testId}-loading`}
-        />
-      ) : null}
-      {model.kind === "error" ? (
-        <ErrorState
-          title={model.title}
-          description={model.description}
-          testId={`${testId}-error`}
-        />
-      ) : null}
-      {model.kind === "empty" ? (
-        <EmptyState
-          title={model.title}
-          description={model.description}
-          testId={`${testId}-empty`}
-        />
-      ) : null}
-      {filteredEmptyMessage ? (
-        // T362: never the empty state — that one says there are no
-        // sessions at all, which is false whenever a filter is on.
-        <Banner tone="neutral" message={filteredEmptyMessage} testId={`${testId}-filtered-empty`} />
-      ) : null}
-      {model.kind === "ready"
-        ? visibleGroups.map((group) => (
-            <Section
-              key={group.kind}
-              title={sessionGroupLabel(group)}
-              variant="label"
-              testId={`${testId}-group-${group.kind}`}
-            >
-              <View style={styles.rows}>
-                {group.rows.map((row) => {
-                  const rawSession = sessionsById.get(row.id);
-                  const isPending = actionsState.pendingSessionId === row.id;
-                  return (
-                    <SessionRow
-                      key={row.id}
-                      row={row}
-                      age={rawSession ? sessionAgeLabel(rawSession.updatedAt, nowMs) : null}
-                      theme={theme}
-                      onOpen={sessionService ? () => handleOpenSession(row.id) : undefined}
-                      onArchive={
-                        sessionService && rawSession && !rawSession.archivedAt
-                          ? () => handleArchiveSession(rawSession)
-                          : undefined
-                      }
-                      archiving={isPending && actionsState.pendingPhase === "archiving"}
-                      onRequestDelete={
-                        sessionService && rawSession
-                          ? () => handleRequestDelete(rawSession)
-                          : undefined
-                      }
-                      deleting={isPending && actionsState.pendingPhase === "deleting"}
-                      errorMessage={
-                        actionsState.error?.sessionId === row.id
-                          ? actionsState.error.message
-                          : undefined
-                      }
-                      testId={`${testId}-row-${row.id}`}
-                    />
-                  );
-                })}
-              </View>
-            </Section>
-          ))
-        : null}
+        ) : null}
+        {listState.kind === "ready" ? (
+          // T32B6, item 3: "the active connection path is visible" — text,
+          // never colour alone, honestly "Unknown" until `network` (see
+          // `SessionsScreenProps`) has fed at least one `NetworkStatus`.
+          <Banner
+            tone="neutral"
+            message={`Connection: ${sessionListConnectionPathLabel(listState.connectionPath)}`}
+            testId={`${testId}-connection-path`}
+          />
+        ) : null}
+        {listStaleness ? (
+          // T32B6, item 4: T37B's own staleness sentence, not a second,
+          // locally-invented one — see `listStaleness`'s doc above.
+          <Banner tone="warning" message={listStaleness.text} testId={`${testId}-list-stale`} />
+        ) : null}
+        {openState.status === "loading" ? (
+          <Banner
+            tone="info"
+            message={`Opening session ${openState.sessionId}…`}
+            testId={`${testId}-open-loading`}
+          />
+        ) : null}
+        {openState.status === "error" ? (
+          <Banner tone="danger" message={openState.message} testId={`${testId}-open-error`} />
+        ) : null}
+        {openState.status === "ready" && openState.stale ? (
+          // T32B3, plan.md §7.4: a restored cached tail is shown, but never
+          // presented as authoritative until a resume reconcile confirms it.
+          <Banner
+            tone="warning"
+            message="Restored from the last time this session was open — catching up with the daemon…"
+            testId={`${testId}-open-stale`}
+          />
+        ) : null}
+        {model.kind === "loading" ? (
+          <LoadingState
+            title={model.title}
+            description={model.description}
+            testId={`${testId}-loading`}
+          />
+        ) : null}
+        {model.kind === "error" ? (
+          <ErrorState
+            title={model.title}
+            description={model.description}
+            testId={`${testId}-error`}
+          />
+        ) : null}
+        {model.kind === "empty" ? (
+          <EmptyState
+            title={model.title}
+            description={model.description}
+            testId={`${testId}-empty`}
+          />
+        ) : null}
+        {filteredEmptyMessage ? (
+          // T362: never the empty state — that one says there are no
+          // sessions at all, which is false whenever a filter is on.
+          <Banner
+            tone="neutral"
+            message={filteredEmptyMessage}
+            testId={`${testId}-filtered-empty`}
+          />
+        ) : null}
+        {model.kind === "ready"
+          ? visibleGroups.map((group) => (
+              <Section
+                key={group.kind}
+                title={sessionGroupLabel(group)}
+                variant="label"
+                testId={`${testId}-group-${group.kind}`}
+              >
+                <View style={styles.rows}>
+                  {group.rows.map((row) => {
+                    const rawSession = sessionsById.get(row.id);
+                    const isPending = actionsState.pendingSessionId === row.id;
+                    return (
+                      <SessionRow
+                        key={row.id}
+                        row={row}
+                        age={rawSession ? sessionAgeLabel(rawSession.updatedAt, nowMs) : null}
+                        theme={theme}
+                        onOpen={sessionService ? () => handleOpenSession(row.id) : undefined}
+                        onArchive={
+                          sessionService && rawSession && !rawSession.archivedAt
+                            ? () => handleArchiveSession(rawSession)
+                            : undefined
+                        }
+                        archiving={isPending && actionsState.pendingPhase === "archiving"}
+                        onRequestDelete={
+                          sessionService && rawSession
+                            ? () => handleRequestDelete(rawSession)
+                            : undefined
+                        }
+                        deleting={isPending && actionsState.pendingPhase === "deleting"}
+                        errorMessage={
+                          actionsState.error?.sessionId === row.id
+                            ? actionsState.error.message
+                            : undefined
+                        }
+                        testId={`${testId}-row-${row.id}`}
+                      />
+                    );
+                  })}
+                </View>
+              </Section>
+            ))
+          : null}
+      </ScrollView>
       {/*
-        A1's bottom row. The artifact's third control, a `home` button,
-        is deliberately absent: its target is a per-host overview screen
-        this app does not have — `{ type: "host" }` resolves to
-        `/h/:serverId`, which Expo Router sends straight back to this
-        very list — so the button would navigate to the screen it is
-        already on. Drawing an affordance a reader cannot act on is the
-        same defect class as printing a keyboard hint on a touch device.
+        A1's bottom row is a sibling BELOW the scroller (`.actbar`
+        follows `.pad` in the artifact), so it is always reachable
+        without scrolling a long list to its end (T385). The gear is
+        the artifact's own bare `.ic` button — no surface, no ring —
+        while `+ New session` keeps the raised `newbtn` look; the two
+        stop sharing one style.
+
+        The artifact's third control, a `home` button, is deliberately
+        absent: its target is a per-host overview screen this app does
+        not have — `{ type: "host" }` resolves to `/h/:serverId`, which
+        Expo Router sends straight back to this very list — so the
+        button would navigate to the screen it is already on. Drawing
+        an affordance a reader cannot act on is the same defect class
+        as printing a keyboard hint on a touch device.
       */}
       <View style={styles.actionRow}>
         <Pressable
@@ -757,7 +822,7 @@ export function SessionsScreen({
           accessibilityState={{ expanded: createFormVisible }}
           accessibilityLabel={createFormVisible ? "Hide the new session form" : "New session"}
           onPress={() => setCreateFormOpen((open) => !open)}
-          style={[styles.actionButton, styles.actionButtonWide]}
+          style={styles.newSessionButton}
           testID={`${testId}-create-new`}
         >
           <Text style={styles.actionLabel}>+ New session</Text>
@@ -767,7 +832,7 @@ export function SessionsScreen({
             accessibilityRole="button"
             accessibilityLabel="Settings"
             onPress={onOpenSettings}
-            style={styles.actionButton}
+            style={styles.settingsButton}
             testID={`${testId}-open-settings`}
           >
             <Text
@@ -795,7 +860,7 @@ export function SessionsScreen({
         onClose={handleDismissDelete}
         testId={`${testId}-delete-dialog`}
       />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -858,12 +923,12 @@ function CreateSessionForm({
  * would change every chip already mounted from it.
  *
  * Selection reaches TalkBack through `accessibilityState.selected`, and
- * is drawn as a filled accent background with `accentContrast` text —
- * the same pair `ui/primitives/Button.tsx` uses for its primary kind,
- * so a product colour is never written here as a literal. The visible
- * pill is the artifact's 30dp; `hitSlop` grows the touch bounds to the
- * 48dp minimum (plan.md §9.3) rather than inflating the pill, the split
- * `Chip` and `IconButton` already use.
+ * is drawn the artifact's own way (T385): an `accent-tint` fill with
+ * `accent-ink` text and no ring when on (`.chip[data-on]`), a `surface`
+ * fill with the hairline `--sh-btn` ring and `ink-2` text when off. The
+ * visible pill is the artifact's 28dp; `hitSlop` grows the touch bounds
+ * to the 48dp minimum (plan.md §9.3) rather than inflating the pill,
+ * the split `Chip` and `IconButton` already use.
  */
 function FilterChip({
   chip,
@@ -885,7 +950,12 @@ function FilterChip({
       accessibilityState={{ selected }}
       accessibilityLabel={sessionFilterChipAccessibilityLabel(chip)}
       onPress={onPress}
-      hitSlop={9}
+      // The artifact's 28dp pill plus two 10dp slops is exactly the 48dp
+      // minimum (plan.md §9.3). The slop is a literal rather than a named
+      // constant because `touch-targets.test.ts` resolves only a numeric
+      // `hitSlop={N}` against the pill's own height, and that audit is the
+      // one this padding exists to satisfy.
+      hitSlop={10}
       testID={testId}
       style={[styles.filterChip, selected ? styles.filterChipSelected : null]}
     >
@@ -986,49 +1056,87 @@ function SessionRow({
 
 function createStyles(theme: NativeTheme) {
   return StyleSheet.create({
+    // A1's page: the bar and the bottom action row are fixed siblings of
+    // the one scrolling body (`.bar` / `.pad` / `.actbar`), so this is
+    // the only flex:1 container (T385).
+    screen: { flex: 1, backgroundColor: theme.colors.page },
     container: { flex: 1 },
+    // A1's `.pad { padding: 12px; gap: 8px }` — every row, chip and
+    // field is inset from the screen edges by this, not by the bar.
+    body: { padding: theme.spacing[3], gap: theme.spacing[2] },
+    // A1's `.sbar` row: a 14dp magnifier beside the field. The field's
+    // own chrome belongs to `SearchField`; only the row's layout lives
+    // here.
+    searchRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+    searchFieldSlot: { flex: 1 },
     formFields: { gap: theme.spacing[2] },
     filterChips: { flexDirection: "row", flexWrap: "wrap", gap: theme.spacing[2] },
-    actionRow: { flexDirection: "row", gap: theme.spacing[2], paddingVertical: theme.spacing[2] },
-    actionButton: {
+    actionRow: {
+      flexDirection: "row",
+      gap: theme.spacing[2],
+      paddingHorizontal: theme.spacing[3],
+      paddingBottom: ACTION_ROW_PADDING_BOTTOM,
+    },
+    // A1's `+ New session`: the `newbtn` look — a raised surface chip at
+    // the artifact's 7px radius, drawn at `radii.control` (8), the
+    // nearest named step. `flex: 1` takes the row's remaining width.
+    newSessionButton: {
+      minHeight: ACTION_BUTTON_SIZE,
+      minWidth: ACTION_BUTTON_SIZE,
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: theme.spacing[3],
+      borderRadius: theme.radii.control,
+      backgroundColor: theme.colors.surface,
+      ...ringShadow(theme, "card"),
+    },
+    // A1's gear is a BARE `.ic` button: no surface fill, no ring, unlike
+    // the raised button beside it (T385).
+    settingsButton: {
       minHeight: ACTION_BUTTON_SIZE,
       minWidth: ACTION_BUTTON_SIZE,
       alignItems: "center",
       justifyContent: "center",
-      paddingHorizontal: theme.spacing[3],
-      borderRadius: theme.radii.full,
-      backgroundColor: theme.colors.surface,
-      ...ringShadow(theme, "card"),
+      borderRadius: theme.radii.control,
     },
-    actionButtonWide: { flex: 1 },
     actionLabel: {
       color: theme.colors.ink,
-      fontSize: theme.typography.variant.body.fontSize,
+      fontSize: NEW_SESSION_FONT_SIZE,
       fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
     actionMark: { color: theme.colors["ink-2"], fontSize: ACTION_MARK_FONT_SIZE },
+    // A1's unselected `.chip`: surface fill with the `--sh-btn` hairline
+    // ring, `ink-2` label, 28dp tall and 11dp of side padding.
     filterChip: {
       height: FILTER_CHIP_HEIGHT,
       justifyContent: "center",
-      paddingHorizontal: theme.spacing[3],
+      paddingHorizontal: FILTER_CHIP_PADDING_HORIZONTAL,
       borderRadius: theme.radii.full,
-      backgroundColor: theme.colors.inset,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors["line-strong"],
     },
-    filterChipSelected: { backgroundColor: theme.colors.accent },
+    // `.chip[data-on] { background: var(--accent-tint); color:
+    // var(--accent-ink); box-shadow: none }` — the ring goes away on
+    // selection, not just the fill change.
+    filterChipSelected: {
+      backgroundColor: theme.colors["accent-tint"],
+      borderWidth: 0,
+    },
     filterChipText: {
       color: theme.colors["ink-2"],
-      fontSize: theme.typography.variant.caption.fontSize,
+      fontSize: FILTER_CHIP_FONT_SIZE,
       fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
-    filterChipTextSelected: { color: theme.colors.accentContrast },
-    rows: { gap: theme.spacing[1] },
+    filterChipTextSelected: { color: theme.colors["accent-ink"] },
+    // A1's `.pad { gap: 8px }` separates adjacent rows of a group.
+    rows: { gap: theme.spacing[2] },
     rowContainer: { gap: theme.spacing[1] },
-    // A1's `.row`: a raised pill, not a dashed rule. `minHeight` stays
-    // 48 rather than the artifact's 46 — the artifact's figure is below
-    // this platform's own touch minimum (plan.md §9.3), and
-    // `touch-targets.test.ts` audits exactly this control.
+    // A1's `.row`: a raised pill. 52dp is above the platform minimum
+    // (plan.md §9.3), so the artifact's own height is kept here.
     row: {
-      minHeight: 48,
+      minHeight: ROW_MIN_HEIGHT,
       flexDirection: "row",
       alignItems: "center",
       gap: theme.spacing[2],
@@ -1050,8 +1158,10 @@ function createStyles(theme: NativeTheme) {
       fontSize: theme.typography.variant.body.fontSize,
       fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
+    // A1's `.row .s`: mono, 10.5px, `ink-3` — an explicitly secondary
+    // reading beside the title, not body copy in `ink-2`.
     meta: {
-      color: theme.colors["ink-2"],
+      color: theme.colors["ink-3"],
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.caption.fontSize,
     },

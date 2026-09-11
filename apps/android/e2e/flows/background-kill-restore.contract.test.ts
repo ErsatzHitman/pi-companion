@@ -148,12 +148,16 @@ describe("background-kill-restore.yaml anchors exist in source", () => {
       );
     });
 
-    it('Composer defaults testId to "composer" and renders that as the Section root testID', () => {
+    it('Composer defaults testId to "composer" and renders that as the composer root testID', () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
       expect(code).toMatch(/const composerTestId = testId \?\? "composer";/);
-      expect(code).toMatch(
-        /<Section\s+title=\{COMPOSER_ACCESSIBILITY_LABEL\}\s+testId=\{composerTestId\}(?:\s+style=\{styles\.section\})?(?:\s+onTitleLayout=\{handleTitleLayout\})?\s*>/, // T338: multi-line, with the shrinkable-section style,
-      );
+      // T385: the artifact draws no heading above the composer, so the
+      // `Section` wrapper became a plain `View` carrying the same testID,
+      // with the heading kept as a clipped-to-zero-height Text for
+      // TalkBack. The contract — something in this component, the one
+      // the flow's ids are built from, carries this testID — is the same.
+      expect(code).toMatch(/<View style=\{styles\.section\} testID=\{composerTestId\}>/);
+      expect(code).toMatch(/accessibilityLabel=\{COMPOSER_ACCESSIBILITY_LABEL\}/);
     });
 
     it('submitDraft commits the entry as "pending" synchronously, before onSubmit is ever invoked', () => {
@@ -191,8 +195,13 @@ describe("background-kill-restore.yaml anchors exist in source", () => {
       expect(composer).toMatch(
         /<View\s+style=\{styles\.entries\}\s+accessibilityRole="none"\s+accessibilityLiveRegion="polite"\s+testID=\{`\$\{composerTestId\}-entries`\}\s*>/,
       );
+      // T385: the bar's mount grew the two slots the artifact's row needs
+      // (attach + ring on the left, the microphone on the right), so the
+      // window between the opening tag and `testId` is wider than the
+      // 900 characters it used to be. The property — this mount carries
+      // the id the input and Send ids are built from — is unchanged.
       expect(composer).toMatch(
-        /<PromptBar\s+label=\{COMPOSER_INPUT_LABEL\}[\s\S]{0,900}?testId=\{composerTestId\}\s*\/>/,
+        /<PromptBar\s+label=\{COMPOSER_INPUT_LABEL\}[\s\S]{0,2500}?testId=\{composerTestId\}\s*\/>/,
       );
     });
   });

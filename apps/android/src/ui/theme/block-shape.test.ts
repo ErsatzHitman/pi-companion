@@ -6,6 +6,7 @@ import {
   BLOCK_PADDING_VERTICAL,
   BLOCK_RADIUS,
   blockOutline,
+  blockRing,
   blockSurface,
   type BlockKind,
 } from "./block-shape.js";
@@ -26,7 +27,7 @@ const EVERY_KIND: readonly BlockKind[] = [
 
 describe("blockSurface", () => {
   it("gives each filled kind the token role the design names for it", () => {
-    expect(blockSurface("user")).toBe("field");
+    expect(blockSurface("user")).toBe("accent-tint");
     expect(blockSurface("pending")).toBe("inset");
     expect(blockSurface("tool-ok")).toBe("tool-success-bg");
     expect(blockSurface("tool-error")).toBe("tool-error-bg");
@@ -59,11 +60,37 @@ describe("blockOutline", () => {
   });
 });
 
+describe("blockRing", () => {
+  it("rings every filled block except the user's tinted one (`.blk.usr { box-shadow: none }`)", () => {
+    expect(blockRing("user")).toBeNull();
+    expect(blockRing("pending")).toBe("line");
+    expect(blockRing("tool-ok")).toBe("line");
+    expect(blockRing("extension")).toBe("line");
+  });
+
+  it("leaves the unfilled assistant prose with no box to ring", () => {
+    expect(blockSurface("assistant")).toBeNull();
+    expect(blockRing("assistant")).toBeNull();
+  });
+
+  it("leaves the error block's one border to blockOutline, which already claims it in red", () => {
+    expect(blockRing("tool-error")).toBeNull();
+    expect(blockOutline("tool-error")).toBe("red");
+  });
+
+  it("names only a token role, never a colour literal", () => {
+    for (const kind of EVERY_KIND) {
+      const ring = blockRing(kind);
+      if (ring !== null) expect(ring).not.toMatch(/#|rgb/);
+    }
+  });
+});
+
 describe("block geometry", () => {
-  it("carries the artifact's own `.blk` numbers, not approximations", () => {
+  it("carries the artifact's own `.blk`/`.t` numbers, not approximations", () => {
     expect(BLOCK_RADIUS).toBe(14);
     expect(BLOCK_PADDING_VERTICAL).toBe(9);
-    expect(BLOCK_PADDING_HORIZONTAL).toBe(12);
-    expect(BLOCK_GAP).toBe(10);
+    expect(BLOCK_PADDING_HORIZONTAL).toBe(11);
+    expect(BLOCK_GAP).toBe(9);
   });
 });

@@ -74,6 +74,21 @@ describe("transcript-window.tsx: scroll/gesture events wire into the model's own
   });
 });
 
+describe("transcript-window.tsx: the artifact's `.t` inset and block gap", () => {
+  it("adds the reference's 12dp horizontal/top inset and a 4dp bottom inset to the list content", () => {
+    const code = readCode();
+    expect(code).toMatch(/paddingHorizontal: theme\.spacing\[3\]/);
+    expect(code).toMatch(/paddingTop: theme\.spacing\[3\]/);
+    expect(code).toMatch(/paddingBottom: theme\.spacing\[1\]/);
+  });
+
+  it("takes the gap between blocks from the shared block shape, not a second literal", () => {
+    const code = readCode();
+    expect(code).toMatch(/import \{ BLOCK_GAP \} from "\.\.\/\.\.\/ui\/theme\/block-shape"/);
+    expect(code).toMatch(/gap: BLOCK_GAP/);
+  });
+});
+
 describe("transcript-window.tsx: both windowed-out edges have a real, wired affordance", () => {
   it("the 'show earlier' Button is gated on hiddenOlderCount and wired to expandOlder()", () => {
     const code = readCode();

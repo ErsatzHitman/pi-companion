@@ -5,6 +5,7 @@ import type { timeline } from "@picompanion/frontend-core";
 import {
   buildSessionTranscriptEntries,
   isSessionTranscriptEntry,
+  selectLatestTodoEntry,
 } from "./session-transcript-model";
 
 function base(id: string, overrides: Partial<timeline.TranscriptEntryBase> = {}) {
@@ -57,19 +58,18 @@ function todo(id: string): timeline.TranscriptEntry {
 }
 
 describe("isSessionTranscriptEntry", () => {
-  it("is true for user-message, assistant-message, thinking, tool-call and todo entries", () => {
+  it("is true for user-message, assistant-message, thinking and tool-call entries", () => {
     expect(isSessionTranscriptEntry(userMessage("1", "hi"))).toBe(true);
     expect(isSessionTranscriptEntry(assistantMessage("2", "hi"))).toBe(true);
     expect(isSessionTranscriptEntry(thinking("3", "hmm"))).toBe(true);
     expect(isSessionTranscriptEntry(toolCall("4"))).toBe(true);
-    // T360: `todo` was in the "no Android row yet" list until the `.ov`
-    // widget shipped, and this filter was the only thing keeping it off
-    // screen.
-    expect(isSessionTranscriptEntry(todo("5"))).toBe(true);
   });
 
-  it("is false for entry kinds this route has no row for", () => {
+  it("is false for entry kinds this route has no transcript row for, todo included", () => {
     expect(isSessionTranscriptEntry(compaction("5"))).toBe(false);
+    // The `.ov` todo widget is a pinned-slot element, not a transcript
+    // row — see `selectLatestTodoEntry` below for where it is read.
+    expect(isSessionTranscriptEntry(todo("6"))).toBe(false);
   });
 });
 
@@ -122,10 +122,7 @@ describe("buildSessionTranscriptEntries", () => {
     expect(buildSessionTranscriptEntries(entries)).toEqual([]);
   });
 
-  it("T360: keeps a todo entry where it arrived, not hoisted above the turn that produced it", () => {
-    // The daemon emits a fresh todo row every time the list changes, so
-    // its position IS when the agent last revised its plan. Pinning it
-    // to the top of the transcript would lose that.
+  it("T360: drops a todo entry from the transcript list, because the widget is pinned, not in flow", () => {
     const entries: timeline.TranscriptEntry[] = [
       userMessage("1", "do the thing"),
       todo("t1"),
@@ -135,12 +132,29 @@ describe("buildSessionTranscriptEntries", () => {
 
     const result = buildSessionTranscriptEntries(entries);
 
-    expect(result.map((entry) => entry.id)).toEqual(["1", "t1", "2", "t2"]);
-    expect(result.map((entry) => entry.kind)).toEqual([
-      "user-message",
-      "todo",
-      "assistant-message",
-      "todo",
-    ]);
+    expect(result.map((entry) => entry.id)).toEqual(["1", "2"]);
+    expect(result.map((entry) => entry.kind)).toEqual(["user-message", "assistant-message"]);
+  });
+});
+
+describe("selectLatestTodoEntry: what the pinned .ov widget draws", () => {
+  it("returns the newest todo, not the first one this client saw", () => {
+    const entries: timeline.TranscriptEntry[] = [
+      userMessage("1", "do the thing"),
+      todo("t1"),
+      assistantMessage("2", "starting"),
+      todo("t2"),
+    ];
+    expect(selectLatestTodoEntry(entries)?.id).toBe("t2");
+  });
+
+  it("returns null when the timeline has no todo at all", () => {
+    expect(selectLatestTodoEntry([userMessage("1", "hi")])).toBeNull();
+    expect(selectLatestTodoEntry([])).toBeNull();
+  });
+
+  it("does not disturb the order it reads, and never returns a non-todo kind", () => {
+    const entries: timeline.TranscriptEntry[] = [assistantMessage("1", "hi"), todo("t1")];
+    expect(selectLatestTodoEntry(entries)?.kind).toBe("todo");
   });
 });

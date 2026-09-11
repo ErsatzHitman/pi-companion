@@ -63,6 +63,13 @@
  * `turn-running-signal.test.ts`'s "never logs" case spies on every
  * `console` method across every scenario in this file to prove that,
  * not merely by omission.
+ *
+ * T385: the signal also records WHEN the current turn started — the
+ * wire event's own `timestamp`, so the Live screen's bar can tick a
+ * real elapsed reading rather than a constant. It is cleared on exactly
+ * the paths `running` becomes `false` (every end event and every
+ * reconnect boundary), and the repeated `pi_queue_update`s that arrive
+ * during one turn do not move it.
  */
 
 /** The subset of `AgentStreamEventPayload` (protocol `messages.ts`) this module reacts to. */
@@ -93,12 +100,20 @@ export type TurnRunningStreamEvent =
   // union it does not act on.
   | { type: string; [key: string]: unknown };
 
-/** The narrow `agent_stream` wire message shape this module reads. */
+/**
+ * The narrow `agent_stream` wire message shape this module reads.
+ * `timestamp` is the daemon's own event time (`AgentStreamMessageSchema`
+ * requires it, `packages/protocol/src/messages.ts`); it is optional here
+ * so a caller that hands this module a synthetic message without one
+ * still compiles, and the signal then falls back to its own clock
+ * reading for the turn's start (T385).
+ */
 export interface AgentStreamTurnMessage {
   type: "agent_stream";
   payload: {
     agentId: string;
     event: TurnRunningStreamEvent;
+    timestamp?: string;
   };
 }
 
@@ -130,13 +145,38 @@ export interface ConnectionStatusSource {
   subscribeConnectionStatus(listener: (status: { status: string }) => void): () => void;
 }
 
-const RUNNING_EVENT_TYPES = new Set(["turn_started", "pi_queue_update"]);
 const NOT_RUNNING_EVENT_TYPES = new Set(["turn_completed", "turn_failed", "turn_canceled"]);
+
+/**
+ * A message's own event time in epoch milliseconds, falling back to the
+ * local clock only when the wire carried no parseable `timestamp` — a
+ * wire event's time is the truth about when the turn started, not when
+ * this process happened to read it (T385).
+ */
+function messageTimeMs(message: AgentStreamTurnMessage): number {
+  const timestamp = message.payload.timestamp;
+  if (timestamp !== undefined) {
+    const parsed = Date.parse(timestamp);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return Date.now();
+}
 
 /** A live `turnRunning` signal for one `agentId`, and its disposer. */
 export interface TurnRunningSignal {
   /** The current value. Never stale after `dispose()` — see this module's doc comment. */
   getRunning(): boolean;
+  /**
+   * When the current turn started, in epoch milliseconds — the wire
+   * `timestamp` of the `turn_started` that began it, the mid-turn
+   * `pi_queue_update` that first reported it (when a route mounted
+   * after the turn had begun), or this signal's own `Date.now()` when
+   * the wire carried no parseable timestamp (T385). `null` exactly when
+   * `getRunning()` is `false`, and cleared on the same reconnect
+   * boundary — so a caller can never count elapsed time for a turn that
+   * is not running.
+   */
+  getStartedAtMs(): number | null;
   /** Stops listening. Idempotent; safe to call more than once. */
   dispose(): void;
 }
@@ -166,11 +206,24 @@ export function createTurnRunningSignal(
   connectionStatus?: ConnectionStatusSource,
 ): TurnRunningSignal {
   let running = false;
+  let startedAtMs: number | null = null;
   let disposed = false;
 
-  function setRunning(next: boolean): void {
-    if (disposed || next === running) return;
+  /**
+   * `refreshStart` only ever matters when `next === running`: an
+   * explicit `turn_started` for an already-running signal refreshes the
+   * start, while the `pi_queue_update`s that arrive repeatedly during
+   * one turn must NOT restart the elapsed clock. A real transition
+   * always (re)sets it, and any transition to `false` clears it.
+   */
+  function setRunning(next: boolean, atMs: number | null, refreshStart: boolean): void {
+    if (disposed) return;
+    if (next === running) {
+      if (next && refreshStart && atMs !== null) startedAtMs = atMs;
+      return;
+    }
     running = next;
+    startedAtMs = next ? atMs : null;
     onChange(running);
   }
 
@@ -178,10 +231,15 @@ export function createTurnRunningSignal(
     if (disposed) return; // an update arriving after dispose() is a no-op, not a stale report
     if (message.payload.agentId !== agentId) return; // a different agent's turn never touches this signal
     const eventType = message.payload.event.type;
-    if (RUNNING_EVENT_TYPES.has(eventType)) {
-      setRunning(true);
+    if (eventType === "turn_started") {
+      setRunning(true, messageTimeMs(message), true);
+    } else if (eventType === "pi_queue_update") {
+      // Only the arrival that flips this signal to running counts as a
+      // start; the queue updates that follow it during the same turn
+      // must leave the clock alone.
+      setRunning(true, messageTimeMs(message), false);
     } else if (NOT_RUNNING_EVENT_TYPES.has(eventType)) {
-      setRunning(false);
+      setRunning(false, null, false);
     }
     // Every other event.type (timeline, pi_status, ...) is left alone.
   });
@@ -191,11 +249,12 @@ export function createTurnRunningSignal(
     // "connected" — is a reconnect boundary: reset first, and let
     // whatever the daemon replays (or doesn't) re-establish the real
     // value. See this module's doc comment.
-    setRunning(false);
+    setRunning(false, null, false);
   });
 
   return {
     getRunning: () => running,
+    getStartedAtMs: () => startedAtMs,
     dispose: () => {
       if (disposed) return;
       disposed = true;

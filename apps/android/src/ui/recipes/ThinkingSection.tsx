@@ -83,11 +83,28 @@ export interface ThinkingSectionProps {
  * Once settled the head says "Thought for N seconds" and the caller
  * stops passing a `durationLabel`, so the number appears once rather
  * than in two places disagreeing about rounding.
+ *
+ * **The artifact's own `.think` column.** Quoting the artifact's CSS:
+ * `.think { border-left: 2px solid var(--line-strong); padding: 1px 0
+ * 1px 11px }`, `.thead { font-size: 11.5px; color: var(--ink-3) }`,
+ * `.think .ln { color: var(--ink-3); font-style: italic }`, where `.ln`
+ * is the transcript's mono 12px/1.62. The rule and its inset sit on
+ * this component's WRAPPER, so the head and the body share the one
+ * column the design draws — the body used to carry the rule by itself,
+ * which left the head floating outside the mark.
  */
-/** The artifact's `.thead` sizes. */
-const HEAD_FONT_SIZE = 12.5;
+/** The artifact's `.thead { font-size: 11.5px; color: var(--ink-3) }`. */
+const HEAD_FONT_SIZE = 11.5;
 const SPARKLE_SIZE = 14;
 const CHEVRON_SIZE = 11;
+/** `.think { border-left: 2px solid var(--line-strong) }`. */
+const THINK_RULE_WIDTH = 2;
+/** `.think { padding: 1px 0 1px 11px }`. */
+const THINK_PADDING_VERTICAL = 1;
+const THINK_PADDING_LEFT = 11;
+/** `.ln { font-size: 12px; line-height: 1.62 }` — the transcript line's own mono metrics. */
+const LINE_FONT_SIZE = 12;
+const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
 
 export function ThinkingSection({
   headline,
@@ -114,7 +131,8 @@ export function ThinkingSection({
     transform: [{ rotate: `${progress.value * 180}deg` }],
   }));
 
-  const headTint = expanded ? theme.colors["ink-2"] : theme.colors["ink-3"];
+  // `.thead { color: var(--ink-3) }` — one resting tint, expanded or not.
+  const headTint = theme.colors["ink-3"];
 
   return (
     <View style={styles.wrapper} testID={testId}>
@@ -141,7 +159,7 @@ export function ThinkingSection({
         </Animated.View>
       </Pressable>
       {expanded ? (
-        <View style={styles.body}>
+        <View>
           <Text style={styles.bodyText}>{body}</Text>
         </View>
       ) : null}
@@ -151,7 +169,16 @@ export function ThinkingSection({
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
-    wrapper: { gap: theme.spacing[1] },
+    // `.think`'s own rule and inset: the reasoning column is marked once
+    // around everything it contains, head included, rather than around
+    // the body only.
+    wrapper: {
+      gap: theme.spacing[1],
+      borderLeftWidth: THINK_RULE_WIDTH,
+      borderLeftColor: theme.colors["line-strong"],
+      paddingVertical: THINK_PADDING_VERTICAL,
+      paddingLeft: THINK_PADDING_LEFT,
+    },
     trigger: {
       flexDirection: "row",
       alignItems: "center",
@@ -172,16 +199,12 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.caption.fontSize,
     },
-    body: {
-      borderLeftWidth: 2,
-      borderLeftColor: theme.colors.line,
-      paddingLeft: theme.spacing[3],
-      paddingVertical: theme.spacing[1],
-    },
     bodyText: {
-      color: theme.colors["ink-2"],
-      fontSize: theme.typography.variant.bodySmall.fontSize,
-      lineHeight: theme.typography.variant.bodySmall.lineHeight,
+      color: theme.colors["ink-3"],
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: LINE_FONT_SIZE,
+      lineHeight: LINE_HEIGHT,
+      fontStyle: "italic",
     },
   });
 }

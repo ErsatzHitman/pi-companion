@@ -47,10 +47,19 @@ describe("SessionsScreen source", () => {
   });
 
   it("declares a 48dp row touch target", () => {
-    const minDimensions = [...code.matchAll(/minHeight:\s*(\d+)\b/g)].map((match) =>
-      Number(match[1]),
+    // Named constants are resolved the same way `touch-targets.test.ts`
+    // resolves them, so a row shrunk through `ROW_MIN_HEIGHT` still fails
+    // here rather than reading as "no declared minimum".
+    const constants = new Map(
+      [...code.matchAll(/const ([A-Za-z_$][\w$]*) = (\d+);/g)].map(([, name, value]) => [
+        name,
+        Number(value),
+      ]),
     );
-    expect(minDimensions.some((value) => value >= 48)).toBe(true);
+    const minDimensions = [...code.matchAll(/minHeight:\s*(\d+|[A-Za-z_$][\w$]*)/g)].map(
+      ([, token]) => (constants.has(token) ? constants.get(token) : Number(token)),
+    );
+    expect(minDimensions.some((value) => value !== undefined && value >= 48)).toBe(true);
   });
 
   it("marks each row as a single accessible node with a combined label, not colour alone", () => {
@@ -285,9 +294,9 @@ describe("SessionsScreen source: T362 A1's bar, search field and filter chips", 
     expect(code).toMatch(/accessibilityLabel=\{sessionFilterChipAccessibilityLabel\(chip\)\}/);
   });
 
-  it("paints a selected chip from the theme's own accent pair", () => {
-    expect(code).toMatch(/backgroundColor:\s*theme\.colors\.accent\b/);
-    expect(code).toMatch(/color:\s*theme\.colors\.accentContrast/);
+  it("paints a selected chip with the artifact's accent-tint/accent-ink pair, and rings only the unselected one", () => {
+    expect(code).toMatch(/backgroundColor: theme\.colors\["accent-tint"\]/);
+    expect(code).toMatch(/color: theme\.colors\["accent-ink"\]/);
     expect(code).not.toMatch(/#[0-9a-fA-F]{6}/);
   });
 
@@ -328,8 +337,9 @@ describe("SessionsScreen source: T363 A1's row", () => {
     expect(code).not.toMatch(/borderStyle: "dashed"/);
   });
 
-  it("keeps the platform's touch minimum rather than the artifact's 46", () => {
-    expect(code).toMatch(/minHeight: 48/);
+  it("T385: keeps the row at the artifact's 52dp, above the platform's touch minimum", () => {
+    expect(code).toMatch(/const ROW_MIN_HEIGHT = 52;/);
+    expect(code).toMatch(/minHeight: ROW_MIN_HEIGHT/);
   });
 
   it("prints the age from the model, against one clock reading for the whole list", () => {
@@ -400,5 +410,50 @@ describe("SessionsScreen source: T364 A1's bottom row", () => {
   it("keeps both bottom buttons at the platform's touch minimum", () => {
     expect(code).toMatch(/const ACTION_BUTTON_SIZE = 48;/);
     expect(code).toMatch(/minHeight: ACTION_BUTTON_SIZE,\s*minWidth: ACTION_BUTTON_SIZE,/);
+  });
+});
+
+describe("SessionsScreen source: T385 A1 chrome, body and rows", () => {
+  const code = readScreenCode();
+
+  it("keeps the bar above the one scrolling body, so it cannot scroll away", () => {
+    expect(code).toMatch(/<View style=\{styles\.screen\}>[\s\S]*?<ScreenBar[\s\S]*?<ScrollView/);
+    expect(code).toMatch(/contentContainerStyle=\{styles\.body\}/);
+  });
+
+  it("gives the scrolling body the artifact's 12dp padding and 8dp gap", () => {
+    expect(code).toMatch(
+      /body: \{\s*padding: theme\.spacing\[3\],\s*gap: theme\.spacing\[2\],?\s*\}/,
+    );
+  });
+
+  it("draws the row as the artifact's 52dp, 12-radius pill with an ink-3 mono meta line", () => {
+    expect(code).toMatch(/const ROW_RADIUS = 12;/);
+    expect(code).toMatch(/const ROW_MIN_HEIGHT = 52;/);
+    expect(code).toMatch(/minHeight: ROW_MIN_HEIGHT/);
+    expect(code).toMatch(/color: theme\.colors\["ink-3"\]/);
+    expect(code).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
+  });
+
+  it("sizes the chips to the artifact's 28dp and pads the touch target back to 48", () => {
+    expect(code).toMatch(/const FILTER_CHIP_HEIGHT = 28;/);
+    expect(code).toMatch(/hitSlop=\{10\}/);
+  });
+
+  it("puts the bottom row outside the scroller, so a long list cannot scroll the create button away", () => {
+    const scrollEnd = code.indexOf("</ScrollView>");
+    const actionRow = code.indexOf("styles.actionRow");
+    expect(scrollEnd).toBeGreaterThan(-1);
+    expect(actionRow).toBeGreaterThan(scrollEnd);
+  });
+
+  it("draws the gear as the artifact's bare button — no surface fill and no ring — unlike the raised create chip", () => {
+    expect(code).toMatch(/style=\{styles\.settingsButton\}/);
+    const settingsStyle = /settingsButton: \{([\s\S]*?)\n    \},/.exec(code)?.[1] ?? "";
+    expect(settingsStyle).toMatch(/minHeight: ACTION_BUTTON_SIZE/);
+    expect(settingsStyle).not.toMatch(/backgroundColor|ringShadow|borderWidth|borderColor/);
+    expect(code).toMatch(
+      /newSessionButton: \{[\s\S]*?backgroundColor: theme\.colors\.surface[\s\S]*?ringShadow\(theme, "card"\)/,
+    );
   });
 });

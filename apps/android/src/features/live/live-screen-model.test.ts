@@ -190,6 +190,19 @@ describe("buildLiveScreenViewModel — workflow", () => {
     expect(model.workflow.summary).toBe("1 of 2 complete");
   });
 
+  it("T385: the summary stays the completion count, because only a PHASE label is on the wire", () => {
+    // A2's Workflow summary reads `<instance name> · round · elapsed ·
+    // tokens`; a `progress` element carries the phase's own label
+    // (`"workflow · implement"`), never the instance's name, and no
+    // round/elapsed/token field exists. Promoting a phase label into
+    // the summary would print a name the workflow does not have.
+    const model = buildLiveScreenViewModel([
+      progressElement("s1", { label: "workflow · implement", value: 2, max: 4 }),
+      progressElement("s2", { label: "workflow · verify", value: 0, max: 1 }),
+    ]);
+    expect(model.workflow.summary).toBe("0 of 2 complete");
+  });
+
   it("names a step by its element title, then its namespace, when the payload carries no label", () => {
     const titled = {
       id: "s1",

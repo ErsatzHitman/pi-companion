@@ -20,10 +20,11 @@ describe("Section: the redesign's quiet `.lbl` heading (T366)", () => {
     expect(readCode()).toMatch(/variant = "heading"/);
   });
 
-  it("draws the label variant at the artifact's size and tracking", () => {
+  it("draws the label variant at the artifact's size, tracking and top padding", () => {
     const code = readCode();
-    expect(code).toMatch(/const LABEL_FONT_SIZE = 10;/);
-    expect(code).toMatch(/const LABEL_LETTER_SPACING = 0\.9;/);
+    expect(code).toMatch(/const LABEL_FONT_SIZE = 9\.5;/);
+    expect(code).toMatch(/const LABEL_LETTER_SPACING = 0\.95;/);
+    expect(code).toMatch(/paddingTop: LABEL_PADDING_TOP/);
     expect(code).toMatch(/textTransform: "uppercase"/);
   });
 

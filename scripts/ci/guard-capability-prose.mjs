@@ -2592,6 +2592,30 @@ export const CAPABILITIES = [
       /(?:a |the )?host'?s (?:live )?connection state is not (?:shown|visible) (?:in|on) settings/i,
     ],
   },
+  {
+    // T384: the Live bar's elapsed reading. `TurnRunningSignal` gained
+    // `getStartedAtMs` — the wire `timestamp` of the `turn_started` that
+    // began the running turn (or of the mid-turn `pi_queue_update` that
+    // first reported it), cleared on exactly the paths `running` becomes
+    // false, including the reconnect boundary — and `live-screen.tsx`
+    // ticks it while a turn is in flight. Without a real start there is
+    // no reading, and the pill falls back to the word `Working`.
+    //
+    // A bare-string member rather than a group: the method is declared
+    // in exactly one shipped file (`features/sessions/
+    // turn-running-signal.ts`), measured with a tree-wide grep rather
+    // than assumed. The phrases are worded in T384's own voice and
+    // deliberately avoid both files' own narration of the pre-fix
+    // drawing ("the fixed word `Working`", "not only the word"), which
+    // carries no historical-quotation marker of its own.
+    name: "The Live bar counts a running turn's elapsed time from the wire's own start (getStartedAtMs)",
+    methodNames: ["getStartedAtMs"],
+    denyingPhrases: [
+      /(?:the )?live (?:screen|bar)'?s? (?:pill|status) (?:shows|draws|reports) no elapsed/i,
+      /(?:no|without a) real elapsed (?:reading|time) (?:exists|is drawn|is shown) (?:for|on) (?:a |the )?running turn/i,
+      /(?:the )?elapsed (?:reading|time) (?:is|stays) a (?:fixed|constant) (?:word|number)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

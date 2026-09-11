@@ -1,8 +1,7 @@
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { ProgressRing } from "../../ui/recipes";
-import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import {
   CONTEXT_RING_RADIUS,
@@ -23,7 +22,9 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
  * used to carry. This is that ring, and the tap target that opens them.
  *
  * `context-ring-model.ts` owns every number and every string; this file
- * wraps the drawing in a `Pressable` and puts the percentage beside it.
+ * wraps the drawing in a `Pressable` and draws the percentage INSIDE
+ * the ring through `ProgressRing`'s `centerLabel`, at the artifact's own
+ * `.pct` size and weight (8px/700, `ink-2`).
  *
  * **T360 moved the drawing itself to `ui/recipes/ProgressRing.tsx`.**
  * It used to be two `react-native-svg` circles here — a track and a
@@ -35,16 +36,17 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
  * what is this control's own: the tap target, the label, and the
  * band-to-colour mapping.
  *
- * **The visible ring is 18dp, the touch target is 48dp**, the same
+ * **The visible ring is 28dp, the touch target is 48dp**, the same
  * split `ui/primitives/IconButton.tsx` and `ui/recipes/ScreenBar.tsx`
  * both use (plan.md §9.3, T26C). A control this small cannot be its own
  * hit area.
  *
- * **The percentage is text, next to the ring, always.** Fill level is a
+ * **The percentage is text, inside the ring, always.** Fill level is a
  * colour-and-geometry signal and this state has to survive both being
- * unseen (plan.md §10.5) and being seen at 18dp on a bright screen. The
- * SVG itself is hidden from assistive tech; the `Pressable` carries the
- * full announced sentence.
+ * unseen (plan.md §10.5) and being seen at 8px on a bright screen. The
+ * SVG is hidden from assistive tech and the `Pressable` carries the
+ * full announced sentence, so the number is announced even though the
+ * drawing is not.
  */
 export interface ContextRingProps {
   /** The newest usage the daemon has reported, or `null`/absent when it has reported none. */
@@ -83,44 +85,34 @@ export function ContextRing({ usage, onPress, testId }: ContextRingProps) {
           strokeWidth={CONTEXT_RING_STROKE}
           circumference={model.circumference}
           dashOffset={model.dashOffset}
-          trackColor={theme.colors.inset}
+          trackColor={theme.colors["line-strong"]}
           arcColor={bandColors[model.band]}
+          centerLabel={model.shortLabel}
+          centerLabelColor={theme.colors["ink-2"]}
+          centerLabelFontFamily={theme.typography.variant.code.fontFamily}
+          centerLabelFontSize={CONTEXT_RING_LABEL_SIZE}
         />
       </View>
-      <Text
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={styles.label}
-        testID={testId ? `${testId}-label` : undefined}
-      >
-        {model.shortLabel}
-      </Text>
     </Pressable>
   );
 }
 
+/** `.ctx-ring .pct { font-size: 8px; font-weight: 700 }`. */
+const CONTEXT_RING_LABEL_SIZE = 8;
+
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     touchArea: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing[1],
+      minWidth: 48,
       minHeight: 48,
-      paddingHorizontal: theme.spacing[2],
+      alignItems: "center",
+      justifyContent: "center",
       borderRadius: theme.radii.full,
     },
     touchAreaPressed: { backgroundColor: theme.colors.hover },
     ringBox: {
       width: CONTEXT_RING_SIZE,
       height: CONTEXT_RING_SIZE,
-    },
-    // The mono family with tabular figures, so the label does not shift
-    // the bar's layout as the percentage climbs through its digits.
-    label: {
-      color: theme.colors["ink-2"],
-      fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: theme.typography.variant.caption.fontSize,
-      fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
     },
   });
 }

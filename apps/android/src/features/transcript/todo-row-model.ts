@@ -57,26 +57,22 @@ export function todoGlyph(state: TodoItemState): string {
 }
 
 /** The `theme.colors` key a row's glyph reads from. */
-export function todoGlyphInk(state: TodoItemState): "green" | "orange" | "ink-3" {
+export function todoGlyphInk(state: TodoItemState): "green" | "accent" | "ink-3" {
   if (state === "done") return "green";
-  if (state === "current") return "orange";
+  if (state === "current") return "accent";
   return "ink-3";
 }
 
 /** The `theme.colors` key a row's subject reads from. */
-export function todoSubjectInk(state: TodoItemState): "ink-2" | "teal" | "ink" {
-  if (state === "done") return "ink-2";
-  if (state === "current") return "teal";
-  return "ink";
+export function todoSubjectInk(state: TodoItemState): "ink-3" | "ink" | "ink-2" {
+  if (state === "done") return "ink-3";
+  if (state === "current") return "ink";
+  return "ink-2";
 }
 
 export interface TodoRow {
-  /** 1-based, matching the visible `#n`. */
-  readonly number: number;
   readonly state: TodoItemState;
   readonly subject: string;
-  /** `└─` for the last row, `├─` for every other — the artifact's own tree. */
-  readonly connector: string;
   /** `true` only for a done row, which the design strikes through. */
   readonly struck: boolean;
 }
@@ -106,10 +102,8 @@ export function buildTodoRows(items: readonly TodoItemLike[]): TodoRow[] {
   return items.map((item, index) => {
     const state = states[index] ?? "waiting";
     return {
-      number: index + 1,
       state,
       subject: item.text,
-      connector: index === items.length - 1 ? "└─" : "├─",
       struck: state === "done",
     };
   });
@@ -121,6 +115,8 @@ export interface TodoProgress {
   /** `0` for an empty list, so the ring is drawn empty rather than full. */
   readonly fraction: number;
   readonly complete: boolean;
+  /** `true` while at least one item is still open — the head's `◐` state. */
+  readonly active: boolean;
 }
 
 export function todoProgress(items: readonly TodoItemLike[]): TodoProgress {
@@ -129,7 +125,8 @@ export function todoProgress(items: readonly TodoItemLike[]): TodoProgress {
   // An empty list is 0/0. Treating that as "all done" would paint a
   // full green ring for a list with nothing in it.
   const fraction = total === 0 ? 0 : done / total;
-  return { done, total, fraction, complete: total > 0 && done === total };
+  const complete = total > 0 && done === total;
+  return { done, total, fraction, complete, active: !complete && total > 0 };
 }
 
 /**
@@ -154,14 +151,21 @@ export function todoHeadline(progress: TodoProgress): string {
   return `Todos (${progress.done}/${progress.total})`;
 }
 
-/** `●` while anything is still open, `○` once the list is finished. */
+/**
+ * The head's own mark, exactly the artifact's `initOv` rule:
+ * `done === rows.length ? "✓" : active ? "◐" : "○"`.
+ */
 export function todoHeadGlyph(progress: TodoProgress): string {
-  return progress.complete ? "○" : "●";
+  if (progress.complete) return "✓";
+  if (progress.active) return "◐";
+  return "○";
 }
 
-/** The `theme.colors` key the head's glyph and label read from. */
-export function todoHeadInk(progress: TodoProgress): "teal" | "ink-3" {
-  return progress.complete ? "ink-3" : "teal";
+/** The `theme.colors` key the head's glyph and label read from — green when finished, quiet while it is still open. */
+export function todoHeadInk(progress: TodoProgress): "green" | "ink-2" | "ink-3" {
+  if (progress.complete) return "green";
+  if (progress.active) return "ink-2";
+  return "ink-3";
 }
 
 /**

@@ -4,8 +4,10 @@ import {
   BLOCK_PADDING_VERTICAL,
   BLOCK_RADIUS,
   blockOutline,
+  blockRing,
   blockSurface,
   type BlockKind,
+  type BlockRingToken,
 } from "../../ui/theme/block-shape";
 import type { ComposerEntryStatus } from "./composer-model";
 
@@ -13,10 +15,10 @@ import type { ComposerEntryStatus } from "./composer-model";
  * The composer's queued-entry blocks (T355) — the redesign's `.blk`.
  *
  * The artifact draws everything the session screen stacks as one block
- * shape: radius 14, padding 9×12, 10 between blocks, and a background
- * that says what KIND of thing it is — `.usr` on `field` for a prompt
- * the user sent, `.pend` on `inset` for one still queued, `.err` on
- * `tool-error-bg` for one that failed. The composer's own entry list
+ * shape: radius 14, padding 9×11, 9 between blocks, and a background
+ * that says what KIND of thing it is — `.usr` on `accent-tint` for a
+ * prompt the user sent, `.pend` on `inset` for one still queued, `.err`
+ * on `tool-error-bg` for one that failed. The composer's own entry list
  * used to be a flat row per entry with a chip on the right; this module
  * is the part of turning it into that block shape that can be proven
  * without rendering.
@@ -48,10 +50,10 @@ import type { ComposerEntryStatus } from "./composer-model";
 
 /** Radius of every block the redesign draws (`.blk`). */
 export const ENTRY_BLOCK_RADIUS = BLOCK_RADIUS;
-/** `.blk` padding, in the artifact's own order (9px top/bottom, 12px left/right). */
+/** `.blk`'s `padding: 9px 11px`, in the artifact's own order. */
 export const ENTRY_BLOCK_PADDING_VERTICAL = BLOCK_PADDING_VERTICAL;
 export const ENTRY_BLOCK_PADDING_HORIZONTAL = BLOCK_PADDING_HORIZONTAL;
-/** `.blk`'s `margin: 10px 0` — expressed as the gap between stacked blocks. */
+/** `.t`'s `gap: 9px` — expressed as the gap between stacked blocks. */
 export const ENTRY_BLOCK_GAP = BLOCK_GAP;
 
 /**
@@ -59,7 +61,7 @@ export const ENTRY_BLOCK_GAP = BLOCK_GAP;
  * than a colour, so this module stays RN-free and theme-free and no
  * product colour is ever written down outside `@picompanion/design-tokens`.
  */
-export type EntryBlockSurface = "field" | "inset" | "tool-error-bg";
+export type EntryBlockSurface = "accent-tint" | "inset" | "tool-error-bg";
 
 /** Which kind of block one entry status is. The composer's own decision, hence its home here. */
 export function entryBlockKind(status: ComposerEntryStatus): BlockKind {
@@ -88,4 +90,18 @@ export function entryBlockSurface(status: ComposerEntryStatus): EntryBlockSurfac
  */
 export function entryBlockIsOutlined(status: ComposerEntryStatus): boolean {
   return blockOutline(entryBlockKind(status)) !== null;
+}
+
+/**
+ * The `theme.colors` key a block's 1px ring reads from, or `null` when
+ * that block has none.
+ *
+ * `sent` is the artifact's `.usr`, the one block kind the design turns
+ * the ring off for, so a delivered prompt is the only entry in this list
+ * without one. A `failed` entry returns `null` here too — its single
+ * border is the red outline `entryBlockIsOutlined` reports, and a view
+ * can only have one border colour.
+ */
+export function entryBlockRing(status: ComposerEntryStatus): BlockRingToken | null {
+  return blockRing(entryBlockKind(status));
 }

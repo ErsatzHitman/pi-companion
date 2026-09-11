@@ -220,7 +220,11 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
 
     it("PromptBar.tsx's TextInput style declares minHeight: 48 — inherited by the composer's message field", () => {
       const code = readCode("../../src/ui/recipes/PromptBar.tsx");
-      expect(code).toMatch(/input: \{\s*minHeight: 48,/);
+      // T385: the style object now opens with a comment explaining the
+      // 48dp floor the artifact's own ~34dp box does not meet, so the
+      // declaration is no longer the first thing after the key. The
+      // property asserted is unchanged.
+      expect(code).toMatch(/input: \{[\s\S]{0,600}?minHeight: 48,/);
     });
 
     it("the shared 48dp audit covers composer-icon-action.tsx (mic/attach), which lives outside ui/primitives/", () => {
@@ -331,12 +335,20 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
 
     it("Composer renders two real <ComposerIconAction> controls: mic (testId `${composerTestId}-mic`) and attach (`${composerTestId}-attach`)", () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
+      // T385 moved both into the prompt bar's own row — the artifact draws
+      // the attach mark inside `.cmp-box` and the microphone beside it —
+      // and swapped their emoji glyphs for the stroked-SVG `icon` prop.
+      // The testIDs, names and handlers the Maestro flows tap are the
+      // same contract as before; the shape they are mounted in changed.
       expect(code).toMatch(
-        /<ComposerIconAction\s+glyph=\{"\\u\{1F3A4\}"\}\s+accessibleName=\{MIC_ACTION_LABEL\}\s+onPress=\{handleMicPress\}\s+testId=\{`\$\{composerTestId\}-mic`\}/,
+        /<ComposerIconAction\s+icon="mic"\s+accessibleName=\{MIC_ACTION_LABEL\}\s+onPress=\{handleMicPress\}\s+testId=\{`\$\{composerTestId\}-mic`\}/,
       );
       expect(code).toMatch(
-        /<ComposerIconAction\s+glyph=\{"\\u\{1F4CE\}"\}\s+accessibleName=\{ATTACH_ACTION_LABEL\}\s+onPress=\{handleAttachPress\}\s+testId=\{`\$\{composerTestId\}-attach`\}/,
+        /<ComposerIconAction\s+icon="plus"\s+accessibleName=\{ATTACH_ACTION_LABEL\}\s+onPress=\{handleAttachPress\}\s+testId=\{`\$\{composerTestId\}-attach`\}/,
       );
+      // Both arrive through the bar's own slots, which is what puts them
+      // INSIDE `.cmp-box` rather than in the controls row above it.
+      expect(code).toMatch(/<PromptBar\b[\s\S]{0,2000}?leading=\{\s*<>[\s\S]{0,2000}?trailing=\{/);
     });
 
     it("composer-icon-action.tsx wires accessibleName to the Pressable's own accessibilityLabel and hides the glyph from the accessibility tree — the mechanism ACCESSIBILITY_AUDIT_FLOW's mic/attach labels depend on", () => {
@@ -355,11 +367,16 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
       expect(COMPOSER_INPUT_LABEL).toBe(ACCESSIBILITY_AUDIT_FLOW.composerInputLabel);
     });
 
-    it('PromptBar.tsx labels its TextInput accessibilityLabel={label} and its send Button label="Send"', () => {
+    it('PromptBar.tsx labels its TextInput accessibilityLabel={label} and its Send control aria-named "Send prompt"', () => {
       const code = readCode("../../src/ui/recipes/PromptBar.tsx");
       expect(code).toMatch(/accessibilityLabel=\{label\}/);
+      // T385: Send is the artifact's 34dp accent mark carrying a stroked
+      // arrow, not a labelled text button — so its visible label is gone
+      // and its accessible name is the only name it has. Same contract
+      // for the flow: the control still exists, is still `${testId}-send`,
+      // and still reads as a send action.
       expect(code).toMatch(
-        /<Button\s+kind="primary"\s+label="Send"\s+disabled=\{!canSend\}\s+onPress=\{onSend\}\s+testId=\{testId \? `\$\{testId\}-send` : undefined\}/,
+        /<Pressable\s+accessibilityRole="button"\s+accessibilityLabel="Send prompt"\s+accessibilityState=\{\{ disabled: !canSend \}\}\s+disabled=\{!canSend\}\s+onPress=\{onSend\}\s+style=\{styles\.sendTouch\}\s+testID=\{testId \? `\$\{testId\}-send` : undefined\}/,
       );
     });
 
@@ -447,7 +464,12 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
         new RegExp(`accessibleName: "${ACCESSIBILITY_AUDIT_FLOW.liveBackLabel}"`),
       );
       expect(code).toMatch(/testId: `\$\{testId\}-back`/);
-      expect(code).toMatch(/label=\{turnRunning \? "Working" : "Idle"\}/);
+      // T385: the pill draws the running turn's elapsed reading (or the
+      // word `Working` until one exists) and the word `Idle` otherwise;
+      // its announced name always carries the state WORD, so the yaml's
+      // `text: "Idle"` assertion still resolves to a name, not a number.
+      expect(code).toMatch(/label=\{pillLabel\}/);
+      expect(code).toMatch(/accessibilityLabel=\{pillAccessibilityLabel\}/);
       expect(code).toMatch(/testId=\{`\$\{testId\}-status`\}/);
       // `live.tsx` passes no `testId`, so the default is what the yaml's
       // ids are built from — checked rather than assumed, because a

@@ -102,9 +102,10 @@ describe("tool-call-row.tsx: memoized on the model's comparator", () => {
 });
 
 describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
-  it("takes the card's fill from the shared block table, never from a colour written here", () => {
+  it("takes the card's fill, ring and outline from the shared block table, never from a colour written here", () => {
     const code = readCode();
     expect(code).toMatch(/blockSurface\(kind\)/);
+    expect(code).toMatch(/blockRing\(kind\)/);
     expect(code).toMatch(/blockOutline\(kind\)/);
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
@@ -115,18 +116,38 @@ describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
     expect(code).toMatch(/if \(status === "failed"\) return "tool-error";/);
   });
 
-  it("leaves a still-running call on the neutral card, because it has no outcome to colour", () => {
+  it("leaves a still-running call on the artifact's own `.blk` resting fill, because it has no outcome to colour", () => {
     // `toolBlockKind` returns `null` for everything that is not finished,
-    // and `useToolCardStyle` turns that into no style override at all —
-    // so a running call keeps `Card`'s own surface.
+    // and `useToolBlockStyle` turns that into the artifact's default
+    // `inset` fill, the `.blk` hairline, and no outcome tint.
     const code = readCode();
-    expect(code).toMatch(/if \(kind === null\) return undefined;/);
+    expect(code).toMatch(/const kind = toolBlockKind\(status\);/);
+    expect(code).toMatch(
+      /const surface = kind === null \? "inset" : \(blockSurface\(kind\) \?\? "inset"\);/,
+    );
   });
 
-  it("applies the override to BOTH cards, so a generic tool is coloured like a known one", () => {
+  it("applies the block frame to BOTH cards, so a generic tool is drawn like a known one", () => {
     const code = readCode();
-    const matches = code.match(/<Card style=\{cardStyle\} testID=\{testId\}>/g) ?? [];
+    const matches =
+      code.match(/<View style=\{\[styles\.block, blockStyle\]\} testID=\{testId\}>/g) ?? [];
     expect(matches).toHaveLength(2);
+  });
+
+  it("draws the artifact's `.blk` geometry rather than a Card's", () => {
+    const code = readCode();
+    expect(code).toMatch(/borderRadius: BLOCK_RADIUS/);
+    expect(code).toMatch(/paddingVertical: BLOCK_PADDING_VERTICAL/);
+    expect(code).toMatch(/paddingHorizontal: BLOCK_PADDING_HORIZONTAL/);
+    expect(code).not.toMatch(/<Card\b/);
+  });
+
+  it("renders the header's `.tchip` from toolHeaderChipLabel, in `accent-ink` on `surface`", () => {
+    const code = readCode();
+    expect(code).toMatch(/const chipLabel = toolHeaderChipLabel\(tool\);/);
+    expect(code).toMatch(/\{chipLabel\}/);
+    expect(code).toMatch(/color: theme\.colors\["accent-ink"\]/);
+    expect(code).toMatch(/borderRadius: TOOL_CHIP_RADIUS/);
   });
 
   it("keeps the status in words beside the fill, so colour is never the only signal", () => {

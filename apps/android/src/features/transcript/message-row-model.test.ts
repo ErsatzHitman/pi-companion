@@ -225,7 +225,9 @@ describe("message-row-model: shared fixture — message-attachments", () => {
       speaker: "user",
       speakerLabel: "You",
       blockKind: "user",
-      surfaceToken: "field",
+      // `.blk.usr { background: var(--accent-tint) }` — the model asks the
+      // shared block table, so this follows the token it names.
+      surfaceToken: "accent-tint",
     });
     // T52A2's images passthrough survives this model unchanged, even
     // though this task's view does not render it yet (see
@@ -446,6 +448,22 @@ describe("roleAffordanceFor: matches the shared StreamingMessage recipe it docum
     expect(code).toMatch(/borderRadius: BLOCK_RADIUS/);
     expect(code).toMatch(/paddingVertical: BLOCK_PADDING_VERTICAL/);
     expect(code).toMatch(/paddingHorizontal: BLOCK_PADDING_HORIZONTAL/);
+  });
+
+  it("draws every transcript line in the artifact's `.ln` mono at 12px/1.62", () => {
+    const code = readStreamingMessageCode();
+    // `.ln { font-family: var(--mono); font-size: 12px; line-height: 1.62 }`
+    expect(code).toMatch(/const LINE_FONT_SIZE = 12;/);
+    expect(code).toMatch(/const LINE_HEIGHT = LINE_FONT_SIZE \* 1\.62;/);
+    expect(code).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
+    expect(code).toMatch(/fontSize: LINE_FONT_SIZE/);
+    expect(code).toMatch(/lineHeight: LINE_HEIGHT/);
+  });
+
+  it("rings a filled block other than `.usr`, and leaves the user's tinted one and the bare assistant prose unringed", () => {
+    const code = readStreamingMessageCode();
+    expect(code).toMatch(/const ring = blockRing\(speaker === "user" \? "user" : "assistant"\);/);
+    expect(code).toMatch(/borderColor: ring === null \? "transparent" : theme\.colors\[ring\]/);
   });
 
   it("T356: the streaming caret is the design's 2px rule, not the 8px block it used to be", () => {

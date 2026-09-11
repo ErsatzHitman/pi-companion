@@ -1,4 +1,7 @@
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Circle, Text as SvgText } from "react-native-svg";
+
+/** The artifact's `.pct` baseline: `y=17` on a 28 box whose centre is 14. */
+const CENTER_LABEL_BASELINE_OFFSET = 3;
 
 export interface ProgressRingProps {
   /** The drawing's box, in dp. The circle is centred in it. */
@@ -13,6 +16,16 @@ export interface ProgressRingProps {
   trackColor: string;
   /** A resolved token colour for the filled arc. */
   arcColor: string;
+  /**
+   * Optional text drawn at the ring's centre (the artifact's `.pct`, a
+   * percentage inside the prompt bar's context ring). Absent draws
+   * nothing — the todo widget's ring has no centre readout.
+   */
+  centerLabel?: string;
+  /** A resolved token colour for `centerLabel`. Required when it is given. */
+  centerLabelColor?: string;
+  centerLabelFontFamily?: string;
+  centerLabelFontSize?: number;
   testId?: string;
 }
 
@@ -40,7 +53,10 @@ export interface ProgressRingProps {
  * **It computes nothing.** `circumference` and `dashOffset` arrive from
  * the caller's own RN-free model, where they are proven by execution;
  * a `Math.PI` in here would be a second, untested source for a number
- * two models already own.
+ * two models already own. The optional `centerLabel` is drawn as an SVG
+ * `<Text>` at the ring's centre, at the artifact's own `.pct` weight
+ * (700) and the baseline its `y=17` gives — the caller still supplies
+ * the string, its colour and its size.
  *
  * **Decorative.** The ring carries no accessible name. Every caller
  * states the same quantity in text beside it and announces it on the
@@ -55,6 +71,10 @@ export function ProgressRing({
   dashOffset,
   trackColor,
   arcColor,
+  centerLabel,
+  centerLabelColor,
+  centerLabelFontFamily,
+  centerLabelFontSize,
   testId,
 }: ProgressRingProps) {
   const centre = size / 2;
@@ -72,6 +92,19 @@ export function ProgressRing({
         strokeDashoffset={dashOffset}
         transform={`rotate(-90, ${centre}, ${centre})`}
       />
+      {centerLabel !== undefined ? (
+        <SvgText
+          x={centre}
+          y={centre + CENTER_LABEL_BASELINE_OFFSET}
+          fill={centerLabelColor}
+          fontSize={centerLabelFontSize}
+          fontFamily={centerLabelFontFamily}
+          fontWeight="700"
+          textAnchor="middle"
+        >
+          {centerLabel}
+        </SvgText>
+      ) : null}
     </Svg>
   );
 }

@@ -15,14 +15,20 @@ const window = (used: number, max: number) => ({
 
 describe("context ring geometry", () => {
   it("keeps the stroke inside the ring's own box", () => {
-    // Half the stroke sits either side of the radius, so the outer edge
-    // lands exactly on the box — a larger radius would clip.
-    expect(CONTEXT_RING_RADIUS * 2 + CONTEXT_RING_STROKE).toBe(CONTEXT_RING_SIZE);
+    // T385: the artifact's own numbers (a 28px box, r=12, stroke 2.5)
+    // leave 0.75px of slack rather than touching the edge, so the
+    // invariant this pins is containment — the stroked circle's outer
+    // edge may not pass the box — not the exact equality an earlier
+    // 18px ring happened to satisfy.
+    expect(CONTEXT_RING_RADIUS * 2 + CONTEXT_RING_STROKE).toBeLessThanOrEqual(CONTEXT_RING_SIZE);
+    expect(CONTEXT_RING_SIZE - (CONTEXT_RING_RADIUS * 2 + CONTEXT_RING_STROKE)).toBeLessThan(
+      CONTEXT_RING_STROKE,
+    );
   });
 
   it("derives the circumference from that radius, matching the artifact's own 2πr", () => {
-    expect(CONTEXT_RING_CIRCUMFERENCE).toBeCloseTo(2 * Math.PI * 8, 6);
-    expect(CONTEXT_RING_CIRCUMFERENCE).toBeCloseTo(50.265, 3);
+    expect(CONTEXT_RING_CIRCUMFERENCE).toBeCloseTo(2 * Math.PI * 12, 6);
+    expect(CONTEXT_RING_CIRCUMFERENCE).toBeCloseTo(75.398, 3);
   });
 });
 
@@ -41,9 +47,12 @@ describe("buildContextRingViewModel", () => {
     expect(model.dashOffset).toBeCloseTo(CONTEXT_RING_CIRCUMFERENCE * 0.75, 6);
   });
 
-  it("labels the ring with a whole percent, short enough to sit beside it", () => {
-    expect(buildContextRingViewModel(window(82_400, 200_000)).shortLabel).toBe("41%");
-    expect(buildContextRingViewModel(window(200_000, 200_000)).shortLabel).toBe("100%");
+  it("labels the ring with a whole percent, bare digits inside the ring", () => {
+    // The artifact draws `<text class="pct">12</text>` INSIDE a 28px
+    // ring, so the label has no percent sign; the spelled-out reading
+    // lives in `accessibilityLabel` (pinned below).
+    expect(buildContextRingViewModel(window(82_400, 200_000)).shortLabel).toBe("41");
+    expect(buildContextRingViewModel(window(200_000, 200_000)).shortLabel).toBe("100");
   });
 
   it("carries the same colour band the Live screen's card uses", () => {

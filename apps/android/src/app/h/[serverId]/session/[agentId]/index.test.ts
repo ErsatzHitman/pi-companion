@@ -217,7 +217,7 @@ describe("SessionRoute source", () => {
   // --- T32S3 item (1) / T32S4 item (1): the transcript slot -------------
 
   it("fills the transcript slot, and it renders TranscriptMessageRow fed by createTranscriptMessageBatcher", () => {
-    expect(readCode()).toMatch(/transcript=\{<SessionTranscript/);
+    expect(readCode()).toMatch(/transcript=\{\s*<SessionTranscript/);
     expect(readCode()).toMatch(/createTranscriptMessageBatcher\(/);
     expect(readCode()).toMatch(/<TranscriptMessageRow\b/);
   });
@@ -352,11 +352,13 @@ describe("SessionRoute source", () => {
     expect(code).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/transcript"/);
     // SessionTranscript takes the same TranscriptStatus the statusStrip
     // slot renders, so the haptic and its visible signal cannot disagree.
+    // (It also takes `onTodoEntryChange`, which reports the pinned .ov
+    // widget's data upward — that does not change this contract.)
     expect(code).toMatch(
-      /function SessionTranscript\(\{ status, agentId \}: \{ status: TranscriptStatus; agentId: string \}\)/,
+      /function SessionTranscript\(\{\s*status,\s*agentId,\s*onTodoEntryChange,?\s*\}: \{[\s\S]*?status: TranscriptStatus;[\s\S]*?agentId: string;/,
     );
     expect(code).toMatch(
-      /transcript=\{<SessionTranscript status=\{status\} agentId=\{agentId \?\? ""\} \/>\}/,
+      /transcript=\{\s*<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}/,
     );
     expect(code).toMatch(/<TranscriptStatusStrip status=\{status\} \/>/);
     // The real, process-lifetime platform is what fires - never an
@@ -762,7 +764,7 @@ describe("SessionRoute bounds the composer slot beside a drawing pinned area (T3
     );
     expect(code).toMatch(/const \{ height: windowHeightDp \} = useWindowDimensions\(\);/);
     expect(code).toMatch(
-      /const composerMaxHeight = resolveComposerSlotMaxHeightDp\(\{\s*windowHeightDp,\s*liveExtensionOccupied: resolvePinnedAreaVisibility\(liveExtensionElements\) === "visible",\s*\}\);/,
+      /const composerMaxHeight = resolveComposerSlotMaxHeightDp\(\{[\s\S]*?liveExtensionOccupied:\s*resolvePinnedAreaVisibility\(liveExtensionElements\) === "visible" \|\| latestTodo !== null,\s*\}\);/,
     );
     // The visibility answer comes from the same store SessionLiveExtension
     // reads, through the registry barrel's own re-export.
@@ -812,28 +814,67 @@ describe("SessionRoute supplies the S7 app bar what only a route can (T351)", ()
   });
 });
 
-// --- T360: mounts the redesign's `.ov` todo widget ------------------------
-describe("session route: the todo widget (T360)", () => {
-  it("renders a todo entry through TranscriptTodoRow, in the same interleaved list", () => {
+// --- T360: mounts the redesign's `.ov` todo widget, in the pinned slot ---
+describe("session route: the todo widget lives in the pinned slot (T360)", () => {
+  it("draws a todo entry through TranscriptTodoRow from SessionLiveExtension, not from the transcript list", () => {
     const code = readCode();
-    expect(code).toMatch(/entry\.kind === "todo"/);
     expect(code).toMatch(
-      /<TranscriptTodoRow key=\{entry\.id\} entry=\{entry\} testId=\{testId\} \/>/,
+      /<TranscriptTodoRow entry=\{todoEntry\} testId="session-todo-overlay" \/>/,
     );
+    // The .ov widget is NOT a transcript row: the per-kind renderRow
+    // switch has no todo branch.
+    expect(code).not.toMatch(/entry\.kind === "todo"/);
+    expect(readCode()).not.toMatch(/<TranscriptTodoRow key=\{entry\.id\}/);
   });
 
   it("imports the row from the feature barrel, like every other row this route mounts", () => {
     expect(readCode()).toMatch(/TranscriptTodoRow,/);
   });
 
-  it("branches before the message-row fallback, so a todo never renders as prose", () => {
-    // The final `return` in `renderRow` is the message row. A kind that
-    // reaches it renders its `text` field, which a todo entry has not
-    // got — the shape of bug this ordering prevents.
+  it("reports the newest todo entry upward from the one live batcher, via selectLatestTodoEntry", () => {
     const code = readCode();
-    const todoAt = code.indexOf('entry.kind === "todo"');
-    const fallbackAt = code.indexOf("<TranscriptMessageRow");
-    expect(todoAt).toBeGreaterThan(-1);
-    expect(fallbackAt).toBeGreaterThan(todoAt);
+    expect(code).toMatch(/selectLatestTodoEntry,/);
+    expect(code).toMatch(
+      /selectLatestTodoEntry\(coreTimeline\.buildTranscriptEntries\(batcher\.getState\(\)\)\)/,
+    );
+    expect(code).toMatch(/onTodoEntryChange\?:\s*\(entry: TodoTranscriptEntry \| null\) => void;/);
+    expect(code).toMatch(
+      /<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}\s+onTodoEntryChange=\{setLatestTodo\}\s*\/>/,
+    );
+  });
+
+  it("collapses the pinned slot only when it has NEITHER a pinned element NOR a todo", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /const pinnedVisible = resolvePinnedAreaVisibility\(elements\) === "visible";/,
+    );
+    expect(code).toMatch(/if \(!pinnedVisible && todoEntry === null\) \{\s*return null;\s*\}/);
+    expect(code).toMatch(
+      /<SessionLiveExtension agentId=\{agentId \?\? ""\} todoEntry=\{latestTodo\} \/>/,
+    );
+  });
+
+  it("treats a drawing todo as an occupied pinned slot for the composer cap", () => {
+    expect(readCode()).toMatch(
+      /resolvePinnedAreaVisibility\(liveExtensionElements\) === "visible" \|\| latestTodo !== null/,
+    );
+  });
+});
+
+// --- this task: the app bar's own live activity ---
+describe("session route: the S7 pill's session activity", () => {
+  it("builds the signal over the one live agent_stream fan-out and the same connection snapshot as the turn-running signal", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /import \{[\s\S]*?createSessionActivitySignal,[\s\S]*?\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/transcript";/,
+    );
+    expect(code).toMatch(/const \[activity, setActivity\] = useState<SessionActivity>\("idle"\);/);
+    expect(code).toMatch(
+      /createSessionActivitySignal\(\s*daemonSource,\s*agentId,\s*setActivity,\s*connectionStatusSource,?\s*\)/,
+    );
+  });
+
+  it("passes the activity straight through to TranscriptHeader, so the pill answers what the session is doing", () => {
+    expect(readCode()).toMatch(/<TranscriptHeader[\s\S]*?activity=\{activity\}/);
   });
 });

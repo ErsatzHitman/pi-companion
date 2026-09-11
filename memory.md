@@ -698,3 +698,36 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   streaming reveal. Both platforms.
 - 3. **Composer parity** (pure core): per-session drafts, @file/@skill refs, attachment previews, honest
   context ring.
+
+## Mockup-fidelity pass (2026-09-12, T384–T387) — the scope decision that governs it
+
+- **The reference is `docs/ui-reference/{pi-companion-app,pi-companion-web}.html`**, byte-identical to
+  `C:\Users\aksha\Downloads\pi-companion-ui\` (verified with md5). They are a *picture* of the intended UI,
+  never authority: `plan.md` §9.2 (the four Android screens + panels-as-sheets) and the ledger's recorded
+  decisions outrank them.
+- **Two classes of audit finding, handled differently.** VISUAL (colour, radius, type, spacing, borders,
+  iconography, element order) is adopted wherever it does not break a hard rule. FUNCTIONAL/STRUCTURAL
+  (a screen the plan does not sanction, a control that would lie) is NOT adopted, and the reason is recorded.
+- **Not adopted, deliberately, with reasons:**
+  1. The five Android extension-detail screens (`data-frame="e1".."e5"`). §9.2 fixes the screen set at
+     Sessions/Live/Settings + panels-as-sheets, and T366 already argued (for the Settings rows) that
+     extension state is per-session, not per-host. Those frames document **where each extension draws** —
+     so their *rendering* requirements are implemented, their chrome is not built.
+  2. A3's four per-agent rows (Model / Thinking effort / Auto-compaction / Ask before every tool) and its
+     extension rows + "Loaded but silent" card: T366's decision, unchanged.
+  3. `Sheet` instead of the artifact's absolutely-positioned `.pmenu` (T353), and the web settings route
+     instead of the mockup's 420px slide-over (the route is axe-covered and guard-checked).
+  4. Where the mockup draws a control smaller than 48dp (34px `.ic`, 38px search field, 28px chips,
+     22px pill), the app keeps the **48dp touch floor** from plan.md §9.3 and matches the *visual* box.
+     The Android `ScreenBar` is therefore 48dp tall, not the artifact's 46.
+- **Token values are already exact.** Both mockups' light/dark colour roles are `tokens.ts` value for value.
+  Two dark shadow strings in the mockups (`--sh-hairline` / `--sh-btn`) deviate from `darkShadows` and from
+  `docs/beautiful-ui-reference.md`; `tokens.ts` is right and the mockup is the stale side. The mockups also
+  name JetBrains Mono for web, where the app ships Geist Mono (the platform split is deliberate).
+- **The Android mockup's turn animation was dead on arrival** (T382): `paintCtx()` set `.className` on an
+  `<svg>`, which is read-only, so the script threw at load and `docs/ui-reference/README.md`'s "plays one
+  whole turn end to end and loops" was false in every browser. Fixed to `setAttribute("class", …)`.
+- **Web console is the far larger gap.** Audited gaps: no per-session head row, no turn meta line, no
+  composer context ring, no task dock (todo entries are not rendered at all on web), rail with no head /
+  search / footer / row metadata, no inbound link to the settings route, and a 32rem block cap where the
+  mockup centres an 860px column.

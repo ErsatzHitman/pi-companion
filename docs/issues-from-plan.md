@@ -640,6 +640,10 @@ that recomputation has to be domain-specific:
 | T381   | Four flows have never run because no shard owns them, and correcting the reason did not give them one                | phase-9   | android          | P9-U   | T380                                                                  |
 | T382   | The two surfaces had no reviewable picture of themselves, only screenshots that cannot carry motion                  | phase-9   | docs             | P9-U   | T380                                                                  |
 | T383   | Give the daemon files-rewind: per-turn snapshots with conflict-checked restore                                       | phase-9   | daemon           | P9-V   | T381                                                                  |
+| T384   | Sessions and Live drew a different bar, pill, row and card geometry than the reference, and Live showed no elapsed   | phase-9   | android          | P9-V   | T382                                                                  |
+| T385   | The chat screen drifted from the reference in the composer row, the transcript face and the todo widget's home       | phase-9   | android          | P9-V   | T384                                                                  |
+| T386   | The web console had no session head, no context ring and a session rail with no head, search, footer or row metadata | phase-9   | web              | P9-V   | T382                                                                  |
+| T387   | An inline extension element had no surface to draw on, so four of the reference's five blocks could never appear     | phase-9   | android          | P9-V   | T385                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -681,7 +685,7 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**592 tasks** (distinct IDs counted directly from the table above), one past the **591** at T382 — verified, not assumed: `grep -o "^| T[0-9A-Za-z]*"` over the table's rows yields 594 hits minus the two prose rows `| This` and `| That` from a non-task table, i.e. 592 distinct IDs — two past the **589** at T380, three past the **588** at T379, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**596 tasks** (distinct IDs counted directly from the table above), four past the **592** at T383, one past the **591** at T382 — verified, not assumed: `grep -o "^| T[0-9A-Za-z]*"` over the table's rows yields 598 hits minus the two prose rows `| This` and `| That` from a non-task table, i.e. 596 distinct IDs — two past the **589** at T380, three past the **588** at T379, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -19492,3 +19496,129 @@ Supernova source files by symbol name, never by line number, per the T269 rule).
 - [ ] `docs/T383-provenance.md` + `THIRD_PARTY_NOTICES.md` row + per-file headers name the Supernova source paths and commit
 - [ ] `plan.md` §4.2 carries the decision record and the shipped code cites it
 - [ ] `npm run test:unit --workspace=@picompanion/server` 3× green locally, typecheck + oxlint + oxfmt clean, push with a Maestro dispatch read
+
+#### T384 — Sessions and Live drew a different bar, pill, row and card geometry than the reference, and Live showed no elapsed
+
+`labels: phase-9, area: android` · `depends-on: T382`
+
+The owner's reference, `docs/ui-reference/pi-companion-app.html`, had never been read back
+against the two screens it draws outside the session screen. A per-frame audit found the
+redesign's chrome had drifted off the drawing in small values nobody had re-measured, and that
+two of A1's and A2's most visible readings were different values rather than different words:
+a running session was green and said `Running` where the drawing says `Working` in the accent
+tint, and the Live bar carried the fixed word `Working` where the drawing carries a ticking
+elapsed reading.
+
+**What A1 (Sessions) now draws.** The app bar is a sibling above the scrolling body, not its
+first child, so it no longer scrolls away; the body carries the drawing's own `12px` padding and
+`8px` gap rather than sitting flush against the screen edges (`.pad`); a row is the drawing's
+raised pill — radius 12, `min-height` 52, `9/12` padding — with its metadata line in `ink-3`; a
+running row is `Working` in the accent tone and an attention-needing row draws the short
+`Needs you` while its accessible label keeps the full `Working · needs attention` sentence, so
+TalkBack loses nothing to the shorter word; the filter chips take `.chip`'s `surface`-with-ring
+resting fill and `accent-tint`/`accent-ink` selected fill; and the settings gear is the bare
+44dp mark the drawing shows instead of the raised card the create button wears.
+
+**What A2 (Live) now draws.** The bar's trailing pill carries a real elapsed reading for the
+running turn — `TurnRunningSignal` gained `getStartedAtMs`, taken from the wire event's own
+`timestamp` (falling back to the local clock only when the wire carried none) and cleared on
+exactly the paths `running` becomes false, including the reconnect boundary — so the number
+counts from when the turn really began rather than from when this screen mounted. The pill is
+accent-toned, ticks at 500ms while a turn is in flight, and announces both the word and the
+reading. Cards take `.card`'s radius 14, `12/13` padding, 12.5/600 title and 11px `ink-3`
+summary; a subagent row is mono 11.5 with its elapsed in `ink-3` and its state word drawn
+through the neutral pill the drawing uses for `Queued`; and the Context card appends the real
+`· auto-compaction on|off` clause, read through the same `resolveSessionControlsClient` port the
+composer's picker uses, leaving the clause out rather than guessing when the daemon will not
+answer.
+
+**Three reference details deliberately not adopted, each for a reason that outlives this task.**
+The 48dp touch floor (plan.md §9.3) is two dp taller than the drawing's 46dp bar, so the bar is
+48 and the marks are 34dp rounded squares inside it; a 46dp bar with a target overflowing it is
+the shape that rule exists to prevent. A2's workflow summary leads with the workflow _instance's_
+name in the drawing; a `progress` element carries only the PHASE's label (`"workflow · implement"`),
+so promoting that into the summary would print a name the workflow does not have, and the
+instance name, round, elapsed time and token total have no wire field at all — the summary stays
+the completion count. And the elapsed reading resolves whole seconds (`formatLiveElapsed`) rather
+than the drawing's tenths, because a second formatter for one line is a number the rest of the
+screen would still round.
+
+**Owns:** `apps/android/src/features/sessions/` (sessions-screen, sessions-model,
+turn-running-signal), `apps/android/src/features/live/` (live-screen, live-screen-model), the two
+routes that mount them, and the three shared chrome files whose values this task corrected —
+`ui/recipes/ScreenBar.tsx`, `ui/primitives/StatusPill.tsx`, `ui/primitives/Section.tsx` (its
+`variant="label"` is the drawing's 9.5px/700 `.lbl` with its 8dp top padding).
+
+- [x] The Sessions bar is fixed above the scrolling body and the body carries `.pad`'s 12/8 padding
+- [x] A session row is the drawing's 52dp/radius-12 raised pill with an `ink-3` metadata line
+- [x] A running session draws `Working` in the accent tone; an attention-needing row draws `Needs you` and still announces the full sentence
+- [x] The filter chips and the gear follow `.chip`'s and `.actbar`'s real fills
+- [x] The Live bar's pill ticks a real elapsed reading sourced from the wire turn timestamp, accent-toned, and announces word plus reading
+- [x] Live cards, subagent rows and the queued pill take `.card`'s and `.sub`'s real geometry, sizes and inks
+- [x] The Context card's auto-compaction clause is wired to a real read and omitted when unavailable
+- [x] Every value is pinned by a test, and the 48dp floor is stated where the drawing is smaller
+
+#### T385 — The chat screen drifted from the reference in the composer row, the transcript face and the todo widget's home
+
+`labels: phase-9, area: android` · `depends-on: T384`
+
+`plan.md` §9.2 already said what the phone's session screen is: an app bar, a compact status
+strip, a pinned live extension area above the composer, a virtualized transcript, and "a bottom
+prompt bar with prominent microphone and attachment actions, and a context ring immediately
+right of the attachment action". The app had drifted from its own spec as well as from the
+drawing — the microphone and attachment actions sat in a controls row ABOVE the bar, the bar
+itself was a column with the input on top and a labelled `Send` button underneath, the
+transcript ran in the sans face, and the todo widget drew as one more row in the scrolling
+transcript instead of in the pinned slot it belongs to.
+
+**The composer is now one row, drawn to the reference's own numbers.** `.cmp-box`'s
+`display:flex; align-items:flex-end; gap:4px; background: var(--surface); border-radius:18px;
+box-shadow: var(--sh-raised); padding: 6px 6px 6px 4px` with, left to right, the attach `+`,
+the context ring, the input, the microphone and the accent Send mark. `PromptBar` gained
+`leading` and `trailing` slots for the ring/attach and the microphone; the ring grew to the
+reference's `28×28`, `r=12`, `stroke-width: 2.5` and now prints bare digits inside itself
+(`.pct` is `12`, not `12%`; the spelled-out reading stays in the accessibility label); Send
+became the reference's accent 34dp box carrying a stroked arrow, so its accessible name is
+`"Send prompt"` and its visible text is gone; and every one of the five marks keeps a 48dp
+press target (plan.md §9.3) even though the drawing's box is 34. Camera and slash-command
+actions stay reachable in the scrolling controls above, where the reference has no opinion.
+
+**The transcript takes the reference's block metrics and face.** `.blk`'s `border-radius: 14px;
+padding: 9px 11px` with a hairline ring on every block but the user's; the user's prompt is
+`accent-tint` (`.blk.usr`) instead of `field`; every line runs in the mono face at the
+reference's `.ln { font-size: 12px; line-height: 1.62 }`; the thinking block carries the
+`2px solid var(--line-strong)` left rule on its wrapper with an italic `ink-3` body and an
+11.5px head; and a tool line gained the reference's `.tchip` path chip (surface, radius 5,
+`accent-ink` text) beside its name.
+
+**The todo widget moved to the pinned slot, where the reference and §9.2 both put it.** E1's
+own card says "A widget docked above the prompt bar, not a transcript block. It stays put while
+the transcript scrolls" — so `app-shell/session-transcript-model.ts` no longer keeps `todo`
+entries in the transcript and the session route renders the widget above the composer, with
+the reference's `.ov` chrome, its head-tap collapse (`accessibilityState.expanded`), the
+`◐ Todos (n/m)` head and the `└─ tap the ring to collapse` hint. Its tree connector and `#n`
+prefix are gone: the drawing's rows are a glyph and a subject.
+
+**The bar's pill finally says the four things the reference does.** `Idle` → `Thinking` →
+`Working` → `Needs you`, driven by a new session-activity signal (turn running, queued work,
+pending permission or extension question) rather than by the connection phase alone — which
+is why `streaming` was previously unreachable and no waiting state existed at all. A pending
+approval now surfaces as `Needs you`, the promise the reference makes twice.
+
+**Owns:** `apps/android/src/features/transcript/`, `features/composer/`, `app-shell/`, the
+session route, `ui/theme/block-shape.ts`, and the recipes this task's values live in
+(`PromptBar`, `BashBlock`, `ThinkingSection`, `StreamingMessage`, `TaskRows`, `ProgressRing`,
+`CodeListing`, `DiffSummary`, `vector-icons`). The composer's source pins in
+`apps/android/e2e/flows/accessibility-audit.contract.test.ts` landed with T384's commit,
+because that file also carried T384's Live-pill pin; the pins in `composer-inputs.contract.test.ts`
+and `background-kill-restore.contract.test.ts` land here.
+
+- [x] The prompt bar is the reference's single row: attach, context ring, input, microphone, accent Send
+- [x] The ring is 28dp at r=12/stroke 2.5 with bare digits inside; Send is the accent mark with an accessible name
+- [x] Every mark keeps a 48dp target, and the two controls the reference does not draw stay reachable above the bar
+- [x] Transcript blocks take `.blk`'s radius/padding/hairline, the user block is `accent-tint`, and all lines are mono at 12/1.62
+- [x] The thinking block draws its left rule on the wrapper, in `line-strong`, with an italic `ink-3` body
+- [x] Tool lines carry the `.tchip` path chip beside the name
+- [x] The todo widget docks above the prompt bar with a collapsing head, and no longer renders a transcript row
+- [x] The app bar's pill reaches `Thinking`, `Working` and `Needs you` from real session activity
+- [x] Every changed value is pinned by a test, and the composer contract tests pin the new source shape

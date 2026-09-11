@@ -154,18 +154,23 @@ describe("composer-inputs.yaml anchors exist in source", () => {
   });
 
   describe("keyboard entry (the only live input mode)", () => {
-    it('Composer defaults testId to "composer" and renders that as the Section root testID', () => {
+    it('Composer defaults testId to "composer" and renders that as the composer root testID', () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
       expect(code).toMatch(/const composerTestId = testId \?\? "composer";/);
-      expect(code).toMatch(
-        /<Section\s+title=\{COMPOSER_ACCESSIBILITY_LABEL\}\s+testId=\{composerTestId\}(?:\s+style=\{styles\.section\})?(?:\s+onTitleLayout=\{handleTitleLayout\})?\s*>/, // T338: multi-line, with the shrinkable-section style,
-      );
+      // T385: `Section` became a plain `View` carrying the same testID
+      // (the artifact draws no heading above the composer); the heading
+      // survives as a clipped Text for TalkBack. See the sibling pin in
+      // `background-kill-restore.contract.test.ts`.
+      expect(code).toMatch(/<View style=\{styles\.section\} testID=\{composerTestId\}>/);
+      expect(code).toMatch(/accessibilityLabel=\{COMPOSER_ACCESSIBILITY_LABEL\}/);
     });
 
     it("wires PromptBar (the text field + Send button) to composerTestId", () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
+      // T385: same widening as the sibling pin above — the mount now
+      // carries the bar's two slots.
       expect(code).toMatch(
-        /<PromptBar\s+label=\{COMPOSER_INPUT_LABEL\}[\s\S]{0,900}?testId=\{composerTestId\}\s*\/>/,
+        /<PromptBar\s+label=\{COMPOSER_INPUT_LABEL\}[\s\S]{0,2500}?testId=\{composerTestId\}\s*\/>/,
       );
     });
 
@@ -216,15 +221,19 @@ describe("composer-inputs.yaml anchors exist in source", () => {
   describe("mic and attach buttons are live and honest; both real now (T276, T290)", () => {
     it('the mic ComposerIconAction carries testId="${composerTestId}-mic"', () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
+      // T385: `icon="mic"` (a stroked SVG) replaced the emoji glyph, and
+      // the control now arrives through the prompt bar's `trailing` slot.
       expect(code).toMatch(
-        /<ComposerIconAction\s+glyph=\{"\\u\{1F3A4\}"\}\s+accessibleName=\{MIC_ACTION_LABEL\}\s+onPress=\{handleMicPress\}\s+testId=\{`\$\{composerTestId\}-mic`\}\s*\/>/,
+        /<ComposerIconAction\s+icon="mic"\s+accessibleName=\{MIC_ACTION_LABEL\}\s+onPress=\{handleMicPress\}\s+testId=\{`\$\{composerTestId\}-mic`\}\s*\/>/,
       );
     });
 
     it('the attach ComposerIconAction carries testId="${composerTestId}-attach"', () => {
       const code = readComponentCode(COMPOSER_TSX, "Composer");
+      // T385: the artifact's `+` mark, now the first child of the bar's
+      // `leading` slot rather than a control above the bar.
       expect(code).toMatch(
-        /<ComposerIconAction\s+glyph=\{"\\u\{1F4CE\}"\}\s+accessibleName=\{ATTACH_ACTION_LABEL\}\s+onPress=\{handleAttachPress\}\s+testId=\{`\$\{composerTestId\}-attach`\}\s*\/>/,
+        /<ComposerIconAction\s+icon="plus"\s+accessibleName=\{ATTACH_ACTION_LABEL\}\s+onPress=\{handleAttachPress\}\s+testId=\{`\$\{composerTestId\}-attach`\}\s*\/>/,
       );
     });
 

@@ -131,6 +131,37 @@ export function isKnownToolCall(tool: tools.ToolCallViewModel): tool is KnownToo
   return tool.family !== "generic";
 }
 
+/**
+ * The `.tchip` text for a tool's header — the one path or argument that
+ * names WHAT this particular call touched, so a transcript of twenty
+ * `read`s is scannable without expanding any of them.
+ *
+ * `undefined` for the families whose header has no such single fact
+ * (`plan`'s text is the whole body, `sub_agent`'s description is a
+ * sentence rather than a path, `plain_text`/`generic` carry nothing this
+ * can name without guessing). A chip is drawn only when this returns a
+ * non-empty string, so an absent fact simply draws no chip rather than
+ * an empty box.
+ */
+export function toolHeaderChipLabel(tool: tools.ToolCallViewModel): string | undefined {
+  switch (tool.family) {
+    case "read":
+    case "write":
+    case "edit":
+      return tool.filePath;
+    case "search":
+      return tool.query;
+    case "fetch":
+      return tool.url;
+    case "shell":
+      return tool.command;
+    case "worktree_setup":
+      return tool.branchName;
+    default:
+      return undefined;
+  }
+}
+
 // --- Edit family: diff derivation (mirrors web's tool-call-row.tsx) ---
 //
 // T33A5: counting and classifying `+`/`-` lines is not re-derived here —

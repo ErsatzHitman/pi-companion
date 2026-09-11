@@ -13,6 +13,7 @@ import {
   BLOCK_PADDING_HORIZONTAL,
   BLOCK_PADDING_VERTICAL,
   BLOCK_RADIUS,
+  blockRing,
   blockSurface,
 } from "../theme/block-shape";
 import { asFontWeight } from "../theme/native-style-helpers";
@@ -30,6 +31,13 @@ const SHIMMER_DURATION_MS = 1400;
 
 /** §7.2's caret width. See this component's doc comment for the phase the artifact has and this app does not. */
 const CARET_WIDTH = 2;
+/**
+ * The transcript line's own mono metrics: `.ln { font-size: 12px;
+ * line-height: 1.62 }`. The code variant is 11px/1.625, one px below
+ * the transcript's size, so this is stated here rather than borrowed.
+ */
+const LINE_FONT_SIZE = 12;
+const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
 
 export interface StreamingMessageProps {
   speaker: "assistant" | "user";
@@ -67,6 +75,16 @@ export interface StreamingMessageProps {
  * first phase to be solid during — the caret blinks for as long as the
  * turn is streaming, and that is stated here rather than faked with a
  * timer that would mean nothing.
+ *
+ * **Mono transcript text, as the artifact draws it.** The design
+ * draws prose in the same mono face, at the same 12px/1.62, as tool
+ * output and reasoning — the transcript is one continuous terminal-
+ * flavoured column, not a sans document with mono code inside it. The
+ * body size (12.5, sans) this used to read was the app's own habit, not
+ * the artifact's rule. A filled block other than `.usr` now also draws
+ * the artifact's 1px `line` ring (`.blk`'s hairline), so a tool-tinted
+ * block is a box rather than a floating tint; `usr` is the one kind the
+ * artifact turns that ring off for.
  */
 export function StreamingMessage({ speaker, text, streaming, testId }: StreamingMessageProps) {
   const { theme, motion, reduceMotion } = useTheme();
@@ -132,6 +150,7 @@ export function StreamingMessage({ speaker, text, streaming, testId }: Streaming
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"], speaker: "assistant" | "user") {
   const surface = blockSurface(speaker === "user" ? "user" : "assistant");
+  const ring = blockRing(speaker === "user" ? "user" : "assistant");
   return StyleSheet.create({
     wrapper: {
       gap: theme.spacing[1],
@@ -142,6 +161,8 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], speaker: "ass
       // T356 paragraph. `"transparent"` rather than `canvas` so the
       // block inherits whatever the transcript is drawn on.
       backgroundColor: surface === null ? "transparent" : theme.colors[surface],
+      borderWidth: ring === null ? 0 : 1,
+      borderColor: ring === null ? "transparent" : theme.colors[ring],
     },
     speaker: {
       color: theme.colors["ink-3"],
@@ -151,15 +172,16 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], speaker: "ass
     textRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end" },
     text: {
       color: theme.colors.ink,
-      fontSize: theme.typography.variant.body.fontSize,
-      lineHeight: theme.typography.variant.body.lineHeight,
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: LINE_FONT_SIZE,
+      lineHeight: LINE_HEIGHT,
     },
     // §7.2's 2px caret. A rule, not a block: at 8px wide it read as a
     // highlight sitting after the text rather than as the place the
     // next character lands.
     cursor: {
       width: CARET_WIDTH,
-      height: theme.typography.variant.body.lineHeight,
+      height: LINE_HEIGHT,
       marginLeft: theme.spacing[1],
       backgroundColor: theme.colors.accent,
     },

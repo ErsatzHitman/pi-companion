@@ -2,10 +2,17 @@
  * The one block shape the redesigned session screen draws everything in
  * (T356) — the artifact's `.blk`.
  *
- * `HANDOFF.md` §7.2 gives it once and then reuses it for every kind of
- * thing the screen stacks: radius 14, padding 9×12, 10 apart, with a
- * background that says WHAT the block is rather than how important it
- * is. `usr` is a prompt the user sent, `pend` one still queued, `ok` and
+ * The design artifact's `.blk` gives it once and then reuses it for
+ * every kind of thing the screen stacks. Quoting the artifact's own
+ * CSS, which is the authority for every figure below:
+ *
+ * ```css
+ * .blk { border-radius: 14px; padding: 9px 11px; box-shadow: var(--sh-hairline); }
+ * .t   { padding: 12px 12px 4px; gap: 9px; }
+ * .blk.usr { background: var(--accent-tint); box-shadow: none; }
+ * ```
+ *
+ * `usr` is a prompt the user sent, `pend` one still queued, `ok` and
  * `err` a tool call that finished either way, `ext` an extension's own
  * element. A user prompt in the composer's queue and the same prompt in
  * the transcript are the same shape, which is the whole point of the
@@ -30,13 +37,13 @@
  * execution rather than by a source-regex pin.
  */
 
-/** Radius of every block (`.blk`). */
+/** Radius of every block (`.blk`'s `border-radius: 14px`). */
 export const BLOCK_RADIUS = 14;
-/** `.blk` padding, in the artifact's own order (9px top/bottom, 12px left/right). */
+/** `.blk`'s `padding: 9px 11px`, in the artifact's own order. */
 export const BLOCK_PADDING_VERTICAL = 9;
-export const BLOCK_PADDING_HORIZONTAL = 12;
-/** `.blk`'s `margin: 10px 0`, expressed as the gap between stacked blocks. */
-export const BLOCK_GAP = 10;
+export const BLOCK_PADDING_HORIZONTAL = 11;
+/** `.t`'s `gap: 9px` — the space between stacked blocks. */
+export const BLOCK_GAP = 9;
 
 /**
  * What a block IS. Named after the artifact's own class suffixes where
@@ -58,7 +65,7 @@ export type BlockKind = "user" | "assistant" | "pending" | "tool-ok" | "tool-err
  * boxes are for.
  */
 export type BlockSurfaceToken =
-  | "field"
+  | "accent-tint"
   | "inset"
   | "tool-success-bg"
   | "tool-error-bg"
@@ -67,7 +74,10 @@ export type BlockSurfaceToken =
 export function blockSurface(kind: BlockKind): BlockSurfaceToken | null {
   switch (kind) {
     case "user":
-      return "field";
+      // `.blk.usr { background: var(--accent-tint) }` — the user's own
+      // prompt is the one block tinted with the accent, so a reader can
+      // find what they sent in a wall of tool output.
+      return "accent-tint";
     case "assistant":
       return null;
     case "pending":
@@ -95,4 +105,40 @@ export type BlockOutlineToken = "red";
 
 export function blockOutline(kind: BlockKind): BlockOutlineToken | null {
   return kind === "tool-error" ? "red" : null;
+}
+
+/**
+ * `true` when a block carries the artifact's own hairline ring —
+ * `.blk`'s `box-shadow: var(--sh-hairline)` — and the `theme.colors`
+ * key to draw it in.
+ *
+ * Every FILLED block except `usr` has one (`.blk.usr` is the one rule
+ * that turns it off), and so does every unfilled outline this app
+ * draws a border on. It is drawn as a 1px `line` border rather than a
+ * shadow because React Native has no hairline box-shadow and a 1px
+ * border is the same pixel at the same weight on both platforms.
+ *
+ * Two kinds return `null` here for two different reasons, and a caller
+ * must not read either as "this block has no border": `user` draws
+ * none at all, exactly as the artifact specifies, while `tool-error`'s
+ * single border is claimed by `blockOutline` above (a block can only
+ * have one border colour, and the error's is the red one).
+ */
+export type BlockRingToken = "line";
+
+export function blockRing(kind: BlockKind): BlockRingToken | null {
+  switch (kind) {
+    case "user":
+      return null;
+    case "assistant":
+      // Not a block at all — the model's prose is bare text on the
+      // canvas, so there is no box to ring.
+      return null;
+    case "tool-error":
+      return null;
+    case "pending":
+    case "tool-ok":
+    case "extension":
+      return "line";
+  }
 }

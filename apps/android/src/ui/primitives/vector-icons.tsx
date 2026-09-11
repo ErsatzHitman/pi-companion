@@ -48,7 +48,8 @@ export type VectorIconName =
   | "sparkle"
   | "chevron-down"
   | "check"
-  | "search";
+  | "search"
+  | "camera";
 
 export interface VectorIconProps {
   name: VectorIconName;
@@ -130,6 +131,25 @@ function IconBody({ name, color }: { name: VectorIconName; color: string }) {
         <>
           <Circle cx={11} cy={11} r={7} stroke={color} strokeWidth={2} strokeLinecap="round" />
           <Path d="M21 21l-4.3-4.3" stroke={color} strokeWidth={2} strokeLinecap="round" />
+        </>
+      );
+    case "camera":
+      // Not one of the artifact's own paths: the S7 frame draws no camera
+      // mark, but the composer's capture control is a real, visible
+      // control and a `📷` font glyph is a different drawing at a
+      // different weight on every OEM fallback. Drawn in the same
+      // language as the rest of this set — 24 viewBox, stroked, round
+      // joins — so it sits beside them without looking imported.
+      return (
+        <>
+          <Path
+            d="M4 8h3l1.5-2.5h7L17 8h3a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 4 8z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Circle cx={12} cy={13} r={3.5} stroke={color} strokeWidth={2} strokeLinecap="round" />
         </>
       );
   }

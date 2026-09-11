@@ -56,6 +56,7 @@ import {
 } from "react-native";
 
 import { Banner, Button } from "../../ui/primitives";
+import { BLOCK_GAP } from "../../ui/theme/block-shape";
 import { useTheme } from "../../ui/theme/theme-context";
 import {
   createTranscriptWindow,
@@ -104,7 +105,14 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     container: { flex: 1, gap: theme.spacing[2] },
     list: { flex: 1 },
-    listContent: { gap: theme.spacing[2] },
+    // The artifact's `.t { padding: 12px 12px 4px; gap: 9px }` — the
+    // transcript's own inset and the space between its blocks.
+    listContent: {
+      gap: BLOCK_GAP,
+      paddingHorizontal: theme.spacing[3],
+      paddingTop: theme.spacing[3],
+      paddingBottom: theme.spacing[1],
+    },
   });
 }
 

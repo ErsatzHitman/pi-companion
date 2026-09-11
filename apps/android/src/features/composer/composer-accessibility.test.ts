@@ -66,9 +66,16 @@ describe("Composer.tsx", () => {
     expect(code).toMatch(/<PromptBar/);
   });
 
-  it("gives the composer a discoverable TalkBack name via the Section primitive", () => {
-    expect(code).toMatch(/<Section\s/);
-    expect(code).toMatch(/COMPOSER_ACCESSIBILITY_LABEL/);
+  it("gives the composer a discoverable TalkBack name through a heading node", () => {
+    // The reference draws no visible heading above the composer, so the
+    // name is carried by a clipped heading `Text` rather than `Section`:
+    // the primitive has no variant that hides its title, and its tests
+    // (and its other callers) stay untouched. The name itself is
+    // unchanged — TalkBack still reaches a `header` node reading
+    // "Message composer".
+    expect(code).toMatch(/accessibilityRole="header"/);
+    expect(code).toMatch(/accessibilityLabel=\{COMPOSER_ACCESSIBILITY_LABEL\}/);
+    expect(code).toMatch(/styles\.heading/);
   });
 
   it("announces entry status changes via a polite live region", () => {
@@ -149,13 +156,13 @@ describe("Composer.tsx", () => {
   // un-shrinkable root overflows the keyboard-shrunk shell and it is the
   // PROMPT BAR that gets pushed under the IME. What must never shrink is
   // the prompt bar; everything above it scrolls.
-  it("T338: root, Section and ScrollView shrink (flexShrink: 1) while PromptBar sits outside and after the ScrollView, so the prompt bar stays above the IME and the controls scroll (plan.md §9.3)", () => {
+  it("T338: root, section and ScrollView shrink (flexShrink: 1) while PromptBar sits outside and after the ScrollView, so the prompt bar stays above the IME and the controls scroll (plan.md §9.3)", () => {
     expect(code).toMatch(/root:\s*\{\s*flexShrink:\s*1,\s*minHeight:\s*0\s*\}/);
-    expect(code).toMatch(/section:\s*\{\s*flexShrink:\s*1,\s*minHeight:\s*0\s*\}/);
+    expect(code).toMatch(/section:\s*\{[^}]*flexShrink:\s*1,\s*minHeight:\s*0\s*\}/);
     expect(code).toMatch(/scroll:\s*\{\s*flexGrow:\s*0,\s*flexShrink:\s*1\s*\}/);
     // T343 adds the measured minHeight to the root's static style.
     expect(code).toMatch(/<View style=\{\[styles\.root, \{ minHeight \}\]\}/);
-    expect(code).toMatch(/<Section[^>]*style=\{styles\.section\}/);
+    expect(code).toMatch(/<View style=\{styles\.section\} testID=\{composerTestId\}>/);
     const scrollOpen = code.indexOf("<ScrollView");
     const scrollClose = code.indexOf("</ScrollView>");
     const promptBar = code.indexOf("<PromptBar");
@@ -219,7 +226,7 @@ describe("Composer.tsx", () => {
       /setMinHeight\(\s*resolveComposerMinHeight\(\{\s*titleHeight: titleHeightRef\.current,\s*promptBarHeight: promptBarHeightRef\.current,\s*gap: sectionGap,\s*\}\),?\s*\)/,
     );
     expect(code).toMatch(/const sectionGap = theme\.spacing\[3\];/);
-    expect(code).toMatch(/<Section[^>]*onTitleLayout=\{handleTitleLayout\}/);
+    expect(code).toMatch(/accessibilityRole="header"[\s\S]*?onLayout=\{handleTitleLayout\}/);
     expect(code).toMatch(/<View onLayout=\{handlePromptBarLayout\}>\s*<PromptBar/);
     expect(code).not.toMatch(/sectionHeightRef|controlsHeightRef/);
     const scrollOpen = code.indexOf("<ScrollView");

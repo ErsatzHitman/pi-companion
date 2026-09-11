@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { AgentUsage } from "@picompanion/protocol/agent-types";
@@ -11,6 +11,7 @@ import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import {
   buildLiveScreenViewModel,
+  formatLiveElapsed,
   type LiveRowGlyph,
   type LiveSubagentRow,
   type LiveWorkflowRow,
@@ -42,6 +43,15 @@ export interface LiveScreenProps {
   /** Whether a turn is in flight, which is what the bar's pill reports. */
   turnRunning: boolean;
   /**
+   * When the running turn started, in epoch milliseconds — the wire
+   * timestamp of the `turn_started` (or mid-turn `pi_queue_update`) the
+   * route's `TurnRunningSignal` recorded (T385). `null`/absent when no
+   * turn is running or nothing has reported a start; the pill then
+   * falls back to the state word alone. Threaded in by the route, so
+   * this screen never invents a start time of its own.
+   */
+  turnStartedAtMs?: number | null;
+  /**
    * The newest token usage the daemon has reported for this session
    * (T352), straight off `createContextUsageSignal`. `null` before any
    * has arrived, and with no connection — the Context card then says
@@ -66,16 +76,29 @@ export interface LiveScreenProps {
   testId?: string;
 }
 
-/** The artifact's `.card`. */
-const CARD_RADIUS = 22;
-/** The artifact's `.card h3`. */
-const CARD_TITLE_SIZE = 13;
-/** The artifact's `.card p`. */
-const CARD_SUMMARY_SIZE = 11.5;
-/** The artifact's `.row.sub`. */
+/**
+ * The artifact's `.card`: radius 14 (`theme.radii.window`, applied in
+ * `createStyles`), padding 12px 13px. Its `h3` is 12.5px/600 — the
+ * theme's own `body` size at `semibold` — and its `p` is 11px `ink-3`.
+ */
+const CARD_SUMMARY_SIZE = 11;
+/** The artifact's `.row.sub` height. */
 const ROW_MIN_HEIGHT = 34;
-/** The artifact's mono row text. */
-const ROW_FONT_SIZE = 12;
+/** The artifact's subagent name: its `.sub` rows are mono 11.5px. */
+const ROW_FONT_SIZE = 11.5;
+/** The artifact's subagent elapsed: mono 11px in `.elapsed`'s `ink-3`. */
+const ROW_ELAPSED_SIZE = 11;
+/** The artifact's workflow row label: its row div is 12px sans. */
+const WORKFLOW_NAME_SIZE = 12;
+/** The artifact's workflow step count: mono 10.5px in `dim`. */
+const WORKFLOW_STEP_SIZE = 10.5;
+/**
+ * How often the bar's elapsed reading updates while a turn is running.
+ * `formatLiveElapsed` resolves whole seconds, so this only needs to be
+ * comfortably under one to keep the drawn value from lagging behind
+ * the real one (the artifact ticks its own timer at 100ms).
+ */
+const ELAPSED_TICK_MS = 500;
 /** The artifact's workflow bar: 70×5. */
 const WORKFLOW_BAR_WIDTH = 70;
 const WORKFLOW_BAR_HEIGHT = 5;
@@ -115,7 +138,7 @@ function SubagentRow({ row }: { row: LiveSubagentRow }) {
       <Text style={styles.rowName} numberOfLines={1}>
         {row.label}
       </Text>
-      {row.stateWord ? <Text style={styles.rowWord}>{row.stateWord}</Text> : null}
+      {row.stateWord ? <StatusPill label={row.stateWord} tone="neutral" /> : null}
       {row.elapsedText ? <Text style={styles.rowElapsed}>{row.elapsedText}</Text> : null}
     </View>
   );
@@ -223,6 +246,10 @@ function ContextCard({
         )}
       </View>
       {model.statsText.length > 0 ? (
+        // A2's mock also prints `R84k W12k`; the wire carries no
+        // read/write token split, so this line shows only the fields
+        // `AgentUsage` actually reports (input, output, cache share,
+        // cost) rather than invented figures (T385).
         <Text style={styles.contextStats} testID={`${testId}-stats`}>
           {model.statsText}
         </Text>
@@ -234,6 +261,7 @@ function ContextCard({
 export function LiveScreen({
   elements,
   turnRunning,
+  turnStartedAtMs,
   usage,
   autoCompaction,
   onBack,
@@ -243,6 +271,32 @@ export function LiveScreen({
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const model = useMemo(() => buildLiveScreenViewModel(elements), [elements]);
+
+  // A2's bar carries a ticking mono elapsed reading for the running
+  // turn, not only the word `Working`. The clock is local to this
+  // screen and only runs while there is a real start time to count
+  // from, so it can never animate while nothing is in flight (T385).
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!turnRunning || turnStartedAtMs === null || turnStartedAtMs === undefined) return;
+    setNowMs(Date.now());
+    const timer = setInterval(() => setNowMs(Date.now()), ELAPSED_TICK_MS);
+    return () => clearInterval(timer);
+  }, [turnRunning, turnStartedAtMs]);
+  const elapsedText =
+    turnRunning && turnStartedAtMs !== null && turnStartedAtMs !== undefined
+      ? formatLiveElapsed(Math.max(0, (nowMs - turnStartedAtMs) / 1000))
+      : null;
+  // The pill DRAWS the elapsed reading (or the state word until one
+  // exists) while a turn is in flight, and `Idle` otherwise. Its
+  // accessible name always carries both the word and the reading, so
+  // TalkBack never hears a bare number (plan.md §10.5).
+  const pillLabel = turnRunning ? (elapsedText ?? "Working") : "Idle";
+  const pillAccessibilityLabel = turnRunning
+    ? elapsedText === null
+      ? "Working"
+      : `Working, ${elapsedText}`
+    : "Idle";
 
   return (
     <View style={styles.screen} testID={testId}>
@@ -256,9 +310,10 @@ export function LiveScreen({
         }}
         status={
           <StatusPill
-            label={turnRunning ? "Working" : "Idle"}
-            tone={turnRunning ? "success" : "neutral"}
+            label={pillLabel}
+            tone={turnRunning ? "info" : "neutral"}
             showDot={turnRunning}
+            accessibilityLabel={pillAccessibilityLabel}
             testId={`${testId}-status`}
           />
         }
@@ -319,18 +374,19 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     card: {
       gap: theme.spacing[1],
-      padding: theme.spacing[3],
-      borderRadius: CARD_RADIUS,
+      paddingVertical: theme.spacing[3],
+      paddingHorizontal: theme.spacing[3] + 1,
+      borderRadius: theme.radii.window,
       backgroundColor: theme.colors.surface,
       ...ringShadow(theme, "card"),
     },
     cardTitle: {
       color: theme.colors.ink,
-      fontSize: CARD_TITLE_SIZE,
-      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+      fontSize: theme.typography.variant.body.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.semibold),
     },
     cardSummary: {
-      color: theme.colors["ink-2"],
+      color: theme.colors["ink-3"],
       fontSize: CARD_SUMMARY_SIZE,
     },
     emptyText: {
@@ -340,6 +396,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     rows: {
       marginTop: theme.spacing[2],
+      gap: theme.spacing[2],
     },
     row: {
       flexDirection: "row",
@@ -358,17 +415,18 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       flex: 1,
       minWidth: 0,
       color: theme.colors.ink,
-      fontSize: ROW_FONT_SIZE,
+      fontSize: WORKFLOW_NAME_SIZE,
     },
     rowWord: {
       color: theme.colors["ink-3"],
       fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: ROW_FONT_SIZE,
+      fontSize: WORKFLOW_STEP_SIZE,
     },
+    // A2's `.elapsed`: mono 11px in `ink-3`, beside the row's name.
     rowElapsed: {
-      color: theme.colors["ink-2"],
+      color: theme.colors["ink-3"],
       fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: ROW_FONT_SIZE,
+      fontSize: ROW_ELAPSED_SIZE,
     },
     glyphRing: {
       width: GLYPH_SIZE,

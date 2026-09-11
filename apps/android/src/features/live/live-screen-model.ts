@@ -216,9 +216,19 @@ function buildWorkflowCard(elements: readonly PiUiElement[]): LiveWorkflowCard {
     });
   }
 
+  // A2's Workflow summary leads with the workflow instance's own name
+  // and its metrics (`phase3_design_system · round 1 · 1h 02m · 1.2M
+  // tokens`) and keeps the completion count as the secondary clause.
+  // None of that is on this wire: a `progress` element carries the
+  // PHASE's label (`"workflow · implement"`), never the instance's
+  // name, and no round, elapsed or token field exists at all — so the
+  // summary stays the one true sentence, rather than promoting a phase
+  // label into a name it is not (T385).
+  const completion = `${complete} of ${rows.length} complete`;
+
   return {
     title: WORKFLOW_TITLE,
-    summary: `${complete} of ${rows.length} complete`,
+    summary: completion,
     rows,
     emptyText: rows.length === 0 ? NO_WORKFLOW : undefined,
   };

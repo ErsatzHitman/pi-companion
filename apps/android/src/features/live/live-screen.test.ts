@@ -65,7 +65,48 @@ describe("LiveScreen source", () => {
 
   it("reports the turn state in words on the pill, never by tone alone", () => {
     const code = readCode();
-    expect(code).toMatch(/label=\{turnRunning \? "Working" : "Idle"\}/);
+    // T385: the drawn label is the ticking elapsed reading (with
+    // `Working` as the fallback before a start time exists), and the
+    // spoken name always carries the state word.
+    expect(code).toMatch(
+      /const pillLabel = turnRunning \? \(elapsedText \?\? "Working"\) : "Idle";/,
+    );
+    expect(code).toMatch(/label=\{pillLabel\}/);
+    expect(code).toMatch(/accessibilityLabel=\{pillAccessibilityLabel\}/);
+    expect(code).toMatch(/`Working, \$\{elapsedText\}`/);
+  });
+
+  it("T385: takes the running turn's elapsed reading from the route's real start time and ticks it, never a constant", () => {
+    const code = readCode();
+    expect(code).toMatch(/turnStartedAtMs\?: number \| null;/);
+    expect(code).toMatch(
+      /formatLiveElapsed\(Math\.max\(0, \(nowMs - turnStartedAtMs\) \/ 1000\)\)/,
+    );
+    expect(code).toMatch(/const ELAPSED_TICK_MS = 500;/);
+    expect(code).toMatch(/setInterval\(\(\) => setNowMs\(Date\.now\(\)\), ELAPSED_TICK_MS\)/);
+    // The clock only runs while there is a turn to count from.
+    expect(code).toMatch(
+      /if \(!turnRunning \|\| turnStartedAtMs === null \|\| turnStartedAtMs === undefined\) return;/,
+    );
+  });
+
+  it("T385: tones the running pill with the artifact's accent (info), not green", () => {
+    expect(readCode()).toMatch(/tone=\{turnRunning \? "info" : "neutral"\}/);
+  });
+
+  it("T385: draws A2's card chrome — 14dp radius, a 12.5/600 title and an 11px ink-3 summary", () => {
+    const code = readCode();
+    expect(code).toMatch(/borderRadius: theme\.radii\.window/);
+    expect(code).toMatch(/paddingVertical: theme\.spacing\[3\],/);
+    expect(code).toMatch(/paddingHorizontal: theme\.spacing\[3\] \+ 1,/);
+    expect(code).toMatch(/fontSize: theme\.typography\.variant\.body\.fontSize/);
+    expect(code).toMatch(/fontWeight: asFontWeight\(theme\.typography\.fontWeight\.semibold\)/);
+    expect(code).toMatch(/fontSize: CARD_SUMMARY_SIZE/);
+    expect(code).toMatch(/color: theme\.colors\["ink-3"\]/);
+  });
+
+  it("T385: renders a subagent's state word through the neutral StatusPill, not as bare text", () => {
+    expect(readCode()).toMatch(/<StatusPill label=\{row\.stateWord\} tone="neutral" \/>/);
   });
 
   it("T352: the Context card takes every string and the band from the shared telemetry model", () => {

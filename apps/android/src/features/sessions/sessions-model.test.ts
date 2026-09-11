@@ -93,21 +93,25 @@ describe("sessionStatusPresentation", () => {
     }
   });
 
-  it("overrides the tone to warning and appends 'needs attention' text when requiresAttention is set", () => {
+  it("overrides the tone to warning and draws A1's short 'Needs you' word, keeping the full sentence for TalkBack when requiresAttention is set", () => {
     const presentation = sessionStatusPresentation(
       session({ status: "running", requiresAttention: true }),
     );
     expect(presentation.tone).toBe("warning");
-    expect(presentation.text).toContain("needs attention");
-    // The underlying status word is still present as text, not dropped in favour of tone alone.
-    expect(presentation.text).toContain("Running");
+    // A1's `.pill.wait` word, drawn instead of "Running · needs attention" (T385).
+    expect(presentation.text).toBe("Needs you");
+    // The spoken sentence still names the underlying status, so nothing
+    // is lost for a reader who cannot see the pill's short word.
+    expect(presentation.accessibilityText).toContain("needs attention");
+    expect(presentation.accessibilityText).toContain("Working");
   });
 
   it("does not apply the attention override when requiresAttention is false or absent", () => {
-    expect(sessionStatusPresentation(session({ status: "running" })).text).toBe("Running");
+    // A1's `.pill.run` word is "Working", not "Running" (T385).
+    expect(sessionStatusPresentation(session({ status: "running" })).text).toBe("Working");
     expect(
       sessionStatusPresentation(session({ status: "running", requiresAttention: false })).text,
-    ).toBe("Running");
+    ).toBe("Working");
   });
 });
 
@@ -160,7 +164,7 @@ describe("buildSessionRowModel", () => {
       }),
     );
     expect(row.accessibilityLabel).toContain("Fix the flaky test");
-    expect(row.accessibilityLabel).toContain("Running");
+    expect(row.accessibilityLabel).toContain("Working");
     expect(row.accessibilityLabel).toContain("anthropic");
     expect(row.accessibilityLabel).toContain("/home/pi/project");
   });

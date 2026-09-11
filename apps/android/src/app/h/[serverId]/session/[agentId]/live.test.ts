@@ -47,6 +47,16 @@ describe("SessionLiveRoute source", () => {
     expect(code).not.toMatch(/turnRunning=\{true\}/);
   });
 
+  it("T385: threads the signal's own turn-start timestamp to LiveScreen, so the elapsed reading is real", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /const \[turnStartedAtMs, setTurnStartedAtMs\] = useState<number \| null>\(null\);/,
+    );
+    expect(code).toMatch(/setTurnStartedAtMs\(signal\.getStartedAtMs\(\)\);/);
+    expect(code).toMatch(/turnStartedAtMs=\{turnStartedAtMs\}/);
+    expect(code).not.toMatch(/turnStartedAtMs=\{\d/);
+  });
+
   it("mounts SessionNavActions here, with this route's own serverId/agentId — the Files/Terminal controls T350 moved off the session screen", () => {
     const code = readCode();
     expect(code).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-nav-actions"/);
@@ -75,7 +85,13 @@ describe("SessionLiveRoute source", () => {
     expect(code).toMatch(/return \(\) => signal\.dispose\(\);/);
   });
 
-  it("T352: passes no autoCompaction, because no control has asked the daemon yet", () => {
-    expect(readCode()).not.toMatch(/autoCompaction=/);
+  it("T385: reads auto-compaction through the real controls client and passes it to the Context card, never a guessed default", () => {
+    const code = readCode();
+    expect(code).toMatch(/resolveSessionControlsClient\(core\.connection\)/);
+    expect(code).toMatch(/controlsClient\s*\.getAutoCompaction\(agentId\)/);
+    expect(code).toMatch(/setAutoCompaction\(enabled\)/);
+    expect(code).toMatch(/autoCompaction=\{autoCompaction\}/);
+    // Unknown stays `undefined` — never a literal false/true default.
+    expect(code).toMatch(/useState<boolean \| undefined>\(undefined\)/);
   });
 });

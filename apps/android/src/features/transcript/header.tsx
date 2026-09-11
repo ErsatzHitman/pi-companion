@@ -57,6 +57,7 @@ export function TranscriptHeader({
   cwd,
   status,
   statusDetail,
+  activity,
   onOpenSessions,
   onOpenLive,
   testId = "transcript-header",
@@ -67,6 +68,7 @@ export function TranscriptHeader({
     cwd,
     status,
     statusDetail,
+    activity,
   });
 
   const leading: ScreenBarAction | undefined = useMemo(

@@ -24,14 +24,18 @@ import { usePressScale } from "../theme/use-press-scale";
  * string keeps this recipe from owning a glyph vocabulary of its own;
  * the caller says what its bar means.
  *
- * **Touch target.** The visible circle is the artifact's 36dp, and the
- * `Pressable` around it is the full 48dp minimum (plan.md §9.3, T26C) —
- * the same split `ui/primitives/IconButton.tsx` already uses, and
- * audited by the same shared loop in
- * `ui/primitives/touch-targets.test.ts`. The mark itself is hidden from
- * assistive tech; `accessibleName` is the only name the button has, and
- * it is required, so a bar action can never ship announced as its
- * glyph (plan.md §10.5).
+ * **Touch target.** The visible mark box is the artifact's 34dp rounded
+ * square, and the `Pressable` around it is the full 48dp minimum
+ * (plan.md §9.3, T26C) — the same split
+ * `ui/primitives/IconButton.tsx` already uses, and audited by the same
+ * shared loop in `ui/primitives/touch-targets.test.ts`. Because that
+ * 48dp minimum is two dp past the artifact's 46dp `.bar`, the bar's own
+ * height is 48: §9.3 wins over a two-pixel difference a reader cannot
+ * see, and the alternative (a 46dp bar with a target that overflows it)
+ * is the shape the 48dp rule exists to prevent. The mark itself is
+ * hidden from assistive tech; `accessibleName` is the only name the
+ * button has, and it is required, so a bar action can never ship
+ * announced as its glyph (plan.md §10.5).
  *
  * **Deliberately not in `testing.recipeLabManifest`.** That manifest is
  * asserted by BOTH apps' recipe labs, so a name added there obliges a
@@ -69,14 +73,18 @@ export interface ScreenBarProps {
   testId?: string;
 }
 
-/** The artifact's `.ic` circle. The touch target around it is 48dp; see this file's doc comment. */
-const MARK_BUTTON_SIZE = 36;
+/** The artifact's `.ic` rounded square. The touch target around it is 48dp; see this file's doc comment. */
+const MARK_BUTTON_SIZE = 34;
 /** The artifact's `.ic` font size. */
 const MARK_FONT_SIZE = 15;
 /** The artifact's `.bar-t`. */
 const TITLE_FONT_SIZE = 13.5;
 /** The artifact's `.bar-s`. */
-const SUBTITLE_FONT_SIZE = 11.5;
+const SUBTITLE_FONT_SIZE = 10.5;
+/** The artifact's `.bar` own height, before the 48dp touch minimum is applied. */
+const BAR_MIN_HEIGHT = 48;
+/** The artifact's `.bar-t { letter-spacing: -0.1px }`, in dp at this size. */
+const TITLE_LETTER_SPACING = -0.1;
 
 function BarAction({ action }: { action: ScreenBarAction }) {
   const { theme } = useTheme();
@@ -143,8 +151,10 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       flexDirection: "row",
       alignItems: "center",
       gap: theme.spacing[2],
-      paddingVertical: theme.spacing[2],
-      paddingHorizontal: theme.spacing[2] + 2,
+      minHeight: BAR_MIN_HEIGHT,
+      paddingHorizontal: theme.spacing[2],
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.line,
       backgroundColor: theme.colors.page,
     },
     touchArea: {
@@ -158,7 +168,9 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     markButton: {
       width: MARK_BUTTON_SIZE,
       height: MARK_BUTTON_SIZE,
-      borderRadius: theme.radii.full,
+      // The artifact's `.ic` radius is 9px; `radii.control` (8) is the
+      // nearest named step, so the box stays on the token scale.
+      borderRadius: theme.radii.control,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -177,7 +189,8 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       flexShrink: 1,
       color: theme.colors.ink,
       fontSize: TITLE_FONT_SIZE,
-      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+      letterSpacing: TITLE_LETTER_SPACING,
+      fontWeight: asFontWeight(theme.typography.fontWeight.semibold),
     },
     // The mono family, so a working directory reads as a path rather
     // than as prose.

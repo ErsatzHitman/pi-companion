@@ -34,15 +34,30 @@ describe("ThinkingSection.tsx: the artifact's .thead (T357)", () => {
 
   it("carries the artifact's own head sizes", () => {
     const code = readCode();
-    expect(code).toMatch(/const HEAD_FONT_SIZE = 12\.5;/);
+    expect(code).toMatch(/const HEAD_FONT_SIZE = 11\.5;/);
     expect(code).toMatch(/const SPARKLE_SIZE = 14;/);
     expect(code).toMatch(/const CHEVRON_SIZE = 11;/);
   });
 
-  it("tints the head ink-3 collapsed and ink-2 expanded, as the design specifies", () => {
-    expect(readCode()).toMatch(
-      /const headTint = expanded \? theme\.colors\["ink-2"\] : theme\.colors\["ink-3"\];/,
-    );
+  it("tints the head ink-3, expanded or not, as `.thead { color: var(--ink-3) }` specifies", () => {
+    expect(readCode()).toMatch(/const headTint = theme\.colors\["ink-3"\];/);
+  });
+
+  it("draws the artifact's single .think rule and inset on the wrapper, not on the body", () => {
+    const code = readCode();
+    expect(code).toMatch(/borderLeftWidth: THINK_RULE_WIDTH/);
+    expect(code).toMatch(/borderLeftColor: theme\.colors\["line-strong"\]/);
+    expect(code).toMatch(/paddingLeft: THINK_PADDING_LEFT/);
+    expect(code).toMatch(/const THINK_RULE_WIDTH = 2;/);
+    expect(code).toMatch(/const THINK_PADDING_LEFT = 11;/);
+  });
+
+  it("draws the reasoning body in the transcript's italic ink-3 mono", () => {
+    const code = readCode();
+    expect(code).toMatch(/const LINE_FONT_SIZE = 12;/);
+    expect(code).toMatch(/const LINE_HEIGHT = LINE_FONT_SIZE \* 1\.62;/);
+    expect(code).toMatch(/fontStyle: "italic"/);
+    expect(code).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
   });
 
   it("shows the mono duration only while there is one to show", () => {

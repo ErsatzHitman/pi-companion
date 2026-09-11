@@ -1,13 +1,14 @@
 /**
  * The S7 status pill (T350) — an app bar's state readout.
  *
- * The design artifact's `.pill`: 26dp tall, fully rounded, no border, a
- * tone-tinted background with the SAME tone as its text, and a 6dp dot in
- * `currentColor` for every state except the neutral one. `Chip`
- * (`./Chip.tsx`) is deliberately not reused: it is 24dp, carries a 1dp
- * border, always paints its label `ink` rather than the tone, and has no
- * dot — four differences from the artifact, on the single most visible
- * element of the session screen.
+ * The design artifact's `.pill`: 22dp tall, fully rounded, a
+ * tone-tinted background with the SAME tone as its text, a 6dp dot in
+ * `currentColor` for every state except the neutral one, and a hairline
+ * ring on the neutral one alone. `Chip` (`./Chip.tsx`) is deliberately
+ * not reused: it is 24dp, carries a 1dp border on every tone, always
+ * paints its label `ink` rather than the tone, and has no dot — four
+ * differences from the artifact, on the single most visible element of
+ * the session screen.
  *
  * **Deliberately not in `testing.primitiveLabManifest`.** That manifest is
  * shared by BOTH apps' component labs (`apps/web/src/dev/component-lab.tsx`
@@ -52,11 +53,22 @@ export interface StatusPillProps {
    * different vocabulary may split that line elsewhere.
    */
   showDot?: boolean;
+  /**
+   * The announced name, when the drawn text is not the whole claim
+   * (T385: the Live bar's pill DRAWS an elapsed reading while a turn runs
+   * and announces `Working, 4m 12s`). Defaults to `label`, which is what
+   * every other pill in the app wants — its visible word is its name.
+   */
+  accessibilityLabel?: string;
   testId?: string;
 }
 
 /** The artifact's `.pill` height, in dp (its CSS px map 1:1 at the 412dp reference width). */
-const PILL_HEIGHT = 26;
+const PILL_HEIGHT = 22;
+/** The artifact's `.pill { padding: 0 9px }`. */
+const PILL_PADDING_HORIZONTAL = 9;
+/** The artifact's `.pill { gap: 5px }`. */
+const PILL_GAP = 5;
 /** The artifact's `.pill .dot`. */
 const DOT_SIZE = 6;
 
@@ -79,18 +91,38 @@ const TONE_TEXT = {
   success: "green",
   warning: "orange",
   danger: "red",
-  info: "accent",
-  neutral: "ink-2",
+  // The artifact's `.pill.run { color: var(--accent-ink) }` — the darker
+  // of the two accent roles, so the tint's own text clears contrast.
+  info: "accent-ink",
+  neutral: "ink-3",
 } as const satisfies Record<StatusTone, string>;
 
-export function StatusPill({ label, tone = "neutral", showDot = false, testId }: StatusPillProps) {
+/** The artifact rings only its neutral `.pill.idle`, in `--line`. */
+const RINGED_TONE: StatusTone = "neutral";
+
+export function StatusPill({
+  label,
+  tone = "neutral",
+  showDot = false,
+  accessibilityLabel,
+  testId,
+}: StatusPillProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fillColor = theme.colors[TONE_FILL[tone]];
   const textColor = theme.colors[TONE_TEXT[tone]];
 
   return (
-    <View style={[styles.pill, { backgroundColor: fillColor }]} testID={testId}>
+    <View
+      accessible
+      accessibilityLabel={accessibilityLabel ?? label}
+      style={[
+        styles.pill,
+        { backgroundColor: fillColor },
+        tone === RINGED_TONE ? styles.pillRing : null,
+      ]}
+      testID={testId}
+    >
       {showDot ? (
         // `currentColor` in the artifact; React Native has no such
         // cascade, so the dot takes the tone's own colour explicitly.
@@ -109,10 +141,14 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       flexDirection: "row",
       alignItems: "center",
       alignSelf: "flex-start",
-      gap: theme.spacing[1] + 2,
+      gap: PILL_GAP,
       height: PILL_HEIGHT,
-      paddingHorizontal: theme.spacing[3],
+      paddingHorizontal: PILL_PADDING_HORIZONTAL,
       borderRadius: theme.radii.full,
+    },
+    pillRing: {
+      borderWidth: 1,
+      borderColor: theme.colors.line,
     },
     dot: {
       width: DOT_SIZE,

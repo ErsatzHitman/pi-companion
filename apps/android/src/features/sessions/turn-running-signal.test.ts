@@ -35,9 +35,14 @@ class FakeAgentStreamDaemon implements DaemonTurnStreamSource {
 
   /** Delivers a real, schema-validated `agent_stream` message to every current listener. */
   push(agentId: string, event: Record<string, unknown>): void {
+    this.pushWithTimestamp(agentId, event, "2026-09-04T00:00:00.000Z");
+  }
+
+  /** The same, with an explicit wire `timestamp` — the fallback path's own case (T385). */
+  pushWithTimestamp(agentId: string, event: Record<string, unknown>, timestamp: string): void {
     const message = AgentStreamMessageSchema.parse({
       type: "agent_stream",
-      payload: { agentId, event, timestamp: "2026-09-04T00:00:00.000Z" },
+      payload: { agentId, event, timestamp },
     }) as unknown as AgentStreamTurnMessage;
     for (const handler of this.handlers) handler(message);
   }
@@ -276,6 +281,84 @@ describe("createTurnRunningSignal", () => {
 
       expect(signal.getRunning()).toBe(false);
       expect(onChange).toHaveBeenLastCalledWith(false);
+      signal.dispose();
+    });
+  });
+
+  describe("turn start time (T385)", () => {
+    // The fake's own `push` stamps every message with this fixed wire
+    // timestamp, so the recorded start is deterministic here.
+    const WIRE_TIME_MS = Date.parse("2026-09-04T00:00:00.000Z");
+
+    it("records the wire event's own timestamp when a turn starts, and clears it when the turn ends", () => {
+      const daemon = new FakeAgentStreamDaemon();
+      const signal = createTurnRunningSignal(daemon, "agt_1", () => {});
+
+      expect(signal.getStartedAtMs()).toBeNull();
+
+      daemon.push("agt_1", { type: "turn_started", provider: "pi", turnId: "t1" });
+      expect(signal.getStartedAtMs()).toBe(WIRE_TIME_MS);
+
+      daemon.push("agt_1", { type: "turn_completed", provider: "pi", turnId: "t1" });
+      expect(signal.getStartedAtMs()).toBeNull();
+      expect(signal.getRunning()).toBe(false);
+      signal.dispose();
+    });
+
+    it("does not move the recorded start when later pi_queue_updates arrive during the same turn", () => {
+      const daemon = new FakeAgentStreamDaemon();
+      const signal = createTurnRunningSignal(daemon, "agt_1", () => {});
+
+      daemon.push("agt_1", { type: "turn_started", provider: "pi", turnId: "t1" });
+      daemon.push("agt_1", { type: "pi_queue_update", provider: "pi", steering: [], followUp: [] });
+      daemon.push("agt_1", {
+        type: "pi_queue_update",
+        provider: "pi",
+        steering: ["more"],
+        followUp: [],
+      });
+
+      expect(signal.getStartedAtMs()).toBe(WIRE_TIME_MS);
+      signal.dispose();
+    });
+
+    it("takes a mid-turn pi_queue_update as the start when it is the first sign of the turn (route mounted after it began)", () => {
+      const daemon = new FakeAgentStreamDaemon();
+      const signal = createTurnRunningSignal(daemon, "agt_1", () => {});
+
+      daemon.push("agt_1", { type: "pi_queue_update", provider: "pi", steering: [], followUp: [] });
+
+      expect(signal.getRunning()).toBe(true);
+      expect(signal.getStartedAtMs()).toBe(WIRE_TIME_MS);
+      signal.dispose();
+    });
+
+    it("clears the recorded start on a reconnect boundary, so no elapsed time survives a dropped socket", () => {
+      const daemon = new FakeAgentStreamDaemon();
+      const connectionStatus = new FakeConnectionStatusSource();
+      const signal = createTurnRunningSignal(daemon, "agt_1", () => {}, connectionStatus);
+
+      daemon.push("agt_1", { type: "turn_started", provider: "pi" });
+      expect(signal.getStartedAtMs()).toBe(WIRE_TIME_MS);
+
+      connectionStatus.publish("disconnected");
+      expect(signal.getStartedAtMs()).toBeNull();
+      signal.dispose();
+    });
+
+    it("falls back to the local clock when the wire timestamp cannot be parsed, never to NaN", () => {
+      const daemon = new FakeAgentStreamDaemon();
+      const signal = createTurnRunningSignal(daemon, "agt_1", () => {});
+
+      const before = Date.now();
+      daemon.pushWithTimestamp("agt_1", { type: "turn_started", provider: "pi" }, "not-a-date");
+      const after = Date.now();
+
+      const startedAtMs = signal.getStartedAtMs();
+      expect(startedAtMs).not.toBeNull();
+      if (startedAtMs === null) throw new Error("unreachable: asserted above");
+      expect(startedAtMs).toBeGreaterThanOrEqual(before);
+      expect(startedAtMs).toBeLessThanOrEqual(after);
       signal.dispose();
     });
   });

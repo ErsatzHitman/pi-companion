@@ -1422,7 +1422,7 @@ function paintCtx() {
   const p = Math.min(100, SESSION.pct);
   ctxArc.setAttribute("stroke-dashoffset", (C * (1 - p / 100)).toFixed(2));
   ctxPct.textContent = Math.round(p);
-  ctxRing.className = "ctx-ring " + (p > 90 ? "er" : p > 70 ? "wa" : "");
+  ctxRing.setAttribute("class", "ctx-ring " + (p > 90 ? "er" : p > 70 ? "wa" : ""));
   ctxBtn.title = "Session controls — " + Math.round(p) + "% of the context window used";
   const m = document.querySelector(".pmenu");
   if (m) renderMenu(m);
