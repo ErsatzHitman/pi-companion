@@ -793,3 +793,10 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   `--depth=1`, so the history the fixture needs was absent from that checkout — an artefact of the
   rewrite, not of the tree, and the same suite passes locally (895/895). **A force-push can cost a
   CI run to a shallow checkout; read the failing job's own log before believing the content is bad.**
+- **Final gate read for wave 2's tip:** CI run `34647734287` at `aac2075` — completed/success, 44 jobs
+  (42 success, 2 skipped by path filters: `nix-checks`, `docker-checks`), zero failures. Both app
+  typechecks re-run clean at that commit (`npm run typecheck --workspace=@picompanion/{web,android}`),
+  `oxfmt --check .` clean over 2616 files, `node --test scripts/ci/*.test.mjs` 895/895, the
+  capability-prose guard exit 0 with 65 groups, the per-commit format guard OK for the new commit and
+  the clean-working-tree guard OK. Wave-2 product commits: `9afc612` (T384+T385), `bf47161` (T386),
+  `aea1248` (T387), `34509d5` + `d44fc0f` (T386 follow-ups); `c05016d` + `aac2075` are prose.
