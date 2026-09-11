@@ -23,7 +23,8 @@
  *    a file this task does not own and has no need to re-prove.
  *  - It never talks to a socket, an emulator, or `adb`.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -298,6 +299,78 @@ describe("cold-start-restore.yaml's testId anchors exist in source", () => {
     expect(sessionsScreenCode()).toMatch(
       /if \(keyValueStorage\) void writeLastOpenedSessionId\(keyValueStorage, sessionId\);/,
     );
+  });
+
+  it("T370: no flow selects a session row with an unanchored `-row-.*`, which Maestro resolves to the row's Archive button", () => {
+    // Dispatch 34555253677 failed two shards on this. A row's testId is
+    // `${testId}-row-${row.id}`, and THREE more ids are built from it:
+    // `-status` (T363's pill, inside the row), `-archive` and `-delete`
+    // (the action buttons beside it). `sessions-screen-.*-row-.*` matches
+    // all four, and Maestro resolved the ambiguity to Archive — so the
+    // created session was archived rather than opened, and the
+    // `session-transcript` assertion that followed failed with nothing on
+    // screen to explain it. The pattern was ambiguous from the day it was
+    // written; T363's new child only changed which candidate was picked,
+    // which is exactly why a passing dispatch never proved it safe.
+    //
+    // The fix anchors the id at end-of-string with a hex/dash body. This
+    // asserts the SHAPE across every flow rather than listing the three
+    // that use it today, so a fourth flow cannot reintroduce it.
+    // Enumerated from disk, not from a list typed here: a flow added
+    // tomorrow is covered without anyone remembering to add it.
+    const maestroDir = fileURLToPath(new URL("../../maestro/", import.meta.url));
+    const flows = readdirSync(maestroDir).filter((name) => name.endsWith(".yaml"));
+    expect(flows.length).toBeGreaterThan(10);
+
+    const rowSelectors: { flow: string; selector: string }[] = [];
+    for (const flow of flows) {
+      // Comment lines stripped first: T370's own CORRECTED note quotes
+      // the unanchored pattern verbatim in order to explain it, and a
+      // raw scan fails against its own fix — the same shape
+      // `guard-capability-prose.mjs` handles with historical markers.
+      const yaml = readFileSync(join(maestroDir, flow), "utf8")
+        .split(/\r?\n/)
+        .filter((line) => !line.trimStart().startsWith("#"))
+        .join("\n");
+      for (const match of yaml.matchAll(/id: "(sessions-screen-[^"]*-row-[^"]*)"/g)) {
+        rowSelectors.push({ flow, selector: match[1] ?? "" });
+      }
+    }
+    // A scan that finds nothing passes by construction — the shape
+    // `CLAUDE.md` warns about in three separate sections.
+    expect(
+      rowSelectors.length,
+      "at least one flow should select a session row; if none does, this guard is inert",
+    ).toBeGreaterThan(0);
+
+    for (const { flow, selector } of rowSelectors) {
+      expect(
+        selector.endsWith("$"),
+        `${flow} selects a session row with "${selector}", which is not anchored — it also matches ` +
+          `that row's -status pill and its -archive/-delete buttons`,
+      ).toBe(true);
+      // And the anchored body must not be able to swallow a suffix.
+      // `endsWith`, not a regex with its own `$`: the subject here is
+      // itself a regex, and nesting one anchor inside another reads as
+      // a mistake even where it is not.
+      expect(
+        selector.endsWith("-row-[0-9a-f-]+$"),
+        `${flow}'s row selector "${selector}" should end in the hex/dash session-id shape`,
+      ).toBe(true);
+      // Proof the shape does what the comment claims, run against the
+      // real ids the app builds rather than against an argument about
+      // them: the anchored pattern accepts the row and rejects all three
+      // ids derived from it.
+      const pattern = new RegExp(selector);
+      const rowId = "sessions-screen-10.0.2.2:34519-row-795ff0a4-e62d-4d90-b5b3-a041d9d8e75e";
+      expect(pattern.test(rowId), `${selector} should match a real row id`).toBe(true);
+      for (const suffix of ["-status", "-archive", "-delete", "-action-error"]) {
+        expect(
+          pattern.test(`${rowId}${suffix}`),
+          `${selector} must not match ${rowId}${suffix}`,
+        ).toBe(false);
+      }
+    }
   });
 
   it('sessions-screen.tsx\'s open-error banner is "${testId}-open-error" and its restore-stale banner is "${testId}-open-stale"', () => {

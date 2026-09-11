@@ -626,6 +626,7 @@ that recomputation has to be domain-specific:
 | T367   | Six of seven comments stopped naming a font the app dropped, and nothing could say which one was left                | phase-9   | android          | P9-U   | T356                                                                  |
 | T368   | The two screens the redesign added were the two the on-device accessibility audit never opened                       | phase-9   | android          | P9-U   | T366                                                                  |
 | T369   | A capability shipped with no entry protecting it, three tasks after the rule that says register it at once           | phase-9   | tooling          | P9-U   | T366                                                                  |
+| T370   | Three flows told Maestro to tap a session row and it tapped Archive, because the selector matched four things        | phase-9   | android          | P9-U   | T363                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -667,8 +668,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**578 tasks** (distinct IDs counted directly from the table above), recounted at T369 with
-`grep`/`sort -u` over the table's own rows — one past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**579 tasks** (distinct IDs counted directly from the table above), recounted at T370 with
+`grep`/`sort -u` over the table's own rows — one past the **578** at T369, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18437,3 +18438,56 @@ stale copy of itself.
 - [x] The phrases avoid both real files' unmarked narration of the pre-fix state
 - [x] Proven able to fire, and restored from a scratchpad copy
 - [x] Group semantics and the no-retyping rule are pinned by tests, not by the entry alone
+
+#### T370 — Three flows told Maestro to tap a session row and it tapped Archive, because the selector matched four things
+
+`labels: phase-9, area: android` · `depends-on: T363`
+
+Maestro dispatch 34555253677 (the first since the redesign landed) failed two of five shards.
+`build-development-apk`, `packaged-app-smoke`, shard-1, shard-3 and shard-5 were green;
+`cold-start-restore`, `notification-approval` and `extension-sheets` failed, all three on the
+same assertion — `id: session-transcript is visible` — and all three for one cause.
+
+**What the hierarchy showed, rather than what the failure said.** The assertion's own message
+named nothing useful: the transcript simply was not there. The captured UI hierarchy explains
+it in one line — the session the flow had just created was sitting under a group heading
+reading `ARCHIVED · 1`, with a `Closed` pill. The flow had archived it instead of opening it.
+
+**The mechanism.** A session row's testId is `${testId}-row-${row.id}`, and three more ids are
+built from that same prefix: the status pill inside the row (`-status`), and the `-archive` and
+`-delete` buttons beside it. The flows selected the row with
+`id: "sessions-screen-.*-row-.*"`, which matches all four, and Maestro resolved the ambiguity
+to the Archive button.
+
+**The pattern was ambiguous from the day it was written — that is the part worth recording.**
+`-archive` and `-delete` long predate this wave, and the last dispatch before the redesign
+(34522689648) was green with the identical selector. T363 added the status pill inside the row,
+which changed nothing about the selector and everything about which candidate Maestro picked.
+A green run never proved this safe; it only proved which way the coin had landed.
+
+**The fix** anchors the selector to a hex-and-dash session id at end-of-string:
+`sessions-screen-.*-row-[0-9a-f-]+$`. No id derived from a row can satisfy it — `-status`,
+`-archive` and `-delete` all carry letters outside `[0-9a-f]` after the id, and the anchor
+forbids a trailing suffix under either of Maestro's possible match semantics, so the fix does
+not depend on knowing which one it uses. `cold-start-restore.yaml`'s later `assertVisible` on
+the restored row is anchored too, for a related reason: unanchored, it was satisfied by the
+row's own status pill, so it could have passed while the restored row itself was gone.
+
+**What keeps it fixed.** A contract case enumerates every `*.yaml` in `apps/android/maestro/`
+from disk — not a list of the three that use the selector today, so a fourth flow is covered
+without anyone remembering — and fails on any sessions-screen row selector that is not
+anchored. It then proves the shape does what this section claims by running each flow's real
+selector against a real row id and against that id plus `-status`, `-archive`, `-delete` and
+`-action-error`: the row must match and all four must not. Comment lines are stripped before
+the scan, because the CORRECTED notes this task wrote quote the unanchored pattern verbatim in
+order to explain it — the same self-collision `guard-capability-prose.mjs` solves with
+historical markers. Reverting one flow's selector was proven to turn the case red, and the file
+was restored from a scratchpad copy rather than with `git checkout --`.
+
+- [x] The cause is identified from the captured hierarchy, not inferred from the assertion
+- [x] All three failing flows are fixed by one change, because they shared one defect
+- [x] The fix does not depend on which regex semantics Maestro uses
+- [x] The restored-row assertion is anchored too, so it cannot pass on the pill alone
+- [x] A contract case enumerates flows from disk and proves the shape against real ids
+- [x] Proven able to fail, and restored from a scratchpad copy
+- [ ] A dispatch in which all five shards are green

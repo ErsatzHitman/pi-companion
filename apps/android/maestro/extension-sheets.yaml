@@ -155,8 +155,21 @@ tags:
 - inputText: "${FLOW_CWD}"
 - tapOn:
     id: "sessions-screen-.*-create-submit"
+# --- CORRECTED (T370): this tapped `id: "sessions-screen-.*-row-.*"`.
+# --- That pattern matches the row AND every descendant/sibling testId
+# --- built from it — `-row-<id>-status` (added by T363), `-row-<id>-
+# --- archive` and `-row-<id>-delete`. Maestro resolved the ambiguity to
+# --- the Archive button in dispatch 34555253677: the created session was
+# --- archived instead of opened, the list showed it under "ARCHIVED · 1"
+# --- with a "Closed" pill, and the `session-transcript` assertion below
+# --- failed with nothing on screen to explain why. The pattern was always
+# --- ambiguous; T363's new child only changed which candidate was picked.
+# --- Anchored to a hex/dash session id at end-of-string, which no
+# --- descendant id can satisfy (`-archive`/`-status`/`-delete` all carry
+# --- letters outside [0-9a-f] after the id, and `$` forbids a trailing
+# --- suffix under either of Maestro's match semantics).
 - tapOn:
-    id: "sessions-screen-.*-row-.*"
+    id: "sessions-screen-.*-row-[0-9a-f-]+$"
 - assertVisible:
     id: "session-transcript"
 
