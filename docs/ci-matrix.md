@@ -191,14 +191,24 @@ typecheck --workspace=@picompanion/frontend-core` then `npm run test
   and simulator/device-free.** The only real on-device Android coverage
   this repository has — all ten §14.4 Maestro flows, and the
   packaged-APK smoke test — lives in `android-maestro-e2e.yml`, which is
-  `workflow_dispatch`-only (§2) and has **never executed end-to-end** for
-  lack of `EXPO_TOKEN` and a verified emulator boot (T208, owner-blocked).
-  "The matrix covers Android" is true only for typecheck/unit/prebuild-smoke
-  coverage on Linux; it is false for anything resembling a real device run,
-  and nothing in `ci.yml` runs one automatically. This gap is disclosed,
-  not silently accepted: T208 already tracks the owner-side blocker, and
-  this task does not attempt to arm either gated workflow (explicitly
-  out of scope per this task's own brief).
+  `workflow_dispatch`-only (§2), so **nothing in `ci.yml` runs a device
+  test automatically**. "The matrix covers Android" is true only for
+  typecheck/unit/prebuild-smoke coverage on Linux; it is false for
+  anything resembling a real device run on a push. This gap is disclosed,
+  not silently accepted, and T234's own task did not attempt to arm
+  either gated workflow (explicitly out of scope per that task's brief).
+  CORRECTED (T373): this bullet used to say the Maestro workflow "has
+  **never executed end-to-end** for lack of `EXPO_TOKEN` and a verified
+  emulator boot (T208, owner-blocked)". All three clauses are now false.
+  `EXPO_TOKEN` was configured at T208 and neither job in that workflow
+  needs it any more (T315 and T330 moved both APK builds onto the runner);
+  the emulator boot was verified at T324, which found `/dev/kvm` present
+  but the runner user outside the `kvm` group; and dispatch 34558058662 at
+  `51e2fa8` was green in every job, with all ten §14.4 flows reporting
+  `PASS`. T371 corrected four files carrying this same claim and missed
+  this one, which is the fifth. What survives is the `workflow_dispatch`
+  half, restated above on its own footing: a dispatch is a real device run,
+  and a push still is not.
 
 ### Backend (`packages/server`, `relay`, `client`, `cli`, `pi-bridge`/`bridge`, `highlight`, `expo-two-way-audio`, `protocol`)
 

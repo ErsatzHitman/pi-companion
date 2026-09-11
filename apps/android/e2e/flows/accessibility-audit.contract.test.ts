@@ -83,6 +83,62 @@ function readCode(relativePath: string): string {
     .replace(/\/\/.*$/gm, "");
 }
 
+/**
+ * Every `ACCESSIBILITY_AUDIT_FLOW` value that is a testID rather than an
+ * announced label or a deep link, read from the real contract object so
+ * the list cannot drift from it (T193).
+ *
+ * The shape test is the classification: a testID in this repository is
+ * lower-case kebab (`live-screen-back`), an announced label is prose
+ * starting with a capital (`"Back to session"`), and a deep link carries
+ * `://`. The caller asserts a floor on the result's size, so a future
+ * value shape that slipped past this filter shows up as a failure here
+ * rather than as a quietly empty set — the "check that cannot fail"
+ * shape `CLAUDE.md` warns about.
+ */
+function auditedControlTestIds(): string[] {
+  // Widened to `string[]` on the way in: `Object.values` of an `as
+  // const` object is a union of its literals, which a `value is string`
+  // predicate cannot narrow (TS2677).
+  const values: string[] = Object.values(ACCESSIBILITY_AUDIT_FLOW);
+  return values.filter((value) => /^[a-z][a-z0-9-]*$/.test(value));
+}
+
+interface TalkbackTableRow {
+  readonly control: string;
+  readonly ids: readonly string[];
+  readonly line: string;
+}
+
+/**
+ * `docs/accessibility-talkback-procedure.md`'s Part 1 table, parsed into
+ * its rows. Only the second cell (`testID`) is scanned for ids, so the
+ * backticked file names in the other cells cannot be mistaken for
+ * controls.
+ */
+function talkbackProcedureRows(): TalkbackTableRow[] {
+  const md = readSource(TALKBACK_PROCEDURE_MD);
+  const start = md.indexOf("| Screen / control");
+  expect(start, `${TALKBACK_PROCEDURE_MD} should carry a Part 1 table`).toBeGreaterThan(-1);
+  const end = md.indexOf("\n\n", start);
+  expect(end, `${TALKBACK_PROCEDURE_MD}'s Part 1 table should end in a blank line`).toBeGreaterThan(
+    start,
+  );
+  return md
+    .slice(start, end)
+    .split("\n")
+    .slice(2) // the header row and its `| --- |` separator
+    .filter((line) => line.startsWith("|"))
+    .map((line) => {
+      const cells = line.split("|").map((cell) => cell.trim());
+      return {
+        control: cells[1] ?? "",
+        ids: [...(cells[2] ?? "").matchAll(/`([a-z][a-z0-9-]*)`/g)].map((match) => match[1]),
+        line,
+      };
+    });
+}
+
 /** Slices `readCode(relativePath)` down to one top-level `function`/`export function` declaration, by name — closes defect (5) (a sibling occurrence satisfying a whole-file match). */
 function readComponentCode(relativePath: string, name: string): string {
   const code = readCode(relativePath);
@@ -113,6 +169,7 @@ const LIVE_ROUTE_TSX = "../../src/app/h/[serverId]/session/[agentId]/live.tsx";
 const SESSION_NAV_ACTIONS_TSX = "../../src/app-shell/session-nav-actions.tsx";
 const SETTINGS_SCREEN_TSX = "../../src/features/settings/SettingsScreen.tsx";
 const TOGGLE_TSX = "../../src/ui/primitives/Toggle.tsx";
+const TALKBACK_PROCEDURE_MD = "../../../../docs/accessibility-talkback-procedure.md";
 
 describe("accessibility-audit.yaml anchors exist in source", () => {
   describe("48dp touch targets — declared once per control, inherited by every screen this flow samples", () => {
@@ -546,6 +603,98 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
         yamlText.includes(String(PRODUCTION_DAEMON_PORT)),
         `accessibility-audit.yaml must never name the production daemon port ${PRODUCTION_DAEMON_PORT}, in any form`,
       ).toBe(false);
+    });
+  });
+
+  /**
+   * The manual TalkBack pass and this flow are supposed to walk the same
+   * controls -- `docs/accessibility-talkback-procedure.md` says so in its
+   * own words, and that is the whole reason the mechanical flow is
+   * described there as a partial substitute rather than a different
+   * exercise. Nothing checked it, and it had already drifted: T368 added
+   * A2 Live and A3 Settings to this flow, and the procedure's table kept
+   * listing the three screens it knew about. A human following it would
+   * have skipped both new screens and recorded a complete pass, which is
+   * worse than having no procedure: the document would have certified
+   * coverage it never had.
+   *
+   * These cases close that in both directions, and deliberately stop
+   * there. They say nothing about what TalkBack announces -- a row added
+   * to that table is not evidence about speech, and Part 1 of that
+   * document exists precisely because nothing here can be.
+   */
+  describe("the manual TalkBack procedure walks the controls this flow samples (T373)", () => {
+    const flowIds = auditedControlTestIds();
+    const rows = talkbackProcedureRows();
+    const documented = new Map<string, TalkbackTableRow>();
+    for (const row of rows) {
+      for (const id of row.ids) {
+        documented.set(id, row);
+      }
+    }
+
+    it("derives its control ids from the flow's own contract, and really finds them", () => {
+      // A floor, not the exact count: this fails loudly if the shape
+      // filter in `auditedControlTestIds` ever stops matching, instead
+      // of passing against an empty set.
+      expect(flowIds.length).toBeGreaterThanOrEqual(15);
+      for (const id of flowIds) {
+        expect(id).toMatch(/^[a-z][a-z0-9-]*$/);
+      }
+      // The filter keeps ids and drops the announced labels and deep
+      // links beside them, proven on one of each rather than asserted.
+      expect(flowIds).toContain(ACCESSIBILITY_AUDIT_FLOW.composerMicButton);
+      expect(flowIds).not.toContain(ACCESSIBILITY_AUDIT_FLOW.composerMicLabel);
+      expect(flowIds).not.toContain(ACCESSIBILITY_AUDIT_FLOW.liveDeepLink);
+      expect(flowIds).not.toContain(ACCESSIBILITY_AUDIT_FLOW.settingsHostRowNoHostLabel);
+    });
+
+    it("parses that table into rows rather than silently matching nothing", () => {
+      expect(rows.length).toBeGreaterThanOrEqual(15);
+      expect(documented.size).toBeGreaterThanOrEqual(flowIds.length);
+      // Every row names a control in its first cell, so a mis-parse that
+      // shifted the columns by one would fail here.
+      for (const row of rows) {
+        expect(
+          row.control.length,
+          `a table row should name a control: ${row.line}`,
+        ).toBeGreaterThan(0);
+      }
+    });
+
+    it("names every control id this flow asserts, so the manual pass cannot skip a screen", () => {
+      for (const id of flowIds) {
+        expect(
+          documented.has(id),
+          `docs/accessibility-talkback-procedure.md's Part 1 table must name \`${id}\` in its testID column -- accessibility-audit.yaml samples that control, so a human running the manual pass has to walk it too`,
+        ).toBe(true);
+      }
+    });
+
+    it("declares any control it lists that this flow does not sample", () => {
+      for (const [id, row] of documented) {
+        if (flowIds.includes(id)) {
+          continue;
+        }
+        expect(
+          row.line,
+          `docs/accessibility-talkback-procedure.md lists \`${id}\`, which accessibility-audit.yaml does not sample, so that row must say "Not sampled mechanically" -- otherwise a reader takes the mechanical flow as covering it`,
+        ).toMatch(/Not sampled mechanically/);
+      }
+    });
+
+    it("still covers the context ring, which nothing mechanical reaches", () => {
+      // The one intentional asymmetry, pinned so it cannot be quietly
+      // dropped: `ContextRing.tsx` hides both the arc and the `34%`
+      // numeral from the accessibility tree, so its accessible name is
+      // the entire affordance, and this flow never opens the ring.
+      const ring = documented.get("composer-context-ring");
+      expect(
+        ring,
+        "the procedure must keep a row for composer-context-ring: it is the only coverage that control has",
+      ).toBeDefined();
+      expect(ring?.line).toMatch(/Not sampled mechanically/);
+      expect(flowIds).not.toContain("composer-context-ring");
     });
   });
 });

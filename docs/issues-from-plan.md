@@ -629,6 +629,7 @@ that recomputation has to be domain-specific:
 | T370   | Three flows told Maestro to tap a session row and it tapped Archive, because the selector matched four things        | phase-9   | android          | P9-U   | T363                                                                  |
 | T371   | The suite finally ran end to end, and four files still said it never had                                             | phase-9   | ci               | P9-U   | T370                                                                  |
 | T372   | A handoff told the next agent to fix a shard that had been green for twenty-five tasks                               | phase-9   | docs             | P9-U   | T371                                                                  |
+| T373   | The TalkBack procedure's own audit flow had just passed on five emulators, and it said none ever had                 | phase-9   | docs             | P9-U   | T372                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -670,8 +671,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**581 tasks** (distinct IDs counted directly from the table above), recounted at T372 with
-`grep`/`sort -u` over the table's own rows — one past the **580** at T371, two past the **579** at T370, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**582 tasks** (distinct IDs counted directly from the table above), recounted at T373 with
+`grep`/`sort -u` over the table's own rows — one past the **581** at T372, two past the **580** at T371, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18669,3 +18670,85 @@ trap `CLAUDE.md` warns about twice.
 - [x] The two §3 cells that were wrong about the tree are fixed and the error explained
 - [x] §10's first step is a live hazard, not a finished one
 - [x] No inert `CAPABILITIES` entry is invented for a file the guard cannot see
+
+#### T373 — The TalkBack procedure's own audit flow had just passed on five emulators, and it said none ever had
+
+`labels: phase-9, area: docs` · `depends-on: T372`
+
+`docs/accessibility-talkback-procedure.md` is the document a human follows to run the manual
+TalkBack pass `plan.md` §10.5 requires of every release candidate. Two things were wrong with it,
+and they compound: its status section described a blocker that had closed, and its walk-this-list
+table had silently stopped matching the mechanical flow it claims to mirror.
+
+**The false claims, each corrected where it stands rather than deleted.**
+
+- "Like every other flow in that directory, it has never been run against a device (same T208
+  blocker as above)" — `accessibility-audit` reported `PASS` on shard-5 of dispatch 34558058662.
+  The sentence beside it, that reaching the accessibility tree is not the same as being spoken,
+  is untouched: that is the real gap, and it is why Part 1 still exists.
+- "Until T208 closes, that workflow (and `android-apk-release.yml` …) dry-runs with a logged
+  notice instead of executing" — three clauses, each false for its own reason. T208 closed.
+  `android-maestro-e2e.yml` has no dry-run branch at all (T315 deleted it with the `configured`
+  gate; T330 removed the second with `packaged-app-smoke`'s EAS build). `android-apk-release.yml`
+  still has such a step, but with the secret configured it is not the branch a run takes.
+- "**No device or emulator.** … Nothing changed that for this task" — still true of the machine an
+  agent executes on, and now false as a statement about the repository. Split, rather than
+  reversed, because the honest reading depends on which machine is meant.
+- **The genuinely open blocker is T44B1**, which this document already named in the bullet above
+  the one that got it wrong: no signed release APK exists, so the "release candidate" the
+  criterion names does not exist either. That is what keeps Part 1 unrun, not `EXPO_TOKEN`.
+
+**`docs/ci-matrix.md` §Android carried the same claim, and is the fifth site.** T371 corrected
+four files asserting the suite had never run end to end; this one — "has **never executed
+end-to-end** for lack of `EXPO_TOKEN` and a verified emulator boot (T208, owner-blocked)" — was
+missed, and no guard could have caught it, for the reason T371 recorded: the capability has no
+declarable member anywhere `isShippedSourcePath` can see, so no `CAPABILITIES` entry is possible
+and the `docs/**` denial scan has nothing to match against. Found by re-running T124's grep
+rather than by a check. Its surviving half (the workflow is `workflow_dispatch`-only, so no push
+runs a device test) is restated on its own footing.
+
+**The drift that mattered more than any single sentence.** The document says its Part 1 table
+"mirrors the same critical-control set `accessibility-audit.yaml` already samples mechanically".
+T368 added A2 Live and A3 Settings to that flow and nothing added them here. A human following
+this document would have walked onboarding, the connect form and the composer, skipped both new
+screens, and recorded a **complete pass** — a document certifying coverage it did not have, which
+is worse than having no document.
+
+The fix is a fourth column and a test, not a note:
+
+- Part 1's table gains a `testID` column naming every control the flow asserts, so the manual
+  walk and the mechanical walk are the same list by construction. Rows were added for A2 Live
+  (the screen and its `‹` back action, the status pill, Files and Terminal) and A3 Settings (the
+  host row, whose whole accessible name is one composed utterance, and the haptics toggle).
+- One row is deliberately NOT in the flow and says so: `composer-context-ring`. Both the arc and
+  the `34%` numeral carry `accessibilityElementsHidden`, so the ring's accessible name — "Context.
+  34% of 200,000 tokens used." from `features/telemetry/context-usage-model.ts`, with the hint
+  "Opens mode, model, thinking effort and context controls" — is the entire affordance, and the
+  audit flow never opens it. The manual table is that control's only coverage.
+- `accessibility-audit.contract.test.ts` now parses that table and fails in both directions: a
+  control id in the flow's contract that the table does not name, and an id the table names that
+  the flow does not sample without the row declaring it. The ids come from
+  `ACCESSIBILITY_AUDIT_FLOW` itself (T193), classified by shape — kebab ids kept, capitalised
+  labels and `://` deep links dropped — with a floor on the result size so a filter that stopped
+  matching would fail loudly instead of passing against an empty set.
+
+**Both new directions were proven able to fire**, against a scratchpad-backed copy of the real
+document, restored from that copy afterwards (never `git checkout --`), with `git status
+--porcelain` clean for it each time: deleting `live-screen-back` from the table failed the
+"names every control id this flow asserts" case naming that id, and adding an invented id to the
+status-pill row failed the "declares any control it lists that this flow does not sample" case
+naming the missing declaration.
+
+**No `CAPABILITIES` entry, for the reason T371 gave about the same capability class.** What ships
+here is a test, in `apps/android/e2e/flows/` — not a `<pkg-or-app>/src/` tree, not `scripts/ci` —
+so `isShippedSourcePath` can see no member to declare, and an entry would be permanently inert.
+Checked by reading that predicate, not assumed.
+
+- [x] Every corrected sentence is quoted, so a reader can tell drift from a typo
+- [x] The status section's surviving blocker (T44B1) is named, and the closed one is not implied
+- [x] The fifth site T371's sweep missed is fixed, and the miss is recorded as a miss
+- [x] Part 1 names every control the mechanical flow samples, enforced by a test
+- [x] The one control the flow cannot reach is covered and declared unsampled
+- [x] Both new failure directions were watched failing, then restored from a scratchpad copy
+- [x] Nothing here claims to be evidence about what TalkBack speaks
+- [ ] A human runs the pass against a signed release candidate and appends a Pass log entry
