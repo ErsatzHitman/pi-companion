@@ -196,7 +196,12 @@ export function SessionRail({
         ) : null}
 
         {state.kind === "ready" && sessions.length > 0 ? (
-          <Section title="Sessions" id="shell-session-rail">
+          // T386: the reference's rail carries no "Sessions" heading — its
+          // head is the `Workspace` eyebrow plus `New session`, and the
+          // rows hang under their own group label. The nav landmark already
+          // announces "Sessions" (`shell__rail--session`'s aria-label), so
+          // the heading was a second, visible name for the same thing.
+          <div className="pc-session-rail__body" data-testid="shell-session-rail">
             {state.stale ? (
               <Banner
                 tone="warning"
@@ -263,7 +268,7 @@ export function SessionRail({
                 </ul>
               </Section>
             ))}
-          </Section>
+          </div>
         ) : null}
       </div>
 
