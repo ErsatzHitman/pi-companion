@@ -781,3 +781,15 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   handoff's §1 table cites commit SHAs. Amend the handoff in the same rebase (or immediately
   after) so its SHA list matches the rewritten history, and say in the paragraph what the
   rewrite replaced — the guard's red job will otherwise look unexplained to the next reader.
+- **Gates for wave 2, both read from GitHub (not inferred):** CI run `34645663675` at `c05016d`
+  — completed/success, 44 jobs (42 success, 2 skipped by path filters), zero failures, including
+  `changes` (the `scripts/ci` guard suite), `typecheck`, `lint`, every repo guard,
+  `web-unit-tests` on ubuntu+windows, `web-tests` (Playwright), `server-tests` on ubuntu+windows
+  and `android-tests`. Maestro run `34645136806` at `d44fc0f` — completed/success across
+  `build-development-apk`, `shard-matrix`, `packaged-app-smoke`, `maestro-non-gating` and all five
+  `maestro-e2e` shards. The one red run of the wave, `34644982421` at `d44fc0f`, failed ONLY
+  `changes`, on `guard-format-check-per-commit.test.mjs`'s real-git fixture asserting
+  `git rev-parse --is-shallow-repository` is `false`: the force-push left that runner fetching
+  `--depth=1`, so the history the fixture needs was absent from that checkout — an artefact of the
+  rewrite, not of the tree, and the same suite passes locally (895/895). **A force-push can cost a
+  CI run to a shallow checkout; read the failing job's own log before believing the content is bad.**
