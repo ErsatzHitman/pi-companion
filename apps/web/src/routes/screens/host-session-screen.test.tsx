@@ -28,14 +28,14 @@ beforeAll(async () => {
  * `routeTree`, the same way `host-session-files-screen.test.tsx` and
  * `host-session-terminal-screen.test.tsx`-equivalent route wiring is
  * proven for their own features) mounts the real composer rather than
- * only the `RoutePlaceholder` stub `apps/web/src/features/composer` is
+ * only a placeholder stub `apps/web/src/features/composer` is
  * otherwise never reached from. `Composer.test.tsx`/`use-composer.test.ts`
  * cover the feature's own behavior in depth with injected fake clients;
  * this only proves the route delivers it, wired to this app's real
  * `platform.clock`/`platform.structuredStorage` (`ComposerContainer`).
  */
 describe("HostSessionScreen route wiring (T28B3)", () => {
-  it("renders the composer's labelled input alongside the route placeholder", async () => {
+  it("renders the composer's labelled input and its Send control", async () => {
     const router = createRouter({
       routeTree,
       history: createMemoryHistory({
@@ -51,7 +51,12 @@ describe("HostSessionScreen route wiring (T28B3)", () => {
     // Same generous, explicit ceiling `host-session-files-screen.test.tsx`
     // uses for a first lazy-route chunk import in a fresh test process.
     expect(await screen.findByLabelText("Message Pi", {}, { timeout: 15_000 })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Session" })).toBeTruthy();
+    // T386: the main column's `Section title="Session"` heading is gone —
+    // the reference draws a `.main-head` row (title, status pill,
+    // model/mode chips) with no heading above it. `Shell` still names the
+    // route to assistive tech through its visually-hidden `<h1>`
+    // ("Session transcript"), and the head row is pinned by its own test id
+    // in `features/sessions`'s tests.
     expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
   }, 20_000);
 

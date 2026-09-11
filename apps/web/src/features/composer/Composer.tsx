@@ -244,7 +244,9 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  */
 export function Composer({
   label = "Message Pi",
-  placeholder = "Ask Pi…",
+  // T386: the reference's own placeholder for this field
+  // (`.prompt textarea::placeholder`).
+  placeholder = "Ask, or steer the turn in flight…",
   testId,
   editorTextClient,
   contextTelemetry,

@@ -102,7 +102,13 @@ describe("root route rail wiring (T53A3)", () => {
     await screen.findByLabelText("Message Pi", {}, { timeout: 15_000 });
 
     expect(screen.getByTestId("shell-regions")).toBeTruthy();
-    expect(screen.getByTestId("shell-center").textContent).toContain("Session");
+    // T386: the centre column's own `Section title="Session"` heading was
+    // removed — the reference draws a `.main-head` row (title + status pill
+    // + chips) with no heading above it, and `Shell` already renders the
+    // route's visually-hidden `<h1>` ("Session transcript"). The property
+    // this pins is that the centre region is filled by the session route,
+    // which the composer's labelled input proves.
+    expect(screen.getByLabelText("Message Pi")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Sessions" })).toBeTruthy();
     expect(screen.getByRole("complementary", { name: "Pi extensions" })).toBeTruthy();
   }, 20_000);

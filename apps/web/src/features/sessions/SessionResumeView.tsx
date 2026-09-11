@@ -1,6 +1,6 @@
 import { timeline as coreTimeline } from "@picompanion/frontend-core";
 
-import { Button, ErrorState, LoadingState, Section } from "../../ui/primitives/index.js";
+import { Button, ErrorState, LoadingState } from "../../ui/primitives/index.js";
 import "./session-resume.css";
 import { sessionModeLabel, sessionModelChipLabel } from "./session-meta.js";
 import { SessionStatusPill } from "./session-status-pill.js";
@@ -30,25 +30,21 @@ export interface SessionResumeViewProps {
  * `session-resume-ready` test id (and its two count test ids) several
  * Playwright specs wait on.
  */
-export function SessionResumeView({ serverId, agentId, controller }: SessionResumeViewProps) {
+export function SessionResumeView({ controller }: SessionResumeViewProps) {
   const { state, retry } = controller;
   const session = state.session;
 
+  // T386: the reference's main column opens with its own head row
+  // (`.main-head`) and nothing else — no `Section` heading above it and no
+  // Host/Session definition list, both of which used to duplicate facts the
+  // URL already carries. The head row draws the title, the status pill and
+  // the model/mode chips; the host and session ids stay reachable through
+  // the address bar and the diagnostics route.
   return (
-    <Section title="Session" className="pc-session-resume">
+    <div className="pc-session-resume">
       {session ? (
         <SessionHead session={session} timeline={state.timeline} queue={state.queue} />
       ) : null}
-      <dl className="pc-session-resume__params">
-        <div>
-          <dt>Host</dt>
-          <dd>{serverId}</dd>
-        </div>
-        <div>
-          <dt>Session</dt>
-          <dd>{agentId}</dd>
-        </div>
-      </dl>
       {state.status === "loading" ? (
         <LoadingState
           title="Resuming session…"
@@ -68,7 +64,7 @@ export function SessionResumeView({ serverId, agentId, controller }: SessionResu
           </Button>
         </div>
       ) : null}
-    </Section>
+    </div>
   );
 }
 

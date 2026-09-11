@@ -731,3 +731,39 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   composer context ring, no task dock (todo entries are not rendered at all on web), rail with no head /
   search / footer / row metadata, no inbound link to the settings route, and a 32rem block cap where the
   mockup centres an 860px column.
+
+## Wave 2 (2026-09-12): the fidelity sweep's commits and what each one owns
+
+- `7fd058d`→ squashed into `9afc612` **T384 + T385** (android, one commit because
+  `apps/android/e2e/flows/accessibility-audit.contract.test.ts` carries pins for both and
+  either task alone leaves it red): chrome primitives (ScreenBar 48dp bar + 34dp rounded
+  square + hairline, StatusPill 22dp + hairline + accent-ink, Section label 9.5/700),
+  Sessions (bar above the scroller, 12/8 body, 52dp radius-12 rows, `Working`/`Needs you`
+  words + tones, `.chip` fills, bare gear), Live (ticking elapsed pill from
+  `TurnRunningSignal.getStartedAtMs`, radius-14 cards, neutral Queued pill, real
+  `· auto-compaction on|off` clause), chat (single-row composer, 28dp ring with bare
+  digits, accent Send mark, mono transcript at 12/1.62, accent-tint user block, `.tchip`
+  path chip, todo widget docked above the prompt bar with a collapsing head, pill states
+  from `session-activity-signal.ts`).
+- `bf47161` **T386** (web): shell top bar (brand tile, workspace crumb from the daemon, gear
+  that gives `/h/:serverId/settings` its first inbound link, Live eyebrow), session rail
+  (Workspace head, New session, search + ⌘K, glyph + real meta rows, foot), session head row,
+  transcript (53.5rem column, meta line, accent-tint bubble, mono prose, tool argument slot),
+  single-row composer with the new context ring + visible footer, task dock above the prompt
+  bar, persisted System/Light/Dark theme preference.
+- `4fbfa6e` **T387** (android): `selectInlineElements` + the transcript footer that draws
+  inline extension elements, the `[ns]` tag (wrapper for in-flow, inside the sheet for
+  sheets), `.blk.ext` chrome, aligned widget key/value lines, tone glyphs, `.pop` figures on
+  the floating Sheet, and `plan.md` §9.2 + the mockup README recording that the five
+  extension frames are drawings, not routes.
+- #lesson Two subagent time limits were hit mid-task (30 min per job): the work survived in
+  their isolated worktrees, but `git diff HEAD` misses NEW files — regenerate with
+  `git add -A` in the worktree and apply `git diff --cached HEAD`, or the new modules are
+  silently left behind.
+- #lesson `npm test --workspace=@picompanion/android` is the CI gate and it also runs
+  `apps/android/e2e/flows/*.contract.test.ts`, which pin the composer/prompt-bar SOURCE
+  shape. A `--dir apps/android/src` run sees none of them.
+- #lesson `node scripts/ci/run-guard-capability-prose.mjs` enumerates shipped files through
+  `git ls-files`, so a capability declared only in an UNTRACKED file cannot be detected —
+  its entry silently resolves as "not shipped" and the denial phrases stay allowed. Commit
+  first, then run the entry's firing proof.
