@@ -617,6 +617,7 @@ that recomputation has to be domain-specific:
 | T358   | A diff was undifferentiated mono text and a search result never said where it matched                                | phase-9   | android          | P9-U   | T356                                                                  |
 | T359   | A shell command was drawn as a file listing, and the artifact's cancel hint names a key Android has not got          | phase-9   | android          | P9-U   | T357, T358, T350                                                      |
 | T360   | The agent's todo list reached Android and was filtered out of the transcript before anything could draw it           | phase-9   | android          | P9-U   | T353, T356                                                            |
+| T361   | An ask-user question opened the same edge-welded sheet as a settings picker, and its footer named two keys           | phase-9   | android          | P9-U   | T360                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -658,8 +659,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**569 tasks** (distinct IDs counted directly from the table above), recounted at T360 with
-`grep`/`sort -u` over the table's own rows — one past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**570 tasks** (distinct IDs counted directly from the table above), recounted at T361 with
+`grep`/`sort -u` over the table's own rows — one past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17954,3 +17955,51 @@ task adds no wire call.
 - [x] Colour is never the only signal: three distinct glyphs, a `#n`, a printed count, and a spoken summary
 - [x] The `(form)` tag is left out with its reason recorded, not silently omitted
 - [x] A todo row keeps its position in the interleaved list
+
+#### T361 — An ask-user question opened the same edge-welded sheet as a settings picker, and its footer named two keys
+
+`labels: phase-9, area: android` · `depends-on: T360`
+
+`HANDOFF.md` §7.2 draws the model's question as a `.pop`: a card inset from both sides, lifted
+clear of the prompt bar, closed on all four corners, with the sending extension's namespace in
+purple brackets above the body. What shipped was the settings sheet — welded to the bottom
+edge, square across the bottom, full-bleed. The difference is not decoration. A panel that
+floats over the conversation reads as part of it; a panel welded to the edge reads as app
+chrome, which is the wrong thing to say about a question the model is blocked on.
+
+**A variant, not a second component.** The scrim, the portal outlet, the TalkBack focus move
+and the Android back gesture are identical in both shapes — only the geometry differs. A second
+component would have duplicated `useModalBehavior` and `usePortalOutlet`, and the next fix to
+either would have landed in one of them. `Sheet` takes `variant?: SheetVariant`, defaulting to
+`"edge"`, so no existing caller moves; a test asserts the file still holds exactly one scrim.
+
+**The treatment is keyed on the PLACEMENT, not on a namespace.** `HANDOFF.md` §6.3 records that
+ask-user has no wire kind of its own: it arrives as an ordinary `panel` placed as a `sheet`,
+composing a `form` (or, for a yes/no, as a confirm permission through `SessionApprovals`). So
+every sheet-placement panel gets the `.pop`, and the tag prints whichever namespace sent it.
+Special-casing the literal `ask-user` would leave every other extension's sheet unlabelled and
+would break the day someone shipped `ask-user-v2`.
+
+**The artifact's footer is rewritten, not reproduced.** It reads "1-2 to answer · esc to let the
+model choose". Both halves are keyboard instructions, and this platform has neither an `esc`
+key nor a number row bound to anything here — printing them would be a visible instruction the
+reader cannot follow, which is `CLAUDE.md`'s T124 defect class reached from the other side.
+`askUserFooterHint` says what a touch reader can actually do, and drops the dismiss clause
+outright when there is nothing to dismiss rather than softening it: a hint offering a way out
+that is not there is worse than a shorter hint. Same call T359 made for the bash block's "esc
+to cancel".
+
+Both decisions live in an RN-free `ask-user-model.ts` and are proven by execution, not by
+source regex — the split this workspace uses everywhere, because plain `vitest` cannot parse
+`react-native`'s Flow source. `Sheet.tsx` and `panel.tsx` keep source-level pins for the wiring
+only.
+
+No `CAPABILITIES` entry: nothing new reaches the wire, and no prose anywhere denied that a
+sheet-placed panel can be styled.
+
+- [x] A sheet-placement panel opens inset, lifted and fully rounded; every other placement is untouched
+- [x] One scrim, one portal, one focus move and one back gesture serve both variants
+- [x] The namespace tag is read from the element, so a second question extension is labelled too
+- [x] The footer hint is touch wording, and neither `esc` nor `1-2` appears in either branch of it
+- [x] The footer renders only when a caller gives one, so `Sheet`'s other callers gain no empty line
+- [x] Both decisions are proven by execution in an RN-free model, with source pins only for the wiring

@@ -79,3 +79,48 @@ describe("Sheet opening does not move focus ownership away from the composer", (
     expect(resolveFocusOwner(withSheetOpen)).toBe("composer");
   });
 });
+
+describe("Sheet: the redesign's floating `.pop` variant (T361)", () => {
+  it("defaults to the edge-anchored panel, so no existing caller moves", () => {
+    expect(readCode()).toMatch(/variant = "edge"/);
+  });
+
+  it("insets and lifts the floating panel by the artifact's own numbers", () => {
+    const code = readCode();
+    expect(code).toMatch(/const POP_INSET = 10;/);
+    expect(code).toMatch(/const POP_BOTTOM = 78;/);
+    expect(code).toMatch(
+      /scrimFloating: \{ paddingHorizontal: POP_INSET, paddingBottom: POP_BOTTOM \}/,
+    );
+  });
+
+  it("closes all four corners on the floating panel, not just the top two", () => {
+    const code = readCode();
+    expect(code).toMatch(/panelFloating: \{\s*borderRadius: theme\.radii\.window/);
+  });
+
+  it("keeps ONE scrim, portal, focus move and back gesture for both variants", () => {
+    // The whole reason this is a variant and not a second component.
+    const code = readCode();
+    expect(code).toMatch(/useModalBehavior\(open, onClose\)/);
+    expect(code).toMatch(/usePortalOutlet\(`sheet-\$\{sheetId\}`, panel, open\)/);
+    const scrims = code.match(/styles\.scrim\b/g) ?? [];
+    expect(scrims).toHaveLength(1);
+  });
+
+  it("draws the footer hint only when the caller gives one", () => {
+    const code = readCode();
+    expect(code).toMatch(/footerHint === undefined \|\| footerHint\.length === 0 \? null :/);
+  });
+
+  it("re-renders the memoised panel when the variant or the hint changes", () => {
+    // Both are read inside the `useMemo`; leaving them out of its
+    // dependency list would freeze the first variant a caller mounted.
+    expect(readCode()).toMatch(/children,\s*variant,\s*footerHint\]/);
+  });
+
+  it("still opens no Modal in either variant", () => {
+    const code = readCode();
+    expect(code).not.toMatch(/<Modal\b/);
+  });
+});

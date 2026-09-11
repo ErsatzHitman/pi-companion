@@ -38,7 +38,7 @@ export type { SectionProps } from "./Section";
 export { Select } from "./Select";
 export type { SelectOption, SelectProps } from "./Select";
 export { Sheet } from "./Sheet";
-export type { SheetProps } from "./Sheet";
+export type { SheetProps, SheetVariant } from "./Sheet";
 export { StatusIndicator } from "./StatusIndicator";
 export type { StatusIndicatorProps, StatusTone } from "./StatusIndicator";
 export { StatusPill } from "./StatusPill";

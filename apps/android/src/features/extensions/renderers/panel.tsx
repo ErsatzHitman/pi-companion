@@ -9,6 +9,19 @@
  * all: `apps/android`'s `vitest` cannot import anything reaching
  * `react-native`).
  *
+ * **T361: a sheet-placement panel is the redesign's `.pop`.** It opens
+ * `Sheet`'s `floating` variant — inset from both sides, lifted clear of
+ * the prompt bar, fully rounded — with the element's namespace in
+ * purple brackets above the body and a footer saying how to answer or
+ * dismiss. §7.2 draws that shape for an ask-user question, and
+ * `HANDOFF.md` §6.3 records that ask-user has no wire kind of its own:
+ * it arrives as exactly this, a `sheet`-placed `panel` composing a
+ * `form`. So the treatment is keyed on the PLACEMENT, which is the
+ * thing the design is actually about, and the tag shows whichever
+ * namespace sent it rather than hardcoding one string — see
+ * `ask-user-model.ts` for that decision and for why the artifact's
+ * keyboard footer is rewritten rather than reproduced.
+ *
  * **Presentation**: `element.placement === "sheet"` opens the panel's
  * content inside the shared `Sheet` primitive (`ui/primitives/Sheet.tsx`,
  * plan.md §10.3) — which itself degrades to an inline render when no
@@ -51,6 +64,7 @@ import {
   type PiUiElementRendererProps,
 } from "../registry";
 import { ExtensionElementBoundary } from "../registry-boundary";
+import { askUserFooterHint, askUserTagLabel } from "./ask-user-model";
 import { ElementActionsRow } from "./element-actions";
 import {
   buildPanelRenderModel,
@@ -210,8 +224,13 @@ export function PanelRenderer(props: PiUiElementRendererProps<"panel">) {
           title={title}
           description={props.payload.text ?? "Panel"}
           onClose={() => setSheetOpen(false)}
+          variant="floating"
+          footerHint={askUserFooterHint(true)}
           testId={`${testId}-sheet`}
         >
+          <Text style={styles.nsTag} testID={`${testId}-ns-tag`}>
+            {askUserTagLabel(element.ns)}
+          </Text>
           <PanelBody {...props} styles={styles} testId={testId} />
         </Sheet>
       </View>
@@ -236,6 +255,13 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     sheetTrigger: { gap: theme.spacing[2] },
     reopenCard: { gap: theme.spacing[2] },
     body: { gap: theme.spacing[3] },
+    // The artifact's `[ns]` tag: purple, mono, above the body.
+    nsTag: {
+      color: theme.colors.purple,
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: theme.typography.variant.caption.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.bold),
+    },
     title: {
       color: theme.colors.ink,
       fontSize: theme.typography.variant.title.fontSize,

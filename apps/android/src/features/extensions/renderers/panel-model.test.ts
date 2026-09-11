@@ -435,3 +435,48 @@ describe("buildPanelRenderModel: empty panel", () => {
     expect(model.actionsAccessibilityLabel).toBe("Loop Run actions");
   });
 });
+
+/**
+ * T361 source-level contract for `panel.tsx`'s sheet presentation. That
+ * file imports `react-native`, so it cannot render under this
+ * workspace's plain `vitest` setup — the constraint this file's own doc
+ * comment already records for `panel-model.ts`'s sibling. Comments are
+ * stripped first, so a claim made only in a doc comment can never
+ * satisfy an assertion.
+ */
+function readPanelCode(): string {
+  return readFileSync(fileURLToPath(new URL("./panel.tsx", import.meta.url)), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+describe("panel.tsx: a sheet-placement panel is the redesign's .pop (T361)", () => {
+  it("opens the floating variant, not the edge-anchored one", () => {
+    expect(readPanelCode()).toMatch(/variant="floating"/);
+  });
+
+  it("draws the namespace tag from the element, never a hardcoded string", () => {
+    const code = readPanelCode();
+    expect(code).toMatch(/\{askUserTagLabel\(element\.ns\)\}/);
+    expect(code).not.toMatch(/"\[ask-user\]"/);
+  });
+
+  it("tints the tag purple from the theme", () => {
+    expect(readPanelCode()).toMatch(/color: theme\.colors\.purple/);
+  });
+
+  it("passes the touch-worded footer hint, and none of the artifact's keyboard text", () => {
+    const code = readPanelCode();
+    expect(code).toMatch(/footerHint=\{askUserFooterHint\(true\)\}/);
+    expect(code).not.toMatch(/esc to let the model choose/);
+    expect(code).not.toMatch(/1-2 to answer/);
+  });
+
+  it("leaves every other placement on the plain inline card", () => {
+    // Only the `sheet` branch changed; `inline`/`pinned`/`status`/
+    // `screen` still render the same `Card`.
+    const code = readPanelCode();
+    expect(code).toMatch(/element\.placement === "sheet"/);
+    expect(code).toMatch(/<Card style=\{styles\.card\} testID=\{testId\}>/);
+  });
+});
