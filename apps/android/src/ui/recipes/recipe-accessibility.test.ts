@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -26,32 +26,58 @@ import { describe, expect, it } from "vitest";
  *   `accessibilityLabel` that names that state as visible text (not
  *   colour alone).
  */
-const RECIPE_FILES = [
-  "ThinkingSection",
-  "StreamingMessage",
-  "ApprovalForm",
-  "ToolChips",
-  "TaskRows",
-  "PromptBar",
-  "DiffSummary",
-  "CommandSearch",
-  "WorkflowSteps",
-  "CodeListing",
-  "SelectionActions",
-  // T350: the redesign's shared top bar, mounted by the Live screen and
-  // by every other redesigned screen as they land.
-  "ScreenBar",
-  // T350: the redesign's running mark, drawn as the artifact's 3x3
-  // staggered grid rather than a spinner.
-  "PixelLoader",
-  // T358: the redesign's diff bands, and the search hit that
-  // shares their treatment.
-  "DiffLines",
-  // T359: the shell command's rules-only container, and the
-  // shimmer both it and ThinkingSection now share.
-  "BashBlock",
-  "ShimmerText",
-];
+/**
+ * Every `.tsx` in this directory, read from disk rather than typed out.
+ *
+ * T377: this was a hand-maintained array of sixteen names against a
+ * directory of seventeen files. The missing one was `ProgressRing`
+ * (T360), the arc both the prompt bar's context meter and the todo
+ * widget draw — and it was left out ON PURPOSE, with the reason written
+ * down: it takes both its colours already resolved from a caller, so
+ * the `useTheme()` assertion below is a rule it cannot follow.
+ *
+ * That reasoning is right. The INSTRUMENT was wrong, in two ways a
+ * derived list fixes and an omission cannot. First, omitting a file
+ * exempts it from every assertion here, not from the one it disputes:
+ * `ProgressRing` also stopped being checked for a raw hex literal, and
+ * the only thing that kept that covered is a separate case someone
+ * remembered to write in `./ProgressRing.test.ts`. Second, and worse,
+ * a deliberate exemption and a forgotten file are byte-identical in an
+ * array — so the next recipe to land here would be audited or not
+ * depending on whether its author remembered a file two directories
+ * away, with no failure either way to say which happened.
+ *
+ * So the set is derived and the exemption is stated, as a named set an
+ * assertion reads: the rule `ProgressRing` genuinely cannot follow is
+ * skipped for it by name, every other rule still runs, and the claim
+ * "this one resolves no colours of its own" is now something a test
+ * fails if it stops being true.
+ */
+const RECIPE_FILES = readdirSync(fileURLToPath(new URL(".", import.meta.url)))
+  .filter((entry) => entry.endsWith(".tsx"))
+  .map((entry) => entry.slice(0, -".tsx".length))
+  .sort();
+
+/**
+ * The recipes that resolve their own colours, and so must call
+ * `useTheme()`.
+ *
+ * `ProgressRing` is the one that does not, deliberately: it is a pure
+ * drawing whose `trackColor`/`arcColor` arrive as already-resolved
+ * token colours from the caller, which is what lets two callers paint
+ * the same arc in their own band colours without the drawing knowing
+ * what a band is. It still has to carry no raw hex — that check runs
+ * over every recipe — and its own doc comment states the contract.
+ *
+ * T360 wrote this reason down, in its ledger section. What it could
+ * not do was put the reason anywhere a test would read: an absence
+ * from an array carries no argument with it, and the next person to
+ * add a recipe sees no absence at all. Named here, the exemption is
+ * narrow (it skips one rule, not all of them) and it is checked — if
+ * this file ever starts resolving its own colours, the case below
+ * fails and the exemption has to be argued again or deleted.
+ */
+const THEME_EXEMPT_RECIPES = new Set(["ProgressRing"]);
 
 function readRecipeSource(name: string): string {
   return readFileSync(fileURLToPath(new URL(`./${name}.tsx`, import.meta.url)), "utf8");
@@ -84,8 +110,15 @@ describe("§10.4 recipes: theme-only colour, no raw hex", () => {
       expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     });
 
-    it(`${name} reads its styling from useTheme()`, () => {
+    it(`${name} reads its styling from useTheme(), or is a stated exemption`, () => {
       const code = readRecipeCode(name);
+      if (THEME_EXEMPT_RECIPES.has(name)) {
+        // An exemption has to earn itself: the colours must arrive as
+        // props, not be absent because the recipe paints nothing.
+        expect(code).toMatch(/Color: string/);
+        expect(code).not.toMatch(/useTheme\(\)/);
+        return;
+      }
       expect(code).toMatch(/useTheme\(\)/);
     });
   }
@@ -98,7 +131,51 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
   // instead, pinned by `./ShimmerText.test.ts` along with the
   // reason. Listing it here would assert a rule it does not follow
   // and could not.
-  const animated = ["ThinkingSection", "StreamingMessage", "PixelLoader"];
+  //
+  // T377: the set is derived, not typed out, for the same reason
+  // `RECIPE_FILES` above now is — a recipe that starts animating is
+  // caught by the import it has to add, rather than by someone
+  // remembering to extend an array. `ShimmerText` stays an exemption,
+  // stated here and asserted below, instead of an omission.
+  const MOTION_TOKEN_EXEMPT = new Set(["ShimmerText"]);
+  /** Calls a Reanimated timing helper itself, rather than delegating to a shared hook that owns the duration. */
+  const DECLARES_OWN_TIMING = /with(?:Timing|Repeat|Delay|Spring)\(/;
+  const reanimated = RECIPE_FILES.filter((name) =>
+    /react-native-reanimated/.test(readRecipeCode(name)),
+  );
+  const animated = reanimated.filter(
+    (name) => DECLARES_OWN_TIMING.test(readRecipeCode(name)) && !MOTION_TOKEN_EXEMPT.has(name),
+  );
+  const delegating = reanimated.filter((name) => !DECLARES_OWN_TIMING.test(readRecipeCode(name)));
+
+  it("finds the animated recipes by their own source, and still finds several", () => {
+    // Floors, so a regex that stopped matching would empty these loops
+    // into a silent pass rather than a failure.
+    expect(reanimated.length).toBeGreaterThanOrEqual(4);
+    expect(animated.length).toBeGreaterThanOrEqual(3);
+    expect(animated).toContain("ThinkingSection");
+    expect(animated).not.toContain("ShimmerText");
+  });
+
+  it("ShimmerText is exempt because it animates and has no token to read, not because it is still", () => {
+    const code = readRecipeCode("ShimmerText");
+    expect(code).toMatch(DECLARES_OWN_TIMING);
+    expect(code).not.toMatch(/motion\.duration/);
+  });
+
+  for (const name of delegating) {
+    // T377: a recipe can import Reanimated and own no duration at all —
+    // `ScreenBar` animates its bar actions entirely through
+    // `usePressScale`, which reads `motion.duration.fast` and no-ops
+    // under `reduceMotion`. Requiring `motion.duration` in its own text
+    // would be asking it to restate a number it correctly does not own;
+    // what it must not do is hardcode one.
+    it(`${name} delegates its timing to a shared motion hook, and hardcodes no duration`, () => {
+      const code = readRecipeCode(name);
+      expect(code).toMatch(/use(?:PressScale|Theme)\(/);
+      expect(code).not.toMatch(/duration:\s*\d/);
+    });
+  }
   for (const name of animated) {
     it(`${name} drives Reanimated timing from theme motion tokens`, () => {
       const code = readRecipeCode(name);

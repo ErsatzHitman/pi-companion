@@ -633,6 +633,7 @@ that recomputation has to be domain-specific:
 | T374   | The owner's release checklist still asked for a secret that had been configured, and named no project id             | phase-9   | docs             | P9-U   | T373                                                                  |
 | T375   | The authoritative spec described an Android session screen that twenty-three tasks had replaced                      | phase-9   | docs             | P9-U   | T374                                                                  |
 | T376   | The 48dp audit could not read a dimension written as a constant, so three small controls sat outside it              | phase-9   | android          | P9-U   | T375                                                                  |
+| T377   | A recipe left out of the audit on purpose was indistinguishable from one left out by accident                        | phase-9   | android          | P9-U   | T376                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -674,8 +675,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**585 tasks** (distinct IDs counted directly from the table above), recounted at T376 with
-`grep`/`sort -u` over the table's own rows — one past the **584** at T375, two past the **583** at T374, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**586 tasks** (distinct IDs counted directly from the table above), recounted at T377 with
+`grep`/`sort -u` over the table's own rows — one past the **585** at T376, two past the **584** at T375, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -17978,6 +17979,12 @@ already resolved, on purpose — it is a drawing, not a themed component, and a 
 band colour cannot get that from a theme lookup here. Listing it would assert a rule it cannot
 follow. Its own contract test carries the no-raw-hex case instead.
 
+CORRECTED (T377): the reason above is still the right reason, but the mechanism it describes is
+gone. `RECIPE_FILES` is no longer a list anything can be left out of — it is every `.tsx` in the
+directory — and `ProgressRing`'s exemption is now a named entry in `THEME_EXEMPT_RECIPES` that
+skips the `useTheme()` case alone. Every other case, the no-raw-hex one included, runs over it
+here as well as in its own contract test. See T377.
+
 **The artifact's `(form)` tag is not drawn.** The wire's todo item carries nothing that says an
 item is waiting on a form, so drawing the tag would mean inventing the condition. A badge that
 appears for the wrong rows is worse than one that does not appear.
@@ -18959,3 +18966,84 @@ a strict AND since T81's follow-up. `session-tree-sheet.tsx`'s header comment, a
 - [x] Six real components joined the audit; the three that declare no element are named and excluded
 - [x] Every control the widened audit found under 48dp is fixed in source, not exempted
 - [x] The prose asserting the old scope and the old predicate is corrected where it stands
+
+#### T377 — A recipe left out of the audit on purpose was indistinguishable from one left out by accident
+
+`labels: phase-9, area: android` · `depends-on: T376`
+
+`apps/android/src/ui/recipes/recipe-accessibility.test.ts` is the whole of what proves the
+recipe layer obeys `plan.md` §10's no-raw-hex rule, reads its colours from `useTheme()`, and
+drives every animation from a `motion.duration` token. It ran over a hand-typed array of
+sixteen names. The directory holds seventeen `.tsx` files.
+
+**The missing one was left out on purpose, and that is the finding, not an excuse.** T360 wrote
+the reason down in its own ledger section: `ProgressRing` takes `trackColor` and `arcColor`
+already resolved from a caller — which is exactly what lets the context meter and the todo
+widget paint the same arc in their own band colours — so the `useTheme()` assertion is a rule it
+cannot follow. That reasoning is correct. The instrument was wrong in two ways an array cannot
+fix:
+
+- **An omission exempts a file from every rule, not from the one it disputes.** `ProgressRing`
+  also stopped being checked for a raw hex literal. It is clean today only because T360
+  separately remembered to write that case into `./ProgressRing.test.ts` — a second place, kept
+  in step by hand, which is the arrangement this repository has now unwound four times in a row.
+- **A deliberate exemption and a forgotten file are byte-identical.** Nothing in the array
+  distinguishes "we argued about this one" from "nobody noticed". The next recipe to land in
+  this directory would have been audited, or not, according to whether its author remembered a
+  file two directories away — and neither outcome produces a failure that says which happened.
+
+**What the audit reads now.** `RECIPE_FILES` is `readdirSync` over this directory, filtered to
+`.tsx` and sorted, so a recipe is audited the day it lands. Two exemptions are named instead of
+omitted, and each is itself asserted rather than merely declared:
+
+| Exemption                               | Rule it skips     | What is asserted instead                                                                                                                                                 |
+| --------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ProgressRing` (`THEME_EXEMPT_RECIPES`) | `useTheme()`      | its colours arrive as `…Color: string` props AND it calls no `useTheme()` — so if it ever starts resolving its own, the case fails and the exemption has to be re-argued |
+| `ShimmerText` (`MOTION_TOKEN_EXEMPT`)   | `motion.duration` | it really does animate (it calls a Reanimated timing helper) and really has no token to read — T359's reason, now checked rather than asserted in a comment              |
+
+**A third case the derivation surfaced, which was a defect in the RULE's wording rather than in
+any file.** With the animated set derived from the Reanimated import instead of typed out,
+`ScreenBar` joined it and failed: it imports Reanimated and declares no duration anywhere.
+Reading its source rather than assuming a defect, it animates entirely through
+`usePressScale()`, and `ui/theme/use-press-scale.ts` is where the tokens are actually read —
+`duration: motion.duration.fast`, skipped under `reduceMotion`. Demanding `motion.duration` in
+`ScreenBar`'s own text would be demanding it restate a number it correctly does not own. So the
+set is split on what a file does, not on what it imports: a recipe that calls a timing helper
+itself must read the token, and one that delegates must name the shared hook and hardcode no
+duration of its own. Both halves have a floor, so a regex that stopped matching empties a loop
+into a failure rather than a silent pass.
+
+**Three mutations, each watched failing by name, each restored from a scratchpad copy — never
+`git checkout --` — with `git status --porcelain` clean afterwards:**
+
+| Mutation                                                  | Case that failed                                                                    | What it proves                                                      |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| a raw hex default added to `ProgressRing.tsx`             | `ProgressRing contains no raw hex colour literal`                                   | the derived list really audits the file the old array never reached |
+| `const fade = { duration: 180 }` added to `ScreenBar.tsx` | `ScreenBar delegates its timing to a shared motion hook, and hardcodes no duration` | the delegation branch is a real constraint, not a way of passing    |
+| a `useTheme()` call added to `ProgressRing.tsx`           | `ProgressRing reads its styling from useTheme(), or is a stated exemption`          | the exemption is a live claim, so it cannot quietly become false    |
+
+**No `CAPABILITIES` entry**, for the fourth time in this run and the same reason each time: the
+capability is "the recipe audit covers every recipe", which declares no member anywhere
+`isShippedSourcePath` can see — that predicate excludes test files, and this capability lives
+entirely in one. An entry would be inert, which is the trap `CLAUDE.md` warns about directly.
+
+**T124 sweep.** T360's ledger paragraph asserting `ProgressRing` "is deliberately NOT in
+`recipe-accessibility.test.ts`'s `RECIPE_FILES`" is falsified by this change and carries a
+`CORRECTED (T377)` note above. `HANDOFF.md`'s two descriptions of this test ("flags bare numeric
+animation literals", "no bare animation literals") both survive the change and are left alone.
+
+**One gap measured and deliberately left to its own task.** The same shape sits one directory
+over: `touch-targets.test.ts`'s `CRITICAL_INTERACTIVE_PRIMITIVES` is still hand-typed, and
+`grep -rlE` for the audit's own `INTERACTIVE_TAG_PATTERN` across `apps/android/src` returns
+twenty-four non-test files against eighteen audited ones. The six outside it are
+`SessionControlsPicker.tsx`, `Dialog.tsx`, `Popover.tsx`, `Sheet.tsx`, `CommandSearch.tsx` and
+`PromptBar.tsx`. Folding that into this commit would mean a second widening and a second set of
+real 48dp fixes under a task whose subject is a different file; it is filed as T378 instead.
+
+- [x] The recipe list is derived from the directory, so a new recipe is audited on arrival
+- [x] Both exemptions are named, scoped to the one rule each disputes, and asserted
+- [x] The animated set is derived, and split on whether a recipe owns its timing or delegates it
+- [x] Every derived set has a floor, so an empty loop fails rather than passing silently
+- [x] Three mutations watched failing by name, restored from scratchpad copies
+- [x] The ledger prose this change falsifies is corrected where it stands
+- [ ] The identical shape in `touch-targets.test.ts`'s component list is closed — filed as T378
