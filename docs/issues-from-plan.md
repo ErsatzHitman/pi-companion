@@ -628,6 +628,7 @@ that recomputation has to be domain-specific:
 | T369   | A capability shipped with no entry protecting it, three tasks after the rule that says register it at once           | phase-9   | tooling          | P9-U   | T366                                                                  |
 | T370   | Three flows told Maestro to tap a session row and it tapped Archive, because the selector matched four things        | phase-9   | android          | P9-U   | T363                                                                  |
 | T371   | The suite finally ran end to end, and four files still said it never had                                             | phase-9   | ci               | P9-U   | T370                                                                  |
+| T372   | A handoff told the next agent to fix a shard that had been green for twenty-five tasks                               | phase-9   | docs             | P9-U   | T371                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -669,8 +670,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**580 tasks** (distinct IDs counted directly from the table above), recounted at T371 with
-`grep`/`sort -u` over the table's own rows — one past the **579** at T370, two past the **578** at T369, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**581 tasks** (distinct IDs counted directly from the table above), recounted at T372 with
+`grep`/`sort -u` over the table's own rows — one past the **580** at T371, two past the **579** at T370, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18598,3 +18599,73 @@ honest outcome, and saying so stops a later reader from "fixing" the apparent sl
 - [x] Every live claim that the suite had never run is corrected where it stands
 - [x] No `CAPABILITIES` entry is invented for a capability the guard's scope cannot see
 - [x] The measured durations are recorded, and the bounds are left alone on purpose
+
+#### T372 — A handoff told the next agent to fix a shard that had been green for twenty-five tasks
+
+`labels: phase-9, area: docs` · `depends-on: T371`
+
+`HANDOFF.md` is the one document a fresh agent is told to read first, and every fact in its
+"Where things stand right now" table had gone stale. It named HEAD as `f75bbd8` (twenty-six
+commits back), the last Maestro dispatch as `34502151872` with **shard-4 red**, two files as
+uncommitted, the ledger as 554 tasks, and seven Geist Mono comments as outstanding. Its title
+ended "and the last red Maestro shard"; §5 presented that shard as Next Step 1 with two options
+to choose between; §10's first instruction was "Fix the failing Maestro checks."
+
+**None of that was true, and the shape of the error is worse than the individual facts.** A
+handoff whose live-state table is wrong does not merely mislead — it sends the next agent to
+re-solve a solved problem, and the first thing it asks them to do is the thing most likely to
+waste a whole session. The refresh is therefore not a tidy-up; it is the same class of defect
+`CLAUDE.md`'s T124 section is about (prose asserting the absence of something shipped), in the
+document with the widest readership in the repository.
+
+What changed, and what deliberately did not:
+
+- **§1 rewritten whole**, by range rather than by anchor: its rows are not uniform width and a
+  hand-transcribed anchor failed on the first attempt. HEAD `6cafdb1` from `git rev-parse`
+  (never the harness's `gitStatus` snapshot, per P6-W19), CI `34560157100` success, dispatch
+  `34558058662` green in every job with the five shard durations, all ten `plan.md` §14.4 flows
+  `PASS`, a clean tree, 580 ledger tasks, and the single deliberately-open box.
+- **§5 is closed as history, not deleted.** Option B is the one that was taken, as T346, and the
+  diagnosis below it is the only written record of how the defect was found — the hierarchy
+  dump's three measured heights are still the reason anyone believes the explanation. Its
+  closing line ("the fix is proven only by a green dispatch, which is why every T334–T344 box is
+  still open") keeps its bolded principle and gains a `CORRECTED (T372)` note, because the
+  principle is exactly why T346's own box stayed open until a dispatch.
+- **Two cells in §3 were wrong about the tree, not merely out of date.** The shell's row said
+  `apps/android/src/features/session/compact-shell.tsx`; that directory has never existed here
+  (`git log --all -- 'apps/android/src/features/session/*'` is empty) and the file has always
+  been under `app-shell/`. §5.2 named the same wrong parent for the model it proposed, which is
+  why T346 put `composer-slot-cap-model.ts` in `app-shell/`. `Composer.tsx`'s row opened with a
+  line count that T353 and T355 both moved; dropped rather than re-pinned, per T217.
+- **Three claims in §8.** `react-native-svg` was "installed, uncommitted, unused" (committed at
+  T349, and `VectorIcon` draws from it); task numbering said "continue from T346" and quoted a
+  ledger total; and §8.9's context clause said "Android has no usage wiring yet" while pointing
+  at the web app as the reference — T352 wired `createContextUsageSignal`,
+  `buildContextCardViewModel` and `buildContextRingViewModel`.
+- **§9 gains §9.0**, mapping each of the seven planned rows onto the tasks that delivered it,
+  plus the five tasks in T346–T371 that belong to no planned row. The planned table is left as
+  written: it is the design intent, and rewriting it would erase the fact that the numbering
+  moved. §9.1 records that all four `CAPABILITIES` entries landed and six more with them, while
+  telling the reader to read the current list from the guard rather than from the handoff.
+  §9.2's grep and §9.3's seven comments are marked done, with what legitimately still matches.
+- **§10 rewritten.** Its first item is no longer a solved problem but the standing hazard T370
+  demonstrated: a green dispatch proves which way the coin landed, not that the selector was
+  safe, so a dispatch follows any wave that touches a screen a flow drives.
+- **§2, §4, §6, §7 and §11 are untouched.** §2's hard rules are the owner's and are not this
+  task's to edit; §4 and §6 are dated history and a dated survey, correct as records; §7 is the
+  design spec the work was built from and is better read as-is than annotated screen by screen.
+
+**No `CAPABILITIES` entry, and the reason is the one T371 gave for its own refusal.** The
+capability here is "the handoff describes the tree it is handed off from", which has no method
+declared anywhere `isShippedSourcePath` can see. `HANDOFF.md` is not under `docs/**` either, so
+`isAppSourcePath` cannot reach it: the denial scan could not fire on this file even if an entry
+existed. Checked rather than assumed — an entry would be inert in both directions, which is the
+trap `CLAUDE.md` warns about twice.
+
+- [x] Every §1 fact is re-derived from a real command, not from the previous handoff
+- [x] The SHA comes from `git rev-parse`, never the session-start `gitStatus` block
+- [x] §5 is closed as history with its diagnosis intact, not deleted
+- [x] Every correction says what the prose used to claim, so a reader can tell drift from a typo
+- [x] The two §3 cells that were wrong about the tree are fixed and the error explained
+- [x] §10's first step is a live hazard, not a finished one
+- [x] No inert `CAPABILITIES` entry is invented for a file the guard cannot see

@@ -1,11 +1,20 @@
-# HANDOFF — Pi Companion, the S7 redesign and the last red Maestro shard
+# HANDOFF — Pi Companion, the S7 redesign and the green Maestro suite
 
-**Written:** 2026-09-10 · **At commit:** `f75bbd8` (T345) · **Branch:** `main` · **For:** the
-next agent continuing this work with no prior context
+**Written:** 2026-09-10 at `f75bbd8` (T345) · **Refreshed:** 2026-09-11 at `6cafdb1` (T371),
+as T372 · **Branch:** `main` · **For:** the next agent continuing this work with no prior
+context
 
 Read this end to end before touching anything. It replaces the 2026-09-05 handoff in full.
 Everything below was true at the moment of writing; re-derive live state (HEAD, CI, working
 tree) with the commands in §1 before acting on it.
+
+**What the refresh changed, so you can trust the rest of it.** The title used to end "and the
+last red Maestro shard". That shard has been green since T346 and the whole suite since dispatch
+34558058662, so the title is corrected rather than left to mislead. T372 rewrote §1 (every fact
+in it had gone stale), closed §5 as history, corrected three claims in §8 and two cells in §3,
+added §9.0's delivery map for T346–T371, and rewrote §10. §2's hard rules, §4's history, §6's
+survey and §7's design spec are otherwise unchanged: §6 and §7 are still the authority on what
+was built, and §7 now describes a screen that exists rather than one to build.
 
 ---
 
@@ -51,24 +60,24 @@ And the one amendment to S7, which supersedes the artifact for the prompt-bar co
 
 ## 1. Where things stand right now
 
-| Fact                         | Value                                                                                                                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HEAD                         | `f75bbd8` — "T345: S7 foundations -- JetBrains Mono on Android and the Pi role colours", pushed to `origin/main`                                                                 |
-| CI for `f75bbd8`             | run `34510418394`, success. The handoff commit `622b447` that followed it: run `34511798678`, success                                                                            |
-| Last Maestro dispatch        | run `34502151872` at `26e467a` (T344): APK build, packaged-app smoke, shards 1, 2, 3, 5 all green; **shard-4 red** on `extension-sheets` (details §5)                            |
-| CI for `26e467a`             | run `34502152280`, success                                                                                                                                                       |
-| Working tree                 | two uncommitted files: `apps/android/package.json` and `package-lock.json`, from `npx expo install react-native-svg` (pins `react-native-svg@15.12.1`). Not yet used by any code |
-| Ledger                       | `docs/issues-from-plan.md` has rows and sections through T345 (554 tasks). Every T337–T344 acceptance box is ticked except the dispatch boxes tracked with T334's last box       |
-| Open ledger boxes            | the "a dispatch in which …" boxes under T334, T336–T344 (extension-sheets green end to end, notification-approval denies then approves, etc.) plus older EAS-dispatch boxes      |
-| Remaining "Geist Mono" prose | seven comments in `apps/android/src` still name Geist Mono as the numeral face (list in §9.3)                                                                                    |
+| Fact                  | Value                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HEAD                  | `6cafdb1` — "T371: the suite finally ran end to end, and four files still said it never had", pushed to `origin/main`                                                                                                                                                                                                                                                                                                      |
+| CI for `6cafdb1`      | run `34560157100`, success. Every commit from T346 to T371 has its own green push run; each task's ledger section records the id                                                                                                                                                                                                                                                                                           |
+| Last Maestro dispatch | run `34558058662` at `51e2fa8`, **every job green** — `build-development-apk` 15m 22s, the five `maestro-e2e` shards at 5m 02s / 6m 15s / 5m 15s / 6m 32s / 6m 36s, `packaged-app-smoke` 22m 33s                                                                                                                                                                                                                           |
+| The ten §14.4 flows   | all `PASS` in that dispatch: `pairing`, `network-switch`, `cold-start-restore`, `background-kill-restore`, `composer-inputs`, `offline-cache-outbox`, `notification-approval`, `extension-sheets`, `files-and-terminal`, `accessibility-audit`. That is `plan.md`'s Phase 5 exit-gate criterion, met for the first time                                                                                                    |
+| Working tree          | clean. `react-native-svg@15.12.1` was committed at T349, the first commit that imported it — the two files this table used to list as uncommitted are on `main`                                                                                                                                                                                                                                                            |
+| Ledger                | `docs/issues-from-plan.md` has rows and sections through T371 (580 tasks). The dispatch boxes under T208, T310, T314, T318, T334, T336–T344, T368 and T370 are all ticked, each naming the run that closes it                                                                                                                                                                                                              |
+| The one open box      | T313's, deliberately. "A real failing dispatch shows the reason in the CI log without anyone opening expo.dev": its subject is the `if: failure()` `eas build:list` diagnostic beside an EAS build step, and after T315 and T330 the only EAS build left in this repository is `android-apk-release.yml`'s `publish-android-apk`. Closing it needs a real release run whose EAS build fails — not something to manufacture |
+| "Geist Mono" prose    | swept. T356 fixed six of §9.3's seven comments and T367 the last, and `apps/android/src/ui/theme/fonts.test.ts` now fails if a live comment anywhere under `apps/android/src` explains an Android style by naming that face                                                                                                                                                                                                |
 
 Re-derive before acting:
 
 ```bash
 cd D:/pi-companion && git rev-parse --short HEAD && git status --short
 gh run list --branch main --limit 5
-gh run view 34511798678 --json status,conclusion
-gh run view 34502151872 --json jobs -q '.jobs[] | "\(.name): \(.conclusion)"'
+gh run view 34560157100 --json status,conclusion
+gh run view 34558058662 --json jobs -q '.jobs[] | "\(.name): \(.conclusion)"'
 ```
 
 ---
@@ -157,24 +166,34 @@ The owner's direct-mode hook: lead with the verdict, tables, no preamble, curren
 
 ## 3. Repository map (the parts this work touches)
 
-| Path                                                  | What it is                                                                                                                                            |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plan.md`                                             | The sole authoritative spec. §10.2 is the design-system section (fonts, tokens, no raw hex).                                                          |
-| `docs/issues-from-plan.md`                            | The task ledger: master table row plus a `#### Tnnn` section per task, acceptance boxes. Governs task boundaries. Add a row and section per new task. |
-| `CLAUDE.md`                                           | Agent rules. Every paragraph exists because something expensive happened.                                                                             |
-| `packages/design-tokens/src/tokens.ts`                | Colour, spacing, radii, motion, font tokens. `nativeFontFamilyNames`, `SemanticColorTokens`, `PiRoleColorTokens` (T345), `buildColors`.               |
-| `packages/design-tokens/src/contrast.test.ts`         | Pins WCAG AA for every text/backdrop pairing, including the T345 role colours.                                                                        |
-| `packages/frontend-core`                              | Framework-neutral core. Must never import React/RN/Expo/DOM. `telemetry/derive.ts` has `deriveContextWindowUsage`.                                    |
-| `packages/client/src/daemon-client.ts`                | `DaemonClient`: every RPC the apps can send (§8.3 lists the ones the redesign needs).                                                                 |
-| `apps/android`                                        | Expo / React Native, Android only. Expo Router under `app/`, features under `src/features`, primitives and recipes under `src/ui`.                    |
-| `apps/android/src/features/session/compact-shell.tsx` | `CompactSessionShell`: the session screen's slot layout (header, statusStrip, transcript, liveExtension, composer).                                   |
-| `apps/android/src/features/composer/Composer.tsx`     | 1788 lines. The composer, its controls scroll view and the `PromptBar`.                                                                               |
-| `apps/android/src/features/extensions/renderers/`     | Pi extension renderers: status, widget, progress, log, markdown, roster, form, diff, panel.                                                           |
-| `apps/android/maestro/*.yaml` + `shards.json`         | 15 Maestro flows, five CI shards. `apps/android/e2e/flows/*-contract.ts` and `.contract.test.ts` pin every selector and string against source.        |
-| `apps/android/e2e/harness/scripted-pi.mjs`            | The scripted Pi provider CI runs: scenarios `echo`, `approval`, `extension-sheets`.                                                                   |
-| `.github/workflows/android-maestro-e2e.yml`           | Manual dispatch: `npx expo prebuild --platform android --no-install`, `./gradlew assembleRelease`, packaged-app smoke, then the five shards.          |
-| `scripts/ci/*.mjs`                                    | Guards. Local baseline: `node --test scripts/ci/*.test.mjs` all pass, `oxfmt --check .` clean.                                                        |
-| `THIRD_PARTY_NOTICES.md`                              | Third-party attribution. §3 has the font rows (JetBrains Mono added at T345).                                                                         |
+| Path                                              | What it is                                                                                                                                            |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan.md`                                         | The sole authoritative spec. §10.2 is the design-system section (fonts, tokens, no raw hex).                                                          |
+| `docs/issues-from-plan.md`                        | The task ledger: master table row plus a `#### Tnnn` section per task, acceptance boxes. Governs task boundaries. Add a row and section per new task. |
+| `CLAUDE.md`                                       | Agent rules. Every paragraph exists because something expensive happened.                                                                             |
+| `packages/design-tokens/src/tokens.ts`            | Colour, spacing, radii, motion, font tokens. `nativeFontFamilyNames`, `SemanticColorTokens`, `PiRoleColorTokens` (T345), `buildColors`.               |
+| `packages/design-tokens/src/contrast.test.ts`     | Pins WCAG AA for every text/backdrop pairing, including the T345 role colours.                                                                        |
+| `packages/frontend-core`                          | Framework-neutral core. Must never import React/RN/Expo/DOM. `telemetry/derive.ts` has `deriveContextWindowUsage`.                                    |
+| `packages/client/src/daemon-client.ts`            | `DaemonClient`: every RPC the apps can send (§8.3 lists the ones the redesign needs).                                                                 |
+| `apps/android`                                    | Expo / React Native, Android only. Expo Router under `app/`, features under `src/features`, primitives and recipes under `src/ui`.                    |
+| `apps/android/src/app-shell/compact-shell.tsx`    | `CompactSessionShell`: the session screen's slot layout (header, statusStrip, transcript, liveExtension, composer).                                   |
+| `apps/android/src/features/composer/Composer.tsx` | The composer, its entry blocks and the `PromptBar`.                                                                                                   |
+| `apps/android/src/features/extensions/renderers/` | Pi extension renderers: status, widget, progress, log, markdown, roster, form, diff, panel.                                                           |
+| `apps/android/maestro/*.yaml` + `shards.json`     | 15 Maestro flows, five CI shards. `apps/android/e2e/flows/*-contract.ts` and `.contract.test.ts` pin every selector and string against source.        |
+| `apps/android/e2e/harness/scripted-pi.mjs`        | The scripted Pi provider CI runs: scenarios `echo`, `approval`, `extension-sheets`.                                                                   |
+| `.github/workflows/android-maestro-e2e.yml`       | Manual dispatch: `npx expo prebuild --platform android --no-install`, `./gradlew assembleRelease`, packaged-app smoke, then the five shards.          |
+| `scripts/ci/*.mjs`                                | Guards. Local baseline: `node --test scripts/ci/*.test.mjs` all pass, `oxfmt --check .` clean.                                                        |
+| `THIRD_PARTY_NOTICES.md`                          | Third-party attribution. §3 has the font rows (JetBrains Mono added at T345).                                                                         |
+
+CORRECTED (T372), two cells above:
+
+- the shell's row read `apps/android/src/features/session/compact-shell.tsx`. That directory has
+  never existed here (`git log --all -- 'apps/android/src/features/session/*'` returns nothing);
+  the file is and always was under `app-shell/`. §5.2 named the same wrong parent for the model
+  it proposed, which is why T346 put `composer-slot-cap-model.ts` in `app-shell/` instead.
+- `Composer.tsx`'s row opened with a line count. T353 and T355 both moved it, and a figure
+  nothing recomputes reads as a defect to the next person (`CLAUDE.md`'s T217), so it is dropped
+  rather than re-pinned.
 
 ---
 
@@ -229,7 +248,16 @@ Maestro dispatch from "cannot build" to "one assertion short of green".
 
 ---
 
-## 5. The failing Maestro check (Next Step 1)
+## 5. The failing Maestro check (closed at T346 — kept as the record of how it was found)
+
+**This section is history, not a live problem.** Option B below is the one that was taken, as
+T346: `resolveComposerSlotMaxHeightDp` and `resolveComposerSlotMinHeight` in
+`apps/android/src/app-shell/composer-slot-cap-model.ts` — note the parent directory, because
+§5.2 wrote `features/session/`, which has never existed in this repository — applied by
+`compact-shell.tsx` to the composer slot while the live-extension slot renders content.
+`extension-sheets` has passed in every dispatch since, and the whole suite is green as of
+34558058662; §1 has the numbers. Everything below is kept because it is the only written record
+of how the defect was diagnosed, and because §5.3's dispatch procedure is still exactly current.
 
 **Run `34502151872` at `26e467a`.** Everything is green except `maestro-e2e (shard-4)`, and
 within shard-4 `notification-approval` passes; `extension-sheets` fails at
@@ -282,6 +310,10 @@ written:
 
 Whichever you choose, **the fix is proven only by a green dispatch**, which is why every
 T334–T344 dispatch box is still open.
+CORRECTED (T372): "is still open" held for one more day. Dispatch 34558058662 closed every one
+of them, and T371 ticked each with that run id. The sentence's principle is the part that
+stands, and it is why T346's own acceptance box stayed open until a dispatch rather than closing
+when its unit tests went green.
 
 ### 5.3 How to dispatch and read a Maestro run
 
@@ -538,7 +570,9 @@ same controller as the context-ring menu; Auto-compaction uses `set/getAutoCompa
 1. **Font.** JetBrains Mono on Android, Geist Mono stays on web. Done at T345.
 2. **Colours.** Six new role tokens (§4.1). Done at T345. ink-3 never on a fill.
 3. **`react-native-svg`** is the vector primitive for the ring, the sparkle, the plus / mic /
-   send icons and the todo ring. Installed, uncommitted, unused so far.
+   send icons and the todo ring. CORRECTED (T372): this said "Installed, uncommitted, unused so
+   far". It was committed at T349, the first commit that imported it, and `VectorIcon` draws
+   every one of those shapes from real path data.
 4. **The amendment wins over the artifact** for the prompt bar: no footer pills; a context ring
    right of `+` opens one menu holding Build/Plan, Model, Effort, Context and auto-compaction.
 5. **testID continuity.** Every selector a Maestro flow or contract test names today survives
@@ -547,8 +581,10 @@ same controller as the context-ring menu; Auto-compaction uses `set/getAutoCompa
 6. **Files / Terminal** move from the session header into the Live screen.
 7. **The subtitle** under "pi-companion" shows the cwd basename; a branch line is added only if
    the daemon ever exposes one.
-8. **Task numbering.** Continue from T346. One ledger row and section per task; ledger rows all
-   the same width; "554 tasks" in the ledger header is recounted on each addition.
+8. **Task numbering.** Continue from the ledger's own last row — T372 as this was refreshed,
+   T346 when it was written. One ledger row and section per task; ledger rows all the same
+   width; the task total in the ledger header is recounted from the table's rows on each
+   addition, never incremented from memory.
 9. **Daemon capabilities the UI binds to** (all exist on `DaemonClient` in
    `packages/client/src/daemon-client.ts`; verified by reading it):
    - Build/Plan: `setAgentMode(agentId, modeId)` and `listProviderModes(provider, {cwd?})`.
@@ -560,9 +596,12 @@ same controller as the context-ring menu; Auto-compaction uses `set/getAutoCompa
 contextWindowMaxTokens?, contextWindowUsedTokens? }` arrives on `usage_updated` and
      `turn_completed` stream events via `AppCore.subscribeAgentStream(listener)` in
      `app-shell/core.ts`; `deriveContextWindowUsage` in `frontend-core`'s `telemetry/derive.ts`
-     returns `{ status: "known", usedTokens, maxTokens, usedFraction }`. Android has no usage
-     wiring yet; the web app's `apps/web/src/features/rail/context-meter.tsx` is the working
-     reference for the derivation (read it; do not import it into Android).
+     returns `{ status: "known", usedTokens, maxTokens, usedFraction }`. CORRECTED (T372): this
+     said "Android has no usage wiring yet" and offered
+     `apps/web/src/features/rail/context-meter.tsx` as the reference to read. T352 wired it:
+     `createContextUsageSignal` and `buildContextCardViewModel` subscribe the stream and derive
+     the fill, and `buildContextRingViewModel` turns that into the ring's arc. The web file is
+     still worth reading, and still must not be imported into Android.
    - Auto-compaction: `setAutoCompaction(agentId, enabled)` and `getAutoCompaction(agentId)`.
      There is no manual-compact RPC; compaction is a slash command.
    - Queue mode: `getQueueModes` / `setSteeringMode` / `setFollowUpMode` behind
@@ -570,7 +609,12 @@ contextWindowMaxTokens?, contextWindowUsedTokens? }` arrives on `usage_updated` 
 
 ---
 
-## 9. Implementation plan for the remaining UI (Next Step 2)
+## 9. Implementation plan for the remaining UI (delivered, T349–T371)
+
+**This plan has been carried out.** §9.0 maps every planned row onto the tasks that delivered
+it, so the table below reads as the design intent it was rather than as outstanding work. The
+numbering moved: T346, T347 and T348 went to three defects that surfaced first, so the redesign
+itself ran from T349 to T371.
 
 Suggested task split. Each is one commit with its own ledger row and section, tests first,
 gates green, then push and read CI. Do not start any of them while a Maestro run is in flight.
@@ -599,6 +643,32 @@ cd D:/pi-companion && npx oxfmt --check . && npx oxlint <touched files>
 cd D:/pi-companion && node scripts/ci/run-guard-clean-working-tree.mjs
 ```
 
+### 9.0 What each planned row was delivered as
+
+Read a planned row above for the intent, then the delivered task's ledger section for what
+actually shipped and what proves it. Where the two differ, the ledger governs.
+
+| Planned | Delivered as                                                                                                                                                                                                                           |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T346    | T349 (`VectorIcon`, and the `react-native-svg` pin committed with it), T351 (the app bar: ☰ → Sessions, ⧉ → Live, title plus cwd subtitle, the status pill keeping `transcript-header-status-chip`), T350 (Files/Terminal move to A2) |
+| T347    | T356 (one container shape where there had been four), T357 (the thinking head and its shimmer), T358 (diff lines and search results), T359 (the bash block and its loader). T367 swept the last wrong font name out of the same area   |
+| T348    | T352 (context usage read from the stream, and the ring), T354 (Build/Plan and auto-compaction inside the ring's menu), T353 (the queue-mode row moving into that menu with the other controls)                                         |
+| T349    | T353 (the `composer-controls` ScrollView dropped; the route finally passes `modelThinkingClient`), T355 (queued prompts drawn as blocks, keeping `composer-entries` and `-retry`)                                                      |
+| T350    | T360 (the todo overlay, un-filtered in `session-transcript-model.ts`), T361 (the ask-user popover over a scrim)                                                                                                                        |
+| T351    | T350 (A2 Live), T362–T364 (A1 Sessions: filtering, the row itself, and the create form's reveal), T366 (A3 Settings)                                                                                                                   |
+| T352    | T368 (the accessibility audit opens A2 and A3), T370 (the row selector that matched four nodes), T371 (the green dispatch read job by job, and the four files that still denied it)                                                    |
+
+Five tasks in that range belong to no planned row, and are worth knowing about because each
+records a trap rather than a feature:
+
+| Task | What it was                                                                                                                          |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| T346 | §5's defect, fixed by Option B before the redesign began — the composer slot bounded above and below so a pinned panel gets the room |
+| T347 | A blocked submit button that could not say why it was blocked                                                                        |
+| T348 | `expo-linking`'s audit range re-synced after upstream narrowed it                                                                    |
+| T365 | A calibrated self-heal phase that turned `main` red, and failed 15 seconds short of the thing it was calibrated against              |
+| T369 | A capability that shipped with no `CAPABILITIES` entry protecting it, three tasks after the rule saying register it at once          |
+
 ### 9.1 CAPABILITIES entries to register (T124)
 
 Each of these ships a capability that prose somewhere could deny. Register an entry in
@@ -610,10 +680,27 @@ it fires against a scratchpad-backed copy of `docs/legacy-retirement.md`:
 - the auto-compaction switch (`setAutoCompaction` / `getAutoCompaction` reaching a UI);
 - the session route passing `modelThinkingClient` (the picker leaving its "no-client" state).
 
+**All four are registered, and six more with them.** T354 covered Build/Plan
+(`createSessionControlsController` + `SessionControlsPicker`) and auto-compaction
+(`describeAutoCompaction`); T352 covered the usage read (`createContextUsageSignal` +
+`buildContextCardViewModel`) and the ring itself (`ContextRing` + `buildContextRingViewModel`);
+T353 covered the route's client (`resolveModelThinkingClient`). Beyond the plan: T346's composer
+slot bounds, T349's `VectorIcon`, T350's Live screen, T351's app bar, and T369's settings-host
+trio. Read the current list from `scripts/ci/guard-capability-prose.mjs` rather than from here —
+T369 exists because a capability shipped three tasks before anyone registered it.
+
 ### 9.2 Prose to fix in the same commits
 
 Grep `apps/android/src` and `docs/` for "no-client", "not wired", "no usage", "does not
 subscribe", "no app bar", and similar before each of T346 and T348 lands.
+
+**Done, and worth re-running rather than trusting.** The live denials this found were fixed in
+the commits that falsified them — `ModelThinkingPicker.tsx`'s "`no-client` is today's only
+real-build shape" at T353 is the representative one, and it carries its own CORRECTED marker.
+What survives the grep today is legitimate: `"no-client"` is a real member of
+`ModelThinkingAvailability`, and `core.test.ts`'s "`createAndroidFilePicker` is not wired here
+yet" is still true of the harness it describes. Re-run the grep before your own commits; do not
+read this paragraph as a clean bill for prose you are about to add.
 
 ### 9.3 Remaining "Geist Mono" comments on Android
 
@@ -629,33 +716,45 @@ first commit that touches the file, or sweep all seven in T347:
 - `ui/recipes/WorkflowSteps.tsx`
 - `ui/theme/fonts.ts` (two mentions; these narrate the T345 swap and are correct as history)
 
+**Swept.** T356 reworded six of them while rebuilding the transcript's containers; T367 found
+and reworded the seventh (`progress.tsx`, whose comment had also been citing a frozen
+reference-only document as its authority) and added the test that stops a new one appearing:
+`ui/theme/fonts.test.ts` walks every file under `apps/android/src` and fails on a live comment
+that explains an Android style by naming the dropped face, while allowing a marked historical
+quotation.
+
 ---
 
 ## 10. Next Steps
 
-1. **Fix the failing Maestro checks.** CI is green at `622b447`. Take
-   shard-4's `extension-sheets` from red to green using Option A or Option B in §5.2, dispatch
-   `android-maestro-e2e.yml`, wait for it (no code while it runs), read every shard, and repeat
-   until all five shards, the APK build and the packaged-app smoke are green.
-2. **Complete the remaining UI changes.** Build S7 with the context-ring menu, then A1, A2 and
-   A3, per §7 and the task split in §9, keeping every existing testID and updating the e2e
-   contracts and yaml flows alongside the source.
-3. **Everything else that has to happen for the work to count as done:**
-   - Commit the pending `react-native-svg` install in the first commit that imports it (§8.3),
-     never as a stray change; keep `git status` clean at every gate (T93).
-   - Add a ledger row and section for every task from T346 on, recount the "N tasks" header,
-     keep rows the same width, and tick the acceptance boxes only when the proof exists.
-   - Register the four `CAPABILITIES` entries in §9.1 with firing proofs, and fix denying
-     prose in the same commits (T124).
+Both of the steps this section used to open with are done: the Maestro suite is green (dispatch
+34558058662, all ten flows), and S7 with A1, A2 and A3 are built (§9.0). What follows is what is
+actually left.
+
+1. **Keep the suite honest as the UI keeps moving.** A dispatch is the only proof that a screen
+   works on a device, and it is cheap to invalidate: T370's defect was latent behind a passing
+   selector for many dispatches and turned red only when T363 changed which candidate node
+   Maestro happened to pick. So dispatch `android-maestro-e2e.yml` (§5.3) after any wave that
+   touches a screen a flow drives, read every shard, and treat "it was green last time with the
+   same selector" as no evidence at all.
+2. **The one deliberately open acceptance box is T313's**, and it needs a real
+   `android-apk-release.yml` run whose EAS build fails — see §1. Do not manufacture one, and do
+   not tick it on the strength of a Maestro dispatch, which never exercises that workflow.
+3. **If you extend the design past §7**, the same discipline applies as to every task above:
+   - Keep `git status` clean at every gate, and read the real CI run after each push, recording
+     its id and conclusion (T93).
+   - A ledger row and section per task, rows all the same width, the header total recounted from
+     the table's rows, and acceptance boxes ticked only when the proof exists.
+   - Register a `CAPABILITIES` entry the moment you ship a capability, with a firing proof
+     (T124), and check the guard can see where it ships before writing the entry — an entry
+     outside `isShippedSourcePath`'s reach can never fail. T369 is the cost of skipping this.
    - Keep the source-regex tests honest: `composer-accessibility.test.ts`, the compact-shell
      tests, `touch-targets.test.ts` (every new pressable is 48dp), `recipe-accessibility.test.ts`
-     (no bare animation literals), and the e2e `.contract.test.ts` files.
-   - Reword the seven remaining Geist Mono comments (§9.3).
-   - After every push: read the real CI run, record its id and conclusion; after every green
-     Maestro dispatch: tick the open "a dispatch in which …" boxes under T334 and T336–T344 in
-     `docs/issues-from-plan.md` in one small commit.
-   - Run the per-commit gate set in §9 before each push; never the full monorepo suite; never
-     a backgrounded local verification.
+     (no bare animation literals), `ui/theme/fonts.test.ts`, and the e2e `.contract.test.ts`
+     files. When a pin's subject moves, re-anchor it at the new address; never widen it and never
+     delete it.
+   - Run the per-commit gate set in §9 before each push; never the full monorepo suite; never a
+     backgrounded local verification.
    - Do not touch anything in §2's read-only or credential list, and never write code while a
      Maestro run is in flight.
    - When everything is green and committed, report to the owner in their direct-mode format:
