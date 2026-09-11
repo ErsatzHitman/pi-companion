@@ -12,6 +12,7 @@ import {
   NEW_PROFILE_ID,
   validateConnectForm,
 } from "../../src/features/connect/connect-form-model.js";
+import { settingsHostAccessibilityLabel } from "../../src/features/settings/settings-host-model.js";
 import { ACCESSIBILITY_AUDIT_FLOW } from "./accessibility-audit-contract.js";
 import { PRODUCTION_DAEMON_PORT } from "../harness/production-daemon-port.js";
 import { assertVisibleTextsAfterEachTap, parseMaestroSteps } from "./maestro-yaml.js";
@@ -106,6 +107,12 @@ const SESSION_ROUTE_TSX = "../../src/app/h/[serverId]/session/[agentId]/index.ts
 const FILES_ROUTE_TSX = "../../src/app/h/[serverId]/session/[agentId]/files/[...path].tsx";
 const FILES_SCREEN_TSX = "../../src/features/files/files-screen.tsx";
 const SHARE_ROUTE_TSX = "../../src/app/share.tsx";
+const SCREEN_BAR_TSX = "../../src/ui/recipes/ScreenBar.tsx";
+const LIVE_SCREEN_TSX = "../../src/features/live/live-screen.tsx";
+const LIVE_ROUTE_TSX = "../../src/app/h/[serverId]/session/[agentId]/live.tsx";
+const SESSION_NAV_ACTIONS_TSX = "../../src/app-shell/session-nav-actions.tsx";
+const SETTINGS_SCREEN_TSX = "../../src/features/settings/SettingsScreen.tsx";
+const TOGGLE_TSX = "../../src/ui/primitives/Toggle.tsx";
 
 describe("accessibility-audit.yaml anchors exist in source", () => {
   describe("48dp touch targets — declared once per control, inherited by every screen this flow samples", () => {
@@ -326,6 +333,74 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
     });
   });
 
+  describe("A2 Live and A3 Settings (T368) — the two redesigned screens this flow had never reached", () => {
+    it("ScreenBar hides its mark from assistive tech and requires an accessibleName, so a bar action can never be announced as its glyph", () => {
+      const code = readComponentCode(SCREEN_BAR_TSX, "BarAction");
+      // The name comes from the action, not from the visible content.
+      expect(code).toMatch(/accessibilityLabel=\{action\.accessibleName\}/);
+      // And the visible content is removed from the tree TalkBack reads,
+      // both ways Android needs it said.
+      expect(code).toMatch(/accessibilityElementsHidden/);
+      expect(code).toMatch(/importantForAccessibility="no-hide-descendants"/);
+      // `accessibleName` is not optional on the interface — that is what
+      // makes the two assertions above a contract rather than a habit.
+      const whole = readCode(SCREEN_BAR_TSX);
+      expect(whole).toMatch(/accessibleName: string;/);
+    });
+
+    it("the bar's 48dp touch area is declared in ScreenBar.tsx itself and audited by the shared touch-target loop", () => {
+      const code = readCode(SCREEN_BAR_TSX);
+      expect(code).toMatch(/touchArea: \{[^}]*minHeight: 48/);
+      expect(code).toMatch(/touchArea: \{[^}]*minWidth: 48/);
+      // Pointed at, not re-derived here — the same split every other
+      // control in this file uses.
+      expect(readSource(TOUCH_TARGETS_TEST_TS)).toMatch(/ScreenBar/);
+    });
+
+    it("live-screen.tsx names the back action and the run pill exactly as the yaml asserts them", () => {
+      const code = readComponentCode(LIVE_SCREEN_TSX, "LiveScreen");
+      expect(code).toMatch(
+        new RegExp(`accessibleName: "${ACCESSIBILITY_AUDIT_FLOW.liveBackLabel}"`),
+      );
+      expect(code).toMatch(/testId: `\$\{testId\}-back`/);
+      expect(code).toMatch(/label=\{turnRunning \? "Working" : "Idle"\}/);
+      expect(code).toMatch(/testId=\{`\$\{testId\}-status`\}/);
+      // `live.tsx` passes no `testId`, so the default is what the yaml's
+      // ids are built from — checked rather than assumed, because a
+      // caller-supplied prefix would silently break every id below.
+      expect(readCode(LIVE_SCREEN_TSX)).toMatch(/testId = "live-screen"/);
+      expect(readComponentCode(LIVE_ROUTE_TSX, "SessionLiveRoute")).not.toMatch(/testId=/);
+    });
+
+    it("Files and Terminal kept their testIDs when HANDOFF §7.4 moved them onto A2, and the route really mounts them there", () => {
+      const code = readComponentCode(SESSION_NAV_ACTIONS_TSX, "SessionNavActions");
+      expect(code).toMatch(new RegExp(`label="${ACCESSIBILITY_AUDIT_FLOW.liveFilesLabel}"`));
+      expect(code).toMatch(new RegExp(`label="${ACCESSIBILITY_AUDIT_FLOW.liveTerminalLabel}"`));
+      expect(code).toMatch(/testId=\{`\$\{testId\}-files`\}/);
+      expect(code).toMatch(/testId=\{`\$\{testId\}-terminal`\}/);
+      expect(readCode(SESSION_NAV_ACTIONS_TSX)).toMatch(/testId = "session-nav-actions"/);
+      // The relocation itself: A2's route is what mounts them now.
+      expect(readComponentCode(LIVE_ROUTE_TSX, "SessionLiveRoute")).toMatch(
+        /navActions=\{<SessionNavActions/,
+      );
+    });
+
+    it("the settings host row is one accessible element whose whole name settings-host-model.ts builds", () => {
+      const code = readComponentCode(SETTINGS_SCREEN_TSX, "SettingsScreen");
+      expect(code).toMatch(
+        /accessibilityLabel=\{settingsHostAccessibilityLabel\(hostProfile, connectionPhase\)\}/,
+      );
+      expect(code).toMatch(/testID=\{testId \? `\$\{testId\}-host-row` : undefined\}/);
+    });
+
+    it("Toggle announces its visible label, which is what the haptics assertion relies on", () => {
+      expect(readCode(TOGGLE_TSX)).toMatch(/accessibilityLabel=\{label\}/);
+      expect(readComponentCode(SETTINGS_SCREEN_TSX, "SettingsScreen")).toMatch(
+        new RegExp(`label="${ACCESSIBILITY_AUDIT_FLOW.settingsHapticsLabel}"`),
+      );
+    });
+  });
+
   it("ACCESSIBILITY_AUDIT_FLOW's constants match the literals accessibility-audit.yaml actually uses", () => {
     // accessibility-audit.yaml cannot import this module (Maestro has no
     // module system) — this pins the two copies (constants file, yaml
@@ -354,6 +429,19 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
     expect(ACCESSIBILITY_AUDIT_FLOW.composerEntriesContainer).toBe("composer-entries");
     expect(ACCESSIBILITY_AUDIT_FLOW.composerMicButton).toBe("composer-mic");
     expect(ACCESSIBILITY_AUDIT_FLOW.composerAttachButton).toBe("composer-attach");
+    // T368 — A2 and A3.
+    expect(ACCESSIBILITY_AUDIT_FLOW.liveDeepLink).toBe(
+      "picompanion://h/e2e-host/session/e2e-session/live",
+    );
+    expect(ACCESSIBILITY_AUDIT_FLOW.liveScreenRoot).toBe("live-screen");
+    expect(ACCESSIBILITY_AUDIT_FLOW.liveBackButton).toBe("live-screen-back");
+    expect(ACCESSIBILITY_AUDIT_FLOW.liveStatusPill).toBe("live-screen-status");
+    expect(ACCESSIBILITY_AUDIT_FLOW.liveFilesButton).toBe("session-nav-actions-files");
+    expect(ACCESSIBILITY_AUDIT_FLOW.liveTerminalButton).toBe("session-nav-actions-terminal");
+    expect(ACCESSIBILITY_AUDIT_FLOW.settingsDeepLink).toBe("picompanion://h/e2e-host/settings");
+    expect(ACCESSIBILITY_AUDIT_FLOW.settingsScreenRoot).toBe("settings-screen");
+    expect(ACCESSIBILITY_AUDIT_FLOW.settingsHostRow).toBe("settings-screen-host-row");
+    expect(ACCESSIBILITY_AUDIT_FLOW.settingsHapticsToggle).toBe("settings-screen-haptics-toggle");
   });
 
   // T72: everything above (including the "constants match the literals"
@@ -399,6 +487,59 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
         }
       },
     );
+
+    it(
+      "asserts the settings host row's name by CALLING settingsHostAccessibilityLabel, not by comparing two hand-typed copies (T368) — " +
+        "the model is RN-free, so the yaml's literal is checked against what the screen will actually announce",
+      () => {
+        // The one reading this unpaired flow can reach: nothing is saved
+        // (its connect-form submit fails validation on purpose) and no
+        // connection exists, so `null` / `"idle"` is the real argument
+        // pair, not a convenient one.
+        const expected = settingsHostAccessibilityLabel(null, "idle");
+        expect(ACCESSIBILITY_AUDIT_FLOW.settingsHostRowNoHostLabel).toBe(expected);
+
+        const texts = steps
+          .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
+          .map((step) => step.text);
+        expect(
+          texts,
+          `accessibility-audit.yaml should assert the host row's whole accessible name ("${expected}")`,
+        ).toContain(expected);
+      },
+    );
+
+    it("reaches A2 and A3 by deep link and asserts each screen's own root before anything inside it (T368)", () => {
+      const openedLinks = steps
+        .filter((step) => step.kind === "openLink")
+        .map((step) => step.value);
+      expect(openedLinks).toContain(ACCESSIBILITY_AUDIT_FLOW.liveDeepLink);
+      expect(openedLinks).toContain(ACCESSIBILITY_AUDIT_FLOW.settingsDeepLink);
+
+      // Order matters: an id asserted before its screen is opened would
+      // pass against whatever was still on screen from the step before.
+      const indexOfStep = (predicate: (step: (typeof steps)[number]) => boolean) =>
+        steps.findIndex(predicate);
+      for (const [link, root, inner] of [
+        [
+          ACCESSIBILITY_AUDIT_FLOW.liveDeepLink,
+          ACCESSIBILITY_AUDIT_FLOW.liveScreenRoot,
+          ACCESSIBILITY_AUDIT_FLOW.liveBackButton,
+        ],
+        [
+          ACCESSIBILITY_AUDIT_FLOW.settingsDeepLink,
+          ACCESSIBILITY_AUDIT_FLOW.settingsScreenRoot,
+          ACCESSIBILITY_AUDIT_FLOW.settingsHostRow,
+        ],
+      ] as const) {
+        const openAt = indexOfStep((step) => step.kind === "openLink" && step.value === link);
+        const rootAt = indexOfStep((step) => step.kind === "assertVisible" && step.id === root);
+        const innerAt = indexOfStep((step) => step.kind === "assertVisible" && step.id === inner);
+        expect(openAt, `${link} should be opened`).toBeGreaterThanOrEqual(0);
+        expect(rootAt, `${root} should be asserted after ${link}`).toBeGreaterThan(openAt);
+        expect(innerAt, `${inner} should be asserted after ${root}`).toBeGreaterThan(rootAt);
+      }
+    });
 
     it("never names the production daemon's port, in any form including comments", () => {
       expect(

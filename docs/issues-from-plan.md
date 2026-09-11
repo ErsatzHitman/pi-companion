@@ -624,6 +624,7 @@ that recomputation has to be domain-specific:
 | T365   | A calibrated self-heal phase turned main red for the second time, and failed 15s away from the thing that broke      | phase-9   | server           | P9-U   | T309                                                                  |
 | T366   | Settings never said which daemon it was about, and offered four controls that are per-agent on the wire              | phase-9   | android          | P9-U   | T364                                                                  |
 | T367   | Six of seven comments stopped naming a font the app dropped, and nothing could say which one was left                | phase-9   | android          | P9-U   | T356                                                                  |
+| T368   | The two screens the redesign added were the two the on-device accessibility audit never opened                       | phase-9   | android          | P9-U   | T366                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -665,8 +666,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**576 tasks** (distinct IDs counted directly from the table above), recounted at T367 with
-`grep`/`sort -u` over the table's own rows — one past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**577 tasks** (distinct IDs counted directly from the table above), recounted at T368 with
+`grep`/`sort -u` over the table's own rows — one past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18334,3 +18335,54 @@ turned it red naming the file, and restoring the file from a scratchpad copy (ne
 - [x] The test does not fail against the corrections that must quote the wrong name to explain it
 - [x] The walk is proven to reach the tree, so an empty result means something
 - [x] Proven able to fail, and restored from a scratchpad copy rather than `git checkout --`
+
+#### T368 — The two screens the redesign added were the two the on-device accessibility audit never opened
+
+`labels: phase-9, area: android` · `depends-on: T366`
+
+`accessibility-audit.yaml` is this repository's only on-device proof that critical controls
+carry a 48dp touch target and a real TalkBack name (`plan.md` §14.4). It sampled onboarding, the
+connect form and the composer. The redesign then added A2 Live as a whole new route and rebuilt
+A3 Settings around a host row, and the audit opened neither — so the two newest screens were the
+two with no live accessibility evidence at all, which is the wrong way round.
+
+**A2 Live.** Reached by the same deep-link mechanism the flow already uses for the composer, so
+this sampling does not depend on the session bar's own navigation working. The control sampled
+is `ScreenBar`'s leading action — the strongest kind of proof available here, because its
+visible content is a single `‹` carrying `accessibilityElementsHidden` and
+`importantForAccessibility="no-hide-descendants"`, so "Back to session" exists ONLY as the
+Pressable's content-description. Maestro's Android driver matches a `text:` selector against
+visible text _or_ content-description, so asserting it is a real TalkBack check rather than a
+restatement of what is on screen — the same mechanism `composer-mic` already gives, now sampled
+on the recipe all four redesigned screens mount. The run pill is asserted by its word, never its
+colour, and Files and Terminal are asserted by the testIDs `HANDOFF.md` §7.4 required the
+relocation to keep — which is what makes the assertion prove the relocation, not just the
+buttons.
+
+**A3 Settings.** The host row is one `accessible` element whose entire name
+`settings-host-model.ts`'s `settingsHostAccessibilityLabel` builds, so which daemon, its state,
+and how it is reached are announced as a single TalkBack stop in the order they are drawn. The
+flow pairs with nothing — its connect-form submit fails validation on purpose — so the honest
+reading is the no-host one, and the yaml asserts that whole string rather than a substring: a
+row that silently drew a half-filled name would still satisfy a looser selector.
+
+**The pin that matters most does not compare two hand-typed copies.** Every sibling contract
+test checks a yaml literal against a constants file someone typed twice. `settings-host-model.ts`
+is RN-free, so this one CALLS `settingsHostAccessibilityLabel(null, "idle")` and checks the yaml
+asserts exactly what the screen will announce — the arguments are the only pair this unpaired
+flow can actually reach, not a convenient choice. Shortening the yaml's assertion to
+`"No host saved"` was proven to turn it red, and the file was restored from a scratchpad copy
+(never `git checkout --`).
+
+A second yaml-read case pins ORDER, not just presence: each screen's root must be asserted after
+its deep link and before anything inside it. An id asserted before its screen is opened would
+otherwise pass against whatever was still on screen from the previous step — the failure mode
+that makes a green flow meaningless.
+
+- [x] The audit opens A2 and A3, each by deep link, independent of the bars' own navigation
+- [x] The bar action's name is proven to exist only as a content-description, and to be required
+- [x] The 48dp touch area is pointed at where it is declared, not re-derived
+- [x] The host row's asserted string is derived by calling the model, not typed a second time
+- [x] Root-before-contents order is pinned, so no assertion can pass against the previous screen
+- [x] Files and Terminal are asserted by the testIDs the §7.4 relocation had to keep
+- [ ] A real dispatch runs the extended flow green on an emulator

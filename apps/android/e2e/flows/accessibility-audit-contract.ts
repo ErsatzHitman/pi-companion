@@ -82,4 +82,48 @@ export const ACCESSIBILITY_AUDIT_FLOW = {
   composerAttachButton: "composer-attach",
   /** Same mechanism as `composerMicLabel` — `ATTACH_ACTION_LABEL`, announced only via content-description. */
   composerAttachLabel: "Add attachment",
+
+  // --- A2 Live (`live-screen.tsx`, T368) -------------------------------
+  /** Reached by the same deep-link mechanism as the composer above, so this sampling does not depend on the session bar's own navigation. */
+  liveDeepLink: "picompanion://h/e2e-host/session/e2e-session/live",
+  liveScreenRoot: "live-screen",
+  liveBackButton: "live-screen-back",
+  /**
+   * `ScreenBar.tsx`'s `ScreenBarAction.accessibleName`, required by that
+   * interface precisely so a bar action can never ship announced as its
+   * glyph. The `‹` itself carries `accessibilityElementsHidden` and
+   * `importantForAccessibility="no-hide-descendants"`, so this string
+   * exists ONLY as the Pressable's content-description — the same
+   * content-description-only proof `composerMicLabel` gives, sampled on
+   * the recipe all four redesigned screens mount.
+   */
+  liveBackLabel: "Back to session",
+  liveStatusPill: "live-screen-status",
+  /** `live-screen.tsx`'s pill reads `turnRunning ? "Working" : "Idle"`; nothing runs on this unpaired harness, so the honest reading is the idle one — announced as a word, never as a colour alone (plan.md §10.5). */
+  liveIdleStatusLabel: "Idle",
+  /** `HANDOFF.md` §7.4 moved Files and Terminal off the transcript header and onto A2, keeping both testIDs — asserting them here is what proves the relocation kept them. */
+  liveFilesButton: "session-nav-actions-files",
+  /** `Button`'s `accessibilityLabel` is its own `label`, so this is both the visible copy and the TalkBack name. */
+  liveFilesLabel: "Files",
+  liveTerminalButton: "session-nav-actions-terminal",
+  liveTerminalLabel: "Terminal",
+
+  // --- A3 Settings (`SettingsScreen.tsx`, T368) ------------------------
+  settingsDeepLink: "picompanion://h/e2e-host/settings",
+  settingsScreenRoot: "settings-screen",
+  settingsHostRow: "settings-screen-host-row",
+  /**
+   * The whole row is one `accessible` element whose name
+   * `settings-host-model.ts`'s `settingsHostAccessibilityLabel` builds,
+   * so which daemon / its state / how it is reached are announced as one
+   * TalkBack stop in the order they are drawn. This flow pairs with
+   * nothing (its connect-form submit fails validation on purpose), so
+   * the honest reading is the no-host one. `accessibility-audit.contract
+   * .test.ts` derives this string by CALLING that function rather than
+   * comparing two hand-typed copies — the model is RN-free, so it can.
+   */
+  settingsHostRowNoHostLabel: "No host saved, Not connected, Connect to a daemon to see it here",
+  settingsHapticsToggle: "settings-screen-haptics-toggle",
+  /** `Toggle.tsx`: `accessibilityLabel={label}` — visible copy and TalkBack name are the same string, as with `Button`. */
+  settingsHapticsLabel: "Haptics",
 } as const;

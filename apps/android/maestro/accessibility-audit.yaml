@@ -246,3 +246,70 @@ tags:
     id: "composer-entries"
 - assertVisible:
     text: "Failed"
+
+# =====================================================================
+# A2 — LIVE (T368). The redesign put this session's running work on its
+# own route, reached from the session bar; this flow reaches it by the
+# same deep-link mechanism it already uses for the composer, so it does
+# not depend on the bar's own navigation.
+#
+# `live-screen-back` is the shared `ScreenBar`'s leading action. Its
+# visible content is a single `‹` carrying `accessibilityElementsHidden`
+# and `importantForAccessibility="no-hide-descendants"`, so
+# "Back to session" exists ONLY as the Pressable's content-description —
+# the same content-description-only proof `composer-mic` gives above,
+# sampled on the recipe every redesigned screen mounts. Its touch area
+# is `ScreenBar.tsx`'s own 48dp `touchArea`, audited by the shared loop
+# in `ui/primitives/touch-targets.test.ts`.
+# =====================================================================
+- openLink: "picompanion://h/e2e-host/session/e2e-session/live"
+- assertVisible:
+    id: "live-screen"
+- assertVisible:
+    id: "live-screen-back"
+- assertVisible:
+    text: "Back to session"
+# --- The run pill. Nothing is running on this unpaired harness, so the
+# --- honest state is the idle one — asserted by its word, never by its
+# --- colour (plan.md §10.5).
+- assertVisible:
+    id: "live-screen-status"
+- assertVisible:
+    text: "Idle"
+# --- Files and Terminal moved here from the transcript header and kept
+# --- their testIDs (`HANDOFF.md` §7.4). `Button`'s accessibilityLabel is
+# --- its own visible `label`, so each text assertion is both checks.
+- assertVisible:
+    id: "session-nav-actions-files"
+- assertVisible:
+    text: "Files"
+- assertVisible:
+    id: "session-nav-actions-terminal"
+- assertVisible:
+    text: "Terminal"
+
+# =====================================================================
+# A3 — SETTINGS (T368). The host row is one accessible element whose
+# whole name is built in `settings-host-model.ts`'s
+# `settingsHostAccessibilityLabel`, so the three things the row draws —
+# which daemon, its state, and how it is reached — are announced as one
+# TalkBack stop in the order they are drawn. Nothing was paired in this
+# flow (the connect-form submit above fails validation on purpose), so
+# the row's honest reading is the no-host one, and this asserts that
+# exact string rather than a substring: a row that silently drew a
+# half-filled name would still match a looser selector.
+# =====================================================================
+- openLink: "picompanion://h/e2e-host/settings"
+- assertVisible:
+    id: "settings-screen"
+- assertVisible:
+    id: "settings-screen-host-row"
+- assertVisible:
+    text: "No host saved, Not connected, Connect to a daemon to see it here"
+# --- The switch this screen already shipped, re-sampled here because the
+# --- redesign moved it under a labelled group: `Toggle`'s
+# --- accessibilityLabel is its visible `label`.
+- assertVisible:
+    id: "settings-screen-haptics-toggle"
+- assertVisible:
+    text: "Haptics"
