@@ -33,6 +33,17 @@ tags:
 # consequence of that exclusion rather than evidence for it. See
 # `../e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` for this
 # flow's own stated reason.
+#
+# CORRECTED (T381): still unassigned, and deliberately so — not an
+# oversight left over from the correction above. This flow's `openLink:`
+# step targets a `picompanion://dev/…` route whose wrapper redirects to
+# `/` outside `__DEV__`, and CI only builds `assembleRelease`, so no
+# dispatch can mount this flow's screen. T381's non-gating observation
+# job derives its set from the tree and leaves dev-linked flows out for
+# exactly this reason (`shard-plan.ts`'s `listNonExitGateFlowNames`).
+# Observing this flow needs a real mount point for its component (the
+# disclosed gap below) or a Metro-backed debug-APK job; until one exists,
+# "has never been run" is the accurate state, and this paragraph is why.
 # ---------------------------------------------------------------------
 # WHY THIS FLOW OPENS A DEV-ONLY LAB ROUTE, NOT THE REAL SESSION SCREEN.
 #

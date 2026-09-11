@@ -39,6 +39,14 @@ const REAL_SHARDS_PATH = fileURLToPath(new URL("../../maestro/shards.json", impo
  * same one documented way any flow does:
  * `npx tsx apps/android/e2e/run-flow.ts file-download`.
  *
+ * CORRECTED (T381): "deliberately not assigned to a shard" no longer
+ * holds — this flow is assigned to the non-gating observation set
+ * (`listNonExitGateFlowNames` below; run via `run-shard.ts non-gating`),
+ * which the `maestro-non-gating` CI job runs on every dispatch without
+ * joining the exit gate's ten. The first half above still holds (not one
+ * of T37E1-T37E10, so never in `shards.json`), and this exclusion set is
+ * unchanged.
+ *
  * `recovered-turn-banner.yaml` (T106) is excluded for the identical
  * reason as `file-download.yaml` above: it was added long after T37F's
  * ten-flow set closed, is not one of T37E1-T37E10, and — see that flow's
@@ -47,11 +55,28 @@ const REAL_SHARDS_PATH = fileURLToPath(new URL("../../maestro/shards.json", impo
  * Runs the same one documented way: `npx tsx apps/android/e2e/run-flow.ts
  * recovered-turn-banner`.
  *
+ * CORRECTED (T381): still unassigned, and the reason is now structural
+ * rather than "nobody gave it a shard". Its `openLink:` step targets a
+ * `picompanion://dev/…` route whose wrapper returns `<Redirect href="/" />`
+ * when `!__DEV__`, and every APK CI builds is the `assembleRelease`
+ * variant (`__DEV__` false; the debug variant carries no embedded bundle
+ * — T311). No CI-buildable APK mounts this flow's screen, so
+ * `listNonExitGateFlowNames` below deliberately leaves dev-linked flows
+ * out of the observed set. Observing it needs a real mount point for its
+ * component (its header's disclosed gap) or a Metro-backed debug-APK job;
+ * this task builds neither, and says so here rather than implying a
+ * shard assignment would suffice.
+ *
  * `session-tree-sheet.yaml` (T39A) is excluded for the identical reason
  * as `recovered-turn-banner.yaml` immediately above — same wave-6 shape
  * (added long after T37F's ten-flow set closed, deep-links to its own
  * `__DEV__`-only lab route). Runs the same one documented way:
  * `npx tsx apps/android/e2e/run-flow.ts session-tree-sheet`.
+ *
+ * CORRECTED (T381): same structural verdict as `recovered-turn-banner`
+ * immediately above — still unassigned because no CI-buildable APK mounts
+ * its `picompanion://dev/…` screen, not because no shard names it. See
+ * that paragraph for the full reason; it applies here unchanged.
  *
  * `queue-retry-compaction.yaml` (T39C) is excluded for the identical
  * reason as the three above — added long after T37F's ten-flow set
@@ -81,6 +106,12 @@ const REAL_SHARDS_PATH = fileURLToPath(new URL("../../maestro/shards.json", impo
  *
  * Runs the same one documented way any flow does:
  * `npx tsx apps/android/e2e/run-flow.ts queue-retry-compaction`.
+ *
+ * CORRECTED (T381): same assignment change as `file-download.yaml` above —
+ * this flow joins the non-gating observation set (`listNonExitGateFlowNames`
+ * below; run via `run-shard.ts non-gating`) while staying out of
+ * `shards.json`, for the same "not one of T37E1-T37E10" reason that still
+ * holds.
  */
 const NON_EXIT_GATE_FLOW_NAMES = new Set([
   "smoke",
@@ -89,6 +120,44 @@ const NON_EXIT_GATE_FLOW_NAMES = new Set([
   "session-tree-sheet",
   "queue-retry-compaction",
 ]);
+
+/**
+ * T381 — flows the non-gating observation job runs, derived from the tree
+ * rather than typed out: every real flow minus the exit gate's ten, minus
+ * the flows observed elsewhere, minus the flows no CI-built APK can run.
+ *
+ * The three subtractions each name their reason, so none of them can go
+ * stale silently:
+ *
+ * - Exit-gate flows are `listExitGateFlowNames`' own output — a flow
+ *   promoted into `shards.json` leaves this set with no edit here.
+ * - `OBSERVED_ELSEWHERE` names the flows a different CI job already runs
+ *   (`smoke`, via `packaged-app-smoke`), so this job never runs anything
+ *   twice.
+ * - Dev-linked flows open a `picompanion://dev/…` route. Every `app/dev/`
+ *   route wrapper returns `<Redirect href="/" />` when `!__DEV__`, and CI
+ *   only ever builds the `assembleRelease` variant, so those screens do
+ *   not exist on a CI-built APK and asserting on them there can only fail.
+ *   Detected from each flow file's own `openLink:` step, so a flow whose
+ *   component gains a real mount point — and drops its dev link — joins
+ *   the observed set automatically.
+ */
+const OBSERVED_ELSEWHERE = new Set(["smoke"]);
+
+const DEV_ROUTE_LINK_PATTERN = /openLink:\s*["']picompanion:\/\/dev\//;
+
+export function usesDevOnlyRoute(flowPath: string): boolean {
+  return DEV_ROUTE_LINK_PATTERN.test(readFileSync(flowPath, "utf8"));
+}
+
+export function listNonGatingObservedFlowNames(maestroDir?: string): string[] {
+  const registry = createFlowRegistry(maestroDir);
+  const exitGate = new Set(listExitGateFlowNames(maestroDir));
+  return registry.listFlowNames().filter((name) => {
+    if (exitGate.has(name) || OBSERVED_ELSEWHERE.has(name)) return false;
+    return !usesDevOnlyRoute(registry.resolveFlowPath(name));
+  });
+}
 
 export interface Shard {
   name: string;

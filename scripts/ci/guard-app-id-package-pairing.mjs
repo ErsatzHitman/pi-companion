@@ -236,7 +236,14 @@ const APP_VARIANT_SHELL_PATTERN = /\bAPP_VARIANT=["']?([^\s"']+)["']?/;
 const APP_VARIANT_ENV_BLOCK_PATTERN = /\bAPP_VARIANT:\s*["']?([^\s"'\n]+)["']?/;
 const EXPLICIT_FLOW_PATTERN = /run-flow\.ts\s+["']?([a-zA-Z][a-zA-Z0-9-]*)["']?/;
 // A job runs the WHOLE shard set when it either reads `shards.json`
-// directly or invokes the shard runner that reads it. Both spellings are
+// directly or invokes the shard runner that reads it. CORRECTED (T381):
+// "the WHOLE shard set" has one known exception — `maestro-non-gating`
+// invokes `run-shard.ts non-gating`, which resolves two tree-derived flows
+// rather than reading `shards.json`. The pairing verdict is unaffected:
+// every flow in either set declares `appId: ${APP_ID}` against the same
+// debug package, so pairing the ten proves the two. If a non-gating flow
+// ever declares a different appId or override, this pattern needs a real
+// third shape, not this note. Both spellings are
 // recognised, and that is deliberate rather than redundant: T320 moved the
 // shard loop out of the workflow and into `run-shard.ts` (the emulator
 // action executes each `script:` line as its own `sh -c`, so a `for` loop in

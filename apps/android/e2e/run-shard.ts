@@ -41,7 +41,11 @@ import { fileURLToPath } from "node:url";
 
 import { adbDeviceCommands, captureCommand, runCommand } from "./harness/adb.js";
 import { prepareDevice } from "./harness/device-prep.js";
-import { loadShardConfig, resolveShardFlows } from "./harness/shard-plan.js";
+import {
+  listNonGatingObservedFlowNames,
+  loadShardConfig,
+  resolveShardFlows,
+} from "./harness/shard-plan.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const RUN_FLOW = path.join(REPO_ROOT, "apps", "android", "e2e", "run-flow.ts");
@@ -77,19 +81,37 @@ async function captureDeviceLog(flow: string, outDir: string): Promise<void> {
   }
 }
 
+/**
+ * T381 — the synthetic shard name for the flows the Phase 5 exit gate
+ * does not observe. Deliberately NOT a key in `shards.json`: that file is
+ * the exit gate's ten scenarios, and widening it would change what "Phase 5
+ * exits green" means. The set comes from
+ * `listNonGatingObservedFlowNames` (derived from the tree, never typed),
+ * and the `maestro-non-gating` CI job invokes exactly this command with
+ * exactly this name — so there is still one loop, not a second runner.
+ */
+const NON_GATING_SHARD_NAME = "non-gating";
+
 async function main(): Promise<void> {
   const [shardName, apkPath] = process.argv.slice(2);
 
   if (!shardName || !apkPath) {
-    console.error("Usage: npx tsx apps/android/e2e/run-shard.ts <shard-name> <apk-path>");
+    console.error(
+      `Usage: npx tsx apps/android/e2e/run-shard.ts <shard-name|${NON_GATING_SHARD_NAME}> <apk-path>`,
+    );
     process.exitCode = 1;
     return;
   }
 
-  // Throws with the known shard names on a typo, rather than silently
+  // `non-gating` resolves from the tree rather than `shards.json` (see
+  // above). Every other name still resolves from the shard config and
+  // throws with the known shard names on a typo, rather than silently
   // running zero flows and reporting success — the shape a shard name that
   // no longer exists would otherwise take.
-  const flows = resolveShardFlows(loadShardConfig(), shardName);
+  const flows =
+    shardName === NON_GATING_SHARD_NAME
+      ? listNonGatingObservedFlowNames()
+      : resolveShardFlows(loadShardConfig(), shardName);
   console.log(`[run-shard] ${shardName}: ${flows.length} flow(s) — ${flows.join(", ")}`);
 
   // T329: install, hide new system error dialogs, and dismiss any already

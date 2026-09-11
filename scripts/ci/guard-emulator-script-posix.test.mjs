@@ -139,12 +139,19 @@ test("a script belonging to a different step is not attributed to the emulator s
   assert.deepEqual(findEmulatorScriptViolations([{ path: "w.yml", content }]), []);
 });
 
-test("the real tree: both emulator scripts exist and neither uses a bashism", () => {
+test("the real tree: every emulator script exists and none uses a bashism", () => {
   const { workflows } = realTree();
   const scripts = workflows.flatMap((workflow) => extractEmulatorScriptBlocks(workflow.content));
 
   // Non-vacuity: a guard that silently checks nothing reports OK forever.
-  assert.equal(scripts.length, 2, "maestro-e2e and packaged-app-smoke each have one");
+  // CORRECTED (T381): two became three when the `maestro-non-gating` job
+  // added its own emulator script — the count is the check, so it moves
+  // with the tree.
+  assert.equal(
+    scripts.length,
+    3,
+    "maestro-e2e, packaged-app-smoke and maestro-non-gating each have one",
+  );
   assert.deepEqual(findEmulatorScriptViolations(workflows), []);
 });
 

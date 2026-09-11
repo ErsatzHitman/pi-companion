@@ -1,10 +1,16 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { createFlowRegistry } from "./flow-registry.js";
 import {
   listExitGateFlowNames,
+  listNonGatingObservedFlowNames,
   listShardNames,
   loadShardConfig,
   resolveShardFlows,
+  usesDevOnlyRoute,
   validateShardConfig,
   type ShardConfig,
 } from "./shard-plan.js";
@@ -114,6 +120,50 @@ describe("validateShardConfig — mutation proof", () => {
     config.shards[1]!.name = "shard-1";
     const issues = validateShardConfig(config, known);
     expect(issues.some((issue) => issue.includes('duplicate shard name "shard-1"'))).toBe(true);
+  });
+});
+
+describe("listNonGatingObservedFlowNames (T381)", () => {
+  it("observes exactly file-download and queue-retry-compaction on the real tree", () => {
+    expect(listNonGatingObservedFlowNames()).toEqual(["file-download", "queue-retry-compaction"]);
+  });
+
+  it("is disjoint from the exit gate, which still asserts exactly ten", () => {
+    const exitGate = new Set(listExitGateFlowNames());
+    expect(exitGate.size).toBe(10);
+    for (const name of listNonGatingObservedFlowNames()) {
+      expect(exitGate.has(name)).toBe(false);
+    }
+  });
+
+  it("finds a dev-only deep link in exactly the two lab flows", () => {
+    const registry = createFlowRegistry();
+    const devLinked = registry
+      .listFlowNames()
+      .filter((name) => usesDevOnlyRoute(registry.resolveFlowPath(name)));
+    expect(devLinked).toEqual(["recovered-turn-banner", "session-tree-sheet"]);
+  });
+
+  it("a fixture flow that drops its dev link joins the observed set with no code change", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "non-gating-fixture-"));
+    // Real exclusion-set names (the set is module-level, not per-directory),
+    // so the only thing deciding between these two fixtures is the dev link.
+    writeFileSync(
+      path.join(dir, "file-download.yaml"),
+      'appId: ${APP_ID}\n- openLink: "picompanion://h/x/session/y"\n',
+    );
+    writeFileSync(
+      path.join(dir, "recovered-turn-banner.yaml"),
+      'appId: ${APP_ID}\n- openLink: "picompanion://dev/some-lab"\n',
+    );
+    expect(listNonGatingObservedFlowNames(dir)).toEqual(["file-download"]);
+    // The lab gains a real mount point and drops its dev link: observed now,
+    // with no edit to the derivation under test.
+    writeFileSync(
+      path.join(dir, "recovered-turn-banner.yaml"),
+      'appId: ${APP_ID}\n- openLink: "picompanion://h/x/session/y"\n',
+    );
+    expect(listNonGatingObservedFlowNames(dir)).toEqual(["file-download", "recovered-turn-banner"]);
   });
 });
 

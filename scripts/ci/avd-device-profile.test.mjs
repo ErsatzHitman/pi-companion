@@ -66,17 +66,20 @@ test("no preferred profile yields an empty string, never a throw", () => {
   assert.equal(chooseAvdDeviceProfile([]), "");
 });
 
-test("both emulator jobs consume the resolver's output, and neither hardcodes a profile", () => {
+test("all emulator jobs consume the resolver's output, and none hardcodes a profile", () => {
   // The mistake this replaces was a literal `profile: pixel_8` in two
   // places; a fix applied to only one of them would look done and leave the
-  // other red on the next dispatch.
+  // other red on the next dispatch. CORRECTED (T381): "both"/two became
+  // all-three when the `maestro-non-gating` job added a third emulator
+  // consumer — a count left at two would bless a future fourth job that
+  // skips the resolver the same way the old tests blessed this one.
   const workflow = readFileSync(".github/workflows/android-maestro-e2e.yml", "utf8");
 
   const consumers = workflow.match(/profile: \$\{\{ steps\.avd\.outputs\.profile \}\}/g) ?? [];
-  assert.equal(consumers.length, 2, "both emulator steps must read the resolved profile");
+  assert.equal(consumers.length, 3, "every emulator step must read the resolved profile");
 
   const resolvers = workflow.match(/run-resolve-avd-device-profile\.mjs/g) ?? [];
-  assert.equal(resolvers.length, 2, "each emulator step needs its own resolver step");
+  assert.equal(resolvers.length, 3, "each emulator step needs its own resolver step");
 
   assert.equal(
     /^\s+profile: (?!\$\{\{)/m.test(workflow),

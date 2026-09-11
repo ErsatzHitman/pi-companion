@@ -31,6 +31,14 @@ tags:
 # consequence of that exclusion rather than evidence for it. See
 # `../e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` for this
 # flow's own stated reason.
+#
+# CORRECTED (T381): "not assigned to a shard" no longer holds — this flow
+# belongs to the non-gating observation set (`shard-plan.ts`'s
+# `listNonExitGateFlowNames`, derived from the tree), which the
+# `maestro-non-gating` job in `android-maestro-e2e.yml` runs on every
+# dispatch via `run-shard.ts non-gating`, outside the exit gate's ten.
+# "Has never been run" holds until that job's first dispatch records its
+# run id in T381's ledger section.
 # ---------------------------------------------------------------------
 # WHY THIS FLOW ASSERTS ONLY AN UNAVAILABLE STATE — no round trip, no
 # retry, no compaction banner:
