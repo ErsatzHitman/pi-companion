@@ -13,9 +13,21 @@ name: Android Maestro E2E
 # shard assignment and flow-order-independence claims below without a
 # device).
 #
-# NOT PROVEN BY THIS FILE, and disclosed rather than hidden: this
-# workflow has never executed end-to-end. It needs two pieces of
-# infrastructure this repository does not have configured yet:
+# CORRECTED (T371): this said "NOT PROVEN BY THIS FILE, and disclosed
+# rather than hidden: this workflow has never executed end-to-end. It
+# needs two pieces of infrastructure this repository does not have
+# configured yet". It has now executed end-to-end. Dispatch 34558058662
+# at 51e2fa8 was green in every job: `build-development-apk` (15m 22s),
+# all five `maestro-e2e` shards, and `packaged-app-smoke` (22m 33s). All
+# ten of plan.md §14.4's flows PASSED -- pairing, network-switch,
+# cold-start-restore, background-kill-restore, composer-inputs,
+# offline-cache-outbox, notification-approval, extension-sheets,
+# files-and-terminal, accessibility-audit -- which is the Phase 5 exit
+# gate's own acceptance criterion, met for the first time. Both
+# requirements below are met; they are kept, with their own corrections,
+# because the history of HOW each was met is the useful part.
+#
+# The two pieces of infrastructure this workflow needs:
 #   1. a development-variant build of sh.picompanion.debug.
 #      CORRECTED (T315): this said an "EAS development build", gated on an
 #      EXPO_TOKEN "currently unconfigured". Both halves are false now. The
@@ -55,10 +67,15 @@ name: Android Maestro E2E
 # fail loudly now rather than no-op. `packaged-app-smoke` still keeps its
 # own EXPO_TOKEN dry run, which is the only part of that sentence that was
 # still true. (CORRECTED (T330): that dry run is gone too, along with the
-# EAS build it guarded -- see the T330 correction above.) Requirement 2
-# remains genuinely unproven: no emulator has
-# ever booted here, because every dispatch so far died before boot -- most
-# recently on `Error: No device found matching --device pixel_8` (T317).
+# EAS build it guarded -- see the T330 correction above.)
+# CORRECTED (T371): this went on to say "Requirement 2 remains genuinely
+# unproven: no emulator has ever booted here, because every dispatch so
+# far died before boot -- most recently on `Error: No device found
+# matching --device pixel_8` (T317)". That sentence outlived its own
+# subject twice over: T319 got past the dash bashism, T324 found and
+# fixed the silent `-accel off` fallback, and by dispatch 34558058662
+# every shard boots, installs, and runs its flows green. The T317 error
+# is history, not the current state.
 # This is a manual (workflow_dispatch) workflow, not part of the
 # push/pull_request `ci.yml` gate: plan.md §15.4's "Required jobs from
 # Phase 1 onward" list does not include an emulator-backed Maestro run,
@@ -321,6 +338,13 @@ jobs:
     # startup, so a shard whose flows both fail spends a multiple of the
     # per-attempt budget; 45 left a fully-failing shard within a minute or
     # two of the bound, which would have cost the cycle and the result.
+    # T371: the first all-green dispatch (34558058662) measured the five
+    # shards at 5m 02s, 5m 15s, 6m 15s, 6m 32s and 6m 36s END TO END --
+    # boot, install and flows together, an order of magnitude inside this
+    # bound. The bound is NOT lowered to match: what it has to contain is
+    # the FAILING case this comment was written for (retried driver
+    # startup on a shard whose flows hang), and a green shard's duration
+    # says nothing about that. Left at 60 deliberately.
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -461,7 +485,10 @@ jobs:
     # (1h 05m of that was the free tier's queue). T330: the APK is
     # assembled on the runner now, so the budget is `build-development-apk`'s
     # measured 23m of Gradle plus the emulator's 20-minute boot allowance
-    # and one flow -- 90 minutes is roughly twice that.
+    # and one flow -- 90 minutes is roughly twice that. T371: measured at
+    # 22m 33s on dispatch 34558058662, the first run in which this job
+    # actually completed. Left at 90 for the same reason as the shards
+    # above: the bound exists for the stuck case, not the green one.
     timeout-minutes: 90
     env:
       # T330: `app.config.ts` resolves the RELEASE package `sh.picompanion`

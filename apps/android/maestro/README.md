@@ -13,8 +13,13 @@ must not touch another task's flow.
 
 - **"The harness runs one smoke flow on the reference emulator" — NOT proven here.** `smoke.yaml`
   below is written, reviewed as text, and its supporting TypeScript typechecks and is
-  unit-tested, but it has never executed against a real emulator. The first real run belongs to
-  whichever `T37E*` task first has a device.
+  unit-tested, but it had not executed against a real emulator when T37D closed.
+  CORRECTED (T371): this bullet went on to say "it has never executed against a real emulator.
+  The first real run belongs to whichever `T37E*` task first has a device." The first half is
+  still true OF T37D, which is what this section records, so it is rephrased rather than
+  deleted; the second half is now answered. `smoke.yaml` runs on a booted emulator in
+  `packaged-app-smoke`, green on dispatch 34558058662, and the ten sharded flows run beside it
+  — see "T371" at the end of the Phase 5 section below for the whole result.
 - **"It targets an isolated daemon, never production" — proven.** See "Isolation" below: this is
   enforced in code (three independent checks against one shared constant — see
   `../e2e/harness/production-daemon-port.ts`), unit-tested in both directions
@@ -207,20 +212,36 @@ workflow that reads it.
   it adds no second way to run a flow. It needs a development-variant build of
   `sh.picompanion.debug` (since T315, assembled by Gradle on the runner — no
   `EXPO_TOKEN`, no EAS queue) and a booted emulator with Maestro installed
-  (`reactivecircus/android-emulator-runner`, unverified against this repository's runners); when
-  the secret is absent it dry-runs with a logged notice instead of failing, the same pattern
-  `android-apk-release.yml` already uses for its own EAS gate.
+  (`reactivecircus/android-emulator-runner`).
+  CORRECTED (T371): this described that action as "unverified against this repository's
+  runners", and said that "when the secret is absent it dry-runs with a logged notice instead
+  of failing, the same pattern `android-apk-release.yml` already uses for its own EAS gate".
+  Neither holds. T324 verified the action and found why it had looked verified while running
+  unaccelerated (`/dev/kvm` exists on ubuntu runners but the runner user is not in the `kvm`
+  group, so it silently fell back to `-accel off`); the `Enable KVM for the emulator` step
+  grants access, and every shard has booted since. And T315 deleted the dry-run branch along
+  with the `configured` gate that selected it, so these shards fail loudly instead.
   CORRECTED (T311): this said that secret was "unconfigured", which T208 made false — it has
   been set as a repository secret since then, and run 34369364166 is the first dispatch that
   actually took the real branch rather than the dry-run one. What that run then proved is
   recorded as T311: the `development` profile carried `developmentClient: true` while
   `apps/android/package.json` declares no `expo-dev-client`, so `eas build` refused before
   starting. The flag is gone; the package this job installs is unchanged.
-- **What this does NOT prove.** This wave has no emulator and no device (same as every
-  `T37E*` task before it). The ten-flow sharded run on the reference emulator — the exit
-  gate's actual acceptance criterion — has never been performed and remains the one
-  outstanding step. Everything above is proven structurally and by unit test, not by a real
-  run.
+- **What T37F itself did not prove, and what has since been proven.** T37F had no emulator and
+  no device (same as every `T37E*` task before it), so everything it shipped was proven
+  structurally and by unit test rather than by a real run.
+  CORRECTED (T371): this bullet said "The ten-flow sharded run on the reference emulator — the
+  exit gate's actual acceptance criterion — has never been performed and remains the one
+  outstanding step." It has now been performed, and it passed. Dispatch 34558058662 at
+  `51e2fa8` was green in every job, and all ten flows reported `PASS`: `pairing` and
+  `network-switch` (shard-1), `cold-start-restore` and `background-kill-restore` (shard-2),
+  `composer-inputs` and `offline-cache-outbox` (shard-3), `notification-approval` and
+  `extension-sheets` (shard-4), `files-and-terminal` and `accessibility-audit` (shard-5). The
+  five shards took 5m 02s, 6m 15s, 5m 15s, 6m 32s and 6m 36s end to end. The immediately
+  preceding dispatch, 34555253677, failed three of those flows on one defect in a flow
+  selector, fixed as T370 — recorded here because "green on the second attempt" is the honest
+  description, and because the defect had been latent behind a passing selector for many
+  dispatches.
 
 ## T43B2b — the phase-8 packaging exit gate's Android half
 
@@ -253,7 +274,16 @@ EAS package and the appId(s) its flows launch can never drift apart again — it
 disagree (reverting the fix on any one flow file reproduces the original failure — see that
 guard's own test file for the mutation proof).
 
-Same disclosure as the Phase 5 gate above: this job has never executed end-to-end either (no
-`EXPO_TOKEN`, no verified emulator boot in this repository), dry-runs with a logged notice
-until `EXPO_TOKEN` is configured, and stays `workflow_dispatch` for the identical reason —
-that part of the original disclosure stands (T208, owner-gated).
+This job stays `workflow_dispatch` for the same reason the Phase 5 gate above does: `plan.md`
+§15.4's required-job list does not include an emulator-backed run.
+
+CORRECTED (T371): the sentence here said "Same disclosure as the Phase 5 gate above: this job
+has never executed end-to-end either (no `EXPO_TOKEN`, no verified emulator boot in this
+repository), dry-runs with a logged notice until `EXPO_TOKEN` is configured". Every clause of
+that is now false, and each for its own reason: `EXPO_TOKEN` has existed since T208; T330
+removed this job's EAS build and its `EXPO_TOKEN` dry run together, so it assembles the
+release-package APK with Gradle on the runner; T324 verified the emulator boot; and the job
+itself succeeded in 22m 33s on dispatch 34558058662, launching `sh.picompanion` and running
+`smoke.yaml` green. The `workflow_dispatch` half of the old sentence is the only part that
+survives, and it is restated above on its own footing rather than as a consequence of a
+missing secret.

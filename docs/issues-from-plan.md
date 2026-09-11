@@ -627,6 +627,7 @@ that recomputation has to be domain-specific:
 | T368   | The two screens the redesign added were the two the on-device accessibility audit never opened                       | phase-9   | android          | P9-U   | T366                                                                  |
 | T369   | A capability shipped with no entry protecting it, three tasks after the rule that says register it at once           | phase-9   | tooling          | P9-U   | T366                                                                  |
 | T370   | Three flows told Maestro to tap a session row and it tapped Archive, because the selector matched four things        | phase-9   | android          | P9-U   | T363                                                                  |
+| T371   | The suite finally ran end to end, and four files still said it never had                                             | phase-9   | ci               | P9-U   | T370                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -668,8 +669,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**579 tasks** (distinct IDs counted directly from the table above), recounted at T370 with
-`grep`/`sort -u` over the table's own rows — one past the **578** at T369, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**580 tasks** (distinct IDs counted directly from the table above), recounted at T371 with
+`grep`/`sort -u` over the table's own rows — one past the **579** at T370, two past the **578** at T369, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -7795,8 +7796,21 @@ and roughly that again per `maestro-e2e` shard in parallel.
 **Must land after T207**, or the first real run burns that wall time rediscovering the appId
 mismatch T207 exists to fix.
 
-- [ ] `EXPO_TOKEN` is configured, or a written decision records that it will not be
-- [ ] A real dispatched run is read, and its conclusion and run id are recorded here
+- [x] `EXPO_TOKEN` is configured, or a written decision records that it will not be —
+      configured as a repository secret at T208 itself; `android-apk-release.yml`'s own
+      comment records it. Neither job in `android-maestro-e2e.yml` needs it any more (T315
+      moved `build-development-apk` to Gradle on the runner, T330 did the same for
+      `packaged-app-smoke`), so the release workflow is the only consumer left
+- [x] A real dispatched run is read, and its conclusion and run id are recorded here —
+      ticked at T371 with the run that answers the question this task actually asked ("read
+      whether KVM is available to `reactivecircus/android-emulator-runner` on this
+      repository's `ubuntu-latest` runners"). It is: dispatch 34558058662 was green in
+      every job, all five shards booted an emulator and ran their flows, and all ten of
+      `plan.md` §14.4's flows reported `PASS`. The KVM answer itself has two halves and was
+      found at T324: `/dev/kvm` is present but the runner user is not in the `kvm` group, so
+      the action fell back to `-accel off` silently until the `Enable KVM for the emulator`
+      step was added. Earlier dispatches were read as they happened and are recorded under
+      T310–T330; this box asked for the one that got through
 
 #### T209 — A guard-guard: every `run-guard-*.mjs` is wired into a workflow, or allowlisted
 
@@ -15089,11 +15103,14 @@ obvious worry on seeing six failed EAS jobs is a spent build quota.
 - [x] Both workflow files still parse under a real YAML loader
 - [x] The three build-starting steps carry a comment naming the cause, so the fix is not
       undone by someone shortening it back to `eas`
-- [ ] A real `android-maestro-e2e.yml` dispatch gets past `Build development APK on EAS`, with
-      the run id recorded — this entry is not closed by the fix alone, because the next
-      failure after this one is the first honest test of everything downstream (the EAS
-      development build itself, then `reactivecircus/android-emulator-runner`'s KVM support,
-      which that workflow's own header has always disclosed as unverified)
+- [x] A real `android-maestro-e2e.yml` dispatch gets past `Build development APK on EAS`, with
+      the run id recorded — closed at T371, and the step named here no longer exists to get
+      past: T315 replaced the EAS development build with a Gradle assemble on the runner
+      (`build-development-apk`) after the free tier queued a 1m 54s build for 1h 05m. What
+      this box was actually for — everything downstream being honestly exercised — is what
+      dispatch 34558058662 did: `build-development-apk` succeeded in 15m 22s, the
+      emulator booted on all five shards (KVM support resolved at T324), and all ten §14.4
+      flows reported `PASS`
 - [x] A guard so this cannot regress: `scripts/ci/guard-npx-binary-package.mjs`, wired into
       `ci.yml` as the `guard-npx-binary-package` job. It is written in the general form this
       criterion asked for rather than as an `npx eas` special case.
@@ -15197,12 +15214,16 @@ over half an hour — the first EAS build this repository has ever performed.
 - [x] Two prose sites falsified by this change ("developer client") corrected, plus
       `apps/android/maestro/README.md`'s claim that `EXPO_TOKEN` is unconfigured, which T208
       had already made false
-- [ ] A real dispatch gets past `Build development APK on EAS` — this closes T310's own last
+- [x] A real dispatch gets past `Build development APK on EAS` — this closes T310's own last
       open criterion too, and is the first honest test of everything downstream of it
       (Moot since T318/T330: the step no longer exists; `build-development-apk` assembles on
       the runner and succeeded in run 34454596535 at `4b73669`, which is what this box was for.)
       (the EAS build itself, then `reactivecircus/android-emulator-runner`'s KVM support,
       which this workflow's header has always disclosed as unverified)
+      Ticked at T371: the parenthetical above had recorded the substance as satisfied while
+      leaving the box open, which reads to the next person as an outstanding step. Dispatch
+      34558058662 then made it unambiguous — every job green, all ten §14.4 flows
+      `PASS`, and the KVM support this box worried about resolved at T324
 
 #### T312 — Five identical EAS builds per Maestro run, and the guard that would have gone quiet when they became one
 
@@ -15709,7 +15730,14 @@ left disclosed as such, because no dispatch has yet reached boot.
 - [x] All three jobs declare a `timeout-minutes`
 - [x] Each bound cites the measurement it came from, or says plainly that none exists
 - [x] The header's dry-run claim matches what the jobs actually do
-- [ ] The `maestro-e2e` estimate is replaced by a measured value once a shard completes
+- [x] The `maestro-e2e` estimate is replaced by a measured value once a shard completes —
+      done at T321 and confirmed at T371. T321 raised the bound from 45 to 60 on run
+      34413092055's real numbers (~17 minutes of setup, boot and install, then 6m 10s of
+      flows), reasoning about the FAILING case rather than the passing one: Maestro retries
+      driver startup, so a shard whose flows hang spends a multiple of the per-attempt
+      budget. Dispatch 34558058662 measured five green shards end to end at 5m 02s,
+      5m 15s, 6m 15s, 6m 32s and 6m 36s. The bound is deliberately NOT lowered to match
+      those: a green shard's duration says nothing about what the timeout has to contain
 
 #### T319 — The emulator action runs its script under dash, and both scripts opened with a bashism
 
@@ -18387,7 +18415,11 @@ that makes a green flow meaningless.
 - [x] The host row's asserted string is derived by calling the model, not typed a second time
 - [x] Root-before-contents order is pinned, so no assertion can pass against the previous screen
 - [x] Files and Terminal are asserted by the testIDs the §7.4 relocation had to keep
-- [ ] A real dispatch runs the extended flow green on an emulator
+- [x] A real dispatch runs the extended flow green on an emulator — dispatch 34558058662,
+      shard-5: `accessibility-audit: PASS`, with the A2 Live and A3 Settings sections this
+      task added. The host row's whole accessible name was asserted on a real device, which
+      is what makes the model-derived pin above a proof of what TalkBack announces rather
+      than a proof about two strings
 
 #### T369 — A capability shipped with no entry protecting it, three tasks after the rule that says register it at once
 
@@ -18490,4 +18522,79 @@ was restored from a scratchpad copy rather than with `git checkout --`.
 - [x] The restored-row assertion is anchored too, so it cannot pass on the pill alone
 - [x] A contract case enumerates flows from disk and proves the shape against real ids
 - [x] Proven able to fail, and restored from a scratchpad copy
-- [ ] A dispatch in which all five shards are green
+- [x] A dispatch in which all five shards are green — dispatch 34558058662 at `51e2fa8`:
+      `build-development-apk`, all five `maestro-e2e` shards and `packaged-app-smoke` green,
+      and all ten of `plan.md` §14.4's flows reporting `PASS`. The three flows this task
+      fixed (`cold-start-restore`, `notification-approval`, `extension-sheets`) each opened
+      the session they created instead of archiving it
+
+#### T371 — The suite finally ran end to end, and four files still said it never had
+
+`labels: phase-9, area: ci` · `depends-on: T370`
+
+**Dispatch 34558058662, at `51e2fa8`, is the first green `android-maestro-e2e.yml` run in this
+repository's history.** Every job passed: `build-development-apk` (15m 22s), all five
+`maestro-e2e` shards, and `packaged-app-smoke` (22m 33s). All ten of `plan.md` §14.4's flows
+reported `PASS` — `pairing` and `network-switch` (shard-1, 5m 02s), `cold-start-restore` and
+`background-kill-restore` (shard-2, 6m 15s), `composer-inputs` and `offline-cache-outbox`
+(shard-3, 5m 15s), `notification-approval` and `extension-sheets` (shard-4, 6m 32s),
+`files-and-terminal` and `accessibility-audit` (shard-5, 6m 36s). That is the Phase 5 exit
+gate's own acceptance criterion, met for the first time, and it is green on the second attempt:
+34555253677 failed three flows on the single selector defect T370 fixed.
+
+**Six acceptance boxes across five tasks were closed, each with the run that closes it.** T208's
+pair (the owner-gated "is KVM available to `reactivecircus/android-emulator-runner` here"
+question — it is, with the two-part answer T324 found), T310's and T314's "gets past
+`Build development APK on EAS`" (a step T315 deleted; what the boxes were for is what this
+dispatch did), T318's "the `maestro-e2e` estimate is replaced by a measured value", T368's
+"a real dispatch runs the extended flow green", and T370's "all five shards are green".
+
+T314's box is worth noting on its own: it already carried a parenthetical recording the
+substance as satisfied while the checkbox stayed empty. To the next reader that is an
+outstanding step, which is the opposite of what the note said. Prose and box now agree.
+
+**One box was deliberately left open, which is the part a reader should trust this entry for.**
+T313's "a real failing dispatch shows the reason in the CI log without anyone opening
+expo.dev" cannot be closed by a Maestro dispatch at all. Its subject is the `if: failure()`
+`eas build:list` diagnostic beside an EAS build step, and after T315 and T330 the only EAS
+build left in this repository is `android-apk-release.yml`'s `publish-android-apk`. Closing it
+needs a real release-workflow run whose EAS build fails — not something to manufacture, and
+not something this dispatch touched.
+
+**Four files asserted the thing that had just happened had never happened.** This is `CLAUDE.md`'s
+T124 shape, and the reason it was not caught by the guard is worth recording: the capability
+here is "the emulator-backed suite executes end to end", and it has no declaration anywhere
+`isShippedSourcePath` can see. `apps/android/e2e/harness/` is not a `<pkg-or-app>/src/` tree,
+so no `methodNames` token exists to register; an entry would be permanently unable to ship,
+which is the inert-entry trap that file warns about. So this is a hand-fixed set, deliberately,
+with no entry added:
+
+- `android-maestro-e2e.yml`'s header, twice — "this workflow has never executed end-to-end",
+  and "Requirement 2 remains genuinely unproven: no emulator has ever booted here, because
+  every dispatch so far died before boot". The second had outlived its own subject twice:
+  T319 got past the dash bashism and T324 fixed the silent `-accel off` fallback.
+- `apps/android/maestro/README.md`'s T37D bullet, whose forward-looking half ("the first real
+  run belongs to whichever `T37E*` task first has a device") is now answered. The backward half
+  is still true OF T37D, which is what that section records, so it is rephrased rather than
+  deleted.
+- the same file's Phase 5 gate bullet, which called the emulator action "unverified against
+  this repository's runners" and described a dry-run branch T315 had already deleted.
+- the same file's "What this does NOT prove" bullet, which said the ten-flow sharded run "has
+  never been performed and remains the one outstanding step".
+- the same file's packaging-gate disclosure, every clause of which was false for a different
+  reason: the secret (T208), the dry run and EAS build (T330), the emulator boot (T324), and
+  the job's own completion (this dispatch). Only its `workflow_dispatch` clause survived, and
+  it is restated on its own footing rather than as a consequence of a missing secret.
+
+**The three `timeout-minutes` bounds are annotated with the measurement and deliberately not
+lowered.** A green shard finishing in 6m says nothing about what a bound has to contain: the
+case it exists for is a shard whose flows hang while Maestro retries driver startup, which is
+a multiple of the per-attempt budget. Recording the measurement without acting on it is the
+honest outcome, and saying so stops a later reader from "fixing" the apparent slack.
+
+- [x] The dispatch is read job by job and flow by flow, and its id recorded
+- [x] Every box closed names the run that closes it, not merely "green now"
+- [x] The one box that a Maestro dispatch cannot close is left open, with the reason
+- [x] Every live claim that the suite had never run is corrected where it stands
+- [x] No `CAPABILITIES` entry is invented for a capability the guard's scope cannot see
+- [x] The measured durations are recorded, and the bounds are left alone on purpose
