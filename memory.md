@@ -767,3 +767,17 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   `git ls-files`, so a capability declared only in an UNTRACKED file cannot be detected —
   its entry silently resolves as "not shipped" and the denial phrases stay allowed. Commit
   first, then run the entry's firing proof.
+- #lesson **`guard / format:check per commit` cannot be fixed forward.** It compares each commit
+  in the push range against its OWN parent and never reads a later commit, so a ledger section
+  written through a heredoc and committed before `oxfmt` saw it left `4fbfa6e` permanently
+  format-red even though the very next commit reformatted the same file. The only repair the
+  guard accepts is amending the offending commit: `git rebase -i <base>` with that commit marked
+  `edit`, run `npx oxfmt <file>` at the stop, `git commit --amend --no-edit`, `git rebase
+  --continue` (a later commit that becomes empty — here the reformat commit — is dropped with
+  `git rebase --skip`), then `git push --force-with-lease`. Take a
+  `git branch backup/<name> <tip>` first, and confirm the rewrite changed nothing but formatting:
+  `git diff backup/<name>..HEAD` must be empty (or show only the intended prose).
+- #lesson The wave's ledger sections are the slow part to re-do after a rewrite, because the
+  handoff's §1 table cites commit SHAs. Amend the handoff in the same rebase (or immediately
+  after) so its SHA list matches the rewritten history, and say in the paragraph what the
+  rewrite replaced — the guard's red job will otherwise look unexplained to the next reader.
