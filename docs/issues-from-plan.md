@@ -632,6 +632,7 @@ that recomputation has to be domain-specific:
 | T373   | The TalkBack procedure's own audit flow had just passed on five emulators, and it said none ever had                 | phase-9   | docs             | P9-U   | T372                                                                  |
 | T374   | The owner's release checklist still asked for a secret that had been configured, and named no project id             | phase-9   | docs             | P9-U   | T373                                                                  |
 | T375   | The authoritative spec described an Android session screen that twenty-three tasks had replaced                      | phase-9   | docs             | P9-U   | T374                                                                  |
+| T376   | The 48dp audit could not read a dimension written as a constant, so three small controls sat outside it              | phase-9   | android          | P9-U   | T375                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -673,8 +674,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**584 tasks** (distinct IDs counted directly from the table above), recounted at T375 with
-`grep`/`sort -u` over the table's own rows — one past the **583** at T374, two past the **582** at T373, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**585 tasks** (distinct IDs counted directly from the table above), recounted at T376 with
+`grep`/`sort -u` over the table's own rows — one past the **584** at T375, two past the **583** at T374, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18881,3 +18882,80 @@ returns `false` for it, as T269 measured — so an entry would be inert on both 
 - [x] The pin compares the spec against the real route inventory, in the file that owns it
 - [x] Both failure directions were watched failing, then restored from a scratchpad copy
 - [x] The reason the controls sit behind the ring is written down, with the failure that proved it
+
+#### T376 — The 48dp audit could not read a dimension written as a constant, so three small controls sat outside it
+
+`labels: phase-9, area: android` · `depends-on: T375`
+
+`plan.md` §9.3's first rule is "primary touch targets are at least 48 dp", and
+`apps/android/src/ui/primitives/touch-targets.test.ts` is the only thing that checks it. It
+audited twelve components. Nine more files under `apps/android/src` declare an interactive
+element of their own, including three screens the redesign shipped, and none of them were in it.
+
+**Trying to add them is what found the bug.** Six of the nine were added and four compliant
+controls failed:
+
+- `sessions-screen.tsx` writes every dimension as a named constant — `ACTION_BUTTON_SIZE = 48`,
+  `FILTER_CHIP_HEIGHT = 30` — and the resolver's patterns captured `(\d+)`, so
+  `minHeight: ACTION_BUTTON_SIZE` matched nothing at all. Three real, compliant controls were
+  reported as 48dp violations.
+- `SettingsScreen.tsx` keeps its nav row's `touchArea` (`minHeight: 48`) in a second
+  `StyleSheet.create`, and `parseStyleSheet` took `code.indexOf("StyleSheet.create(")` and
+  stopped. Every style in a file's later sheets was invisible.
+
+**The direction that matters is the other one.** A false alarm is loud and gets fixed. What
+these two gaps really meant is that a control _shrunk below 48_ through either shape — a
+constant edited from 48 to 40, a style moved into a second sheet — resolved to "no dimension
+declared" and was reported identically to one that declares nothing. A check that cannot tell a
+violation from a blind spot is the shape `CLAUDE.md` warns about, reached here by a resolver
+that was correct for the files it was written against and silently wrong for the ones it was
+not.
+
+Both are fixed: `parseStyleSheet` walks every `StyleSheet.create` in a file, the dimension
+patterns capture `([\w$]+)` and resolve an identifier through a module-level
+`const NAME = <integer>;` map, and a computed dimension (`theme.spacing[3]`, `SIZE * 2`) stays
+deliberately unresolved rather than guessed — the element then falls through to the `hitSlop`
+branch exactly as before. Merging sheets introduced one new ambiguity, closed rather than
+ignored: a key two sheets declare with different bodies is recorded by `duplicateStyleKeys`, and
+an element resolving through such a key fails loudly instead of being judged on whichever copy
+won the merge.
+
+**Three controls were genuinely under 48dp, and are fixed in source.**
+
+| Control                                            | Was                                                                        | Now                                                                                                       |
+| -------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `session-tree-sheet.tsx`'s expand/collapse chevron | `width: 28, minHeight: 28` plus `hitSlop={8}` — 44dp of touched area       | 48 × 48, with the empty spacer beside it sharing the style so rows with and without children stay aligned |
+| `files-screen.tsx`'s breadcrumb crumb              | `hitSlop={8}` around caption text with no height of its own — roughly 32dp | a `breadcrumbTouch` style with `minHeight: 48`                                                            |
+| `files-screen.tsx`'s "‹ Back to folder" link       | the same shape                                                             | the same fix                                                                                              |
+
+The chevron is the one worth dwelling on: its own file's header comment says rows are "48dp
+minimum hit area", which was true of the row and false of the control sitting inside it, for as
+long as the file was outside the audit. That sentence now carries what it was missing and the
+audit checks it.
+
+**Three of the nine files were deliberately NOT added**, because they declare no interactive
+element of their own: `thinking-row.tsx` names `accessibilityRole="button"` only in a comment
+describing what it delegates, and `ApprovalForm.tsx` and `element-actions.tsx` mark their
+containers `accessibilityRole="none"` and put the real buttons in `Button`, which the audit
+already covers. Adding them would have pinned an empty set, which is a check that cannot fail.
+
+**Fixture-level pins for both new resolver capabilities**, so a later simplification fails at the
+mechanism rather than silently in the component list: a constant-written minimum passes at 48 and
+fails at 40; a second-sheet style passes at 48 and fails at 40; a colliding key fails while an
+identical duplicate does not; a computed dimension stays unresolved; and
+`parseNumericConstants` reads only module-level integers, not strings, expressions or floats.
+The component entry itself was watched failing too — shrinking `chevronTouch` to 44 failed
+`SessionTreeSheet element 2` by name, restored from a scratchpad copy afterwards.
+
+**Two prose sites corrected in the same commit (T124).** `docs/accessibility-talkback-
+procedure.md`'s Part 2 described the audit as covering "every shared primitive" with an OR of
+the two dimensions — the set has not been primitives-only since T81, and the predicate has been
+a strict AND since T81's follow-up. `session-tree-sheet.tsx`'s header comment, above.
+
+- [x] The resolver reads a dimension written as a named constant, proven in both directions
+- [x] Every `StyleSheet.create` in a file is parsed, proven in both directions
+- [x] An ambiguous style key fails rather than resolving to an arbitrary copy
+- [x] A computed dimension stays unresolved rather than being guessed at
+- [x] Six real components joined the audit; the three that declare no element are named and excluded
+- [x] Every control the widened audit found under 48dp is fixed in source, not exempted
+- [x] The prose asserting the old scope and the old predicate is corrected where it stands

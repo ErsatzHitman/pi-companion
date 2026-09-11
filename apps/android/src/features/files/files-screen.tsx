@@ -488,7 +488,13 @@ function FilesBreadcrumbRow({
               accessibilityRole="button"
               accessibilityLabel={`Go to ${crumb.label}`}
               testID={`${testId}-crumb-${crumb.path || "root"}`}
-              hitSlop={8}
+              // T376: a real 48dp minimum, not `hitSlop={8}` around
+              // caption text. The text carries no height of its own, so
+              // the touched area was the glyph box plus 8dp on each side
+              // -- roughly 32dp for a 16dp line, well under plan.md
+              // §9.3's 48dp floor, and impossible to see from the source
+              // until this element joined `touch-targets.test.ts`.
+              style={styles.breadcrumbTouch}
             >
               <Text style={styles.breadcrumbLink}>{crumb.label}</Text>
             </Pressable>
@@ -759,7 +765,7 @@ function FileContentView({
         accessibilityRole="button"
         accessibilityLabel="Back to folder"
         testID={`${testId}-back`}
-        hitSlop={8}
+        style={styles.breadcrumbTouch}
       >
         <Text style={styles.breadcrumbLink}>‹ Back to folder</Text>
       </Pressable>
@@ -1113,6 +1119,12 @@ function createStyles(theme: NativeTheme) {
       color: theme.colors.accent,
       fontSize: theme.typography.variant.caption.fontSize,
     },
+    // T376: the touch target for a breadcrumb crumb and for the file
+    // viewer's back link. Separate from `breadcrumbLink` (the text's own
+    // colour and size) so the tappable box is stated where the audit in
+    // `ui/primitives/touch-targets.test.ts` reads it, on the element
+    // that is actually pressed.
+    breadcrumbTouch: { minHeight: 48, justifyContent: "center" },
     rows: { gap: theme.spacing[1] },
     row: {
       minHeight: 48,

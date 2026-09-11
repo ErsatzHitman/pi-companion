@@ -146,11 +146,19 @@ TalkBack's speech engine, which is exactly why Part 1 still exists.
   own doc comment for the full mechanism and its disclosed gaps (what is NOT sampled: real voice
   capture, real attachment picking, share intent, the files screen's upload/download controls,
   and Pi UI panel elements — each named there with the specific reason it is unreachable today).
-- **`apps/android/src/ui/primitives/touch-targets.test.ts`.** A standing audit that every shared
-  primitive declares a `minHeight`/`minWidth` of at least 48 on its touchable element — the
-  automatable half of the 48dp requirement, for every primitive this audit reaches. (It uses an
-  OR of the two dimensions, not an AND — a control satisfying only one of the two still passes;
-  that is this existing check's own predicate, unchanged by this task.)
+- **`apps/android/src/ui/primitives/touch-targets.test.ts`.** A standing audit that every
+  audited component declares a `minHeight`/`minWidth` of at least 48 on its touchable element —
+  the automatable half of the 48dp requirement, for every component this audit reaches.
+  CORRECTED (T376): this said "every shared primitive", and described the check as using "an OR
+  of the two dimensions, not an AND — a control satisfying only one of the two still passes".
+  Both were out of date. The audited set is no longer primitives only: T81 added
+  `composer-icon-action.tsx`, T350 `ScreenBar.tsx`, and T376 six feature components
+  (`ContextRing`, `ThinkingSection`, `SessionsScreen`, `SettingsScreen`, `SessionTreeSheet`,
+  `FilesScreen`) once the resolver could read a dimension written as a named constant or declared
+  in a file's second `StyleSheet.create`. And the predicate has been a strict AND since T81's
+  follow-up: every declared minimum must itself reach 48, and a `hitSlop` on the same element no
+  longer rescues one that does not. Read the entry list in that file rather than a count here.
+  Adding those six found three real controls under 48dp, fixed in the same change.
 - **Non-color status text.** Several features carry their own tests asserting a status is
   represented as real text, not color alone, including `apps/android/src/features/composer/
 composer-accessibility.test.ts` and `composer-model.test.ts` (turn status labels),

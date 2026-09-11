@@ -25,7 +25,12 @@
  * rationale this file mirrors rather than reinterprets. Android has no
  * keyboard contract to mirror from that file — rows are plain touch
  * targets (48dp minimum hit area via `Pressable`'s own accessible role),
- * not a roving-tabIndex `role="tree"`.
+ * not a roving-tabIndex `role="tree"`. T376: that 48dp was true of the
+ * row and false of the expand/collapse chevron beside it, which was a
+ * 28dp box plus `hitSlop={8}` — 44dp — for as long as this file sat
+ * outside `../../ui/primitives/touch-targets.test.ts`. It is 48dp now,
+ * and the audit reaches this file, so the sentence is checked rather
+ * than asserted.
  *
  * ## Fork/clone/rename: always a truthful state, never a silent no-op
  *
@@ -267,7 +272,12 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       paddingRight: theme.spacing[3],
     },
     rowSelected: { backgroundColor: theme.colors.hover },
-    chevronTouch: { width: 28, minHeight: 28, alignItems: "center", justifyContent: "center" },
+    // T376: 48, not 28. The expand/collapse control was a 28dp box with
+    // `hitSlop={8}` -- 44dp of touched area, under plan.md §9.3's 48dp
+    // floor, and the file sat outside `ui/primitives/touch-targets.
+    // test.ts` so nothing said so. The empty spacer beside it uses the
+    // same style, so rows with and without children stay aligned.
+    chevronTouch: { width: 48, minHeight: 48, alignItems: "center", justifyContent: "center" },
     chevron: { color: theme.colors["ink-2"], fontSize: theme.typography.variant.body.fontSize },
     title: { flex: 1, color: theme.colors.ink, fontSize: theme.typography.variant.body.fontSize },
     kind: {
