@@ -5414,3 +5414,124 @@ test("T346: the real tree carries no live denial of the composer-slot bounds", (
     );
   }
 });
+const T369_HOST_ROW_CAPABILITY =
+  "Android's settings screen names the host it is about, with its live state " +
+  "(settingsHostTitle + settingsHostDetail + settingsHostStatus)";
+
+const T369_SHIPPED_FIXTURE = [
+  {
+    path: "apps/android/src/features/settings/settings-host-model.ts",
+    content: `
+export function settingsHostTitle(profile) { return profile === null ? "No host saved" : profile.label; }
+export function settingsHostDetail(profile) { return profile === null ? "" : profile.endpoint; }
+export function settingsHostStatus(phase) { return { label: phase, tone: "neutral" }; }
+`,
+  },
+];
+
+test("T369: the host-row entry is a T168 AND-group — two of its three members in one file is not shipped", () => {
+  // The group shape is the point: the row IS the three parts together,
+  // so losing the detail line has to un-ship the capability and release
+  // the phrase protection. An OR across members would keep it "shipped"
+  // on the strength of whichever one survived.
+  const withoutDetail = [
+    {
+      path: "apps/android/src/features/settings/settings-host-model.ts",
+      content: `
+export function settingsHostTitle(profile) { return "x"; }
+export function settingsHostStatus(phase) { return { label: phase }; }
+`,
+    },
+  ];
+  const denial = [
+    {
+      path: "docs/legacy-retirement.md",
+      content: "The settings screen offers no way to tell which host a row belongs to.",
+    },
+  ];
+
+  assert.equal(
+    findCapabilityDenialViolations({ shippedFiles: T369_SHIPPED_FIXTURE, appFiles: denial }).filter(
+      (v) => v.capability === T369_HOST_ROW_CAPABILITY,
+    ).length,
+    1,
+  );
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: withoutDetail, appFiles: denial }).filter(
+      (v) => v.capability === T369_HOST_ROW_CAPABILITY,
+    ),
+    [],
+  );
+});
+
+test("T369: the group's members must co-occur in ONE file, not be spread across three", () => {
+  const spread = [
+    {
+      path: "apps/android/src/features/settings/a.ts",
+      content: "export function settingsHostTitle(p) { return 'x'; }",
+    },
+    {
+      path: "apps/android/src/features/settings/b.ts",
+      content: "export function settingsHostDetail(p) { return 'x'; }",
+    },
+    {
+      path: "apps/android/src/features/settings/c.ts",
+      content: "export function settingsHostStatus(p) { return {}; }",
+    },
+  ];
+  const denial = [
+    {
+      path: "docs/legacy-retirement.md",
+      content: "The settings screen offers no way to tell which host a row belongs to.",
+    },
+  ];
+  assert.deepEqual(
+    findCapabilityDenialViolations({ shippedFiles: spread, appFiles: denial }).filter(
+      (v) => v.capability === T369_HOST_ROW_CAPABILITY,
+    ),
+    [],
+  );
+});
+
+test("T369: neither real file's unmarked narration of the pre-T366 state trips the new entry", () => {
+  // Both of these narrate what the screen used to be, in the same words
+  // ("said which daemon ... belonged to"), and NEITHER carries a
+  // HISTORICAL_QUOTE_MARKERS trigger — so a phrase lifted from either
+  // would have tripped this guard against correct source on its first
+  // run (T215's collision). This reads their real committed content
+  // rather than a stand-in, which is the only way to keep that claim
+  // true as those comments are edited.
+  for (const path of [
+    "apps/android/src/features/settings/settings-host-model.ts",
+    "apps/android/src/features/settings/SettingsScreen.tsx",
+  ]) {
+    const content = readRepoFile(path);
+    assert.match(content, /which daemon/i, `${path} should still carry the narration under test`);
+    const violations = findCapabilityDenialViolations({
+      shippedFiles: T369_SHIPPED_FIXTURE,
+      appFiles: [{ path, content }],
+    });
+    assert.equal(
+      violations.filter((v) => v.path === path).length,
+      0,
+      `${path}'s real committed content must not trip the host-row entry`,
+    );
+  }
+});
+
+test("T369: the entry's shipped members are read from the real CAPABILITIES list, not retyped here", () => {
+  // T193's lesson, applied: a test that restates the members cannot
+  // notice the shipped entry changing underneath it.
+  const entry = CAPABILITIES.find((c) => c.name === T369_HOST_ROW_CAPABILITY);
+  assert.ok(entry, "the host-row capability entry should exist in CAPABILITIES");
+  assert.deepEqual(entry.methodNames, [
+    ["settingsHostTitle", "settingsHostDetail", "settingsHostStatus"],
+  ]);
+  for (const member of entry.methodNames[0]) {
+    assert.equal(
+      isCapabilityMemberDeclared(T369_SHIPPED_FIXTURE[0].content, member),
+      true,
+      `${member} should be declared by the fixture this file's other cases rely on`,
+    );
+  }
+});

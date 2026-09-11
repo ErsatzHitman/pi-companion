@@ -625,6 +625,7 @@ that recomputation has to be domain-specific:
 | T366   | Settings never said which daemon it was about, and offered four controls that are per-agent on the wire              | phase-9   | android          | P9-U   | T364                                                                  |
 | T367   | Six of seven comments stopped naming a font the app dropped, and nothing could say which one was left                | phase-9   | android          | P9-U   | T356                                                                  |
 | T368   | The two screens the redesign added were the two the on-device accessibility audit never opened                       | phase-9   | android          | P9-U   | T366                                                                  |
+| T369   | A capability shipped with no entry protecting it, three tasks after the rule that says register it at once           | phase-9   | tooling          | P9-U   | T366                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -666,8 +667,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**577 tasks** (distinct IDs counted directly from the table above), recounted at T368 with
-`grep`/`sort -u` over the table's own rows — one past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**578 tasks** (distinct IDs counted directly from the table above), recounted at T369 with
+`grep`/`sort -u` over the table's own rows — one past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18386,3 +18387,53 @@ that makes a green flow meaningless.
 - [x] Root-before-contents order is pinned, so no assertion can pass against the previous screen
 - [x] Files and Terminal are asserted by the testIDs the §7.4 relocation had to keep
 - [ ] A real dispatch runs the extended flow green on an emulator
+
+#### T369 — A capability shipped with no entry protecting it, three tasks after the rule that says register it at once
+
+`labels: phase-9, area: tooling` · `depends-on: T366`
+
+`CLAUDE.md`'s T124 section says to register a `CAPABILITIES` entry **in the same commit** that
+ships a capability. T366 shipped one — A3's host row, which finally names the daemon every
+setting on that screen belongs to, with its address, how it is reached, and its live state — and
+registered nothing. `HANDOFF.md` §9.1 had listed four entries to register for this wave and all
+four were; this one was not on that list, which is exactly how the omission got past two gates.
+
+**The shape, chosen rather than defaulted.** A T168 AND-group of `settingsHostTitle`,
+`settingsHostDetail` and `settingsHostStatus`, all three declared in
+`settings-host-model.ts` and nowhere else in the tree — measured against the real tree before
+the entry was written, not assumed. The group is doing real work here rather than decoration:
+the row IS the three parts together, so requiring one file to declare all of them means deleting
+the detail line or the status word un-ships the capability and releases its phrase protection,
+which is the correct behaviour. An OR across members would keep it "shipped" on the strength of
+whichever part survived.
+
+`settingsHostAccessibilityLabel` is deliberately NOT a member, even though it is the most
+specific name in the file: it composes the other three, so it would still be declared after any
+one of them was deleted. A group is only as strong as its weakest member's ability to disappear
+along with the capability — the "token that outlives the capability" trap T215 and T172 each
+name, one level in.
+
+**The collision this entry had to be worded away from.** Both `settings-host-model.ts` and
+`SettingsScreen.tsx` narrate the pre-T366 state in their own doc comments, in nearly the same
+words, and NEITHER carries a `HISTORICAL_QUOTE_MARKERS` trigger — so a denying phrase lifted
+from either would have tripped this guard against correct source on its first run, the collision
+T215 hit and resolved by rephrasing rather than by adding an exclusion. None of the three phrases
+uses the wording either file uses, and a test reads both files' real committed content to keep
+that true as those comments are edited.
+
+Proven able to FIRE before being trusted, the way this section's every predecessor was: a
+sentence in this entry's own phrasing appended to a real tracked in-scope file made
+`run-guard-capability-prose.mjs` exit 1 naming exactly this capability; restoring the file from a
+scratchpad copy — never `git checkout --` — returned it to exit 0 with `git status --porcelain`
+empty for that file. Four cases in `guard-capability-prose.test.mjs` pin the group semantics
+(two of three members is not shipped; three members spread across three files is not shipped),
+the real-file non-collision, and — per T193 — that the members are read out of the real
+`CAPABILITIES` entry rather than retyped, so a rename cannot leave the test passing against a
+stale copy of itself.
+
+- [x] The entry exists, and names the capability T366 actually shipped
+- [x] The group shape is argued, and its members measured as uniquely declared in one file
+- [x] The composing function is excluded, with the reason recorded
+- [x] The phrases avoid both real files' unmarked narration of the pre-fix state
+- [x] Proven able to fire, and restored from a scratchpad copy
+- [x] Group semantics and the no-retyping rule are pinned by tests, not by the entry alone

@@ -2550,6 +2550,48 @@ export const CAPABILITIES = [
       /(?:the )?auto[- ]compaction (?:setting|switch) (?:is|remains) (?:web|apps\/web)[- ]only/i,
     ],
   },
+  {
+    // T369, registering what T366 shipped and did not register.
+    // A3's first row names the host every setting below it belongs to
+    // — its label, its address, whether it is reached directly or
+    // through the relay, and its live connection state as a word. The
+    // screen is per-host (`/h/:serverId/settings`) in an app built for
+    // several saved daemons, and before this row nothing on it
+    // identified the one it was about.
+    //
+    // A T168 AND-group, not an OR across members, and the group shape
+    // is doing real work here rather than decoration: the row IS the
+    // three parts together, so requiring one file to declare all three
+    // means deleting the detail line (or the status word) un-ships the
+    // capability and releases the phrase protection, which is the
+    // correct behaviour. All three are declared in
+    // `apps/android/src/features/settings/settings-host-model.ts` —
+    // measured, not assumed, and each is declared nowhere else in the
+    // tree, so no unrelated member can satisfy the group.
+    //
+    // `settingsHostAccessibilityLabel` is deliberately NOT a member: it
+    // composes the other three, so it would still be declared after
+    // any one of them was deleted, and a group is only as strong as its
+    // weakest member's ability to disappear with the capability.
+    //
+    // The phrases are worded in T369's own voice. Both
+    // `settings-host-model.ts` and `SettingsScreen.tsx` narrate the
+    // pre-T366 state in their own doc comments, in the same words
+    // ("said which daemon ... belonged to"), and NEITHER carries a
+    // `HISTORICAL_QUOTE_MARKERS` trigger — so a phrase lifted from
+    // either would trip this guard against correct source on its first
+    // run, the collision T215 hit and resolved by rephrasing rather
+    // than by adding an exclusion. Nothing below uses "which daemon" or
+    // "said" at all; `guard-capability-prose.test.mjs` pins that
+    // non-collision against both files' real committed text.
+    name: "Android's settings screen names the host it is about, with its live state (settingsHostTitle + settingsHostDetail + settingsHostStatus)",
+    methodNames: [["settingsHostTitle", "settingsHostDetail", "settingsHostStatus"]],
+    denyingPhrases: [
+      /(?:the )?settings screen (?:gives|offers) no way to tell (?:which|what) host/i,
+      /(?:the )?(?:android )?settings (?:screen|rows) apply to (?:an )?unnamed (?:host|daemon)/i,
+      /(?:a |the )?host'?s (?:live )?connection state is not (?:shown|visible) (?:in|on) settings/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
