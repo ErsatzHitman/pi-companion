@@ -66,3 +66,37 @@ describe("SettingsRoute source", () => {
     expect(readCode()).not.toMatch(/`\/h\/\$\{serverId\}/);
   });
 });
+
+describe("settings route: A3's host row and close action (T366)", () => {
+  it("reads the saved profile from the same credential store the rest of the app uses", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /import \{ listHostProfiles \} from "\.\.\/\.\.\/\.\.\/\.\.\/features\/connect\/credential-store";/,
+    );
+    expect(code).toMatch(/profiles\.find\(\(profile\) => profile\.id === serverId\)/);
+  });
+
+  it("passes on only the four non-secret fields", () => {
+    // A password or a relay key has no business crossing into a
+    // component that draws.
+    const code = readCode();
+    expect(code).toMatch(
+      /label: match\.label,\s*endpoint: match\.endpoint,\s*kind: match\.kind,\s*useTls: match\.useTls,/,
+    );
+    expect(code).not.toMatch(/password/);
+    expect(code).not.toMatch(/relayKey/);
+  });
+
+  it("fences the read so an abandoned one cannot land on a later mount", () => {
+    const code = readCode();
+    expect(code).toMatch(/if \(cancelled\) return;/);
+    expect(code).toMatch(/return \(\) => \{\s*cancelled = true;\s*\};/);
+  });
+
+  it("feeds the pill the live phase, and closes only where it can", () => {
+    const code = readCode();
+    expect(code).toMatch(/const \{ phase \} = useConnectionStatus\(core\.connection\);/);
+    expect(code).toMatch(/connectionPhase=\{phase\}/);
+    expect(code).toMatch(/onClose=\{canClose \? handleClose : undefined\}/);
+  });
+});

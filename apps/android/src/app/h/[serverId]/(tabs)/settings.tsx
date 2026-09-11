@@ -1,9 +1,13 @@
+import { useCallback, useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import { listHostProfiles } from "../../../../features/connect/credential-store";
+import { useConnectionStatus } from "../../../../features/connect";
 import {
   SettingsScreen,
   pressOpenDevices,
   pressOpenDiagnostics,
+  type SettingsHostProfileView,
 } from "../../../../features/settings";
 import { useAppCore } from "../../../core-context";
 
@@ -37,16 +41,72 @@ import { useAppCore } from "../../../core-context";
  * function ever sees — `SettingsScreen` itself never imports `expo-
  * router` (T301, closing the gap `../../../../features/devices/
  * DevicesScreen.tsx`'s own doc comment named).
+ *
+ * **T366**: this route also feeds A3's host row. It reads the saved
+ * profile matching `serverId` from the credential store and passes on
+ * only the four non-secret fields `settings-host-model.ts` declares,
+ * plus the live connection phase behind the row's pill. Neither the
+ * screen nor that model ever sees a `HostProfileRecord`, let alone a
+ * secret — which is the same reason the navigation seam above exists:
+ * the route owns every dependency the screen should not.
  */
 export default function SettingsRoute() {
   const { serverId } = useLocalSearchParams<{ serverId: string }>();
   const core = useAppCore();
   const router = useRouter();
+  const { phase } = useConnectionStatus(core.connection);
+
+  // T366: the host row's four non-secret fields, read once per mount
+  // from the same credential store `app/core-context.tsx` and
+  // `connection-shell.tsx` already read. `null` until the read lands,
+  // and on failure — `settings-host-model.ts` renders that honestly as
+  // "No host saved" rather than a half-filled row. Only these four
+  // fields are passed on: a password or relay key has no business
+  // crossing into a component that draws.
+  const [hostProfile, setHostProfile] = useState<SettingsHostProfileView | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void listHostProfiles({
+      plainStorage: core.keyValueStorage,
+      secureStorage: core.secureStorage,
+    })
+      .then((profiles) => {
+        if (cancelled) return;
+        const match = profiles.find((profile) => profile.id === serverId);
+        setHostProfile(
+          match
+            ? {
+                label: match.label,
+                endpoint: match.endpoint,
+                kind: match.kind,
+                useTls: match.useTls,
+              }
+            : null,
+        );
+      })
+      .catch(() => {
+        // Nothing to show is the honest state; see the note above.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [core.keyValueStorage, core.secureStorage, serverId]);
+
+  // T366: as a tab there is nothing to close back to; reached from A1's
+  // gear there is. Same rule as `(tabs)/sessions.tsx`'s own close.
+  const canClose = router.canGoBack();
+  const handleClose = useCallback(() => {
+    router.back();
+  }, [router]);
+
   return (
     <SettingsScreen
       storage={core.keyValueStorage}
       onOpenDevices={() => pressOpenDevices(router, serverId)}
       onOpenDiagnostics={() => pressOpenDiagnostics(router, serverId)}
+      hostProfile={hostProfile}
+      connectionPhase={phase}
+      onClose={canClose ? handleClose : undefined}
       testId="settings-screen"
     />
   );

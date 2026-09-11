@@ -66,7 +66,12 @@ describe("SettingsScreen source", () => {
 
   it("gates the whole More section on either callback being present, not a hand-typed true", () => {
     expect(code).toMatch(/\{onOpenDevices \|\| onOpenDiagnostics \? \(/);
-    expect(code).toMatch(/<Section title="More"/);
+    // CORRECTED (T366): this read `<Section title="More"` on one line.
+    // T366 gave that Section a `variant="label"`, which wrapped the tag
+    // across lines. Same claim, same section, re-anchored across the
+    // wrap rather than shortened to `title="More"`, which would also
+    // match a heading rendered outside a `Section`.
+    expect(code).toMatch(/<Section\s+title="More"/);
   });
 
   it("proves each row independently — one prop passing must not stand in for the other", () => {
@@ -99,5 +104,51 @@ describe("SettingsScreen source", () => {
     const navRowBody = readFunctionCode(code, "NavRow");
     expect(navRowBody).toMatch(/accessibilityRole="button"/);
     expect(navRowBody).toMatch(/accessibilityLabel=\{label\}/);
+  });
+});
+
+describe("SettingsScreen source: T366 A3's shape", () => {
+  const code = readScreenCode();
+
+  it("opens with the shared ScreenBar, and only offers close where a caller can act", () => {
+    expect(code).toMatch(/<ScreenBar\b/);
+    expect(code).toMatch(/title="Settings"/);
+    expect(code).toMatch(/leading=\{\s*onClose\s*\?/);
+  });
+
+  it("labels its groups in the redesign's quiet style", () => {
+    const labelled = code.match(/variant="label"/g) ?? [];
+    expect(labelled.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("names the host every setting below belongs to, from the model", () => {
+    expect(code).toMatch(/\{settingsHostTitle\(hostProfile\)\}/);
+    expect(code).toMatch(/\{settingsHostDetail\(hostProfile\)\}/);
+    expect(code).toMatch(/testID=\{testId \? `\$\{testId\}-host-row` : undefined\}/);
+  });
+
+  it("reports the connection as a pill with a word in it, not a bare colour", () => {
+    expect(code).toMatch(/label=\{settingsHostStatus\(connectionPhase\)\.label\}/);
+    expect(code).toMatch(/tone=\{settingsHostStatus\(connectionPhase\)\.tone\}/);
+  });
+
+  it("speaks the whole host row as one stop, from the model", () => {
+    expect(code).toMatch(
+      /accessibilityLabel=\{settingsHostAccessibilityLabel\(hostProfile, connectionPhase\)\}/,
+    );
+  });
+
+  it("keeps the two testIDs eight Maestro flows and their contracts name", () => {
+    expect(code).toMatch(/testId=\{testId \? `\$\{testId\}-haptics-toggle` : undefined\}/);
+    expect(code).toMatch(/testID=\{testId\}/);
+  });
+
+  it("draws none of the four per-agent controls, which have no session here", () => {
+    // `setAgentMode`/`setAutoCompaction` and friends all take an
+    // agentId; this screen is per-host. They live in the session's own
+    // context-ring menu.
+    expect(code).not.toMatch(/setAutoCompaction/);
+    expect(code).not.toMatch(/setAgentMode/);
+    expect(code).not.toMatch(/Thinking effort/);
   });
 });

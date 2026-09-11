@@ -703,6 +703,7 @@ export function SessionsScreen({
             <Section
               key={group.kind}
               title={sessionGroupLabel(group)}
+              variant="label"
               testId={`${testId}-group-${group.kind}`}
             >
               <View style={styles.rows}>

@@ -34,7 +34,7 @@ export type { RecordListColumn, RecordListProps, RecordListRow } from "./RecordL
 export { SearchField } from "./SearchField";
 export type { SearchFieldProps } from "./SearchField";
 export { Section } from "./Section";
-export type { SectionProps } from "./Section";
+export type { SectionProps, SectionVariant } from "./Section";
 export { Select } from "./Select";
 export type { SelectOption, SelectProps } from "./Select";
 export { Sheet } from "./Sheet";

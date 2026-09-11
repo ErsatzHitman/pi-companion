@@ -32,4 +32,12 @@ export {
   pressOpenDiagnostics,
   type SettingsNavRouter,
 } from "./settings-navigation-model.js";
+export {
+  settingsHostAccessibilityLabel,
+  settingsHostDetail,
+  settingsHostStatus,
+  settingsHostTitle,
+  type SettingsHostProfileView,
+  type SettingsHostStatus,
+} from "./settings-host-model.js";
 export { SettingsScreen, type SettingsScreenProps } from "./SettingsScreen.js";

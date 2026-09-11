@@ -622,6 +622,7 @@ that recomputation has to be domain-specific:
 | T363   | A session row was a dashed rule with a bare dot, and said nothing about how long ago the session was touched         | phase-9   | android          | P9-U   | T362                                                                  |
 | T364   | An empty create-session form sat above the list on every visit, and nothing at the bottom of A1 did anything         | phase-9   | android          | P9-U   | T363                                                                  |
 | T365   | A calibrated self-heal phase turned main red for the second time, and failed 15s away from the thing that broke      | phase-9   | server           | P9-U   | T309                                                                  |
+| T366   | Settings never said which daemon it was about, and offered four controls that are per-agent on the wire              | phase-9   | android          | P9-U   | T364                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -663,8 +664,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**574 tasks** (distinct IDs counted directly from the table above), recounted at T365 with
-`grep`/`sort -u` over the table's own rows — one past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**575 tasks** (distinct IDs counted directly from the table above), recounted at T366 with
+`grep`/`sort -u` over the table's own rows — one past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18224,3 +18225,68 @@ service does.
 - [x] The phase, the handoff window and the file's budget are raised together and consistently
 - [x] A spent tick now fails at the flip, in one line, naming the remedy
 - [x] The distinction from T240's contention shape is written down where the number is
+
+#### T366 — Settings never said which daemon it was about, and offered four controls that are per-agent on the wire
+
+`labels: phase-9, area: android` · `depends-on: T364`
+
+A3 in `HANDOFF.md` §7.5 is the Settings screen. What shipped before this task was a
+single unlabelled column of cards: a haptics toggle, and two rows leading to Devices and
+Diagnostics. It had no bar, no group labels, and — the part that matters — no statement
+anywhere of WHICH host the settings on it belonged to, on a screen reached from a
+per-host route (`/h/:serverId/settings`) in an app whose whole point is that a reader
+may have several daemons saved.
+
+**What was added.** The screen opens with the shared `ScreenBar`, whose leading `‹`
+renders only when the caller passes `onClose` — as a tab there is nothing to close back
+to, and reached from A1's gear there is. Its three groups are labelled in the redesign's
+quiet `.lbl` style, which is `Section`'s new `variant="label"`: the same heading element
+and the same `accessibilityRole="header"`, drawn in ink-3, uppercase, at the mono
+family's smallest size. A1's status groups took the same variant in the same commit, so
+the two screens' group headings are now one style rather than two that happen to agree.
+
+The first group is the host itself: the name the reader gave it, the address and how it
+is reached beneath, and a live status pill. Every string of that row is produced by
+`settings-host-model.ts`, which is RN-free and proven by execution — the split
+`settings-model.ts` already has with `SettingsScreen.tsx`, for the reason `CLAUDE.md`
+gives about `.tsx` files under Vitest.
+
+**What the row does not claim.** The artifact reads "mbp-14 / 192.168.1.40:6768 · paired
+Tue". The first two are real fields. The third is not: `credential-store.ts`'s
+`HostProfileRecord` persists no timestamp of any kind, so a day name would have to be
+invented. What the record does carry, and what a reader on a phone actually needs, is
+how the daemon is reached — directly or through the relay, over TLS or not — so that
+replaces the invented clause rather than padding beside it. A relay profile's `endpoint`
+is the RELAY's address, not the daemon's, so the line says "via relay" beside it instead
+of presenting a relay host as though the daemon were sitting there.
+
+`disconnected` reads **Offline**, tone `warning`, not "Error" and not `danger`: a phone
+going through a tunnel is the ordinary state of this app, not a fault to alarm anyone
+about. Every phase gets a word, so the pill is never a bare colour, and the whole row is
+one TalkBack stop whose label is built in the model — so the pill's word cannot be lost
+inside the wrapper, and the three pieces cannot be spoken in a different order than they
+are drawn.
+
+**Four of §7.5's rows are deliberately not drawn, and this is the reason.** Model,
+Thinking effort, Auto-compaction and "Ask before every tool" are per-AGENT on the wire:
+every method that reads or writes them (`session-controls-model.ts`'s
+`listProviderModes`, `setAgentMode`, `getAutoCompaction`, `setAutoCompaction`) takes an
+`agentId`, and this screen is per-host — it has no session to name. Drawing them here
+would mean either a local preference nothing on the wire reads, or a control that
+silently applied to one arbitrary session; both are worse than their absence, and all
+four are already reachable where they belong, in the session's own context-ring menu.
+The same argument covers §7.5's extension rows and its "Loaded but silent" card: which
+extensions have drawn is state a session accumulates, not a property of a host.
+
+**Secrets do not cross the seam.** The route reads the saved profile matching `serverId`
+from the credential store and passes on exactly four non-secret fields — the
+`SettingsHostProfileView` the model declares — never a `HostProfileRecord`. That is the
+same seam `pressOpenDevices`/`pressOpenDiagnostics` already establish for navigation:
+the route owns every dependency the screen should not have.
+
+- [x] A3 opens with the shared bar, and its close only renders where there is somewhere to close to
+- [x] The three groups are labelled in the `.lbl` style, and A1's groups took the same variant
+- [x] The host row names the daemon, its address, how it is reached, and its live state
+- [x] Nothing on the row is invented: no pairing date exists to print, and the row says so by omission
+- [x] The four per-agent rows and the extension rows are omitted with the reason written where it is checkable
+- [x] The screen never receives a credential-bearing record
