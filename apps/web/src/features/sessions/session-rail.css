@@ -1,0 +1,275 @@
+/**
+ * Left session-rail styles (plan.md §8.3, §10.2). Values are the design
+ * reference's rail block (`docs/ui-reference/pi-companion-web.html`:
+ * `.rail-head`/`.newbtn`/`.rail-search`/`.search`/`.sess`/`.rail-foot`)
+ * mapped onto `@picompanion/design-tokens`. Colours, spacing, radii,
+ * type, and shadows all come from `var(--...)` tokens; the reference's
+ * fixed control dimensions that the token set has no equivalent for are
+ * declared once below as custom properties on the rail root rather than
+ * repeated as literals at each use site.
+ */
+
+.pc-session-rail {
+  /* The reference's fixed control sizes, token-less by construction:
+     `.newbtn` 24px / radius 7, `.search` 30px / radius 8 / 9px inline
+     padding, `.sess` 7px 8px / radius 9, `.sess-gl` 14px wide at 12px
+     mono, `.rail-foot` 9px block padding, `.rail-head` 12px 12px 6px,
+     `.rail-search` 4px 12px 10px, `.search kbd` radius 4. */
+  --pc-session-rail-head-pad-block-end: 6px;
+  --pc-session-rail-new-height: 24px;
+  --pc-session-rail-new-radius: 7px;
+  --pc-session-rail-search-pad-block-end: 10px;
+  --pc-session-rail-search-height: 30px;
+  --pc-session-rail-kbd-radius: 4px;
+  --pc-session-rail-row-radius: 9px;
+  --pc-session-rail-row-pad-block: 7px;
+  --pc-session-rail-row-pad-inline: 8px;
+  --pc-session-rail-glyph-width: 14px;
+  --pc-session-rail-glyph-size: 12px;
+  --pc-session-rail-glyph-line-height: 18px;
+  --pc-session-rail-foot-pad-block: 9px;
+  --pc-session-rail-dot-size: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Head -------------------------------------------------------------------- */
+
+.pc-session-rail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-3) var(--pc-session-rail-head-pad-block-end);
+}
+
+.pc-session-rail__eyebrow {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+.pc-session-rail__new {
+  display: inline-flex;
+  align-items: center;
+  height: var(--pc-session-rail-new-height);
+  padding: 0 var(--spacing-2);
+  border: none;
+  border-radius: var(--pc-session-rail-new-radius);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-btn);
+  color: var(--color-ink);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pc-session-rail__new:hover {
+  background-color: var(--color-hover);
+}
+
+.pc-session-rail__new:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Search ------------------------------------------------------------------ */
+
+.pc-session-rail__search {
+  padding: var(--spacing-1) var(--spacing-3) var(--pc-session-rail-search-pad-block-end);
+}
+
+.pc-session-rail__search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  height: var(--pc-session-rail-search-height);
+  padding: 0 var(--spacing-2);
+  border-radius: var(--radius-control);
+  background-color: var(--color-field);
+  box-shadow: var(--shadow-inset-field);
+}
+
+.pc-session-rail__search-input {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  background-color: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+}
+
+.pc-session-rail__search-input::placeholder {
+  color: var(--color-ink-3);
+}
+
+.pc-session-rail__search-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pc-session-rail__search-kbd {
+  flex: none;
+  padding: 1px var(--spacing-1);
+  border-radius: var(--pc-session-rail-kbd-radius);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-hairline);
+  color: var(--color-ink-3);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* Rows -------------------------------------------------------------------- */
+
+.pc-session-rail__scroll {
+  min-height: 0;
+  padding: 0 var(--spacing-2) var(--spacing-3);
+}
+
+.pc-session-rail__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-session-rail__row-item {
+  display: flex;
+  min-width: 0;
+}
+
+.pc-session-rail__row {
+  display: grid;
+  grid-template-columns: var(--pc-session-rail-glyph-width) minmax(0, 1fr);
+  gap: var(--spacing-2);
+  width: 100%;
+  padding: var(--pc-session-rail-row-pad-block) var(--pc-session-rail-row-pad-inline);
+  border: none;
+  border-radius: var(--pc-session-rail-row-radius);
+  background-color: transparent;
+  color: inherit;
+  font-family: var(--font-family-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pc-session-rail__row:hover {
+  background-color: var(--color-hover);
+}
+
+.pc-session-rail__row[data-selected="true"] {
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.pc-session-rail__row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pc-session-rail__glyph {
+  font-family: var(--font-family-mono);
+  font-size: var(--pc-session-rail-glyph-size);
+  line-height: var(--pc-session-rail-glyph-line-height);
+  text-align: center;
+}
+
+.pc-session-rail__glyph--wait {
+  color: var(--color-ink-3);
+}
+
+.pc-session-rail__glyph--now {
+  color: var(--color-accent);
+}
+
+.pc-session-rail__glyph--done {
+  color: var(--color-green);
+}
+
+.pc-session-rail__glyph--hold {
+  color: var(--color-orange);
+}
+
+.pc-session-rail__glyph--err {
+  color: var(--color-red);
+}
+
+.pc-session-rail__row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pc-session-rail__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-snug);
+  color: var(--color-ink);
+}
+
+.pc-session-rail__meta {
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+.pc-session-rail__filter-note {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-2);
+}
+
+/* Foot -------------------------------------------------------------------- */
+
+.pc-session-rail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  padding: var(--pc-session-rail-foot-pad-block) var(--spacing-3);
+  border-top: 1px solid var(--color-line);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+.pc-session-rail__connection {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.pc-session-rail__connection-dot {
+  width: var(--pc-session-rail-dot-size);
+  height: var(--pc-session-rail-dot-size);
+  flex: none;
+  border-radius: var(--radius-full);
+  background-color: var(--color-ink-3);
+}
+
+/* The dot carries the state colour; the words stay `--ink-3`, the
+   reference's own `.rail-foot .ok` treatment. */
+.pc-session-rail__connection[data-state="connected"] .pc-session-rail__connection-dot {
+  background-color: var(--color-green);
+}
+
+.pc-session-rail__connection[data-state="connecting"] .pc-session-rail__connection-dot,
+.pc-session-rail__connection[data-state="probing"] .pc-session-rail__connection-dot,
+.pc-session-rail__connection[data-state="reconnect-pending"] .pc-session-rail__connection-dot {
+  background-color: var(--color-orange);
+}

@@ -14,6 +14,29 @@
 /** Mirrors `AGENT_LIFECYCLE_STATUSES` (`@picompanion/protocol`). */
 export type SessionStatus = "initializing" | "idle" | "running" | "error" | "closed";
 
+/**
+ * Mirrors `AgentUsage` (`packages/protocol/src/agent-types.ts`), the
+ * shape `AgentSnapshotPayload.lastUsage` carries. The session rail reads
+ * exactly `contextWindowUsedTokens` from it (the provider's own
+ * context-used figure, populated by the Pi provider in
+ * `packages/server/.../pi/agent.ts`); the other members are declared so
+ * this type stays a faithful mirror rather than a hand-trimmed subset.
+ */
+export interface SessionUsage {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  totalCostUsd?: number;
+  contextWindowMaxTokens?: number;
+  contextWindowUsedTokens?: number;
+}
+
+/** Mirrors `AgentMode` (`packages/protocol/src/agent-types.ts`). */
+export interface SessionMode {
+  id: string;
+  label: string;
+}
+
 export interface SessionSummary {
   id: string;
   /** `null` before Pi assigns a title, as in the ported backend. */
@@ -27,6 +50,22 @@ export interface SessionSummary {
   archivedAt?: string | null;
   /** ISO-8601 timestamp, mirrors `AgentSnapshotPayload.updatedAt`. */
   updatedAt: string;
+  /**
+   * Mirrors `AgentSnapshotPayload.model`; `null` when the provider
+   * reports none. Optional here so the many `SessionSummary` literal
+   * fixtures this feature's tests already build (which predate the
+   * session head/row meta line) keep compiling: a missing field renders
+   * as an omitted part, never as an invented one.
+   */
+  model?: string | null;
+  /** Mirrors `AgentSnapshotPayload.currentModeId`; `null` when the provider has no mode concept. */
+  currentModeId?: string | null;
+  /** Mirrors `AgentSnapshotPayload.availableModes`; used to label `currentModeId` for display. */
+  availableModes?: readonly SessionMode[];
+  /** Mirrors `AgentSnapshotPayload.thinkingOptionId` (this client's own explicit choice, if any). */
+  thinkingOptionId?: string | null;
+  /** Mirrors `AgentSnapshotPayload.lastUsage`. */
+  lastUsage?: SessionUsage;
 }
 
 /**

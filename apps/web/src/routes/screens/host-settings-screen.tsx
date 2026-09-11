@@ -5,10 +5,12 @@ import type { DaemonClient } from "@picompanion/client";
 import { useDaemonClientContext } from "../../app/daemon-client-context.js";
 import {
   AgentSettingsPanel,
+  ThemePreferenceControl,
   createDaemonSettingsClient,
   useAutoCompaction,
   useAutoRetry,
 } from "../../features/settings/index.js";
+import { Section } from "../../ui/primitives/index.js";
 import { RoutePlaceholder } from "../../ui/route-placeholder.js";
 
 const routeApi = getRouteApi("/h/$serverId/settings");
@@ -132,6 +134,18 @@ export function HostSettingsScreen() {
       {agent.status === "empty" || agent.status === "error" ? (
         <p className="pc-agent-settings__note">{agent.reason}</p>
       ) : null}
+      {/*
+        The Theme control is a real, persisted System/Light/Dark choice
+        (`features/settings/ThemePreferenceControl.tsx` +
+        `styles/theme-preference.ts`). It lives on this route rather than
+        in a slide-over sheet: this route is the one axe/route-coverage
+        guards and the header gear links to, and that
+        sheet-vs-route shape is a recorded product decision — the
+        reference's 420px sheet was not adopted.
+      */}
+      <Section title="Appearance">
+        <ThemePreferenceControl testId="host-settings-theme" />
+      </Section>
       <AgentSettingsPanel
         autoCompaction={autoCompaction}
         autoRetry={autoRetry}

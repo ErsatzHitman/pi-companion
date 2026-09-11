@@ -10,8 +10,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  max-width: 36rem;
-  border-radius: var(--radius-card);
+  /* The mockup's `.composer-inner` — the same 53.5rem content column the
+   * transcript centres on, so the prompt bar lines up with the prose above
+   * it. */
+  width: 100%;
+  max-width: 53.5rem;
+  margin: 0 auto;
+  border-radius: var(--radius-window);
   transition: box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
 }
 
@@ -62,6 +67,78 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-3);
+}
+
+/* The context ring (T386) — the mockup's `.ctxbtn`: a 30x30 transparent
+ * 8px-radius button that paints an accent tint while its menu is open. */
+.pc-context-ring {
+  --pc-context-ring-control-size: 30px;
+  width: var(--pc-context-ring-control-size);
+  height: var(--pc-context-ring-control-size);
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.pc-context-ring:hover {
+  background-color: var(--color-hover);
+}
+.pc-context-ring[aria-expanded="true"] {
+  background-color: var(--color-accent-tint);
+}
+.pc-context-ring:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pc-context-ring__svg {
+  display: block;
+}
+/* `.ctx-ring .bg { fill: none; stroke: var(--line-strong); stroke-width:
+ * 2.5 }` and `.ctx-ring .p { fill: none; stroke: var(--accent);
+ * stroke-width: 2.5; stroke-linecap: round; transform: rotate(-90deg);
+ * transform-origin: center }` — width/rotation come from the SVG
+ * attributes, these rules only carry the token colours and motion. */
+.pc-context-ring__track {
+  fill: none;
+  stroke: var(--color-line-strong);
+}
+.pc-context-ring__arc {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset var(--motion-duration-slower) var(--motion-easing-standard);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-context-ring__arc {
+    transition: none;
+  }
+}
+/* `.ctx-ring .pct { font-family: var(--mono); font-size: 7.5px;
+ * font-weight: 700; fill: var(--ink-2); text-anchor: middle;
+ * font-variant-numeric: tabular-nums }`. 7.5px has no font-size token (xs
+ * is 10.5px), so it is a named custom property quoting the mockup value. */
+.pc-context-ring__pct {
+  --pc-context-ring-percent-size: 7.5px;
+  font-family: var(--font-family-mono);
+  font-size: var(--pc-context-ring-percent-size);
+  font-weight: var(--font-weight-bold);
+  fill: var(--color-ink-2);
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The session-controls sheet opened by the ring: the three existing
+ * pickers stacked with the same spacing the composer used to give them. */
+.pc-composer__session-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
 }
 
 /* Slash-command completion (T28B4): `CommandSearch` already positions its

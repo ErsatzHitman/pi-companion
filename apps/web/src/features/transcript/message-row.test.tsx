@@ -73,8 +73,22 @@ describe("TranscriptMessageRow", () => {
         <TranscriptMessageRow entry={assistantEntry()} streaming={false} testId="row-assistant" />
       </>,
     );
-    expect(screen.getByTestId("row-user").textContent).toContain("You");
-    expect(screen.getByTestId("row-assistant").textContent).toContain("Pi");
+    // T386: the visible speaker moved out of the bubble into the meta line
+    // above it (the mockup's `.meta`), so the DOM carries the mockup's own
+    // lowercase `you`/`pi` — uppercased by CSS, never by a different string.
+    const userRow = screen.getByTestId("row-user");
+    const assistantRow = screen.getByTestId("row-assistant");
+    // `testId` sits on the bubble (the `role="group"` element); the meta
+    // line is its sibling inside the row wrapper.
+    expect(userRow.parentElement?.querySelector(".pc-transcript__who")?.textContent).toBe("you");
+    expect(assistantRow.parentElement?.querySelector(".pc-transcript__who")?.textContent).toBe(
+      "pi",
+    );
+    // The bubble's `role="group"` aria-label is still the accessible name,
+    // which is what actually keeps the two distinguishable without colour.
+    expect(userRow.getAttribute("role")).toBe("group");
+    expect(userRow.getAttribute("aria-label")).toBe("You");
+    expect(assistantRow.getAttribute("aria-label")).toBe("Pi");
   });
 
   it("announces the streaming state as visible text, not only the cursor animation", () => {

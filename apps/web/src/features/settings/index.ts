@@ -1,5 +1,7 @@
 export { AgentSettingsPanel } from "./AgentSettingsPanel.js";
 export type { AgentSettingsPanelProps } from "./AgentSettingsPanel.js";
+export { ThemePreferenceControl } from "./ThemePreferenceControl.js";
+export type { ThemePreferenceControlProps } from "./ThemePreferenceControl.js";
 export type { AgentSettingAvailability, AgentSettingState } from "./agent-setting-state.js";
 export { createDaemonSettingsClient } from "./daemon-settings-client.js";
 export type { DaemonSettingsClient } from "./daemon-settings-client.js";

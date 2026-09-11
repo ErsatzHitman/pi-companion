@@ -172,16 +172,41 @@ describe("TranscriptToolCallRow — known tool families render their specific ca
     render(<TranscriptToolCallRow entry={toolEntry(SHELL_TOOL)} testId="tc-shell" />);
     const card = screen.getByTestId("tc-shell");
     expect(within(card).getByText("Ran a shell command")).toBeTruthy();
-    expect(within(card).getByText("pnpm test")).toBeTruthy();
+    // T386: the shell command now also appears in the header's argument
+    // slot (the mockup's `.tool-h .arg`), so the same text legitimately
+    // renders twice — assert presence, not uniqueness.
+    expect(within(card).getAllByText("pnpm test").length).toBeGreaterThan(0);
     expect(within(card).getByText("3 passed, 0 failed")).toBeTruthy();
     expect(within(card).getByText(/Exit code: 0/)).toBeTruthy();
     expect(within(card).getByText("4s")).toBeTruthy();
   });
 
+  it("shows the tool's own argument in the header, ellipsised, with the full value as its title", () => {
+    render(<TranscriptToolCallRow entry={toolEntry(SHELL_TOOL)} testId="tc-arg" />);
+    const argument = screen.getByTestId("tc-arg").querySelector(".pc-tool-call__arg");
+    expect(argument?.textContent).toBe("pnpm test");
+    expect(argument?.getAttribute("title")).toBe("pnpm test");
+  });
+
+  it("shows no argument slot at all for a family whose body already leads with the same line", () => {
+    const planTool: tools.PlanToolCallViewModel = {
+      family: "plan",
+      callId: "call-plan",
+      toolName: "plan",
+      status: "completed",
+      displayName: "Planned",
+      updateCount: 1,
+      text: "1. read\n2. write",
+    };
+    render(<TranscriptToolCallRow entry={toolEntry(planTool)} testId="tc-no-arg" />);
+    expect(screen.getByTestId("tc-no-arg").querySelector(".pc-tool-call__arg")).toBeNull();
+  });
+
   it("renders a read card with the file path and a bounded content preview", () => {
     render(<TranscriptToolCallRow entry={toolEntry(READ_TOOL)} testId="tc-read" />);
     const card = screen.getByTestId("tc-read");
-    expect(within(card).getByText("/synthetic/workspace/README.md")).toBeTruthy();
+    // T386: the path now also appears in the header's argument slot.
+    expect(within(card).getAllByText("/synthetic/workspace/README.md").length).toBeGreaterThan(0);
     expect(card.textContent).toContain("Demo repo");
   });
 

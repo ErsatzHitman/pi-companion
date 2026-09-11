@@ -9,6 +9,7 @@ import { useDaemonClientContext } from "../../app/daemon-client-context.js";
 import { ApprovalsContainer } from "../../features/approvals/index.js";
 import { ComposerContainer } from "../../features/composer/index.js";
 import { createDaemonAgentTurnClient } from "../../features/composer/index.js";
+import { useSessionContextTelemetry } from "../../features/composer/index.js";
 import { createDaemonSessionResumeClient } from "../../features/sessions/index.js";
 import { SessionResumeScreen } from "../../features/sessions/SessionResumeScreen.js";
 import {
@@ -16,6 +17,7 @@ import {
   useAttachmentImageResolver,
 } from "../../features/transcript/attachment-image-resolver.js";
 import { EditFromHereSurface } from "../../features/transcript/index.js";
+import { selectLatestTodoEntry, TodoDock } from "../../features/transcript/index.js";
 import type {
   EditFromHereForkClient,
   EditFromHereOutcome,
@@ -339,6 +341,23 @@ export function HostSessionScreen() {
 
   const transcriptEntries = useSessionTranscriptEntries(client, agentId, info.status);
 
+  // T386: the todo dock above the composer reads the same live entry list
+  // the transcript does (plan.md §8.3's centre column) — the latest `todo`
+  // entry the session has emitted, or nothing at all when it never has.
+  // `transcript.tsx` deliberately keeps `todo` out of the scrolling
+  // transcript so the list is rendered once, here, where the mockup pins
+  // it (`.dock-todo` above `.prompt`).
+  const latestTodoEntry = useMemo(
+    () => selectLatestTodoEntry(transcriptEntries),
+    [transcriptEntries],
+  );
+
+  // T386: the composer's context ring reads the same derivation the right
+  // rail's `ContextMeter` does (`root-route.tsx`), from this route's own
+  // `DaemonClient` subscription — the composer's narrower turn client has
+  // no usage stream of its own.
+  const contextTelemetry = useSessionContextTelemetry(client, agentId);
+
   // T284: `hostController.getCurrentProfile()` is a synchronous getter,
   // not itself part of the `info` snapshot `useDaemonClientContext()`
   // hands back — but it changes exactly when `info.profileId`/`info.kind`
@@ -379,6 +398,7 @@ export function HostSessionScreen() {
         testId="host-session-transcript"
       />
       <ApprovalsContainer sessionId={agentId} client={client ?? undefined} />
+      {latestTodoEntry ? <TodoDock entry={latestTodoEntry} testId="session-todo-dock" /> : null}
       <ComposerContainer
         sessionId={agentId}
         client={agentTurnClient}
@@ -386,6 +406,8 @@ export function HostSessionScreen() {
         // structurally (`daemon-editor-text-client.ts`) — passed directly,
         // same as `ApprovalsContainer`'s `client` above.
         editorTextClient={client ?? undefined}
+        // T386: the ring's derived context-window telemetry.
+        contextTelemetry={contextTelemetry}
       />
     </>
   );

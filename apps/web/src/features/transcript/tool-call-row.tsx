@@ -220,15 +220,60 @@ function DiffLines({ diff, testId }: { diff: string; testId?: string }) {
 }
 
 /**
- * Header shared by every tool-call card: display name, non-colour status
- * (`StatusIndicator` always pairs its dot with visible text — T28A4
+ * The tool's own primary argument, for the header line the mockup draws as
+ * `.tool-h .arg` (`color: var(--ink-2); overflow: hidden; text-overflow:
+ * ellipsis; white-space: nowrap`) between the name and the duration.
+ *
+ * Every value here is a field the view model already carries — nothing is
+ * derived from the wire payload or fabricated. Families whose body already
+ * leads with the same string (plan, plain-text, and a generic card whose
+ * `toolName` is also its `displayName`) deliberately return `undefined`
+ * rather than printing the same text twice. The header then simply has no
+ * argument for those, which is honest: there is nothing extra to show.
+ */
+function toolArgument(tool: tools.ToolCallViewModel): string | undefined {
+  switch (tool.family) {
+    case "shell":
+      return tool.command;
+    case "read":
+    case "write":
+    case "edit":
+      return tool.filePath;
+    case "search":
+      return tool.query;
+    case "fetch":
+      return tool.url;
+    case "worktree_setup":
+      return tool.branchName ? `${tool.branchName} → ${tool.worktreePath}` : tool.worktreePath;
+    case "sub_agent":
+      return tool.description;
+    case "generic":
+      // Only when it adds information the display name does not already
+      // carry (the two are the same string on the common path).
+      return tool.toolName === tool.displayName ? undefined : tool.toolName;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Header shared by every tool-call card: display name, the tool's own
+ * argument (ellipsised, with the full value in a `title`), non-colour
+ * status (`StatusIndicator` always pairs its dot with visible text — T28A4
  * acceptance "tool status is conveyed in text as well as colour"), and a
  * mono, tabular-figure duration readout once one is known.
  */
 function ToolCallHeader({ tool, testId }: { tool: tools.ToolCallViewModel; testId?: string }) {
+  const argument = toolArgument(tool);
   return (
     <div className="pc-tool-call__header">
       <span className="pc-tool-call__name">{tool.displayName}</span>
+      {argument ? (
+        <span className="pc-tool-call__arg" title={argument}>
+          {argument}
+        </span>
+      ) : null}
+      <span className="pc-tool-call__grow" />
       <StatusIndicator
         label="Tool call"
         tone={STATUS_TONE[tool.status]}

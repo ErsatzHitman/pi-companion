@@ -7,7 +7,11 @@ import { routeTree } from "../route-tree.js";
 import { useCurrentAgentId } from "./host-settings-screen.js";
 import type { DaemonClient } from "@picompanion/client";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+});
 
 /**
  * Warm the lazy route chunk before any assertion is timed — see
@@ -55,6 +59,28 @@ describe("HostSettingsScreen route wiring (T131)", () => {
     ).toBeTruthy();
     expect(screen.getByTestId("host-settings-agent-settings-auto-compaction-toggle")).toBeTruthy();
     expect(screen.getByTestId("host-settings-agent-settings-auto-retry-toggle")).toBeTruthy();
+  }, 20_000);
+
+  it("mounts the persisted Theme control alongside the existing placeholder facts", async () => {
+    const router = createRouter({
+      routeTree,
+      history: createMemoryHistory({ initialEntries: ["/h/host-1/settings"] }),
+    });
+    render(
+      <CoreProvider>
+        <RouterProvider router={router} />
+      </CoreProvider>,
+    );
+
+    const theme = (await screen.findByTestId(
+      "host-settings-theme",
+      {},
+      { timeout: 15_000 },
+    )) as HTMLSelectElement;
+    expect(theme.value).toBe("system");
+    // The route's own placeholder facts stay put.
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
+    expect(screen.getByText("host-1")).toBeTruthy();
   }, 20_000);
 });
 

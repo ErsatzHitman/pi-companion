@@ -3,6 +3,8 @@ import type { timeline } from "@picompanion/frontend-core";
 
 import { ThinkingSection } from "../../ui/recipes/index.js";
 
+import { TranscriptMeta } from "./transcript-meta.js";
+
 /** The `thinking` transcript entry kind (plan.md §11.1 "assistant text and
  * thinking deltas"; `transcript-view.ts`'s `reasoning` -> `"thinking"`
  * projection). T28A3's sibling to `message-row.tsx`'s `CoreMessageEntry` —
@@ -128,6 +130,10 @@ function TranscriptThinkingRowImpl({ entry, live, testId }: TranscriptThinkingRo
 
   return (
     <div data-render-count={renderCount.current}>
+      {/* The mockup's `.meta` line carries `thinking` here, with no time:
+          reasoning is process detail rather than something either party
+          said, which is the T308 rule this row still honours. */}
+      <TranscriptMeta who="thinking" />
       <ThinkingSection
         summary={summaryFor(entry, live)}
         body={bodyFor(entry)}

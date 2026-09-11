@@ -20,13 +20,20 @@ import type {
   RenameSessionResult,
   SessionsClient,
 } from "./sessions-client.js";
-import type { SessionStatus, SessionSummary } from "./types.js";
+import type { SessionMode, SessionStatus, SessionSummary, SessionUsage } from "./types.js";
 
 /**
  * The subset of `AgentSnapshotPayload`
  * (`@picompanion/protocol`'s `messages.ts`) this feature reads. A real
  * `AgentSnapshotPayload` has every one of these fields, so it satisfies
  * this type as-is.
+ *
+ * `model`, `currentModeId` and `availableModes` mirror the wire schema's
+ * own non-optional fields (they are `string | null` / an array on every
+ * snapshot); `thinkingOptionId` and `lastUsage` mirror the schema's
+ * optional ones, so this type stays satisfiable by every snapshot a real
+ * daemon emits, not only the ones that carry a provider-side thinking
+ * level or a usage report yet.
  */
 export interface DaemonAgentSnapshot {
   id: string;
@@ -35,6 +42,11 @@ export interface DaemonAgentSnapshot {
   status: SessionStatus;
   title: string | null;
   updatedAt: string;
+  model: string | null;
+  currentModeId: string | null;
+  availableModes: readonly SessionMode[];
+  thinkingOptionId?: string | null;
+  lastUsage?: SessionUsage;
   requiresAttention?: boolean;
   archivedAt?: string | null;
 }
@@ -146,6 +158,11 @@ export function toSessionSummary(agent: DaemonAgentSnapshot): SessionSummary {
       : {}),
     ...(agent.archivedAt !== undefined ? { archivedAt: agent.archivedAt } : {}),
     updatedAt: agent.updatedAt,
+    model: agent.model,
+    currentModeId: agent.currentModeId,
+    availableModes: agent.availableModes,
+    ...(agent.thinkingOptionId !== undefined ? { thinkingOptionId: agent.thinkingOptionId } : {}),
+    ...(agent.lastUsage !== undefined ? { lastUsage: agent.lastUsage } : {}),
   };
 }
 

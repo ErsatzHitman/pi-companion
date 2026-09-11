@@ -19622,3 +19622,64 @@ and `background-kill-restore.contract.test.ts` land here.
 - [x] The todo widget docks above the prompt bar with a collapsing head, and no longer renders a transcript row
 - [x] The app bar's pill reaches `Thinking`, `Working` and `Needs you` from real session activity
 - [x] Every changed value is pinned by a test, and the composer contract tests pin the new source shape
+
+#### T386 — The web console had no session head, no context ring and a rail with no head, search, footer or row metadata
+
+`labels: phase-9, area: web` · `depends-on: T382`
+
+The desktop console was the surface with the largest gap to `docs/ui-reference/pi-companion-web.html`.
+`.main-head` did not exist — the session's title, status and identity lived inside a
+`Section title="Session"` block with a Host/Session definition list — the composer had no context
+ring anywhere, `{ kind: "todo" }` entries were deliberately excluded from the transcript and
+rendered nowhere, the session rail was a bare list of buttons with no head, no search and no
+footer, and `/h/$serverId/settings` had **no inbound link at all** anywhere in the app.
+
+**The shell now carries the reference's top bar and rail.** A 20×20 accent brand tile with the
+`π` glyph beside the wordmark; a workspace crumb whose basename and branch are read from the
+daemon for the open session's own `cwd` (a failed branch read omits the branch rather than
+inventing one, and the reference's HEAD-sha chip is left out because `checkout_status_response`
+is the only thing that carries a sha and the header has no session-scoped call to it — recorded
+here rather than faked); a 30×30 gear `IconButton` that is the settings route's first inbound
+link; a rail head with the `Workspace` eyebrow and a `New session` button that navigates to the
+host's sessions route, where the create form lives; a rail search field with a `⌘K`/`Ctrl+K`
+focus binding that filters rows by title or cwd and states an empty result instead of showing an
+empty list; rows that draw the reference's status glyph plus `age · tokens · model` from the
+snapshot's real `model`/`lastUsage`/`updatedAt`; and a foot line with the real connection state,
+the relay kind and the package version. The live rail gained the `Live` eyebrow and the same
+status pill the head uses.
+
+**The centre column takes `.thread`'s measure and the composer takes `.prompt`'s row.** A
+centred 53.5rem column with the reference's `78ch`/`72ch` caps; a per-turn meta line carrying
+`you`/`pi`/`thinking` and the time above the block (superseding T308's placement below it); the
+user bubble in `accent-tint` at radius 14 with `11px 14px` padding; mono prose at 12.5/1.62;
+tool headers with the reference's argument slot beside the name; the composer as one raised row
+— attach `+`, the **new** context ring (26×26, `r=11`, `stroke-width: 2.5`, bare digits inside,
+derived from the same telemetry the right rail's ContextMeter uses), the textarea, and the accent
+Send mark — with the reference's visible `.composer-foot` line carrying the steering state and
+the keyboard contract; and a task dock pinned above the prompt bar that renders the session's
+latest `todo` entry (so a todo is rendered on web for the first time, once, in the dock). A
+dictation control is deliberately absent: web has no dictation path, and the alternative was a
+dead button.
+
+**The theme control the reference's settings sheet shows is real.** `features/settings` gained a
+System/Light/Dark control backed by `styles/theme-preference.ts`, persisted in `localStorage` and
+applied as `data-theme` on the document element, defaulting to System and following
+`prefers-color-scheme` exactly as `theme-runtime.ts` already did. Settings stays a **route**
+rather than becoming the reference's 420px slide-over: the route is axe-covered and
+route-coverage-guarded, and the sheet was a presentation choice with no capability behind it.
+The gear added above is what makes that route reachable.
+
+**Owns:** `apps/web/src/ui/shell.tsx`/`shell.css`, `routes/root-route.tsx`,
+`routes/screens/host-settings-screen.tsx`, `routes/screens/host-session-screen.tsx`,
+`features/sessions/`, `features/settings/`, `features/transcript/`, `features/composer/`,
+`features/connection/`, `ui/recipes/`, `styles/theme-runtime.ts`, `styles/theme-preference.ts`.
+
+- [x] The top bar carries the brand tile, a real workspace crumb, and a gear that reaches the settings route
+- [x] The rail has its `Workspace` head with a real `New session` path, a search field with `⌘K`, and a foot with real connection and version facts
+- [x] Rail rows draw the status glyph and a meta line built only from fields the snapshot really carries
+- [x] The session head draws the title, status pill, model/effort and mode chips from real state, and `session-resume-ready` survives
+- [x] The transcript takes `.thread`'s measure, the meta line above each turn, the accent-tint user bubble and the mono face
+- [x] Tool headers gained the reference's argument slot without losing the status word
+- [x] The composer is the reference's single row with a real context ring, and its footer states the steering mode and the keyboard contract
+- [x] The task dock renders the latest todo entry above the prompt bar, and it is rendered nowhere else
+- [x] System/Light/Dark is a real, persisted control; the settings route keeps its tested shape and gains its first inbound link

@@ -1,5 +1,4 @@
 import type { AgentStreamEvent } from "@picompanion/protocol/agent-types";
-import type { AgentUsage } from "@picompanion/protocol/agent-types";
 import { extensions, telemetry as coreTelemetry } from "@picompanion/frontend-core";
 import { Outlet, createRootRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
@@ -10,23 +9,20 @@ import { PiNoticeBannerContainer } from "../features/notices/index.js";
 import { ContextMeter, PiExtensionRail, usePiUiRailElements } from "../features/rail/index.js";
 import {
   SESSIONS_NOT_CONNECTED,
+  SessionRail,
+  SessionStatusPill,
+  SessionWorkspaceCrumb,
   createDaemonSessionsClient,
   createPendingConnectionSessionsClient,
-  groupSessions,
-  statusPresentation,
   useSessionListSync,
+  useSessionSnapshot,
 } from "../features/sessions/index.js";
-import type { SessionListConnectionState, SessionListState } from "../features/sessions/index.js";
+import type {
+  SessionChromeClient,
+  SessionListConnectionState,
+  SessionListState,
+} from "../features/sessions/index.js";
 import { SessionCostMeterContainer } from "../features/telemetry/index.js";
-import {
-  Banner,
-  Button,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  Section,
-  StatusIndicator,
-} from "../ui/primitives/index.js";
 import { Shell } from "../ui/shell.js";
 import { NotFoundScreen } from "./not-found-screen.js";
 import { RouteErrorScreen } from "./route-error-screen.js";
@@ -65,12 +61,12 @@ import { RouteErrorScreen } from "./route-error-screen.js";
  * `data-testid`s/row keys there would render two elements sharing the
  * same `session-list-empty`/`session-row-<id>` test id at once on that
  * route (`host-sessions-screen.test.tsx`'s existing `getByTestId` calls
- * require a single match). This file's `SessionRailContent` reuses that
- * feature's pure, presentation-free logic (`groupSessions`,
- * `statusPresentation`, `useSessionListSync`, the real/pending-connection
- * client factories) and composes the same primitives, but renders its own
- * rows under a `shell-session-rail-*` test id namespace so the two
- * regions can never collide, on this route or any other.
+ * require a single match). This file's `SessionRailContent` keeps the
+ * same live-data wiring (`useSessionListSync`, the real/pending-connection
+ * client factories) and renders `features/sessions`' own `SessionRail`
+ * (`SessionRail.tsx`), which owns the rail's head/search/rows/foot and
+ * uses the `shell-session-rail-*` test id namespace so the two regions
+ * can never collide, on this route or any other.
  */
 
 function toSessionListConnectionState(status: string): SessionListConnectionState {
@@ -88,9 +84,9 @@ interface SessionRailContentProps {
 
 /**
  * The left session rail's live content (plan.md §8.3: "sessions, host
- * state, and session creation"; session creation and host state stay
- * with `HostSessionsScreen`'s existing centre-route surface — see this
- * file's module doc for why. This rail's job is live cross-route
+ * state, and session creation"; the create dialog itself and host state
+ * stay with `HostSessionsScreen`'s existing centre-route surface — see
+ * this file's module doc for why. This rail's job is live cross-route
  * navigation between a host's sessions, always visible next to whatever
  * is open in the centre column).
  */
@@ -132,83 +128,36 @@ function SessionRailContent({ serverId, selectedSessionId }: SessionRailContentP
     });
   }
 
-  if (listState.kind === "loading") {
-    return (
-      <LoadingState
-        title="Loading sessions"
-        description="Fetching sessions from this host."
-        testId="shell-session-rail-loading"
-      />
-    );
+  // The create-session dialog is `SessionsScreen`'s own
+  // (`features/sessions/SessionsScreen.tsx`'s `create-session-trigger`),
+  // and that screen is what `/h/:serverId/sessions` mounts. This rail's
+  // `New session` action navigates there rather than duplicating a create
+  // controller in the shell — the honest wiring, not a second dialog.
+  function openCreateSession(): void {
+    void navigate({ to: "/h/$serverId/sessions", params: { serverId } });
   }
-
-  if (listState.kind === "error") {
-    return (
-      <ErrorState
-        title="Couldn't load sessions"
-        description={listState.message}
-        testId="shell-session-rail-error"
-      />
-    );
-  }
-
-  if (listState.sessions.length === 0) {
-    return (
-      <EmptyState
-        title="No sessions yet"
-        description="Create a session on this host to see it here."
-        testId="shell-session-rail-empty"
-      />
-    );
-  }
-
-  const groups = groupSessions(listState.sessions);
 
   return (
-    <Section title="Sessions" id="shell-session-rail">
-      {listState.stale ? (
-        <Banner
-          tone="warning"
-          message="Reconnecting — this list may be out of date."
-          testId="shell-session-rail-stale-banner"
-        />
-      ) : null}
-      {groups.map((group) => (
-        <Section key={group.kind} title={group.label}>
-          <ul
-            className="shell-rail__session-rows"
-            data-testid={`shell-session-rail-group-${group.kind}`}
-          >
-            {group.sessions.map((session) => {
-              const presentation = statusPresentation(session);
-              const selected = session.id === selectedSessionId;
-              return (
-                <li key={session.id}>
-                  <Button
-                    kind="secondary"
-                    onClick={() => openSession(session.id)}
-                    aria-current={selected ? "true" : undefined}
-                    data-testid={`shell-session-rail-row-${session.id}`}
-                  >
-                    {session.title ?? "Untitled session"}
-                    <StatusIndicator
-                      label="Status"
-                      tone={presentation.tone}
-                      statusText={presentation.text}
-                    />
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        </Section>
-      ))}
-    </Section>
+    <SessionRail
+      state={listState}
+      selectedSessionId={selectedSessionId}
+      onSelectSession={openSession}
+      onNewSession={openCreateSession}
+      connection={{ status: info.status, kind: info.kind }}
+    />
   );
 }
 
 interface ExtensionRailContentProps {
   agentId: string;
+  /**
+   * The adapted daemon client this rail reads the open session's live
+   * snapshot through; its `Live` head status pill and the context-window
+   * telemetry below both come from that one snapshot, and an
+   * `agent_update` re-renders this rail rather than the whole routed
+   * tree.
+   */
+  chromeClient: SessionChromeClient | null;
 }
 
 /**
@@ -246,9 +195,10 @@ interface ExtensionRailContentProps {
  * a faked success. Fixing this requires adding a sender to
  * `packages/client`, a different package than this task owns.
  */
-function ExtensionRailContent({ agentId }: ExtensionRailContentProps) {
+function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentProps) {
   const { client } = useDaemonClientContext();
   const { platform } = useCore();
+  const session = useSessionSnapshot(chromeClient, agentId);
 
   const store = useMemo(() => new extensions.PiUiElementStore(), [agentId]);
   const actionController = useMemo(
@@ -287,22 +237,15 @@ function ExtensionRailContent({ agentId }: ExtensionRailContentProps) {
     });
   }, [client, agentId, store, actionController]);
 
-  const [usage, setUsage] = useState<AgentUsage | undefined>(undefined);
-  useEffect(() => {
-    setUsage(undefined);
-    if (!client) return undefined;
-    return client.on("agent_update", (message) => {
-      if (message.payload.kind !== "upsert") return;
-      if (message.payload.agent.id !== agentId) return;
-      setUsage(message.payload.agent.lastUsage);
-    });
-  }, [client, agentId]);
-
   const elements = usePiUiRailElements(store, agentId);
-  const windowTelemetry = coreTelemetry.deriveContextWindowTelemetry(usage);
+  const windowTelemetry = coreTelemetry.deriveContextWindowTelemetry(session?.lastUsage);
 
   return (
     <>
+      <div className="shell__live-head" data-testid="shell-live-head">
+        <span className="shell__live-eyebrow">Live</span>
+        <SessionStatusPill session={session} testId="shell-live-status" />
+      </div>
       <ContextMeter telemetry={windowTelemetry} />
       <SessionCostMeterContainer agentId={agentId} client={client ?? undefined} />
       <PiNoticeBannerContainer agentId={agentId} client={client ?? undefined} />
@@ -318,6 +261,26 @@ function RootRouteComponent() {
   // declare, rather than requiring one specific route.
   const params = useParams({ strict: false }) as { serverId?: string; agentId?: string };
   const { serverId, agentId } = params;
+  const { client } = useDaemonClientContext();
+
+  // A real `DaemonClient.on` is a generic overload set over every
+  // outbound message type, which `SessionSnapshotSource`'s structural
+  // shape cannot express; this memo adapts it once, the same way
+  // `daemon-agent-turn-client.ts` narrows `DaemonClient` for the
+  // composer. It is handed to two small chrome components (the header
+  // crumb and the live rail's head), each of which reads it through
+  // `useSessionSnapshot` itself so a metadata push re-renders that
+  // component, never this route wrapper (and therefore never the
+  // transcript).
+  const chromeClient = useMemo<SessionChromeClient | null>(() => {
+    if (!client) return null;
+    return {
+      fetchAgent: (sessionId) => client.fetchAgent(sessionId),
+      subscribeAgentUpdates: (handler) =>
+        client.on("agent_update", (message) => handler({ payload: message.payload })),
+      getCheckoutStatus: (cwd) => client.getCheckoutStatus(cwd),
+    };
+  }, [client]);
 
   return (
     <Shell
@@ -326,7 +289,10 @@ function RootRouteComponent() {
           <SessionRailContent serverId={serverId} selectedSessionId={agentId} />
         ) : undefined
       }
-      extensionRail={agentId ? <ExtensionRailContent agentId={agentId} /> : undefined}
+      extensionRail={
+        agentId ? <ExtensionRailContent agentId={agentId} chromeClient={chromeClient} /> : undefined
+      }
+      headerWorkspace={<SessionWorkspaceCrumb agentId={agentId ?? null} client={chromeClient} />}
     >
       <Outlet />
     </Shell>

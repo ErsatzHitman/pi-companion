@@ -1,0 +1,164 @@
+/**
+ * `TodoDock` styles (the mockup's `.dock-todo`, pinned above the prompt
+ * bar). Every value is a design token or a fixed marker/box dimension with
+ * a comment quoting the mockup figure — same rule `primitives.css` states
+ * for its own fixed dimensions.
+ *
+ * The mockup's dock panel is
+ *
+ * ```css
+ * .dock-todo .todo {
+ *   border-radius: var(--r-blk);
+ *   background: var(--surface);
+ *   box-shadow: var(--sh-card);
+ *   padding: 9px 12px;
+ * }
+ * ```
+ *
+ * `--radius-window` is 14px (`--r-blk`), `--shadow-card` is the published
+ * card tier and `--color-surface` the mockup's `var(--surface)`. The 9px/
+ * 12px padding has no spacing token (8px/12px are the nearest), so it is a
+ * local custom property quoting the mockup value rather than a silent
+ * 1px round.
+ *
+ * The dock is the same 53.5rem content column as the transcript and the
+ * composer, centred with `margin: 0 auto`, so all three line up.
+ */
+.pc-todo-dock {
+  --pc-todo-dock-padding-block: 9px;
+  --pc-todo-dock-padding-inline: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 53.5rem;
+  margin: 0 auto var(--spacing-2);
+  padding: var(--pc-todo-dock-padding-block) var(--pc-todo-dock-padding-inline);
+  border-radius: var(--radius-window);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* `.todo-h { display: flex; align-items: center; gap: 9px }` — 9px again
+ * has no token, so it is kept as the mockup's own figure. */
+.pc-todo-dock__head {
+  --pc-todo-dock-head-gap: 9px;
+  display: flex;
+  align-items: center;
+  gap: var(--pc-todo-dock-head-gap);
+}
+
+.pc-todo-dock__ring {
+  display: block;
+  flex: none;
+}
+/* The ring geometry matches `apps/android/src/features/transcript/
+ * todo-row-model.ts`: `fill: none`, stroke 2, arc rotated -90deg. */
+.pc-todo-dock__ring-track {
+  fill: none;
+  stroke: var(--color-line-strong);
+}
+.pc-todo-dock__ring-arc {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset var(--motion-duration-slower) var(--motion-easing-standard);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-todo-dock__ring-arc {
+    transition: none;
+  }
+}
+
+/* `.todo-h .t { font-size: 12px; font-weight: 600 }`. 12px has no font-size
+ * token (base is 12.5px), so it is a named custom property quoting the
+ * mockup value. */
+.pc-todo-dock__title {
+  --pc-todo-dock-title-size: 12px;
+  flex: none;
+  font-size: var(--pc-todo-dock-title-size);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+/* `.dock-todo .todo-h .now-line { font-family: var(--mono); font-size:
+ * 11px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis;
+ * white-space: nowrap; min-width: 0 }` — `--font-size-sm` is 11px. */
+.pc-todo-dock__now {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `.todo-h .c { margin-left: auto; font-family: var(--mono); font-size:
+ * 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums }`. */
+.pc-todo-dock__count {
+  flex: none;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* `.todo-toggle { width: 22px; height: 22px; border: 0; border-radius:
+ * 6px; ... }` — `--radius-chip` is 6px. */
+.pc-todo-dock__toggle {
+  --pc-todo-dock-toggle-size: 22px;
+  width: var(--pc-todo-dock-toggle-size);
+  height: var(--pc-todo-dock-toggle-size);
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-ink-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.pc-todo-dock__toggle:hover {
+  background-color: var(--color-hover);
+  color: var(--color-ink);
+}
+.pc-todo-dock__toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pc-todo-dock__chevron {
+  transition: transform var(--motion-duration-fast) var(--motion-easing-standard);
+}
+/* `.dock-todo[data-open="false"] .todo-toggle svg { transform:
+ * rotate(180deg) }` — collapsed flips the chevron. */
+.pc-todo-dock__toggle[aria-expanded="false"] .pc-todo-dock__chevron {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-todo-dock__chevron {
+    transition: none;
+  }
+}
+
+/* `.dock-todo ul { margin-top: 9px }`. */
+.pc-todo-dock__list {
+  margin-top: 9px;
+}
+
+/* Flatten `TaskRows`' own per-row cards inside the dock: the mockup draws
+ * one raised panel here and plain rows inside it, not six stacked cards.
+ * Only layout/surface properties are overridden — every status word,
+ * marker and the done-row strikethrough still come from the recipe. */
+.pc-todo-dock .pc-task-row {
+  box-shadow: none;
+  background-color: transparent;
+  border-radius: 0;
+  padding: var(--spacing-1) 0;
+}
+.pc-todo-dock .pc-task-row__title,
+.pc-todo-dock .pc-task-row__status {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+}

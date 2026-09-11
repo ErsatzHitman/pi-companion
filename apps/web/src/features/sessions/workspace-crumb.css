@@ -1,0 +1,34 @@
+/**
+ * Header workspace crumb styles. Values are the design reference's
+ * `.crumb` block (`docs/ui-reference/pi-companion-web.html`: mono
+ * 11.5px, `--ink-2`, 6px gap, directory name at `--ink`, separator at
+ * `--ink-3`) mapped onto `@picompanion/design-tokens`. The 6px gap has no
+ * spacing token, so it is declared once here as a custom property.
+ */
+
+.pc-workspace-crumb {
+  --pc-workspace-crumb-gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: var(--pc-workspace-crumb-gap);
+  min-width: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-md);
+  color: var(--color-ink-2);
+}
+
+.pc-workspace-crumb__name,
+.pc-workspace-crumb__branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-workspace-crumb__name {
+  color: var(--color-ink);
+  font-weight: var(--font-weight-medium);
+}
+
+.pc-workspace-crumb__separator {
+  color: var(--color-ink-3);
+}

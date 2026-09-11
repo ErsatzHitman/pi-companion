@@ -56,6 +56,14 @@ describe("root route rail wiring (T53A3)", () => {
     // pre-T53A3 "nothing ever mounted here" state -- distinguishable from
     // it only by which component produced the identical copy.
     expect(within(sessionRail).getByTestId("shell-session-rail-empty")).toBeTruthy();
+    // The rail's own chrome (head + search + foot) renders around that
+    // empty state.
+    expect(within(sessionRail).getByTestId("shell-session-rail-search")).toBeTruthy();
+    expect(within(sessionRail).getByTestId("shell-session-rail-foot")).toBeTruthy();
+
+    // The settings gear is this header's inbound link to the settings
+    // route, which had no entry point anywhere in the app before it.
+    expect(screen.getByTestId("shell-settings-trigger")).toBeTruthy();
 
     const extensionRail = screen.getByRole("complementary", { name: "Pi extensions" });
     // No `agentId` on this route: nothing for the extension rail to show,
@@ -74,6 +82,8 @@ describe("root route rail wiring (T53A3)", () => {
 
     const extensionRail = screen.getByRole("complementary", { name: "Pi extensions" });
     expect(extensionRail.getAttribute("data-has-content")).toBe("true");
+    // The live rail's own head sits above the meters/extension content.
+    expect(within(extensionRail).getByTestId("shell-live-head").textContent).toContain("Live");
     // `Shell`'s own fallback must be gone now that a real `extensionRail`
     // element is passed, even though that real content is itself empty
     // (no live Pi UI elements without a daemon connection).

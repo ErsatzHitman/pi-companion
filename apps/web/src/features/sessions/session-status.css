@@ -1,0 +1,57 @@
+/**
+ * Session status pill (dot + word) shared by the per-session head and the
+ * live rail's own head. Every value below is the design reference
+ * (`docs/ui-reference/pi-companion-web.html`'s `.pill` block) mapped onto
+ * `@picompanion/design-tokens`; the reference's fixed 22px pill height and
+ * 6px dot have no token, so they are declared once here as custom
+ * properties rather than repeated as literals at each use site.
+ */
+
+.pc-session-pill {
+  --pc-session-pill-height: 22px;
+  --pc-session-pill-dot-size: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  height: var(--pc-session-pill-height);
+  padding: 0 var(--spacing-2);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-wide);
+  white-space: nowrap;
+}
+
+.pc-session-pill__dot {
+  width: var(--pc-session-pill-dot-size);
+  height: var(--pc-session-pill-dot-size);
+  flex: none;
+  border-radius: var(--radius-full);
+  background-color: currentColor;
+}
+
+.pc-session-pill--success {
+  background-color: var(--status-success-background);
+  color: var(--status-success-foreground);
+}
+
+.pc-session-pill--warning {
+  background-color: var(--status-warning-background);
+  color: var(--status-warning-foreground);
+}
+
+.pc-session-pill--danger {
+  background-color: var(--status-danger-background);
+  color: var(--status-danger-foreground);
+}
+
+.pc-session-pill--info {
+  background-color: var(--status-info-background);
+  color: var(--status-info-foreground);
+}
+
+.pc-session-pill--neutral {
+  background-color: var(--color-inset);
+  color: var(--color-ink-3);
+  box-shadow: var(--shadow-hairline);
+}

@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { Link, useMatches } from "@tanstack/react-router";
+import { Link, useMatches, useNavigate, useParams } from "@tanstack/react-router";
 
 import { ConnectionStatus } from "../features/connection/connection-status.js";
-import { EmptyState } from "./primitives/index.js";
+import { EmptyState, IconButton } from "./primitives/index.js";
 import "./shell.css";
 
 /**
@@ -27,6 +27,14 @@ export interface ShellProps {
    * rail. It does not disappear into a collapsed status chip.").
    */
   extensionRail?: ReactNode;
+  /**
+   * Header workspace crumb slot (this task's top-bar fidelity work):
+   * `root-route.tsx` mounts `features/sessions`' `WorkspaceCrumb`, which
+   * reads the open session's own `cwd`/branch. `Shell` owns the slot's
+   * position between the brand mark and the spacer; it never invents a
+   * workspace value itself.
+   */
+  headerWorkspace?: ReactNode;
   /** Centre transcript-and-composer column. */
   children: ReactNode;
 }
@@ -77,16 +85,27 @@ function useRouteHeading(): string {
 }
 
 /**
- * The authenticated app shell (plan.md §8.3): a header with connection
- * state, then the three-region workspace — left session rail, centre
- * transcript/composer, right Pi extension rail — collapsing to a single
- * stacked column under the design-tokens "wide" breakpoint (see
+ * The authenticated app shell (plan.md §8.3): a header with the brand
+ * mark, the open workspace's crumb, connection state and the settings
+ * entry point, then the three-region workspace — left session rail,
+ * centre transcript/composer, right Pi extension rail — collapsing to a
+ * single stacked column under the design-tokens "wide" breakpoint (see
  * `shell.css`'s media query, kept in sync with
  * `@picompanion/design-tokens`' `breakpoints.wide` by `shell.test.tsx`).
+ *
+ * The settings gear is the header's own inbound link to
+ * `/h/$serverId/settings`: that route existed with no reachable entry
+ * point anywhere in the app until this header added one. It resolves
+ * `serverId` from the currently matched route (the same loose-params
+ * read `root-route.tsx` uses) and renders only when a host is genuinely
+ * in context — on `/connect` there is no host to open settings for.
  */
-export function Shell({ sessionRail, extensionRail, children }: ShellProps) {
+export function Shell({ sessionRail, extensionRail, headerWorkspace, children }: ShellProps) {
   const hasExtensionContent = extensionRail != null;
   const heading = useRouteHeading();
+  const params = useParams({ strict: false }) as { serverId?: string };
+  const serverId = params.serverId;
+  const navigate = useNavigate();
 
   return (
     <div className="shell">
@@ -106,9 +125,27 @@ export function Shell({ sessionRail, extensionRail, children }: ShellProps) {
         */}
         <h1 className="pc-visually-hidden">{heading}</h1>
         <Link to="/connect" className="shell__brand">
-          Pi Companion
+          <span className="shell__brand-tile" aria-hidden="true">
+            π
+          </span>
+          <span className="shell__brand-name">Pi Companion</span>
         </Link>
-        <ConnectionStatus />
+        {headerWorkspace}
+        <div className="shell__header-spacer" />
+        <div className="shell__header-tools">
+          <ConnectionStatus />
+          {serverId ? (
+            <IconButton
+              icon="settings"
+              accessibleName="Settings"
+              className="shell__gear"
+              data-testid="shell-settings-trigger"
+              onClick={() => {
+                void navigate({ to: "/h/$serverId/settings", params: { serverId } });
+              }}
+            />
+          ) : null}
+        </div>
       </header>
       <div className="shell__regions" data-testid="shell-regions">
         <nav
@@ -117,11 +154,13 @@ export function Shell({ sessionRail, extensionRail, children }: ShellProps) {
           data-testid="shell-session-rail"
         >
           {sessionRail ?? (
-            <EmptyState
-              title="No sessions yet"
-              description="Connect to a host to see its sessions here."
-              testId="shell-session-rail-empty"
-            />
+            <div className="shell__rail-fallback">
+              <EmptyState
+                title="No sessions yet"
+                description="Connect to a host to see its sessions here."
+                testId="shell-session-rail-empty"
+              />
+            </div>
           )}
         </nav>
         <main className="shell__center" data-testid="shell-center">

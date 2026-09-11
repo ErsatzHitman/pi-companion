@@ -1,11 +1,13 @@
 import {
+  Outlet,
   RouterProvider,
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { breakpoints } from "@picompanion/design-tokens";
 import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
@@ -108,6 +110,52 @@ describe("Shell", () => {
     expect(screen.getByRole("link", { name: "Pi Companion" }).getAttribute("href")).toBe(
       "/connect",
     );
+    // The brand mark's tile is decorative (its glyph is `aria-hidden`),
+    // so the link's accessible name stays exactly the wordmark.
+    expect(screen.getByText("π")).toBeTruthy();
+  });
+
+  it("renders no settings gear where there is no host in context", async () => {
+    renderShell({});
+    await screen.findByRole("navigation", { name: "Sessions" });
+    expect(screen.queryByTestId("shell-settings-trigger")).toBeNull();
+  });
+
+  it("navigates the header's settings gear to that host's settings route", async () => {
+    const gearRootRoute = createRootRoute({
+      component: () => (
+        <Shell>
+          <Outlet />
+        </Shell>
+      ),
+    });
+    const settingsRoute = createRoute({
+      getParentRoute: () => gearRootRoute,
+      path: "/h/$serverId/settings",
+      component: () => <div data-testid="settings-route" />,
+    });
+    const diagnosticsRoute = createRoute({
+      getParentRoute: () => gearRootRoute,
+      path: "/h/$serverId/diagnostics",
+      component: () => null,
+    });
+    const router = createRouter({
+      routeTree: gearRootRoute.addChildren([settingsRoute, diagnosticsRoute]),
+      history: createMemoryHistory({ initialEntries: ["/h/srv-1/diagnostics"] }),
+    });
+    const user = userEvent.setup();
+    render(
+      <CoreProvider>
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- test-local router, not the app's registered one */}
+        <RouterProvider router={router as any} />
+      </CoreProvider>,
+    );
+
+    const gear = await screen.findByTestId("shell-settings-trigger");
+    expect(gear.getAttribute("aria-label")).toBe("Settings");
+    await user.click(gear);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/h/srv-1/settings"));
+    expect(await screen.findByTestId("settings-route")).toBeTruthy();
   });
 
   it("declares a compact-fallback media query pinned to the design-tokens wide breakpoint", () => {

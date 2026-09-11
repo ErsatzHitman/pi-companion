@@ -86,6 +86,11 @@
 .pc-thinking__body p {
   margin: 0;
   white-space: pre-wrap;
+  /* T386: reasoning is prose too, so it takes the mockup's mono face
+   * (`.prose { font-family: var(--mono) }`, which `.turn-think .prose`
+   * inherits) at the transcript's own size/leading. */
+  font-family: var(--font-family-mono);
+  line-height: var(--line-height-relaxed);
 }
 /* Still-thinking summary text gets the same shimmer-gradient live-state
    treatment as `StreamingMessage`'s in-flight text (T28A3, plan.md
@@ -112,30 +117,55 @@
 
 /* StreamingMessage -------------------------------------------------------- */
 
+/* The mockup draws no bubble around assistant prose at all, but this
+ * recipe's surface card is the existing approved treatment for both
+ * speakers (plan.md §10.2), so it stays — narrowed to hug its own measure
+ * (`fit-content`) instead of filling the column, which is what the
+ * reference's `78ch` prose cap produces in practice. The user bubble below
+ * takes the mockup's accent tint and 14px window radius. */
 .pc-message {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-1);
-  max-width: 32rem;
+  width: fit-content;
+  max-width: 100%;
   padding: var(--spacing-3);
   border-radius: var(--radius-card);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-hairline);
 }
+/* Mockup `.turn-user .body { background: var(--accent-tint); border-radius:
+ * var(--r-blk); padding: 11px 14px; max-width: 72ch }`. `--radius-window`
+ * is 14px, the mockup's `--r-blk`. 11px/14px have no spacing token (12px/
+ * 16px are the nearest), so they are kept as local custom properties
+ * quoting the mockup value rather than rounded.
+ *
+ * Contrast on the tint (T54A1's constraint): the text stays `--color-ink`
+ * (`#1f2124` on light `#e9f3ff`, `#f2f3f4` on the dark theme's 16% alpha
+ * tint over `--color-page`) — both far above AA, so no tone adjustment was
+ * needed here. The mockup's own `.turn-user .prose { color: var(--ink) }`
+ * asks for the same role. */
 .pc-message--user {
-  background-color: var(--color-hover);
-  align-self: flex-end;
-}
-.pc-message__speaker {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-ink-3);
+  --pc-message-user-padding-block: 11px;
+  --pc-message-user-padding-inline: 14px;
+  background-color: var(--color-accent-tint);
+  border-radius: var(--radius-window);
+  padding: var(--pc-message-user-padding-block) var(--pc-message-user-padding-inline);
+  max-width: 72ch;
+  box-shadow: none;
 }
 .pc-message__text {
   margin: 0;
   color: var(--color-ink);
+  /* The mockup renders transcript prose in its mono face at 12.5px/1.62
+   * (its own Settings row names "Transcript size — 12.5 px / 1.62").
+   * `--font-size-base` is 12.5px and `--line-height-relaxed` is 1.625, the
+   * token file's own documented "beautiful-ui-reference Body line-height
+   * relaxed" figure. `max-width: 78ch` is the mockup's `.prose` cap. */
+  font-family: var(--font-family-mono);
   font-size: var(--font-size-base);
   line-height: var(--line-height-relaxed);
+  max-width: 78ch;
   /* T305: assistant and user text arrives with the model's own newlines in
      it, and this element renders that text directly (`StreamingMessage.tsx`
      puts `{text}` inside this `<p>`; nothing between the wire and here
@@ -381,46 +411,161 @@
   font-size: var(--font-size-xs);
 }
 
-/* PromptBar ------------------------------------------------------------------ */
-
+/* PromptBar ------------------------------------------------------------------
+ * The mockup's `.prompt` row and `.composer-foot`:
+ *
+ *   .prompt {
+ *     display: grid;
+ *     grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+ *     align-items: end;
+ *     gap: 8px;
+ *     background: var(--surface);
+ *     border-radius: var(--r-blk);
+ *     box-shadow: var(--sh-raised);
+ *     padding: 8px 8px 8px 10px;
+ *   }
+ *
+ * `--radius-window` is 14px (`--r-blk`), `--shadow-raised` is the
+ * published raised tier and `--spacing-2` is 8px. The one figure with no
+ * token is the 10px left padding, kept below as a local custom property
+ * quoting the mockup value rather than rounded to 8px or 12px. The
+ * reference's fifth column (its mic/dictate button) is absent here: web
+ * has no real dictation path, and a dead button is worse than a missing
+ * one (see `features/composer/Composer.tsx`).
+ */
 .pc-prompt-bar {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-hairline);
-  padding: var(--spacing-3);
-  background-color: var(--color-field);
-  max-width: 36rem;
+  width: 100%;
+  max-width: 53.5rem;
 }
+.pc-prompt-bar__row {
+  --pc-prompt-padding-start: 10px;
+  --pc-prompt-control-size: 30px;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-2) var(--spacing-2) var(--pc-prompt-padding-start);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-raised);
+}
+/* `.prompt textarea { border: 0; outline: none; resize: none; background:
+ * transparent; font-family: var(--mono); font-size: 12.5px; line-height:
+ * 1.62; padding: 6px 0; max-height: 140px; color: var(--ink) }`.
+ * `--font-size-base` is 12.5px and `--line-height-relaxed` is 1.625.
+ * `resize: vertical` is kept from this recipe's previous treatment — the
+ * reference's `resize: none` assumes the JS auto-grow it ships with, which
+ * this component does not have, and removing the user's own resize would
+ * be a real loss for a long draft. */
 .pc-prompt-bar__input {
+  --pc-prompt-textarea-padding: 6px 0;
   border: none;
   outline: none;
   resize: vertical;
   min-height: 3rem;
-  font-family: var(--font-family-sans);
+  padding: var(--pc-prompt-textarea-padding);
+  font-family: var(--font-family-mono);
   font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
   color: var(--color-ink);
   background: transparent;
+}
+.pc-prompt-bar__input::placeholder {
+  color: var(--color-ink-3);
 }
 .pc-prompt-bar__input:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
-.pc-prompt-bar__row {
+
+/* The attach `+` and the accent send control, both the mockup's 30x30
+ * `.pbtn`/`.send` boxes with its 8px control radius. `.pc-prompt-bar__attach`
+ * is placed visually first (before the ring) with `order`, while staying
+ * last in document order so the keyboard contract above is unchanged. */
+.pc-prompt-bar__attach,
+.pc-prompt-bar__send {
+  width: var(--pc-prompt-control-size);
+  height: var(--pc-prompt-control-size);
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.pc-prompt-bar__attach {
+  order: -1;
+  background: transparent;
+  color: var(--color-ink-2);
+}
+.pc-prompt-bar__attach:hover {
+  background-color: var(--color-hover);
+  color: var(--color-ink);
+}
+.pc-prompt-bar__attach svg {
+  width: 16px;
+  height: 16px;
+}
+/* `.send { background: var(--accent); color: var(--surface) }` with the
+ * dark theme's dark glyph. `--color-accent-contrast` is exactly that
+ * theme-conditional on-solid-fill role (see `tokens.ts`'s
+ * `onSolidFillFor`), so it replaces the mockup's raw `#0d1b2a`. */
+.pc-prompt-bar__send {
+  background-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+.pc-prompt-bar__send:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.pc-prompt-bar__send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pc-prompt-bar__send svg {
+  width: 15px;
+  height: 15px;
+}
+.pc-prompt-bar__attach:focus-visible,
+.pc-prompt-bar__send:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* `.composer-foot { display: flex; align-items: center; gap: 8px;
+ * padding: 0 4px; font-family: var(--mono); font-size: 10.5px; color:
+ * var(--ink-3) }` — `--font-size-xs` is 10.5px and `--spacing-1` is 4px. */
+.pc-prompt-bar__foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-top: var(--spacing-2);
-  border-top: 1px dashed var(--color-line);
+  gap: var(--spacing-2);
+  padding: 0 var(--spacing-1);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+.pc-prompt-bar__foot-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-prompt-bar__foot-grow {
+  flex: 1;
 }
 /* Queued-message counter: a numeral readout, Geist Mono + tabular
    figures. */
 .pc-prompt-bar__queued {
+  flex: none;
   font-size: var(--font-size-xs);
   color: var(--color-ink-3);
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
+}
+.pc-prompt-bar__keys {
+  flex: none;
 }
 
 /* DiffSummary ---------------------------------------------------------------- */

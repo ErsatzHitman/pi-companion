@@ -4,6 +4,9 @@
  */
 export { Composer } from "./Composer.js";
 export type { ComposerProps } from "./Composer.js";
+export { ContextRing } from "./ContextRing.js";
+export type { ContextRingProps } from "./ContextRing.js";
+export { useSessionContextTelemetry } from "./use-context-telemetry.js";
 export { ComposerContainer } from "./ComposerContainer.js";
 export type { ComposerContainerProps } from "./ComposerContainer.js";
 export { useComposer } from "./use-composer.js";

@@ -1,16 +1,29 @@
 /**
  * `Shell` styles (plan.md §8.3, §10.1 "standing consistency rule": no
  * Beautiful UI component ships a three-region workspace, so this reads
- * the same language by hand — dashed hairline dividers between regions,
- * the same surface/spacing/radius tokens as `ui/primitives`, no raw hex,
+ * the same language by hand — hairline dividers between regions, the
+ * same surface/spacing/radius tokens as `ui/primitives`, no raw hex,
  * pixel spacing, or duration literal).
  *
  * Colocated with `shell.tsx` (T27S1 owns both, matching the
  * `primitives.css`/`recipes.css` convention of a stylesheet living next
  * to the components it styles).
+ *
+ * The bar's fixed dimensions are the design reference's
+ * (`docs/ui-reference/pi-companion-web.html`'s `.bar`: 48px tall,
+ * `background: var(--surface)`, `padding: 0 12px`, 10px gap; `.mark`'s
+ * 20px `π` tile at radius 6; `.iconbtn` 30px / radius 8). None of those
+ * pixel dimensions has a spacing/radius token, so they are declared
+ * once below as custom properties on `.shell` rather than repeated as
+ * literals; every colour, spacing, type, and shadow value still comes
+ * from `var(--...)` tokens.
  */
 
 .shell {
+  --shell-header-height: 48px;
+  --shell-header-gap: 10px;
+  --shell-brand-tile-size: 20px;
+  --shell-head-control-size: 30px;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -20,19 +33,85 @@
 .shell__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-4);
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: var(--color-canvas);
-  border-bottom: 1px dashed var(--color-line);
+  gap: var(--shell-header-gap);
+  min-height: var(--shell-header-height);
+  padding: 0 var(--spacing-3);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .shell__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  height: var(--shell-brand-tile-size);
+  min-width: 0;
+  padding-inline-end: var(--spacing-3);
+  border-inline-end: 1px solid var(--color-line);
+  text-decoration: none;
+  color: var(--color-ink);
+}
+
+.shell__brand-tile {
+  display: grid;
+  place-items: center;
+  width: var(--shell-brand-tile-size);
+  height: var(--shell-brand-tile-size);
+  flex: none;
+  border-radius: var(--radius-chip);
+  background-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.shell__brand-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--letter-spacing-tight);
-  text-decoration: none;
-  color: var(--color-ink);
+}
+
+.shell__header-spacer {
+  flex: 1;
+}
+
+.shell__header-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.shell__gear {
+  width: var(--shell-head-control-size);
+  height: var(--shell-head-control-size);
+  border-radius: var(--radius-control);
+  flex: none;
+}
+
+/*
+ * The live rail's own head (plan.md §8.3). The eyebrow type is the same
+ * 10px/600/0.09em uppercase treatment as the session rail's `Workspace`
+ * eyebrow; kept as its own class here rather than shared, because this
+ * stylesheet is the only one `Shell` itself loads.
+ */
+.shell__live-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-2);
+}
+
+.shell__live-eyebrow {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
 }
 
 /*
@@ -63,6 +142,14 @@
 .shell__rail--session {
   grid-area: session;
   border-bottom: 1px dashed var(--color-line);
+  /* The rail's own content (`.pc-session-rail`) owns its inner padding so
+     the head, search, list, and foot can each sit flush against the rail's
+     edges, the way the design reference's `.rail` does. */
+  padding: 0;
+}
+
+.shell__rail-fallback {
+  padding: var(--spacing-4);
 }
 
 .shell__rail--extension {

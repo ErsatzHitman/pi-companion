@@ -5,6 +5,7 @@ import { Button } from "../../ui/primitives/index.js";
 import { StreamingMessage } from "../../ui/recipes/index.js";
 import { MessageAttachments } from "./message-attachments.js";
 import type { ResolveImageSrc } from "./message-attachments.js";
+import { TranscriptMeta } from "./transcript-meta.js";
 
 /** The subset of `timeline.TranscriptEntry` this task renders (plan.md
  * §11.1's "assistant text" and user-message lifecycle states). Sibling
@@ -108,10 +109,13 @@ function boundedText(text: string): string {
 /**
  * Renders one `user-message`/`assistant-message` transcript entry by
  * composing the `StreamingMessage` recipe (T28A2, plan.md §10.4). The
- * recipe already gives non-colour speaker distinguishability (a visible
- * "Pi"/"You" label) and the reduced-motion-safe streaming treatment; this
- * component only maps the framework-neutral `TranscriptEntry` onto that
- * recipe's props.
+ * visible speaker distinction now lives above the block in
+ * `TranscriptMeta` (`you`/`pi`, the mockup's `.meta` treatment) rather
+ * than inside the bubble, exactly as the design reference draws it; the
+ * bubble's own `role="group"` `aria-label` remains the accessible name,
+ * so speaker identity is still never colour-only. The recipe supplies the
+ * reduced-motion-safe streaming treatment; this component only maps the
+ * framework-neutral `TranscriptEntry` onto that recipe's props.
  *
  * Memoized on the fields that actually change a rendered row (`text`,
  * `corrected`, `pending`, `streaming`) so a live update to the newest
@@ -137,15 +141,17 @@ function TranscriptMessageRowImpl({
   const renderCount = useRef(0);
   renderCount.current += 1;
 
-  // Not memoized: `formatMessageTimestamp` is two `Intl.DateTimeFormat`
-  // builds on a string this row already holds, and it is only reached when
-  // the row re-renders at all — which `areRowPropsEqual` below already
-  // restricts to a real change. A `useMemo` here would add a dependency
-  // array to keep correct for no measurable saving.
-  const stamp = timeline.formatMessageTimestamp(entry.timestamp);
-
   return (
     <div data-render-count={renderCount.current}>
+      {/* The mockup's `.meta` line, above the block rather than inside it:
+          the visible speaker (`you`/`pi`) plus this row's own time. The
+          bubble below keeps its `role="group"` `aria-label` as the
+          accessible name, so nothing here is colour- or label-only. */}
+      <TranscriptMeta
+        who={entry.kind === "assistant-message" ? "pi" : "you"}
+        timestamp={entry.timestamp}
+        testId={testId}
+      />
       <StreamingMessage
         speaker={speakerFor(entry)}
         text={boundedText(entry.text)}
@@ -160,16 +166,6 @@ function TranscriptMessageRowImpl({
           resolveImageSrc={resolveImageSrc}
           testId={testId ? `${testId}-attachments` : undefined}
         />
-      ) : null}
-      {stamp ? (
-        <time
-          className="pc-transcript__timestamp"
-          dateTime={stamp.iso}
-          title={stamp.title}
-          data-testid={testId ? `${testId}-timestamp` : undefined}
-        >
-          {stamp.text}
-        </time>
       ) : null}
       {entry.kind === "user-message" && onEditFromHere ? (
         <Button

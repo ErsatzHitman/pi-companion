@@ -2,6 +2,7 @@ import { useCore } from "../../app/core-context.js";
 import { Composer } from "./Composer.js";
 import type { AgentTurnClient } from "./agent-turn-client.js";
 import type { DaemonEditorTextSource } from "./daemon-editor-text-client.js";
+import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
 export interface ComposerContainerProps {
   /** Conversation target this composer submits into (session or agent id). */
@@ -24,6 +25,13 @@ export interface ComposerContainerProps {
    * can pass one directly.
    */
   editorTextClient?: DaemonEditorTextSource;
+  /**
+   * This session's derived context-window telemetry for the composer's
+   * context ring (T386) — see `Composer`'s own doc comment on this prop.
+   * The route computes it through `useSessionContextTelemetry`; omitting it
+   * renders the ring's honest "not reported" state.
+   */
+  contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
 }
 
 /**
@@ -39,7 +47,12 @@ export interface ComposerContainerProps {
  * `platform.filePicker` (T28B6, plan.md §7.3) is this app's real
  * `createBrowserFilePicker()` adapter (`apps/web/src/platform/file-picker.ts`).
  */
-export function ComposerContainer({ sessionId, client, editorTextClient }: ComposerContainerProps) {
+export function ComposerContainer({
+  sessionId,
+  client,
+  editorTextClient,
+  contextTelemetry,
+}: ComposerContainerProps) {
   const { platform } = useCore();
   return (
     <Composer
@@ -49,6 +62,7 @@ export function ComposerContainer({ sessionId, client, editorTextClient }: Compo
       filePicker={platform.filePicker}
       client={client}
       editorTextClient={editorTextClient}
+      contextTelemetry={contextTelemetry}
     />
   );
 }

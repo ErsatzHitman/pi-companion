@@ -115,6 +115,37 @@ describe("SessionResumeScreen (T27B3)", () => {
     expect(screen.getByText(/running/i)).toBeTruthy();
   });
 
+  it("renders the head row from the snapshot's real fields and omits chips it lacks", async () => {
+    const rich: SessionSummary = {
+      ...SESSION,
+      model: "opus-5",
+      thinkingOptionId: "xhigh",
+      currentModeId: "plan",
+      availableModes: [{ id: "plan", label: "Plan" }],
+    };
+    const client: SessionResumeClient = {
+      resumeSession: async () => ({ session: rich, timeline: timelineWithMessages(2) }),
+    };
+    renderSessionScreenAt("/h/host-1/session/agent-1", { client });
+
+    await screen.findByTestId("session-resume-ready");
+    expect(screen.getByTestId("session-head")).toBeTruthy();
+    expect(screen.getByTestId("session-head-status").textContent).toContain("Running");
+    expect(screen.getByTestId("session-head-model").textContent).toBe("opus-5 · xhigh");
+    expect(screen.getByTestId("session-head-mode").textContent).toBe("Plan");
+  });
+
+  it("omits the model and mode chips when the snapshot carries neither", async () => {
+    const client: SessionResumeClient = {
+      resumeSession: async () => ({ session: SESSION, timeline: timelineWithMessages(1) }),
+    };
+    renderSessionScreenAt("/h/host-1/session/agent-1", { client });
+
+    await screen.findByTestId("session-resume-ready");
+    expect(screen.queryByTestId("session-head-model")).toBeNull();
+    expect(screen.queryByTestId("session-head-mode")).toBeNull();
+  });
+
   it("fails with a clear message when resuming a session that does not exist", async () => {
     const client: SessionResumeClient = {
       resumeSession: async () => {

@@ -35,6 +35,17 @@ function isRenderableEntry(entry: timeline.TranscriptEntry): entry is Renderable
   );
 }
 
+/**
+ * `{ kind: "todo" }` stays deliberately excluded here, now with a real
+ * reason rather than a scope gap: the mockup draws the session's task list
+ * as a dock pinned *above the prompt bar* (`.dock-todo`), not as another
+ * turn in the scrolling transcript. `todo-dock.tsx` (composed by
+ * `routes/screens/host-session-screen.tsx` directly above the composer)
+ * renders it from the same `entries` array via `selectLatestTodoEntry`, so
+ * a session's todo is no longer unrendered on web — it is rendered once,
+ * in the dock, and never duplicated into the scroll.
+ */
+
 export interface TranscriptProps {
   /** The framework-neutral entries `buildTranscriptEntries`/`buildTranscriptView`
    * (T28A1, `@picompanion/frontend-core`) project from `TimelineState`. */
@@ -251,12 +262,15 @@ function renderEntryRow(
  * (T28A3), `tool-call` rows (T28A4, extended by T28A5 with full
  * diff-line and image-result rendering), and `compaction` markers
  * (T28A7, `compaction-row.tsx`) are rendered here — the remaining
- * `TranscriptEntry` kinds (`todo`, `error`, `extension-snapshot`,
- * `unknown`) are still out of this directory's built scope, with no
- * further task currently scheduled to add them (see
- * `docs/issues-from-plan.md`'s T28A family). Silently skipping them
- * here — rather than rendering nothing meaningful or guessing at a
- * shape — keeps this task's surface exactly what it claims.
+ * `TranscriptEntry` kinds (`error`, `extension-snapshot`, `unknown`) are
+ * still out of this directory's built scope, with no further task
+ * currently scheduled to add them (see `docs/issues-from-plan.md`'s T28A
+ * family). `todo` is the one exception: it is excluded from this
+ * scroll on purpose and rendered by `todo-dock.tsx` above the composer
+ * instead, exactly where the mockup pins it (see `isRenderableEntry`'s
+ * own doc comment). Silently skipping the rest here — rather than
+ * rendering nothing meaningful or guessing at a shape — keeps this task's
+ * surface exactly what it claims.
  *
  * **No `"retry"` row exists, and cannot yet exist here.** T28A7's other
  * half — "retry markers" — has no `TranscriptEntry` kind to render:

@@ -1,12 +1,15 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import { Button, Chip, ChipGroup, StatusIndicator } from "../../ui/primitives/index.js";
+import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
+
+import { Button, Chip, ChipGroup, Sheet, StatusIndicator } from "../../ui/primitives/index.js";
 import type { ChipTone } from "../../ui/primitives/index.js";
 import { CommandSearch, PromptBar } from "../../ui/recipes/index.js";
 import type { CommandSearchItem } from "../../ui/recipes/index.js";
-import type { AgentSlashCommand } from "./agent-turn-client.js";
+import type { AgentSlashCommand, PromptStreamingBehavior } from "./agent-turn-client.js";
 import "./composer.css";
+import { ContextRing } from "./ContextRing.js";
 import type { DaemonEditorTextSource } from "./daemon-editor-text-client.js";
 import { wireEditorTextResponder } from "./daemon-editor-text-client.js";
 import { ModelThinkingPicker } from "./ModelThinkingPicker.js";
@@ -36,6 +39,26 @@ function describeQueue(steeringCount: number, followUpCount: number): string {
   return `${total} queued (${parts.join(", ")})`;
 }
 
+/**
+ * The composer footer's state sentence (the mockup's `.composer-foot`
+ * left-hand `Steering — this goes to the turn already running`).
+ *
+ * It reads straight off the same per-message routing control T38B1b
+ * already ships: an explicit Steer/Follow-up choice names exactly what
+ * that submission will do, and the un-chosen default describes the
+ * daemon's own turn-state-derived behaviour ("a message while a turn is
+ * already producing output steers it, while sending one before the turn
+ * has started queues a follow-up" — `agent-turn-client.ts`'s header
+ * comment). Auto does not claim to know which of the two is about to
+ * happen: the composer has no live turn-state signal to read, and a
+ * sentence that guessed would be wrong half the time.
+ */
+function describeRouting(routing: PromptStreamingBehavior | null): string {
+  if (routing === "steer") return "Steering — this goes to the turn already running";
+  if (routing === "followUp") return "Follow-up — sent once the running turn finishes";
+  return "Auto — steers the turn in flight, or starts a new one when idle";
+}
+
 export interface ComposerProps extends UseComposerOptions {
   /** Accessible label for the input; also its visible-on-focus hint text. */
   label?: string;
@@ -53,6 +76,14 @@ export interface ComposerProps extends UseComposerOptions {
    * on the daemon side covers that, same as a second, unanswered client).
    */
   editorTextClient?: DaemonEditorTextSource;
+  /**
+   * This session's derived context-window telemetry, from
+   * `useSessionContextTelemetry` — the SAME derivation the right rail's
+   * `ContextMeter` renders (`routes/root-route.tsx` owns that half). Omit
+   * when no usage has been reported and the ring renders its honest
+   * "not reported" state rather than a fabricated 0%.
+   */
+  contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
 }
 
 /** `ComposerAttachment.status` -> `Chip` tone (T28B6): status is always paired with visible text too, never colour alone (plan.md §10.5). */
@@ -90,11 +121,33 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  *
  * Composes existing pieces rather than forking them (plan.md §10):
  * `PromptBar` already supplies the labelled `<textarea>`, the
- * Enter-to-send / Shift+Enter-for-newline keyboard contract, and the
- * `focus-visible` ring; the `Button` primitive supplies the Stop
- * control's native keyboard operation and `disabled` state; and
- * `StatusIndicator` pairs any send/abort problem with visible text, not
- * colour alone (plan.md §10.5).
+ * Enter-to-send / Shift+Enter-for-newline / Escape-to-interrupt keyboard
+ * contract, the attach and context slots and the visible footer; the
+ * `Button` primitive supplies the Stop control's native keyboard
+ * operation and `disabled` state; and `StatusIndicator` pairs any
+ * send/abort problem with visible text, not colour alone (plan.md §10.5).
+ *
+ * **Prompt-row layout (T386 fidelity work).** The row itself is the
+ * mockup's `.prompt`: attach `+`, the context ring, the mono textarea and
+ * the accent send control on one raised surface, with the mockup's visible
+ * `.composer-foot` line below it. Three capabilities are unchanged and
+ * stay reachable: `Attach files` is the `+` (same accessible name and
+ * testId as its old text button), and `Commands` / `Stop` remain real
+ * labelled buttons in the compact control line under the row. There is no
+ * mic/dictate control: the mockup draws one, but web has no real dictation
+ * path, and a dead button is worse than a missing one — the same call
+ * `use-drag-and-drop.ts`'s own docs make for capabilities that are not
+ * really there.
+ *
+ * **The context ring opens the session controls.** `ModelThinkingPicker`,
+ * `QueueModePicker` and `PromptRoutingPicker` now live inside the existing
+ * `Sheet` primitive, opened by the ring, matching the mockup's
+ * ring-opens-the-menu behaviour. They are still the same components with
+ * the same testIds and labels; only their mount point moved, so a reader
+ * cannot mistake these session-wide controls for ambient composer chrome.
+ * Escape inside the sheet closes it (the primitive's own focus trap);
+ * Escape in the prompt bar interrupts the running turn instead, exactly as
+ * the mockup's footer says.
  *
  * "Stop" (T28B2) is a second, distinctly-labelled control from "Send" —
  * cancelling the agent's active turn rather than submitting the draft —
@@ -194,6 +247,7 @@ export function Composer({
   placeholder = "Ask Pi…",
   testId,
   editorTextClient,
+  contextTelemetry,
   ...composerOptions
 }: ComposerProps) {
   const {
@@ -237,6 +291,8 @@ export function Composer({
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
+  /** Whether the context ring's session-controls sheet is showing. */
+  const [controlsOpen, setControlsOpen] = useState(false);
 
   // T293: mirrors the live draft into a ref rather than re-wiring on every
   // keystroke — `wireEditorTextResponder` reads `draftTextRef.current`
@@ -290,6 +346,26 @@ export function Composer({
     focusMessageInput();
   }
 
+  /**
+   * Escape in the prompt bar (the mockup's `Esc interrupt`). With the
+   * slash-command palette open this keeps its old meaning — dismiss the
+   * palette and return focus to the draft — because a palette is a
+   * transient overlay, not a turn. Otherwise it interrupts the running
+   * turn through the same `abort()` the `Stop` button already uses, and
+   * only when that button could act at all (`canAbort`); a draft is never
+   * discarded by it.
+   */
+  function handlePromptEscape(): void {
+    if (slashCommands.isOpen) {
+      slashCommands.dismiss();
+      focusMessageInput();
+      return;
+    }
+    if (canAbort) {
+      void abort();
+    }
+  }
+
   const statusTestId = testId ? `${testId}-status` : undefined;
   const abortTestId = testId ? `${testId}-abort` : undefined;
   const queueStatusTestId = testId ? `${testId}-queue-status` : undefined;
@@ -298,6 +374,9 @@ export function Composer({
   const attachTestId = testId ? `${testId}-attach` : undefined;
   const attachmentsTestId = testId ? `${testId}-attachments` : undefined;
   const dropHintTestId = testId ? `${testId}-drop-hint` : undefined;
+  const contextRingTestId = testId ? `${testId}-context-ring` : undefined;
+  const controlsSheetTestId = testId ? `${testId}-session-controls` : undefined;
+  const footerStateTestId = testId ? `${testId}-foot-state` : undefined;
   const composerClassName = dragAndDrop.isDraggingOver
     ? "pc-composer pc-composer--drop-active"
     : "pc-composer";
@@ -324,6 +403,39 @@ export function Composer({
         onSend={() => {
           void submit();
         }}
+        onEscape={handlePromptEscape}
+        contextControl={
+          <ContextRing
+            telemetry={contextTelemetry}
+            expanded={controlsOpen}
+            onToggle={() => setControlsOpen((open) => !open)}
+            testId={contextRingTestId}
+          />
+        }
+        attachControl={
+          <button
+            type="button"
+            className="pc-prompt-bar__attach"
+            aria-label="Attach files"
+            title="Attach files"
+            onClick={() => {
+              void attachments.pickAndAddFiles();
+            }}
+            data-testid={attachTestId}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        }
+        footer={<span data-testid={footerStateTestId}>{describeRouting(promptRouting)}</span>}
         testId={testId}
       />
       {slashCommands.isOpen ? (
@@ -384,15 +496,6 @@ export function Composer({
       <div className="pc-composer__controls">
         <Button
           kind="secondary"
-          onClick={() => {
-            void attachments.pickAndAddFiles();
-          }}
-          data-testid={attachTestId}
-        >
-          Attach files
-        </Button>
-        <Button
-          kind="secondary"
           aria-haspopup="listbox"
           aria-expanded={slashCommands.isOpen}
           disabled={slashCommands.commands.length === 0}
@@ -444,16 +547,29 @@ export function Composer({
           testId={queueStatusTestId}
         />
       ) : null}
-      <ModelThinkingPicker
-        state={modelThinking}
-        testId={testId ? `${testId}-model-thinking` : undefined}
-      />
-      <QueueModePicker state={queueModes} testId={testId ? `${testId}-queue-modes` : undefined} />
-      <PromptRoutingPicker
-        value={promptRouting}
-        onChange={setPromptRouting}
-        testId={testId ? `${testId}-prompt-routing` : undefined}
-      />
+      <Sheet
+        open={controlsOpen}
+        title="Session controls"
+        description="Mode, model and effort, and queue delivery for this session."
+        onClose={() => setControlsOpen(false)}
+        testId={controlsSheetTestId}
+      >
+        <div className="pc-composer__session-controls">
+          <ModelThinkingPicker
+            state={modelThinking}
+            testId={testId ? `${testId}-model-thinking` : undefined}
+          />
+          <QueueModePicker
+            state={queueModes}
+            testId={testId ? `${testId}-queue-modes` : undefined}
+          />
+          <PromptRoutingPicker
+            value={promptRouting}
+            onChange={setPromptRouting}
+            testId={testId ? `${testId}-prompt-routing` : undefined}
+          />
+        </div>
+      </Sheet>
     </div>
   );
 }

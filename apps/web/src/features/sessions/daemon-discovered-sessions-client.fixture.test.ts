@@ -194,7 +194,10 @@ describe("createDaemonDiscoveredSessionsClient.importSession (T27B5, session-imp
     const session = await importPromise;
     // Imported terminal session appears correctly (T27B5 acceptance):
     // real fields from the fixture's `agent_resumed` payload, ready to
-    // render as an ordinary, openable `SessionSummary` row.
+    // render as an ordinary, openable `SessionSummary` row. The
+    // model/mode/thinking fields below are the same fixture payload's
+    // own values, carried through `toSessionSummary` for the rail row
+    // meta line and the session head (this task's fidelity work).
     expect(session).toEqual({
       id: "agt_fixture_0002",
       title: "Imported terminal session",
@@ -203,6 +206,10 @@ describe("createDaemonDiscoveredSessionsClient.importSession (T27B5, session-imp
       status: "idle",
       archivedAt: null,
       updatedAt: "2026-08-31T09:05:00.000Z",
+      model: "fixture-model-large",
+      currentModeId: "default",
+      availableModes: [{ id: "default", label: "Default" }],
+      thinkingOptionId: "medium",
     });
 
     await daemonClient.close();

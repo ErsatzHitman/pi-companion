@@ -13,7 +13,40 @@ export { SessionRow } from "./SessionRow.js";
 export type { SessionRowProps } from "./SessionRow.js";
 export { statusPresentation } from "./status-presentation.js";
 export type { SessionStatusPresentation } from "./status-presentation.js";
-export type { SessionListState, SessionStatus, SessionSummary } from "./types.js";
+export type {
+  SessionListState,
+  SessionMode,
+  SessionStatus,
+  SessionSummary,
+  SessionUsage,
+} from "./types.js";
+
+// App-shell session chrome: the left rail's head/search/rows/foot, the
+// shared status pill, the header workspace crumb, and the read-only
+// snapshot source both consume.
+export { SessionRail } from "./SessionRail.js";
+export type { SessionRailConnection, SessionRailProps } from "./SessionRail.js";
+export { SessionStatusPill } from "./session-status-pill.js";
+export type { SessionStatusPillProps } from "./session-status-pill.js";
+export {
+  formatSessionAge,
+  formatSessionTokens,
+  sessionGlyph,
+  sessionMetaParts,
+  sessionModeLabel,
+  sessionModelChipLabel,
+} from "./session-meta.js";
+export type { SessionGlyph, SessionGlyphPresentation, SessionGlyphTone } from "./session-meta.js";
+export { useSessionSnapshot } from "./use-session-snapshot.js";
+export type { SessionSnapshotSource, SessionUpdateLike } from "./use-session-snapshot.js";
+export { WorkspaceCrumb, SessionWorkspaceCrumb, workspaceBasename } from "./workspace-crumb.js";
+export type {
+  SessionChromeClient,
+  SessionWorkspaceCrumbProps,
+  WorkspaceCrumbProps,
+  WorkspaceGitSource,
+  WorkspaceLocation,
+} from "./workspace-crumb.js";
 
 // T27B2: session creation and opening.
 export { CreateSessionDialog } from "./CreateSessionDialog.js";

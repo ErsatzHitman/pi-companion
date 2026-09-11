@@ -1,14 +1,10 @@
 import { timeline as coreTimeline } from "@picompanion/frontend-core";
 
-import {
-  Button,
-  ErrorState,
-  LoadingState,
-  Section,
-  StatusIndicator,
-} from "../../ui/primitives/index.js";
+import { Button, ErrorState, LoadingState, Section } from "../../ui/primitives/index.js";
 import "./session-resume.css";
-import { statusPresentation } from "./status-presentation.js";
+import { sessionModeLabel, sessionModelChipLabel } from "./session-meta.js";
+import { SessionStatusPill } from "./session-status-pill.js";
+import type { SessionSummary } from "./types.js";
 import type { SessionResumeController } from "./use-resume-session.js";
 
 export interface SessionResumeViewProps {
@@ -19,25 +15,30 @@ export interface SessionResumeViewProps {
 
 /**
  * The `/h/:serverId/session/:agentId` screen body (T27B3, plan.md
- * §8.3): the route's own identity (host, session) above one of the
- * loading/error/ready states, composed entirely from `ui/primitives`
- * (plan.md §10.1 — no new one-off styled primitive here), matching
- * `features/terminal/terminal-route.tsx` and
+ * §8.3): the session's own head row above one of the loading/error/
+ * ready states, composed entirely from `ui/primitives` plus this
+ * feature's own head pieces (plan.md §10.1 — no new one-off styled
+ * primitive here), matching `features/terminal/terminal-route.tsx` and
  * `features/files/file-browser-view.tsx`'s precedent for this exact
  * shape.
  *
- * The ready state summarizes what resume restored (title, status,
- * restored message count, queued submission count) rather than
- * rendering the transcript itself — that is `features/transcript/`'s
- * separately owned surface (T28A*); this task's job stops at proving
- * "resume restores timeline and queue state" is true, not at
- * re-rendering it a second time.
+ * The head row (title, status pill, model/effort and mode chips) is
+ * deliberately read-only and sourced only from the resumed snapshot's
+ * real fields: a chip whose value the daemon does not report is omitted
+ * rather than filled with a placeholder. The restored-message/queued
+ * facts stay in the head as a compact sub-line, keeping the
+ * `session-resume-ready` test id (and its two count test ids) several
+ * Playwright specs wait on.
  */
 export function SessionResumeView({ serverId, agentId, controller }: SessionResumeViewProps) {
   const { state, retry } = controller;
+  const session = state.session;
 
   return (
     <Section title="Session" className="pc-session-resume">
+      {session ? (
+        <SessionHead session={session} timeline={state.timeline} queue={state.queue} />
+      ) : null}
       <dl className="pc-session-resume__params">
         <div>
           <dt>Host</dt>
@@ -67,41 +68,48 @@ export function SessionResumeView({ serverId, agentId, controller }: SessionResu
           </Button>
         </div>
       ) : null}
-      {state.status === "ready" && state.session && state.timeline ? (
-        <SessionResumeSummary
-          session={state.session}
-          timeline={state.timeline}
-          queue={state.queue}
-        />
-      ) : null}
     </Section>
   );
 }
 
-interface SessionResumeSummaryProps {
-  session: NonNullable<SessionResumeController["state"]["session"]>;
-  timeline: NonNullable<SessionResumeController["state"]["timeline"]>;
+interface SessionHeadProps {
+  session: SessionSummary;
+  timeline: SessionResumeController["state"]["timeline"];
   queue: SessionResumeController["state"]["queue"];
 }
 
-function SessionResumeSummary({ session, timeline, queue }: SessionResumeSummaryProps) {
-  const { tone, text } = statusPresentation(session);
-  const messageCount = coreTimeline.buildTranscriptEntries(timeline).length;
+function SessionHead({ session, timeline, queue }: SessionHeadProps) {
+  const modelChip = sessionModelChipLabel(session);
+  const modeChip = sessionModeLabel(session);
+  const messageCount = timeline ? coreTimeline.buildTranscriptEntries(timeline).length : null;
 
   return (
-    <div className="pc-session-resume__summary" data-testid="session-resume-ready">
-      <h3 className="pc-session-resume__title">{session.title ?? "Untitled session"}</h3>
-      <StatusIndicator label="Status" tone={tone} statusText={text} />
-      <dl className="pc-session-resume__counts">
-        <div>
-          <dt>Messages restored</dt>
-          <dd data-testid="session-resume-message-count">{messageCount}</dd>
+    <div className="pc-session-head" data-testid="session-head">
+      <div className="pc-session-head__main">
+        <h3 className="pc-session-head__title">{session.title ?? "Untitled session"}</h3>
+        {timeline ? (
+          <p className="pc-session-head__facts" data-testid="session-resume-ready">
+            <span data-testid="session-resume-message-count">{messageCount}</span> messages restored
+            <span aria-hidden="true"> · </span>
+            <span data-testid="session-resume-queue-count">{queue.length}</span> queued
+          </p>
+        ) : null}
+      </div>
+      <SessionStatusPill session={session} testId="session-head-status" />
+      {modelChip || modeChip ? (
+        <div className="pc-session-head__right">
+          {modelChip ? (
+            <span className="pc-session-head__chip" data-testid="session-head-model">
+              {modelChip}
+            </span>
+          ) : null}
+          {modeChip ? (
+            <span className="pc-session-head__chip" data-testid="session-head-mode">
+              {modeChip}
+            </span>
+          ) : null}
         </div>
-        <div>
-          <dt>Queued</dt>
-          <dd data-testid="session-resume-queue-count">{queue.length}</dd>
-        </div>
-      </dl>
+      ) : null}
     </div>
   );
 }

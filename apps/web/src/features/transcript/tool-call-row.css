@@ -11,19 +11,39 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  max-width: 32rem;
+  /* The mockup's `.tool` block spans the thread column, so the card fills
+   * the transcript's own 53.5rem content column rather than a narrower cap. */
+  max-width: 53.5rem;
 }
 
 .pc-tool-call__header {
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
 }
 
 .pc-tool-call__name {
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-bold);
   color: var(--color-ink);
-  font-size: var(--font-size-base);
+  flex: none;
+}
+
+/* The mockup's `.tool-h .arg`: `color: var(--ink-2); min-width: 0;
+ * overflow: hidden; text-overflow: ellipsis; white-space: nowrap`. */
+.pc-tool-call__arg {
+  color: var(--color-ink-2);
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pushes the duration and status pill to the right edge, the mockup's
+ * `.tool-h .grow { flex: 1 }`. */
+.pc-tool-call__grow {
   flex: 1;
 }
 

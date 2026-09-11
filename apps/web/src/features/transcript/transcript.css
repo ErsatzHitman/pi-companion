@@ -50,9 +50,18 @@
   }
 }
 
+/*
+ * Thread measure. The mockup centres its transcript and composer on one
+ * `.thread { max-width: 860px; margin: 0 auto }` column; 860px is
+ * 53.75rem at a 16px root, and this feature pins the shared content
+ * column at the reference's own rounded `53.5rem` so a browser's minimum
+ * font size can never widen it past what the mockup draws.
+ */
 .pc-transcript__sizer {
   position: relative;
   width: 100%;
+  max-width: 53.5rem;
+  margin: 0 auto;
 }
 
 .pc-transcript__row {
@@ -67,25 +76,50 @@
   padding-bottom: var(--spacing-3);
 }
 
-/* T308: the local wall-clock time of a message, rendered beneath it by
- * `message-row.tsx` for `user-message` and `assistant-message` rows only —
- * never for reasoning, tool-call, todo, error, or compaction rows, which
- * are process detail rather than something either party said.
+/* The turn meta line the mockup draws above every block
+ * (`.meta { display: flex; align-items: center; gap: 7px; font-family:
+ * var(--mono); font-size: 10.5px; color: var(--ink-3); margin-bottom:
+ * 5px }`). `--font-size-xs` is 10.5px, the mockup's exact figure; the
+ * 7px/5px gaps have no spacing token (8px/4px are the nearest), so the
+ * mockup's own values are kept as local custom properties rather than
+ * silently rounded by 1px each.
  *
- * Styled to match `recipes.css`'s `.pc-thinking__duration` rather than
- * inventing a second treatment for a numeric readout: same `--color-ink-3`
- * de-emphasis, same `--font-size-xs`, same mono family, and the same
- * `tabular-nums`, which here also keeps the times vertically aligned down
- * a long transcript instead of jittering with each digit's width.
- *
- * Indented by the bubble's own `--spacing-3` padding so it reads as part of
- * the message above it, and capped at the same `32rem` as `.pc-message` so
- * it can never be the thing that widens a row. */
+ * `.pc-transcript__who` is the mockup's `.meta .who`: 9.5px, 700,
+ * uppercase, letter-spacing .06em. 9.5px has no font-size token, so it
+ * lives here as a named custom property quoting the mockup value. */
+.pc-transcript__meta {
+  --pc-transcript-meta-gap: 7px;
+  --pc-transcript-who-size: 9.5px;
+  display: flex;
+  align-items: center;
+  gap: var(--pc-transcript-meta-gap);
+  margin-bottom: 5px;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  max-width: 53.5rem;
+}
+.pc-transcript__who {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--pc-transcript-who-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* `.meta .who.u { color: var(--accent-ink) }` — the user's own words;
+ * `.meta .who.a { color: var(--ink-2) }` covers `pi` and `thinking`. */
+.pc-transcript__who--you {
+  color: var(--color-accent-ink);
+}
+.pc-transcript__who--pi,
+.pc-transcript__who--thinking {
+  color: var(--color-ink-2);
+}
+
+/* The time inside the meta line. Still the mono, tabular readout T308
+ * shipped (times stay aligned down a long transcript) and still
+ * `--color-ink-3` — it now sits beside its speaker rather than under the
+ * bubble, which is what the mockup draws. */
 .pc-transcript__timestamp {
-  display: block;
-  max-width: 32rem;
-  margin-top: var(--spacing-1);
-  padding-left: var(--spacing-3);
   color: var(--color-ink-3);
   font-size: var(--font-size-xs);
   font-family: var(--font-family-mono);

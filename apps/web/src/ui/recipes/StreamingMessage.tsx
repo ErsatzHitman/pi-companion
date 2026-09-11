@@ -18,7 +18,12 @@ export interface StreamingMessageProps {
  * the blinking-cursor animation alone, so screen-reader users and
  * `prefers-reduced-motion` users get the same information. The cursor
  * animation is suppressed under reduced motion in CSS.
- */
+ *
+ * The visible speaker label moved OUT of this recipe to the transcript's
+ * own meta line above the block (`features/transcript/transcript-meta.tsx`,
+ * the mockup's `.meta`), so the group's `aria-label` here is the one place
+ * the label still lives in this recipe — and it is the accessible name,
+ * kept deliberately. */
 export function StreamingMessage({ speaker, text, streaming, testId }: StreamingMessageProps) {
   return (
     <div
@@ -27,7 +32,6 @@ export function StreamingMessage({ speaker, text, streaming, testId }: Streaming
       aria-label={`${speaker === "assistant" ? "Pi" : "You"}${streaming ? " (responding)" : ""}`}
       data-testid={testId}
     >
-      <span className="pc-message__speaker">{speaker === "assistant" ? "Pi" : "You"}</span>
       <p className="pc-message__text">
         {text}
         {streaming ? <span className="pc-message__cursor" aria-hidden="true" /> : null}
