@@ -623,6 +623,7 @@ that recomputation has to be domain-specific:
 | T364   | An empty create-session form sat above the list on every visit, and nothing at the bottom of A1 did anything         | phase-9   | android          | P9-U   | T363                                                                  |
 | T365   | A calibrated self-heal phase turned main red for the second time, and failed 15s away from the thing that broke      | phase-9   | server           | P9-U   | T309                                                                  |
 | T366   | Settings never said which daemon it was about, and offered four controls that are per-agent on the wire              | phase-9   | android          | P9-U   | T364                                                                  |
+| T367   | Six of seven comments stopped naming a font the app dropped, and nothing could say which one was left                | phase-9   | android          | P9-U   | T356                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -664,8 +665,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**575 tasks** (distinct IDs counted directly from the table above), recounted at T366 with
-`grep`/`sort -u` over the table's own rows — one past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**576 tasks** (distinct IDs counted directly from the table above), recounted at T367 with
+`grep`/`sort -u` over the table's own rows — one past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18290,3 +18291,46 @@ the route owns every dependency the screen should not have.
 - [x] Nothing on the row is invented: no pairing date exists to print, and the row says so by omission
 - [x] The four per-agent rows and the extension rows are omitted with the reason written where it is checkable
 - [x] The screen never receives a credential-bearing record
+
+#### T367 — Six of seven comments stopped naming a font the app dropped, and nothing could say which one was left
+
+`labels: phase-9, area: android` · `depends-on: T356`
+
+T345 swapped Android's mono face from Geist Mono to JetBrains Mono. Seven comments across
+`apps/android/src` still explained a mono `fontFamily` by quoting
+`docs/beautiful-ui-reference.md`'s own "Geist Mono for all numerals". The citation itself is
+fine — that document is on `CLAUDE.md`'s reference-only list and these comments record where a
+style came from, which is PROVENANCE under the T253 test, not authority — but the face name in
+it had stopped describing this app. `HANDOFF.md` §9.3 listed all seven. T356 reworded six while
+restyling the transcript; the extension `progress` renderer's was still standing.
+
+**The one-line half.** `features/extensions/renderers/progress.tsx`'s step-count comment now
+says "the mono family", keeps the provenance citation, and narrates the correction in the same
+shape T356's six already use.
+
+**The half that matters.** Nothing could tell whether the sweep was complete. Both times, the
+only way to answer "is this done?" was to re-grep the tree and hand-classify every hit, which is
+precisely how six got fixed and one did not — and a seventh site could be added tomorrow without
+anything noticing. `fonts.test.ts` now walks every `.ts`/`.tsx` under `apps/android/src` and
+fails on any mention of the dropped face that is not marked as history.
+
+The classification is the whole difficulty, and it is why a bare substring check was not enough:
+every correction T356 and T367 wrote has to quote the wrong name verbatim in order to explain
+what was wrong, so a naive matcher fails against its own fix. The walk therefore reads a window
+of surrounding text and allows a mention only where that window marks it as past — the same idea
+`scripts/ci/guard-capability-prose.mjs`'s `HISTORICAL_QUOTE_MARKERS` encodes, for the identical
+reason. The window is a span of characters rather than one physical line because every one of
+these comments wraps, and T356's own corrections put the marker on a different line than the
+quoted name.
+
+The case asserts the walk reached more than 200 files before trusting an empty result — a
+directory walk that silently finds nothing is the "check that cannot fail" shape `CLAUDE.md`
+names in three separate sections — and it was proven able to FAIL: restoring the old comment
+turned it red naming the file, and restoring the file from a scratchpad copy (never
+`git checkout --`) returned it to green with `git status --porcelain` clean.
+
+- [x] The seventh comment names the mono family, not the dropped face, and keeps its provenance
+- [x] A test fails if any live comment names that face again, anywhere under `apps/android/src`
+- [x] The test does not fail against the corrections that must quote the wrong name to explain it
+- [x] The walk is proven to reach the tree, so an empty result means something
+- [x] Proven able to fail, and restored from a scratchpad copy rather than `git checkout --`

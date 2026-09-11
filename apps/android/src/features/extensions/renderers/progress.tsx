@@ -73,8 +73,13 @@ export function ProgressRenderer({
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     wrapper: { gap: theme.spacing[1] },
-    // The step count is a counter (docs/beautiful-ui-reference.md "Geist
-    // Mono for all numerals"), matching the primitive's percentage readout.
+    // The step count is a counter, so it takes the mono family
+    // (docs/beautiful-ui-reference.md's rule for numerals on counters),
+    // matching the primitive's percentage readout. T367: this used to
+    // quote that document's own "Geist Mono", a face name that has been
+    // wrong on Android since T345 swapped the mono face to JetBrains
+    // Mono — the last of the seven sites `HANDOFF.md` §9.3 listed, six
+    // of which T356 swept.
     fraction: {
       color: theme.colors["ink-2"],
       fontFamily: theme.typography.variant.code.fontFamily,
