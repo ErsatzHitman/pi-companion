@@ -697,13 +697,23 @@ Do not target web from `apps/android`. There are no `.web.tsx` files in the Andr
 
 The Android session screen is one primary transcript with:
 
-- host/session header;
+- an app bar carrying the session's title, the basename of its working directory as a subtitle, a status pill, and two navigation actions: `☰` to this host's Sessions screen and `⧉` to this session's Live screen;
 - compact status strip;
 - pinned live extension area above the composer;
 - virtualized transcript;
-- bottom composer with prominent microphone and attachment actions.
+- a bottom prompt bar with prominent microphone and attachment actions, and a context ring immediately right of the attachment action showing how full the session's context window is.
+
+Tapping the context ring opens one menu holding every per-session control: Build/Plan mode, model, thinking effort, the context readout, auto-compaction, and queue mode. Those controls are deliberately not laid out above the prompt bar. A compact screen cannot afford a second control surface competing with the transcript for height, and the pinned extension area is the slot that loses when one exists — §9.3's keyboard-ownership rule describes the same pressure from the other direction, and `docs/issues-from-plan.md`'s T346 records the shard-4 failure that made the cost concrete.
+
+Three sibling screens complete the compact product:
+
+- **Sessions** lists and filters a host's sessions, and creates new ones.
+- **Live** is one session's running work, and is where Files and Terminal are reached from.
+- **Settings** names the host it is about together with that host's live connection state, and holds the device-level preferences.
 
 Focused extension panels open as bottom sheets or full screens. Subagent fleet state remains pinned while active. Files and terminal are dedicated routes rather than squeezed beside chat.
+
+**Superseded (T375).** This section described the session screen as a "host/session header" above a "bottom composer", named no context ring and no sibling screens, and said nothing about where the per-session controls live. It predated the redesign that T349 through T371 shipped, so for twenty-three tasks the authoritative spec did not describe the product's actual Android surface — the kind of gap this repository's `CLAUDE.md` means when it says a supersession belongs in `plan.md` rather than only in the document that drove the work. The frame-by-frame design those tasks were built from is in `HANDOFF.md` §7, and each screen's own acceptance record is in `docs/issues-from-plan.md`; what this section carries is the part that governs: which screens exist, what the session screen is composed of, and why the per-session controls sit behind the ring.
 
 ### 9.3 Native interaction rules
 

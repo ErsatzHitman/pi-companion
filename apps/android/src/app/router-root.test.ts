@@ -251,6 +251,78 @@ describe("Expo Router root contains only real routes (or a named exception)", ()
     }
   });
 
+  /**
+   * T375 — `plan.md` §9.2 is the authoritative description of the
+   * Android compact product, and until T375 it named none of the three
+   * screens T349–T371 shipped. A spec that does not name a screen cannot
+   * be checked against the router at all, so the two drifted for
+   * twenty-three tasks with nothing able to notice.
+   *
+   * This pin closes it in both directions: §9.2 has to keep naming each
+   * screen, and each named screen has to stay a mounted route in
+   * `REAL_ROUTES` above. It says nothing about what those screens
+   * CONTAIN — the acceptance records in `docs/issues-from-plan.md` and
+   * the e2e contract tests are where that lives.
+   */
+  const PLAN_SECTION_9_2_SCREENS: ReadonlyArray<readonly [string, RegExp, string]> = [
+    [
+      "Sessions",
+      /\*\*Sessions\*\* lists and filters a host's sessions/,
+      "./h/[serverId]/(tabs)/sessions.tsx",
+    ],
+    [
+      "Live",
+      /\*\*Live\*\* is one session's running work/,
+      "./h/[serverId]/session/[agentId]/live.tsx",
+    ],
+    [
+      "Settings",
+      /\*\*Settings\*\* names the host it is about/,
+      "./h/[serverId]/(tabs)/settings.tsx",
+    ],
+  ];
+
+  function planSection92(): string {
+    const plan = readFileSync(
+      fileURLToPath(new URL("../../../../plan.md", import.meta.url)),
+      "utf8",
+    );
+    const start = plan.indexOf("### 9.2 Compact layout");
+    expect(start, "plan.md should carry a §9.2 Compact layout section").toBeGreaterThan(-1);
+    const end = plan.indexOf("### 9.3", start);
+    expect(end, "plan.md §9.2 should be followed by §9.3").toBeGreaterThan(start);
+    return plan.slice(start, end);
+  }
+
+  it("plan.md §9.2 names each Android screen, and each is a mounted route (T375)", () => {
+    const section = planSection92();
+    // The slice is real prose, not an empty string a mis-index would
+    // make every `toMatch` below vacuous against.
+    expect(section.length).toBeGreaterThan(500);
+    for (const [name, mention, route] of PLAN_SECTION_9_2_SCREENS) {
+      expect(
+        section,
+        `plan.md §9.2 must name the ${name} screen: it is part of the compact product, and a spec that omits a screen cannot be checked against the router`,
+      ).toMatch(mention);
+      expect(
+        REAL_ROUTES.has(route),
+        `${route} must stay a real route: plan.md §9.2 names the ${name} screen as part of the shipped product`,
+      ).toBe(true);
+    }
+  });
+
+  it("plan.md §9.2 describes the context ring the per-session controls live behind (T375)", () => {
+    const section = planSection92();
+    // The one structural decision in §9.2 that a later reader is most
+    // likely to undo by accident -- "why is there no control row above
+    // the prompt bar" is exactly the question the ring's existence
+    // answers, and T346's shard-4 failure is the measured cost of the
+    // other arrangement.
+    expect(section).toMatch(/context ring/);
+    expect(section).toMatch(/Build\/Plan mode, model, thinking effort/);
+    expect(section).toMatch(/T346/);
+  });
+
   it("every KNOWN_NON_ROUTE_EXCEPTIONS entry has no default export (proving it is not meant to be a route)", () => {
     for (const relativePath of KNOWN_NON_ROUTE_EXCEPTIONS) {
       const source = stripComments(

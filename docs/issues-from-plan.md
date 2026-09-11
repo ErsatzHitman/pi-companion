@@ -631,6 +631,7 @@ that recomputation has to be domain-specific:
 | T372   | A handoff told the next agent to fix a shard that had been green for twenty-five tasks                               | phase-9   | docs             | P9-U   | T371                                                                  |
 | T373   | The TalkBack procedure's own audit flow had just passed on five emulators, and it said none ever had                 | phase-9   | docs             | P9-U   | T372                                                                  |
 | T374   | The owner's release checklist still asked for a secret that had been configured, and named no project id             | phase-9   | docs             | P9-U   | T373                                                                  |
+| T375   | The authoritative spec described an Android session screen that twenty-three tasks had replaced                      | phase-9   | docs             | P9-U   | T374                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -672,8 +673,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**583 tasks** (distinct IDs counted directly from the table above), recounted at T374 with
-`grep`/`sort -u` over the table's own rows — one past the **582** at T373, two past the **581** at T372, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**584 tasks** (distinct IDs counted directly from the table above), recounted at T375 with
+`grep`/`sort -u` over the table's own rows — one past the **583** at T374, two past the **582** at T373, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18819,3 +18820,64 @@ with no shippable member there is nothing for an entry to key on.
 - [x] The pin was watched failing, then restored from a scratchpad copy
 - [x] Nothing here asserts anything about the remote EAS project's current state
 - [ ] The owner runs §4 steps 2, 4 and 5, and the run id and conclusion are recorded here
+
+#### T375 — The authoritative spec described an Android session screen that twenty-three tasks had replaced
+
+`labels: phase-9, area: docs` · `depends-on: T374`
+
+`plan.md` is "the sole, authoritative plan for this repository" and `plan.md` §9.2 is the whole
+of what it says about the Android compact product. It described a "host/session header" above a
+"bottom composer with prominent microphone and attachment actions", named no context ring, and
+named no screen other than the session screen — which is what the app looked like before T349.
+
+T349 through T371 replaced that surface: an app bar with `☰` to Sessions and `⧉` to Live, a cwd
+subtitle and a status pill; a context ring right of the attachment action whose menu holds
+Build/Plan, model, thinking effort, the context readout, auto-compaction and queue mode; and
+three sibling screens, with Files and Terminal moved off the transcript header onto Live. Every
+one of those landed with a ledger section, a `CAPABILITIES` entry where the guard could see one,
+and an e2e contract test. None of it reached the one document that governs.
+
+**Why this is a defect and not bookkeeping.** `CLAUDE.md` is explicit that when a later decision
+supersedes something, "record the supersession in `plan.md`, the one document that governs this
+product's present" — the rule exists so a reader can trust one place. An agent told to "read
+`plan.md` §9 before making a structural change to Android" would have been reading a description
+of a screen that no longer exists, and would have had no way to discover the ring, the Live
+screen, or the reason the per-session controls are not laid out above the prompt bar. The
+handoff carried all of it; the spec carried none of it; nothing pointed from one to the other.
+
+**What §9.2 now says, and what was deliberately left out.** The section carries what governs:
+which screens exist, what the session screen is composed of, and _why_ the controls sit behind
+the ring — a compact screen cannot afford a second control surface competing with the transcript
+for height, and the pinned extension area is the slot that loses, which T346's shard-4 failure
+measured rather than predicted. The frame-by-frame visual detail is NOT copied in: it is in
+`HANDOFF.md` §7 and in each task's own acceptance record, and duplicating it here would create a
+second thing to keep in sync — the failure this task is fixing, in a new place. A `Superseded
+(T375)` note records what the section used to say, as `CLAUDE.md` requires.
+
+**The pin, in `apps/android/src/app/router-root.test.ts` rather than a new file.** That test
+already owns the authoritative route inventory (`REAL_ROUTES`), which is exactly what §9.2's
+screen list has to agree with, so the check lives beside the thing it compares against. It fails
+in both directions: if §9.2 stops naming a screen, and if a screen it names stops being a mounted
+route. A second case pins the three parts of §9.2 most likely to be undone by accident — the ring
+itself, the list of controls behind it, and the T346 citation that explains why.
+
+Both directions were watched failing, each restored from a scratchpad copy afterwards (never
+`git checkout --`), with `git status --porcelain` clean for the file each time:
+
+- renaming §9.2's `**Live**` bullet to `**Live view**` failed the naming case, naming the Live
+  screen and the reason a spec that omits a screen cannot be checked against the router;
+- removing `./h/[serverId]/session/[agentId]/live.tsx` from `REAL_ROUTES` failed the route case
+  with the same pairing — and, as a bonus, failed two of that file's pre-existing cases, which is
+  the correct blast radius for unmounting a real route.
+
+**No `CAPABILITIES` entry**, for the third time in this run and the same reason: the capability
+is "the spec names the screens the product ships", which declares no member anywhere
+`isShippedSourcePath` can see. `plan.md` is not even in the denial scan's reach — `isAppSourcePath`
+returns `false` for it, as T269 measured — so an entry would be inert on both sides.
+
+- [x] §9.2 describes the screens the app actually ships, in spec voice, not as a changelog
+- [x] The supersession is recorded in `plan.md` itself, per `CLAUDE.md`'s rule
+- [x] The visual detail is cited, not duplicated, so there is still one place to keep in sync
+- [x] The pin compares the spec against the real route inventory, in the file that owns it
+- [x] Both failure directions were watched failing, then restored from a scratchpad copy
+- [x] The reason the controls sit behind the ring is written down, with the failure that proved it
