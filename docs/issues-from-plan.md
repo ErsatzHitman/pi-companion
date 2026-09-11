@@ -639,6 +639,7 @@ that recomputation has to be domain-specific:
 | T380   | Nine flow comments blamed a missing emulator for limits the emulator had stopped causing, one circularly             | phase-9   | android          | P9-U   | T379                                                                  |
 | T381   | Four flows have never run because no shard owns them, and correcting the reason did not give them one                | phase-9   | android          | P9-U   | T380                                                                  |
 | T382   | The two surfaces had no reviewable picture of themselves, only screenshots that cannot carry motion                  | phase-9   | docs             | P9-U   | T380                                                                  |
+| T383   | Give the daemon files-rewind: per-turn snapshots with conflict-checked restore                                       | phase-9   | daemon           | P9-V   | T381                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -680,8 +681,7 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**591 tasks** (distinct IDs counted directly from the table above), recounted at T382 with
-`grep`/`sort -u` over the table's own rows — two past the **589** at T380, three past the **588** at T379, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**592 tasks** (distinct IDs counted directly from the table above), one past the **591** at T382 — verified, not assumed: `grep -o "^| T[0-9A-Za-z]*"` over the table's rows yields 594 hits minus the two prose rows `| This` and `| That` from a non-task table, i.e. 592 distinct IDs — two past the **589** at T380, three past the **588** at T379, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -19419,3 +19419,76 @@ reason: this task ships no capability. It adds two HTML documents and a README.
 - [x] The two audit conventions are written down, so the next sweep does not re-litigate them
 - [x] The one formatter exemption is justified in both the config's neighbour doc and the ledger
 - [x] The stale pattern list the exemption falsified is corrected in the same commit
+
+#### T383 — Give the daemon files-rewind: per-turn snapshots with conflict-checked restore
+
+`labels: phase-9, area: daemon` · `depends-on: T381` · `wave: P9-V`
+
+**Filed, not done.** The wire already speaks files-rewind — `AgentRewindModeSchema` in
+`packages/protocol/src/messages.ts` carries `"conversation" | "files" | "both"`, and
+`DaemonClient.rewindAgent` (`packages/client/src/daemon-client.ts`) already sends the mode —
+but the daemon cannot do the files leg: `supportsRewindFiles` and `supportsRewindBoth` in
+`packages/server/src/server/agent/providers/pi/agent.ts` are both `false`, and nothing under
+`packages/server/src` snapshots a workspace. So every `mode: "files"` / `"both"` rewind fails
+today, and the session-tree / recovered-turn work the owner just approved (project `memory.md`,
+"Supernova adoptions") has no undo machinery underneath it. This task builds that leg, adapted
+from Supernova's checkpoint implementation — reimplemented in plain Node, not ported, because
+Supernova's version is entangled with Effect RPC, Bun, and an Electron shell this repository
+will never take (see the "do NOT adopt" list in the fleet's integration map, confirmed against
+the tree: `D:/supernova/apps/desktop`, `packages/agent-runtime/src/layers/**`,
+`apps/server/src/environment.ts`'s Bun OAuth shim).
+
+**Source to learn from, not to copy.** Supernova is MIT (© 2026 Mattia Cerutti), so adaptation
+with attribution is allowed — the same treatment as `expo-two-way-audio` — but no file may be
+copied verbatim while it still imports Effect, Bun, or Electron. Read for behavior, then write
+fresh:
+`D:/supernova/packages/agent-runtime/src/layers/session-runtime/internal/checkpoint-store.ts`
+(manifest + restore plan + rollback + ref verification),
+`.../internal/shadow-repository.ts` (app-private git shadow repos; `CheckpointConflictError`
+when the worktree moved under the snapshot),
+`.../internal/git/git-commands.ts` (the git operations the store is built on),
+`.../lib/checkpoints/checkpoint-keys.ts` + `checkpoint-entries.ts` + `git-paths.ts`
+(exclusion rules, path validation, the 2 MiB untracked-file cap),
+`.../operations/checkpoint/undo-checkpoint.ts` + `redo-checkpoint.ts` + `revert-to-message.ts`
+(branch walk to the previous checkpoint, cursor semantics),
+`D:/supernova/packages/contracts/src/session-runtime/procedures/checkpoints.ts`
+(Conflict/Uncaptured/Generic tagged union, `force`, `fromCheckpointId`).
+Verify first that none of these files is itself derived from Paseo's `packages/app` — the plan
+§5 ban is untouched by Supernova's license, and an adaptation that launders banned code
+through an MIT tree is still banned code.
+
+**The shape, decided here so the implementer does not re-litigate it.**
+Snapshots live OUTSIDE the workspace in a daemon-private directory (never a `.git` inside the
+user's tree, never moving the workspace HEAD) and are captured at turn boundaries for the
+agent that owns the workspace. A restore builds a plan (affected / delete / restore paths),
+refuses with a conflict error when the worktree changed under the snapshot unless `force` is
+set, and rolls back when the restore itself fails midway. Exclusions start from Supernova's
+(`node_modules`, `.git`, large binaries, the 2 MiB cap) and are pinned by a test, not by prose.
+`force` arrives as a new OPTIONAL field on `agent.rewind.request` (default false) — no new
+message type, no version-literal change, so the version-drift guard has nothing to say; if it
+does, the implementer has misread the guard and must stop. `supportsRewindFiles` /
+`supportsRewindBoth` flip to true only when the daemon can actually snapshot (git CLI present
+and workspace snapshotable); otherwise they stay false and a files rewind fails with an honest
+"unsupported here" rather than a crash. Conversation rewind (`revertPiConversation`,
+`packages/server/src/server/agent/providers/pi/rewind.ts`) is untouched.
+
+**What this task does NOT do** (follow-ups, not scope): the `force` pass-through on
+`DaemonClient.rewindAgent`, the `frontend-core` checkpoint controller, and any web/Android
+surface (conflict dialog, undone-turns drawer) — those are separate tasks depending on this
+one, because this one's files must merge without colliding with them.
+
+Owns: new `packages/server/src/server/agent/checkpoints/` directory; the `force` field on
+`AgentRewindRequestMessageSchema`; the two capability flags' flip conditions in the Pi
+provider; one `THIRD_PARTY_NOTICES.md` row; `docs/T383-provenance.md`; one `plan.md` §4.2
+decision record restating the snapshot/restore semantics (per the T253 rule, the shipped code
+cites `plan.md`, never the frozen reference docs and never `D:/supernova` directly — cite
+Supernova source files by symbol name, never by line number, per the T269 rule).
+
+- [ ] A turn boundary leaves a restorable snapshot outside the workspace; the workspace HEAD never moves
+- [ ] Restoring an unchanged-since-snapshot workspace reproduces the snapshot byte-for-byte, proven by a test
+- [ ] Restoring after an outside change refuses with a conflict error unless `force: true`, proven by a test
+- [ ] A restore that fails midway rolls back to the pre-restore worktree, proven by a test
+- [ ] `supportsRewindFiles`/`supportsRewindBoth` are true only where snapshots work, false with an honest error elsewhere
+- [ ] `docs/T383-provenance.md` + `THIRD_PARTY_NOTICES.md` row + per-file headers name the Supernova source paths and commit
+- [ ] `plan.md` §4.2 carries the decision record and the shipped code cites it
+- [ ] `npm run test:unit --workspace=@picompanion/server` 3× green locally, typecheck + oxlint + oxfmt clean, push with a Maestro dispatch read
