@@ -37,10 +37,15 @@
 //      alongside a copy of THAT COMMIT's own `.oxfmtrc.json`
 //      (`git show <sha>:.oxfmtrc.json`, falling back to the working tree's
 //      current copy if that commit predates the config file entirely) --
-//      preserving the real relative layout is what lets oxfmt apply its own
-//      `ignorePatterns` (`*.lock`, `**/*.gen.ts`, `**/*.gen.tsx`,
-//      `memory.md`, `.dev/**`) exactly as it would for a real checkout,
-//      without this guard reimplementing glob matching itself.
+//      preserving the real relative layout is what lets oxfmt apply that
+//      commit's own `ignorePatterns` exactly as it would for a real
+//      checkout, without this guard reimplementing glob matching itself.
+//      (CORRECTED at T382: this restated the pattern list inline, and the
+//      list had gone one entry stale the moment `docs/ui-reference/*.html`
+//      was added. It is dropped rather than re-pinned, for the reason
+//      `CLAUDE.md` gives twice elsewhere about restated figures -- what
+//      matters here is that the commit's OWN config governs, not which
+//      patterns it happens to hold today. Read `.oxfmtrc.json`.)
 //   4. The PINNED oxfmt binary (never `npx`, which resolves a floating,
 //      unpinned version -- see resolveOxfmtBinary below and this task's
 //      report for the six false failures that produced at the real P6-W10

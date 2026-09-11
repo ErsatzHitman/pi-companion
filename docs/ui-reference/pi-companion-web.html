@@ -1,0 +1,1961 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Pi Companion — web console (desktop, three panes at once).
+  Standalone: no build step, no network except Google Fonts. Open it directly.
+  Colours are packages/design-tokens/src/tokens.ts (beautifulLight / beautifulDark)
+  verbatim; the transcript, prompt bar and context ring follow the Android frames.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; padding: 0; }
+  img { max-width: 100%; }
+  [hidden]:not([hidden="until-found"]) { display: none !important; }
+</style>
+<title>Pi Companion Console</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   Tokens — taken verbatim from packages/design-tokens/src/tokens.ts
+   (beautifulLight / beautifulDark). Light is the bare :root set.
+--------------------------------------------------------------------------- */
+:root {
+  --page: #fafafb;
+  --canvas: #f1f2f3;
+  --surface: #ffffff;
+  --inset: #f7f8f9;
+  --hover: #f4f5f6;
+  --hover-2: #e7e9eb;
+  --field: #f2f2f3;
+  --ink: #1f2124;
+  --ink-2: #62656b;
+  --ink-3: #6b6f76;
+  --line: #ecedef;
+  --line-strong: #e0e2e5;
+  --line-soft: #f3f4f5;
+  --accent: #006dd3;
+  --accent-ink: #005aaf;
+  --accent-tint: #e9f3ff;
+  --green: #157f40;
+  --orange: #b1540a;
+  --red: #d52026;
+  --green-tint: #e8f5ed;
+  --orange-tint: #fdf1e5;
+  --red-tint: #fcecec;
+  --purple: #6d3fbf;
+  --teal: #0f766e;
+  --tool-success-bg: #f0f6f1;
+  --tool-error-bg: #fff1f0;
+  --extension-bg: #f4f2fc;
+  --accent-highlight: rgba(0, 109, 211, 0.18);
+  --tooltip-bg: #25272b;
+  --tooltip-fg: #f6f7f8;
+  --stripe: rgba(73, 73, 73, 0.075);
+
+  --sh-hairline: 0 0 0 1px #ecedef;
+  --sh-btn: 0 0 0 1px #e0e2e5, 0 1px 2px rgba(0, 0, 0, 0.05);
+  --sh-card: 0 0 0 1px #ecedef, 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --sh-raised: 0 0 0 1px #ecedef, 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --sh-overlay: 0 0 0 1px #ecedef, 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --sh-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+
+  --ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --r-blk: 14px;
+  --r-card: 10px;
+  --r-pill: 999px;
+  --rail-l: 264px;
+  --rail-r: 344px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #17181a;
+    --canvas: #1c1d1f;
+    --surface: #232427;
+    --inset: #1f2022;
+    --hover: #2a2b2e;
+    --hover-2: #313236;
+    --field: #2b2c2f;
+    --ink: #f2f3f4;
+    --ink-2: #a5a8ad;
+    --ink-3: #92959b;
+    --line: #2e3033;
+    --line-strong: #3a3c40;
+    --line-soft: #27282b;
+    --accent: #4da3ff;
+    --accent-ink: #7ec0ff;
+    --accent-tint: rgba(61, 154, 255, 0.16);
+    --green: #3cbb72;
+    --orange: #f68f3c;
+    --red: #f17579;
+    --green-tint: rgba(60, 187, 114, 0.14);
+    --orange-tint: rgba(246, 143, 60, 0.14);
+    --red-tint: rgba(238, 92, 97, 0.14);
+    --purple: #b88fe6;
+    --teal: #8dc8c0;
+    --tool-success-bg: #28312e;
+    --tool-error-bg: #3b2f31;
+    --extension-bg: #373340;
+    --accent-highlight: rgba(61, 154, 255, 0.24);
+    --tooltip-bg: #111214;
+    --tooltip-fg: #f2f3f4;
+    --stripe: rgba(255, 255, 255, 0.055);
+
+    --sh-hairline: 0 0 0 1px rgba(255, 255, 255, 0.11);
+    --sh-btn: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --sh-card: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.2);
+    --sh-raised: 0 0 0 1px rgba(255, 255, 255, 0.13), 0 2px 10px rgba(0, 0, 0, 0.22);
+    --sh-overlay: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 8px 28px rgba(0, 0, 0, 0.34);
+    --sh-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: #17181a;
+  --canvas: #1c1d1f;
+  --surface: #232427;
+  --inset: #1f2022;
+  --hover: #2a2b2e;
+  --hover-2: #313236;
+  --field: #2b2c2f;
+  --ink: #f2f3f4;
+  --ink-2: #a5a8ad;
+  --ink-3: #92959b;
+  --line: #2e3033;
+  --line-strong: #3a3c40;
+  --line-soft: #27282b;
+  --accent: #4da3ff;
+  --accent-ink: #7ec0ff;
+  --accent-tint: rgba(61, 154, 255, 0.16);
+  --green: #3cbb72;
+  --orange: #f68f3c;
+  --red: #f17579;
+  --green-tint: rgba(60, 187, 114, 0.14);
+  --orange-tint: rgba(246, 143, 60, 0.14);
+  --red-tint: rgba(238, 92, 97, 0.14);
+  --purple: #b88fe6;
+  --teal: #8dc8c0;
+  --tool-success-bg: #28312e;
+  --tool-error-bg: #3b2f31;
+  --extension-bg: #373340;
+  --accent-highlight: rgba(61, 154, 255, 0.24);
+  --tooltip-bg: #111214;
+  --tooltip-fg: #f2f3f4;
+  --stripe: rgba(255, 255, 255, 0.055);
+
+  --sh-hairline: 0 0 0 1px rgba(255, 255, 255, 0.11);
+  --sh-btn: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --sh-card: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.2);
+  --sh-raised: 0 0 0 1px rgba(255, 255, 255, 0.13), 0 2px 10px rgba(0, 0, 0, 0.22);
+  --sh-overlay: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 8px 28px rgba(0, 0, 0, 0.34);
+  --sh-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* --------------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------------------------------------------------------- app shell -- */
+
+.app {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  grid-template-columns: var(--rail-l) minmax(0, 1fr) var(--rail-r);
+  grid-template-areas: "bar bar bar" "rail main live";
+}
+
+/* ------------------------------------------------------------ app bar -- */
+
+.bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  z-index: 30;
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 10px;
+  margin-right: 2px;
+  border-right: 1px solid var(--line);
+  height: 28px;
+}
+.mark-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+:root[data-theme="dark"] .mark-dot { color: #0d1b2a; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mark-dot { color: #0d1b2a; }
+}
+.mark-name { font-weight: 600; font-size: 13px; letter-spacing: -0.1px; }
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.crumb b { color: var(--ink); font-weight: 500; }
+.crumb .sep { color: var(--ink-3); }
+
+.bar-spacer { flex: 1; }
+
+.bar-tools { display: flex; align-items: center; gap: 6px; }
+
+.iconbtn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.iconbtn:hover { background: var(--hover); color: var(--ink); }
+.iconbtn svg { width: 16px; height: 16px; display: block; }
+
+/* -------------------------------------------------------------- pills -- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.pill-run { background: var(--accent-tint); color: var(--accent-ink); }
+.pill-wait { background: var(--orange-tint); color: var(--orange); }
+.pill-idle { background: var(--inset); color: var(--ink-3); box-shadow: var(--sh-hairline); }
+.pill-info { background: var(--extension-bg); color: var(--purple); }
+.pill-ok { background: var(--green-tint); color: var(--green); }
+.pill-err { background: var(--red-tint); color: var(--red); }
+
+.pill-run .dot { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--inset);
+  box-shadow: var(--sh-hairline);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.chip b { color: var(--ink); font-weight: 500; }
+
+.mono-num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* -------------------------------------------------------- left rail A1 -- */
+
+.rail {
+  grid-area: rail;
+  background: var(--canvas);
+  border-right: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 6px;
+}
+.eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.newbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: var(--sh-btn);
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.newbtn:hover { background: var(--hover); }
+.newbtn svg { width: 13px; height: 13px; }
+
+.rail-search { padding: 4px 12px 10px; }
+.search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: var(--field);
+  box-shadow: var(--sh-inset-field);
+}
+.search svg { width: 13px; height: 13px; color: var(--ink-3); flex: none; }
+.search input {
+  border: 0;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.search input::placeholder { color: var(--ink-3); }
+.search kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1px 4px;
+  box-shadow: var(--sh-hairline);
+}
+
+.rail-scroll { overflow-y: auto; padding: 0 8px 10px; min-height: 0; }
+
+.group-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 4px 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.group-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.sess {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+.sess + .sess { margin-top: 1px; }
+.sess:hover { background: var(--hover); }
+.sess[aria-current="true"] { background: var(--surface); box-shadow: var(--sh-card); }
+
+.sess-gl {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+.gl-wait { color: var(--ink-3); }
+.gl-now { color: var(--accent); }
+.gl-done { color: var(--green); }
+.gl-hold { color: var(--orange); }
+
+.sess-t {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sess-m {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.sess-m .bullet { opacity: 0.5; }
+
+.rail-foot {
+  border-top: 1px solid var(--line);
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.rail-foot .ok { color: var(--green); }
+
+/* ----------------------------------------------------------- main S7 -- */
+
+.main {
+  grid-area: main;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  background: var(--page);
+}
+
+.main-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+}
+.main-head h1 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  text-wrap: balance;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.head-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+.scroller { overflow-y: auto; min-height: 0; padding: 18px 20px 26px; }
+.thread { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+.fade { animation: fade-up 0.32s cubic-bezier(0.23, 1, 0.32, 1) both; }
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* turn meta line above every block */
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-bottom: 5px;
+}
+.meta .who {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+}
+.meta .who.u { color: var(--accent-ink); }
+.meta .who.a { color: var(--ink-2); }
+
+.prose {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: var(--ink);
+  max-width: 78ch;
+  white-space: pre-wrap;
+}
+.prose .hl { background: var(--accent-highlight); border-radius: 3px; padding: 0 2px; }
+.prose code {
+  font-family: var(--mono);
+  background: var(--inset);
+  box-shadow: var(--sh-hairline);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+/* user turn */
+.turn-user .body {
+  background: var(--accent-tint);
+  border-radius: var(--r-blk);
+  padding: 11px 14px;
+  max-width: 72ch;
+}
+.turn-user .prose { color: var(--ink); }
+
+/* thinking */
+.turn-think .body {
+  border-left: 2px solid var(--line-strong);
+  padding: 2px 0 2px 12px;
+}
+.turn-think .prose { color: var(--ink-3); font-style: italic; font-size: 12px; }
+
+/* tool call */
+.tool {
+  border-radius: var(--r-card);
+  background: var(--inset);
+  box-shadow: var(--sh-hairline);
+  overflow: hidden;
+}
+.tool-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.tool-h .name { font-weight: 700; color: var(--ink); }
+.tool-h .arg {
+  color: var(--ink-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-h .grow { flex: 1; }
+.tool-h .dur { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tool-out {
+  border-top: 1px solid var(--line);
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre;
+  overflow-x: auto;
+}
+.tool-ok { background: var(--tool-success-bg); }
+.tool-err { background: var(--tool-error-bg); }
+.tool-out .add { color: var(--green); }
+.tool-out .del { color: var(--red); }
+.tool-out .key { color: var(--ink); }
+
+/* todo widget */
+.todo {
+  border-radius: var(--r-blk);
+  background: var(--surface);
+  box-shadow: var(--sh-card);
+  padding: 11px 13px;
+}
+.todo-h {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.todo-h .t { font-size: 12px; font-weight: 600; }
+.todo-h .c {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.ring { display: block; flex: none; }
+.ring .bg { fill: none; stroke: var(--line-strong); stroke-width: 2; }
+.ring .p {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.todo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.todo li {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.todo li .g { text-align: center; }
+.todo li.now { color: var(--ink); font-weight: 500; }
+.todo li.done span:last-child { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+
+/* extension panel (ask_user) */
+.ext {
+  border-radius: var(--r-blk);
+  background: var(--extension-bg);
+  box-shadow: var(--sh-hairline);
+  padding: 12px 14px;
+}
+.ext-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ext-h .t { font-size: 12px; font-weight: 600; }
+.ext-q { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; margin-bottom: 10px; }
+.ext-opts { display: flex; flex-wrap: wrap; gap: 7px; }
+.opt {
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--sh-btn);
+  padding: 7px 11px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+}
+.opt:hover { background: var(--hover); }
+.opt b { display: block; font-weight: 600; }
+.opt small { color: var(--ink-3); font-size: 11px; }
+
+/* streaming loader */
+.pxl {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 3px);
+  grid-auto-rows: 3px;
+  gap: 1px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.pxl i { background: var(--accent); border-radius: 0.5px; opacity: 0.2; animation: pxl 1.05s linear infinite; }
+.pxl i:nth-child(1) { animation-delay: 0ms; }
+.pxl i:nth-child(2) { animation-delay: 60ms; }
+.pxl i:nth-child(3) { animation-delay: 120ms; }
+.pxl i:nth-child(4) { animation-delay: 420ms; }
+.pxl i:nth-child(5) { animation-delay: 180ms; }
+.pxl i:nth-child(6) { animation-delay: 240ms; }
+.pxl i:nth-child(7) { animation-delay: 360ms; }
+.pxl i:nth-child(8) { animation-delay: 330ms; }
+.pxl i:nth-child(9) { animation-delay: 300ms; }
+@keyframes pxl { 0%, 70%, 100% { opacity: 0.18; } 30% { opacity: 1; } }
+
+.tail { filter: blur(0.35px); opacity: 0.72; }
+
+/* ---------------------------------------------------------- prompt bar -- */
+
+/* The composer is not a separate band: same ground as the transcript, no
+   rule above it, and the scrolling text dissolves into it. */
+.composer {
+  background: var(--page);
+  padding: 0 20px 14px;
+  position: relative;
+}
+.composer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 28px;
+  background: linear-gradient(to top, var(--page), transparent);
+  pointer-events: none;
+}
+.composer-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* task list, pinned directly above the prompt bar */
+.dock-todo:empty { display: none; }
+.dock-todo .todo {
+  border-radius: var(--r-blk);
+  background: var(--surface);
+  box-shadow: var(--sh-card);
+  padding: 9px 12px;
+}
+.dock-todo .todo-h { margin-bottom: 0; }
+.dock-todo .todo-h .t { flex: none; }
+.dock-todo .todo-h .now-line {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.dock-todo ul { margin-top: 9px; }
+.dock-todo[data-open="false"] ul { display: none; }
+.todo-toggle {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.todo-toggle:hover { background: var(--hover); color: var(--ink); }
+.todo-toggle svg { width: 14px; height: 14px; transition: transform 0.18s ease; }
+.dock-todo[data-open="false"] .todo-toggle svg { transform: rotate(180deg); }
+
+.prompt {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  background: var(--surface);
+  border-radius: var(--r-blk);
+  box-shadow: var(--sh-raised);
+  padding: 8px 8px 8px 10px;
+}
+.prompt textarea {
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  padding: 6px 0;
+  max-height: 140px;
+  color: var(--ink);
+}
+.prompt textarea::placeholder { color: var(--ink-3); }
+
+.pbtn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.pbtn:hover { background: var(--hover); color: var(--ink); }
+.pbtn svg { width: 16px; height: 16px; }
+
+.send {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--surface);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+:root[data-theme="dark"] .send { color: #0d1b2a; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .send { color: #0d1b2a; }
+}
+.send:hover { filter: brightness(1.06); }
+.send svg { width: 15px; height: 15px; }
+
+/* the context ring, immediately right of + */
+.ctxbtn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  position: relative;
+}
+.ctxbtn:hover { background: var(--hover); }
+.ctxbtn[aria-expanded="true"] { background: var(--accent-tint); }
+.ctx-ring .bg { fill: none; stroke: var(--line-strong); stroke-width: 2.5; }
+.ctx-ring .p {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ctx-ring .pct {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 700;
+  fill: var(--ink-2);
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.composer-foot .grow { flex: 1; }
+
+/* context menu popover */
+.menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: 336px;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--sh-overlay);
+  padding: 6px;
+  z-index: 40;
+}
+.menu[hidden] { display: none; }
+.menu-g + .menu-g { border-top: 1px solid var(--line); margin-top: 5px; padding-top: 5px; }
+.menu-l {
+  padding: 6px 8px 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.seg {
+  display: flex;
+  gap: 3px;
+  padding: 2px;
+  margin: 0 6px 4px;
+  background: var(--field);
+  border-radius: 8px;
+}
+.seg button {
+  flex: 1;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 5px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  min-height: 26px;
+}
+.seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--sh-btn);
+}
+.mrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 7px 8px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-size: 12px;
+}
+.mrow:hover { background: var(--hover); }
+.mrow .k { color: var(--ink-2); }
+.mrow .v {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mrow .tick { color: var(--accent); }
+
+.usebar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--field);
+  overflow: hidden;
+  margin: 2px 8px 6px;
+  display: flex;
+}
+.usebar i { display: block; height: 100%; }
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 0 8px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 6px; height: 6px; border-radius: 2px; }
+
+/* -------------------------------------------------------- right rail A2 -- */
+
+.live {
+  grid-area: live;
+  background: var(--canvas);
+  border-left: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+.live-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+}
+.live-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: var(--sh-card);
+  padding: 11px 12px;
+}
+.card-h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+}
+.card-h .t { font-size: 11.5px; font-weight: 600; }
+.card-h .n {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent + .agent { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line-soft); }
+.agent-t {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.agent-t .gl { font-family: var(--mono); width: 12px; text-align: center; }
+.agent-t .el {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.agent-s {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin: 3px 0 6px 19px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track { height: 3px; border-radius: 999px; background: var(--field); margin-left: 19px; overflow: hidden; }
+.track i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.track.is-done i { background: var(--green); }
+.track.is-wait i { background: var(--line-strong); }
+
+/* workflow phases */
+.flow { display: flex; flex-direction: column; gap: 0; }
+.phase {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 9px;
+  align-items: start;
+  padding: 5px 0;
+  position: relative;
+}
+.phase .g { font-family: var(--mono); font-size: 11px; text-align: center; line-height: 16px; }
+.phase .n { font-size: 11.5px; line-height: 16px; }
+.phase.now .n { font-weight: 600; }
+.phase .d { font-family: var(--mono); font-size: 10px; color: var(--ink-3); line-height: 16px; font-variant-numeric: tabular-nums; }
+.phase:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 6.5px;
+  top: 22px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.phase.done::before { background: var(--green); opacity: 0.45; }
+
+/* context breakdown */
+.ctxrow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  padding: 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.ctxrow .k { display: inline-flex; align-items: center; gap: 6px; }
+.ctxrow i { width: 6px; height: 6px; border-radius: 2px; }
+
+/* event log */
+.ev {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 3px 0;
+  color: var(--ink-2);
+  align-items: baseline;
+}
+.ev + .ev { border-top: 1px solid var(--line-soft); }
+.ev .ts { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ev .w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev .r { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* --------------------------------------------------------- settings A3 -- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 12, 0.42);
+  z-index: 50;
+  animation: fade 0.18s ease both;
+}
+.scrim[hidden] { display: none; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.sheet {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 92vw;
+  background: var(--page);
+  box-shadow: var(--sh-overlay);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  animation: slide 0.26s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes slide { from { transform: translateX(18px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+
+.sheet-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet-h h2 { margin: 0; font-size: 13.5px; font-weight: 600; }
+.sheet-b { overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+
+.set-g { display: flex; flex-direction: column; gap: 1px; }
+.set-g > .eyebrow { margin-bottom: 6px; }
+.set {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--surface);
+  box-shadow: var(--sh-hairline);
+}
+.set:first-of-type { border-radius: var(--r-card) var(--r-card) 0 0; }
+.set:last-of-type { border-radius: 0 0 var(--r-card) var(--r-card); }
+.set:only-of-type { border-radius: var(--r-card); }
+.set .k { font-size: 12px; }
+.set .k small { display: block; color: var(--ink-3); font-size: 10.5px; margin-top: 1px; }
+.set .v { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+
+.sw {
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  border: 0;
+  padding: 2px;
+  cursor: pointer;
+  flex: none;
+  display: flex;
+}
+.sw i {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--sh-btn);
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.sw[aria-pressed="true"] { background: var(--accent); }
+.sw[aria-pressed="true"] i { transform: translateX(14px); }
+
+.danger { color: var(--red); }
+
+/* ---------------------------------------------------------- responsive -- */
+
+@media (max-width: 1360px) { :root { --rail-l: 232px; --rail-r: 312px; } }
+@media (max-width: 1180px) {
+  .app { grid-template-columns: var(--rail-l) minmax(0, 1fr); grid-template-areas: "bar bar" "rail main"; }
+  .live { display: none; }
+}
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "bar" "main"; }
+  .rail { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <!-- ================================================== app bar ====== -->
+  <header class="bar">
+    <div class="mark">
+      <div class="mark-dot" aria-hidden="true">π</div>
+      <div class="mark-name">Pi Companion</div>
+    </div>
+    <nav class="crumb" aria-label="Workspace">
+      <span>D:\</span><b>pi-companion</b>
+      <span class="sep">/</span>
+      <span id="crumb-branch">main</span>
+    </nav>
+    <span class="chip" id="bar-sha">f394f9d</span>
+    <div class="bar-spacer"></div>
+    <div class="bar-tools">
+      <button class="iconbtn" id="settings-btn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============================================ A1 · workspace ===== -->
+  <aside class="rail" aria-label="Sessions">
+    <div class="rail-head">
+      <span class="eyebrow">Workspace</span>
+      <button class="newbtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        New session
+      </button>
+    </div>
+    <div class="rail-search">
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        <input type="search" placeholder="Search sessions and files" aria-label="Search sessions and files">
+        <kbd>⌘K</kbd>
+      </label>
+    </div>
+    <div class="rail-scroll" id="rail-list"></div>
+    <div class="rail-foot">
+      <span><span class="ok">●</span> connected · relay off</span>
+      <span class="mono-num">v0.4.0</span>
+    </div>
+  </aside>
+
+  <!-- ================================================== S7 · chat ==== -->
+  <main class="main">
+    <div class="main-head">
+      <h1 id="head-title">T380 — emulator claims in the Maestro flows</h1>
+      <span class="pill" id="head-pill"><span class="dot"></span><span></span></span>
+      <div class="head-right">
+        <span class="chip" id="head-model"><b>opus-5</b> · xhigh</span>
+        <span class="chip" id="head-mode">Build</span>
+      </div>
+    </div>
+
+    <div class="scroller" id="scroller">
+      <div class="thread" id="thread"></div>
+    </div>
+
+    <!-- prompt bar: + then the context ring, per the amendment -->
+    <div class="composer">
+      <div class="composer-inner">
+        <div class="dock-todo" id="dock-todo"></div>
+
+        <div class="menu" id="ctx-menu" hidden role="dialog" aria-label="Session controls">
+          <div class="menu-g">
+            <div class="menu-l">Mode</div>
+            <div class="seg" id="seg-mode">
+              <button type="button" aria-pressed="true">Build</button>
+              <button type="button" aria-pressed="false">Plan</button>
+            </div>
+          </div>
+          <div class="menu-g">
+            <div class="menu-l">Model &amp; effort</div>
+            <button class="mrow" type="button" id="row-model">
+              <span class="k">Model</span>
+              <span class="v"><span id="v-model">opus-5</span><span class="tick">›</span></span>
+            </button>
+            <div class="seg" id="seg-eff">
+              <button type="button" aria-pressed="false">low</button>
+              <button type="button" aria-pressed="false">med</button>
+              <button type="button" aria-pressed="false">high</button>
+              <button type="button" aria-pressed="true">xhigh</button>
+              <button type="button" aria-pressed="false">max</button>
+            </div>
+          </div>
+          <div class="menu-g">
+            <div class="menu-l">Queue</div>
+            <button class="mrow" type="button" id="row-steer">
+              <span class="k">While a turn runs</span>
+              <span class="v"><span id="v-steer">Steer</span><span class="tick">›</span></span>
+            </button>
+            <button class="mrow" type="button" id="row-follow">
+              <span class="k">After it finishes</span>
+              <span class="v"><span id="v-follow">Send queued</span><span class="tick">›</span></span>
+            </button>
+          </div>
+          <div class="menu-g">
+            <div class="menu-l">Context · <span class="mono-num" id="menu-ctx">131.6k of 200k</span></div>
+            <div class="usebar" id="menu-usebar"></div>
+            <div class="legend" id="menu-legend"></div>
+            <button class="mrow" type="button" id="row-compact">
+              <span class="k">Compact now</span>
+              <span class="v">frees ~38k</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="prompt">
+          <button class="pbtn" title="Attach files" aria-label="Attach files">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button class="ctxbtn" id="ctx-btn" aria-expanded="false" aria-controls="ctx-menu" title="Session controls — 66% of context used">
+            <svg class="ctx-ring" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+              <circle class="bg" cx="13" cy="13" r="11"/>
+              <circle class="p" id="ctx-arc" cx="13" cy="13" r="11" stroke-dasharray="69.12" stroke-dashoffset="69.12"/>
+              <text class="pct" id="ctx-pct" x="13" y="16">66</text>
+            </svg>
+          </button>
+          <textarea id="prompt" rows="1" placeholder="Ask, or steer the turn in flight…"></textarea>
+          <button class="pbtn" title="Dictate" aria-label="Dictate">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button class="send" title="Send" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+        <div class="composer-foot">
+          <span id="foot-state">Steering — this goes to the turn already running</span>
+          <span class="grow"></span>
+          <span>⏎ send · ⇧⏎ newline · Esc interrupt</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================================================== A2 · live ==== -->
+  <aside class="live" aria-label="Live">
+    <div class="live-head">
+      <span class="eyebrow">Live</span>
+      <span class="pill" id="live-pill"><span class="dot"></span><span></span></span>
+    </div>
+    <div class="live-scroll" id="live-scroll"></div>
+  </aside>
+</div>
+
+<!-- ==================================================== A3 · settings == -->
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="sheet-h">
+      <h2>Settings</h2>
+      <div style="margin-left:auto"></div>
+      <button class="iconbtn" id="sheet-close" aria-label="Close settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="sheet-b">
+      <div class="set-g">
+        <div class="eyebrow">Connection</div>
+        <div class="set"><div class="k">Daemon<small>Development daemon, separate from production</small></div><span class="v">127.0.0.1:6768</span></div>
+        <div class="set"><div class="k">Relay<small>Reach this daemon from your phone</small></div><button class="sw" aria-pressed="false" aria-label="Relay"><i></i></button></div>
+        <div class="set"><div class="k">Reconnect automatically</div><button class="sw" aria-pressed="true" aria-label="Reconnect automatically"><i></i></button></div>
+      </div>
+
+      <div class="set-g">
+        <div class="eyebrow">Transcript</div>
+        <div class="set"><div class="k">Show thinking blocks</div><button class="sw" aria-pressed="true" aria-label="Show thinking blocks"><i></i></button></div>
+        <div class="set"><div class="k">Collapse tool output over 40 lines</div><button class="sw" aria-pressed="true" aria-label="Collapse long tool output"><i></i></button></div>
+        <div class="set"><div class="k">Stream tokens as they arrive<small>Off renders each turn when it completes</small></div><button class="sw" aria-pressed="true" aria-label="Stream tokens"><i></i></button></div>
+        <div class="set"><div class="k">Transcript size</div><span class="v">12.5 px / 1.62</span></div>
+      </div>
+
+      <div class="set-g">
+        <div class="eyebrow">Approvals</div>
+        <div class="set"><div class="k">Ask before writing files</div><button class="sw" aria-pressed="true" aria-label="Ask before writing files"><i></i></button></div>
+        <div class="set"><div class="k">Ask before running commands</div><button class="sw" aria-pressed="true" aria-label="Ask before running commands"><i></i></button></div>
+        <div class="set"><div class="k">Notify me when a turn needs input</div><button class="sw" aria-pressed="true" aria-label="Notify when a turn needs input"><i></i></button></div>
+      </div>
+
+      <div class="set-g">
+        <div class="eyebrow">Appearance</div>
+        <div class="set" id="set-theme-row" role="button" tabindex="0" style="cursor:pointer"><div class="k">Theme<small>System follows your OS setting</small></div><span class="v" id="set-theme">System</span></div>
+        <div class="set"><div class="k">Accent</div><span class="v">Beautiful blue</span></div>
+      </div>
+
+      <div class="set-g">
+        <div class="eyebrow">Data</div>
+        <div class="set"><div class="k">Export diagnostics<small>Redacted bundle — no tokens, no file contents</small></div><span class="v">2.1 MB</span></div>
+        <div class="set"><div class="k danger">Forget this workspace<small>Removes local sessions. The daemon keeps its own copy.</small></div><span class="v danger">Remove</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------ helpers -- */
+
+const GL = { wait: ["○", "gl-wait"], now: ["◐", "gl-now"], done: ["✓", "gl-done"], hold: ["◆", "gl-hold"] };
+const PILL = {
+  run: ["pill-run", "Working — the daemon reports a turn in flight"],
+  wait: ["pill-wait", "Needs you — blocked on ask_user"],
+  idle: ["pill-idle", "Idle — no turn in flight"],
+  info: ["pill-info", "Thinking — reasoning before it acts"],
+};
+
+const fmtTok = (n) =>
+  n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+const CTX_SLICES = [
+  { k: "System + tools", v: 12400, c: "var(--teal)" },
+  { k: "Files read", v: 61200, c: "var(--accent)" },
+  { k: "Transcript", v: 48900, c: "var(--purple)" },
+  { k: "Tool results", v: 9100, c: "var(--orange)" },
+];
+const CTX_MAX = 200000;
+
+/* ---------------------------------------------------------------- data -- */
+/* Example sessions, modelled on this repository's real Phase 9 work.      */
+
+const SESSIONS = [
+  {
+    id: "t380",
+    group: "pi-companion · main",
+    title: "T380 — emulator claims in the Maestro flows",
+    status: "run",
+    when: "now",
+    tokens: 131600,
+    model: "opus-5",
+    effort: "xhigh",
+    mode: "Build",
+    branch: "main",
+    sha: "f394f9d",
+    blocks: [
+      {
+        t: "user",
+        text:
+          "Nine comments under apps/android/maestro/ blame a missing emulator for limits the emulator stopped causing. Correct them — but quote what you replace, don't delete the claims.",
+      },
+      {
+        t: "think",
+        text:
+          "The conclusions may still hold even where the stated cause has rotted. Separate the two before touching anything: which flows actually run on a device today, and which have genuinely never run.",
+      },
+      {
+        t: "tool",
+        name: "Grep",
+        arg: 'pattern:"no emulator" path:apps/android/maestro',
+        dur: "0.42s",
+        state: "ok",
+        out:
+          "composer-inputs.yaml       3 matches\nfiles-and-terminal.yaml    1 match\nqueue-retry-compaction.yaml 2 matches\nrecovered-turn-banner.yaml 1 match\nsession-tree-sheet.yaml    1 match\nfile-download.yaml         1 match\n\n6 files · 9 matches",
+      },
+      {
+        t: "text",
+        text:
+          "Nine sites, two kinds. Eleven of the fifteen flows in that directory run on a booted emulator on every dispatch — 34558058662 was green end to end — so for those the cause is gone while the conclusion survives on a better reason. The native picker is a system surface outside the app's process, so Maestro's view hierarchy cannot observe it on any device. Four flows really have never run, and the reason is that none of them is assigned to a shard.",
+      },
+      {
+        t: "tool",
+        name: "Edit",
+        arg: "apps/android/e2e/harness/shard-plan.ts",
+        dur: "0.08s",
+        state: "ok",
+        out:
+          '- that flow\'s own header states it has never been run (no emulator,\n- no device, no Maestro binary here) ... Putting an admittedly-unrun\n- flow into the CI exit gate would assert a run nobody has made.\n+ This set is plan.md §14.4\'s ten scenarios. T39C is not one of them,\n+ and widening it would change what the Phase 5 exit gate MEANS.\n+ The old second reason was circular: this set decides which flows CI\n+ runs, so "it has never run" cannot justify keeping it out.',
+      },
+      {
+        t: "tool",
+        name: "Bash",
+        arg: "npx vitest run --dir apps/android/e2e --maxWorkers=3",
+        dur: "48.6s",
+        state: "ok",
+        out: "Test Files  37 passed (37)\n     Tests  419 passed (419)\n  Duration  48.61s",
+      },
+      {
+        t: "stream",
+        text:
+          "Guards are green: PROSE-OK, PORT-OK, and node --test scripts/ci/*.test.mjs exits 0 with the new quotations in place — worth running rather than reasoning about, since apps/android/maestro/*.yaml has been inside the capability-prose denial scan since T281 and two of these quoted phrases match a scan term. ",
+        tail: "Writing the ledger row now: cells 8/118/11/18/8/71, 241 characters, count 588 → 589.",
+      },
+    ],
+    todo: {
+      done: 4,
+      items: [
+        ["done", "Separate rotted causes from surviving conclusions"],
+        ["done", "Re-ground composer-inputs.yaml on the system-surface reason"],
+        ["done", "Correct apps/android/e2e/README.md's closing paragraph"],
+        ["done", "Name the circular exclusion in shard-plan.ts"],
+        ["now", "Add the T380 ledger row and section"],
+        ["wait", "Run the guard suite and push"],
+      ],
+    },
+    live: {
+      agents: [
+        { g: "done", t: "verify-touch-targets", s: "48dp audit derived from the tree", el: "2m 11s", p: 100, k: "is-done" },
+        { g: "now", t: "grep-capability-prose", s: "scanning 2124 app-source files", el: "0m 39s", p: 62, k: "" },
+        { g: "wait", t: "ledger-row-writer", s: "queued behind the guard run", el: "—", p: 8, k: "is-wait" },
+      ],
+      phases: [
+        ["done", "Survey", "9 sites"],
+        ["done", "Classify", "2 kinds"],
+        ["done", "Correct", "6 files"],
+        ["now", "Ledger", "T380"],
+        ["wait", "Gate + push", "—"],
+      ],
+      events: [
+        ["23:41:08", "oxfmt apps/android/maestro", "ok"],
+        ["23:40:52", "tsc --noEmit apps/android", "ok"],
+        ["23:39:15", "vitest --dir apps/android/src", "612"],
+        ["23:38:02", "run-guard-no-production-daemon-port", "PORT-OK"],
+        ["23:37:44", "run-guard-capability-prose", "PROSE-OK"],
+      ],
+    },
+  },
+  {
+    id: "web-shell",
+    group: "pi-companion · main",
+    title: "Three-pane web console shell",
+    status: "wait",
+    when: "4m",
+    tokens: 74300,
+    model: "sonnet-5",
+    effort: "high",
+    mode: "Plan",
+    branch: "main",
+    sha: "f394f9d",
+    blocks: [
+      {
+        t: "user",
+        text:
+          "apps/web is DOM-first React + Vite — no Next, no SSR. Lay the Android S7/A1/A2 frames out as one desktop shell where all three are visible at once.",
+      },
+      {
+        t: "text",
+        text:
+          "Grid shell at 264px / 1fr / 344px, each pane its own scroll container so the document never scrolls. Sessions keeps A1's tree and search; the centre keeps S7's mono transcript and prompt bar verbatim, including the context ring right of the attachment button; Live gets A2's subagents, workflow and context cards, which on Android were a separate screen.",
+      },
+      {
+        t: "ext",
+        title: "ask_user",
+        q: "Settings was a full screen on Android (A3). On the web it has three plausible homes — which one?",
+        opts: [
+          ["Slide-over from the right", "Keeps all three panes mounted. No route change."],
+          ["Fourth pane", "Always visible, costs ~380px of transcript width."],
+          ["Its own route", "Closest to Android, loses the live rail while open."],
+        ],
+      },
+    ],
+    todo: {
+      done: 2,
+      items: [
+        ["done", "Read the four Android frames and the token file"],
+        ["done", "Map S7 / A1 / A2 onto three panes"],
+        ["now", "Settle where Settings lives — blocked on ask_user"],
+        ["wait", "Write the grid shell in apps/web/src/app"],
+        ["wait", "Pin the pane widths in a layout contract test"],
+      ],
+    },
+    live: {
+      agents: [
+        { g: "done", t: "read-design-tokens", s: "beautifulLight + beautifulDark", el: "0m 22s", p: 100, k: "is-done" },
+        { g: "hold", t: "layout-drafter", s: "blocked on ask_user", el: "4m 02s", p: 45, k: "is-wait" },
+      ],
+      phases: [
+        ["done", "Read the Android frames", "4"],
+        ["done", "Map to panes", "3"],
+        ["now", "Settle Settings", "ask_user"],
+        ["wait", "Write the shell", "—"],
+      ],
+      events: [
+        ["23:37:10", "read packages/design-tokens/src/tokens.ts", "ok"],
+        ["23:36:58", "read apps/web/src/app/App.tsx", "ok"],
+        ["23:36:31", "ask_user emitted", "wait"],
+      ],
+    },
+  },
+  {
+    id: "shards",
+    group: "pi-companion · main",
+    title: "A second shard set for the four unrun flows",
+    status: "idle",
+    when: "1h",
+    tokens: 22800,
+    model: "haiku-4.5",
+    effort: "medium",
+    mode: "Plan",
+    branch: "main",
+    sha: "6c55c13",
+    blocks: [
+      {
+        t: "user",
+        text:
+          "file-download, recovered-turn-banner, session-tree-sheet and queue-retry-compaction have never run. Not because a device is missing — because no shard owns them. Sketch the second set.",
+      },
+      {
+        t: "text",
+        text:
+          "Keep the Phase 5 exit gate exactly as it is: plan.md §14.4's ten scenarios, nothing added. Add a non-gating shard-6 that runs these four on the same booted emulator and reports, so a failure is visible without changing what the exit gate asserts. Filed as T381.",
+      },
+      {
+        t: "tool",
+        name: "Read",
+        arg: "apps/android/e2e/harness/shard-plan.ts",
+        dur: "0.05s",
+        state: "ok",
+        out:
+          "NON_EXIT_GATE_FLOW_NAMES = [\n  \"file-download\",\n  \"recovered-turn-banner\",\n  \"session-tree-sheet\",\n  \"queue-retry-compaction\",\n]",
+      },
+    ],
+    todo: {
+      done: 2,
+      items: [
+        ["done", "Read NON_EXIT_GATE_FLOW_NAMES and its stated reasons"],
+        ["done", "Draft a non-gating shard-6 for the four flows"],
+        ["wait", "File T381 with the exit-gate boundary written down"],
+      ],
+    },
+    live: {
+      agents: [{ g: "done", t: "shard-plan-reader", s: "4 names, 1 stated reason each", el: "0m 14s", p: 100, k: "is-done" }],
+      phases: [
+        ["done", "Read the exclusion set", "4"],
+        ["done", "Draft shard-6", "non-gating"],
+        ["wait", "File T381", "—"],
+      ],
+      events: [["22:48:19", "read shard-plan.ts", "ok"], ["22:47:55", "session resumed", "ok"]],
+    },
+  },
+];
+
+/* ------------------------------------------------------------ rendering */
+
+let activeId = SESSIONS[0].id;
+const active = () => SESSIONS.find((s) => s.id === activeId);
+
+function ringSvg(frac, size) {
+  const r = size === 18 ? 8 : 11;
+  const c = 2 * Math.PI * r;
+  return (
+    '<svg class="ring" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + " " + size + '" aria-hidden="true">' +
+    '<circle class="bg" cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '"/>' +
+    '<circle class="p" cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r +
+    '" stroke-dasharray="' + c.toFixed(2) + '" stroke-dashoffset="' + (c * (1 - frac)).toFixed(2) + '"/></svg>'
+  );
+}
+
+function renderRail() {
+  const el = document.getElementById("rail-list");
+  let html = "";
+  let group = null;
+  for (const s of SESSIONS) {
+    if (s.group !== group) {
+      group = s.group;
+      html += '<div class="group-label">' + esc(group) + "</div>";
+    }
+    const [g, cls] = GL[s.status === "run" ? "now" : s.status === "wait" ? "hold" : "wait"];
+    html +=
+      '<button class="sess" data-id="' + s.id + '" aria-current="' + (s.id === activeId) + '">' +
+      '<span class="sess-gl ' + cls + '">' + g + "</span>" +
+      "<span>" +
+      '<span class="sess-t">' + esc(s.title) + "</span>" +
+      '<span class="sess-m">' + s.when + '<span class="bullet">·</span>' + fmtTok(s.tokens) +
+      '<span class="bullet">·</span>' + s.model + "</span>" +
+      "</span></button>";
+  }
+  el.innerHTML = html;
+  el.querySelectorAll(".sess").forEach((b) =>
+    b.addEventListener("click", () => {
+      activeId = b.dataset.id;
+      renderAll();
+    })
+  );
+}
+
+function blockHtml(b, i) {
+  const delay = ' style="animation-delay:' + Math.min(i * 120, 720) + 'ms"';
+  if (b.t === "user")
+    return (
+      '<div class="turn turn-user fade"' + delay + '><div class="meta"><span class="who u">you</span><span>23:36</span></div>' +
+      '<div class="body"><div class="prose">' + esc(b.text) + "</div></div></div>"
+    );
+  if (b.t === "think")
+    return (
+      '<div class="turn turn-think fade"' + delay + '><div class="meta"><span class="who a">thinking</span></div>' +
+      '<div class="body"><div class="prose">' + esc(b.text) + "</div></div></div>"
+    );
+  if (b.t === "text")
+    return '<div class="turn fade"' + delay + '><div class="prose">' + esc(b.text) + "</div></div>";
+  if (b.t === "stream")
+    return (
+      '<div class="turn fade"' + delay + '>' +
+      '<div class="prose">' + esc(b.text) + '<span id="stream-tail" class="tail"></span>' +
+      '<span class="pxl" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></div>'
+    );
+  if (b.t === "tool") {
+    const chip = b.state === "ok" ? "pill-ok" : "pill-err";
+    return (
+      '<div class="turn fade"' + delay + '><div class="tool">' +
+      '<div class="tool-h"><span class="name">' + esc(b.name) + '</span><span class="arg">' + esc(b.arg) + "</span>" +
+      '<span class="grow"></span><span class="dur">' + b.dur + "</span>" +
+      '<span class="pill ' + chip + '">' + (b.state === "ok" ? "done" : "failed") + "</span></div>" +
+      '<div class="tool-out ' + (b.state === "ok" ? "tool-ok" : "tool-err") + '">' + diffHtml(b.out) + "</div>" +
+      "</div></div>"
+    );
+  }
+  if (b.t === "ext")
+    return (
+      '<div class="turn fade"' + delay + '><div class="ext">' +
+      '<div class="ext-h"><span class="pill pill-info"><span class="dot"></span>extension</span><span class="t">' + esc(b.title) + "</span></div>" +
+      '<div class="ext-q">' + esc(b.q) + "</div>" +
+      '<div class="ext-opts">' +
+      b.opts.map((o) => '<button class="opt" type="button"><b>' + esc(o[0]) + "</b><small>" + esc(o[1]) + "</small></button>").join("") +
+      "</div></div></div>"
+    );
+  return "";
+}
+
+function diffHtml(out) {
+  return esc(out)
+    .split("\n")
+    .map((l) =>
+      l.startsWith("+") ? '<span class="add">' + l + "</span>" : l.startsWith("-") ? '<span class="del">' + l + "</span>" : l
+    )
+    .join("\n");
+}
+
+function renderThread() {
+  const s = active();
+  document.getElementById("thread").innerHTML = s.blocks.map(blockHtml).join("");
+  startStream();
+}
+
+/* The task list lives above the prompt bar, not in the scroll. */
+let todoOpen = true;
+
+function renderTodo() {
+  const el = document.getElementById("dock-todo");
+  const td = active().todo;
+  if (!td) {
+    el.innerHTML = "";
+    return;
+  }
+  const now = td.items.find((it) => it[0] === "now") || td.items.find((it) => it[0] === "wait");
+  el.dataset.open = String(todoOpen);
+  el.innerHTML =
+    '<div class="todo"><div class="todo-h">' + ringSvg(td.done / td.items.length, 18) +
+    '<span class="t">Task list</span>' +
+    '<span class="now-line">' + (now ? esc(now[1]) : "all done") + "</span>" +
+    '<span class="c">' + td.done + " of " + td.items.length + "</span>" +
+    '<button class="todo-toggle" type="button" aria-expanded="' + todoOpen + '" aria-label="Collapse task list">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>' +
+    "</button></div><ul>" +
+    td.items
+      .map((it) => {
+        const [g, cls] = GL[it[0]];
+        return '<li class="' + it[0] + '"><span class="g ' + cls + '">' + g + "</span><span>" + esc(it[1]) + "</span></li>";
+      })
+      .join("") +
+    "</ul></div>";
+  el.querySelector(".todo-toggle").addEventListener("click", () => {
+    todoOpen = !todoOpen;
+    renderTodo();
+  });
+}
+
+function renderHeader() {
+  const s = active();
+  document.getElementById("head-title").textContent = s.title;
+  document.getElementById("crumb-branch").textContent = s.branch;
+  document.getElementById("bar-sha").textContent = s.sha;
+  document.getElementById("head-model").innerHTML = "<b>" + s.model + "</b> · " + s.effort;
+  document.getElementById("head-mode").textContent = s.mode;
+
+  for (const id of ["head-pill", "live-pill"]) {
+    const p = document.getElementById(id);
+    const [cls, label] = PILL[s.status];
+    p.className = "pill " + cls;
+    p.lastElementChild.textContent = id === "head-pill" ? label : label.split(" — ")[0];
+  }
+
+  const frac = s.tokens / CTX_MAX;
+  const c = 2 * Math.PI * 11;
+  document.getElementById("ctx-arc").setAttribute("stroke-dashoffset", (c * (1 - frac)).toFixed(2));
+  document.getElementById("ctx-pct").textContent = Math.round(frac * 100);
+  document.getElementById("ctx-btn").title =
+    "Session controls — " + Math.round(frac * 100) + "% of context used";
+  document.getElementById("menu-ctx").textContent = fmtTok(s.tokens) + " of 200k";
+  document.getElementById("foot-state").textContent =
+    s.status === "run"
+      ? "Steering — this goes to the turn already running"
+      : s.status === "wait"
+      ? "Answer above, or type to override the question"
+      : "Idle — this starts a new turn";
+
+  document.querySelectorAll("#seg-mode button").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.textContent.trim() === s.mode))
+  );
+  document.getElementById("v-model").textContent = s.model;
+}
+
+function renderLive() {
+  const s = active();
+  const L = s.live;
+  let html = "";
+
+  html +=
+    '<div class="card"><div class="card-h"><span class="t">Subagents</span>' +
+    '<span class="n">' + L.agents.filter((a) => a.g === "now").length + " running · " + L.agents.length + " total</span></div>" +
+    L.agents
+      .map((a) => {
+        const [g, cls] = GL[a.g];
+        return (
+          '<div class="agent"><div class="agent-t"><span class="gl ' + cls + '">' + g + "</span>" +
+          "<span>" + esc(a.t) + '</span><span class="el">' + a.el + "</span></div>" +
+          '<div class="agent-s">' + esc(a.s) + "</div>" +
+          '<div class="track ' + a.k + '"><i style="width:' + a.p + '%"></i></div></div>'
+        );
+      })
+      .join("") +
+    "</div>";
+
+  html +=
+    '<div class="card"><div class="card-h"><span class="t">Workflow</span>' +
+    '<span class="n">' + L.phases.filter((p) => p[0] === "done").length + " of " + L.phases.length + "</span></div>" +
+    '<div class="flow">' +
+    L.phases
+      .map((p) => {
+        const [g, cls] = GL[p[0]];
+        return (
+          '<div class="phase ' + p[0] + '"><span class="g ' + cls + '">' + g + "</span>" +
+          '<span class="n">' + esc(p[1]) + '</span><span class="d">' + esc(p[2]) + "</span></div>"
+        );
+      })
+      .join("") +
+    "</div></div>";
+
+  document.getElementById("live-scroll").innerHTML = html;
+
+  document.getElementById("menu-usebar").innerHTML =
+    CTX_SLICES.map((x) => '<i style="width:' + ((x.v / CTX_MAX) * 100).toFixed(1) + "%;background:" + x.c + '"></i>').join("") +
+    '<i style="flex:1;background:var(--field)"></i>';
+  document.getElementById("menu-legend").innerHTML = CTX_SLICES.map(
+    (x) => '<span><i style="background:' + x.c + '"></i>' + esc(x.k) + " " + fmtTok(x.v) + "</span>"
+  ).join("");
+}
+
+function renderAll() {
+  renderRail();
+  renderHeader();
+  renderThread();
+  renderTodo();
+  renderLive();
+}
+
+/* ---------------------------------------------------- streaming tail --- */
+
+const CPT = 2, TICK = 9;
+let streamTimer = null;
+
+function startStream() {
+  if (streamTimer) clearInterval(streamTimer);
+  const el = document.getElementById("stream-tail");
+  if (!el) return;
+  const full = (active().blocks.find((b) => b.t === "stream") || {}).tail || "";
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    el.textContent = full;
+    return;
+  }
+  let i = 0;
+  streamTimer = setInterval(() => {
+    i = Math.min(i + CPT, full.length);
+    el.textContent = full.slice(0, i);
+    if (i >= full.length) {
+      clearInterval(streamTimer);
+      streamTimer = null;
+      el.classList.remove("tail");
+    }
+  }, TICK);
+}
+
+/* ------------------------------------------------------------ controls -- */
+
+const ctxBtn = document.getElementById("ctx-btn");
+const ctxMenu = document.getElementById("ctx-menu");
+
+function setMenu(open) {
+  ctxMenu.hidden = !open;
+  ctxBtn.setAttribute("aria-expanded", String(open));
+}
+ctxBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setMenu(ctxMenu.hidden);
+});
+ctxMenu.addEventListener("click", (e) => e.stopPropagation());
+document.addEventListener("click", () => setMenu(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  setMenu(false);
+  closeSheet();
+});
+
+document.querySelectorAll("#seg-mode button").forEach((b) =>
+  b.addEventListener("click", () => {
+    active().mode = b.textContent.trim();
+    renderHeader();
+  })
+);
+document.querySelectorAll("#seg-eff button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#seg-eff button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    const map = { low: "low", med: "medium", high: "high", xhigh: "xhigh", max: "max" };
+    active().effort = map[b.textContent.trim()];
+    renderHeader();
+  })
+);
+
+const MODELS = ["opus-5", "sonnet-5", "haiku-4.5"];
+document.getElementById("row-model").addEventListener("click", () => {
+  const s = active();
+  s.model = MODELS[(MODELS.indexOf(s.model) + 1) % MODELS.length];
+  renderHeader();
+  renderRail();
+});
+
+const STEER = ["Steer", "Queue", "Reject"];
+document.getElementById("row-steer").addEventListener("click", () => {
+  const el = document.getElementById("v-steer");
+  el.textContent = STEER[(STEER.indexOf(el.textContent) + 1) % STEER.length];
+});
+const FOLLOW = ["Send queued", "Hold for me", "Discard"];
+document.getElementById("row-follow").addEventListener("click", () => {
+  const el = document.getElementById("v-follow");
+  el.textContent = FOLLOW[(FOLLOW.indexOf(el.textContent) + 1) % FOLLOW.length];
+});
+
+document.querySelectorAll(".sw").forEach((b) =>
+  b.addEventListener("click", () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"))
+);
+
+/* settings sheet */
+const scrim = document.getElementById("scrim");
+const openSheet = () => { scrim.hidden = false; };
+const closeSheet = () => { scrim.hidden = true; };
+document.getElementById("settings-btn").addEventListener("click", openSheet);
+document.getElementById("sheet-close").addEventListener("click", closeSheet);
+scrim.addEventListener("click", (e) => { if (e.target === scrim) closeSheet(); });
+
+/* theme — chosen in Settings; the page follows the OS until it is changed */
+const THEMES = ["System", "Light", "Dark"];
+document.getElementById("set-theme").parentElement.addEventListener("click", () => {
+  const el = document.getElementById("set-theme");
+  const t = THEMES[(THEMES.indexOf(el.textContent) + 1) % THEMES.length];
+  el.textContent = t;
+  if (t === "System") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t.toLowerCase());
+});
+
+/* prompt autosize */
+const prompt = document.getElementById("prompt");
+prompt.addEventListener("input", () => {
+  prompt.style.height = "auto";
+  prompt.style.height = Math.min(prompt.scrollHeight, 140) + "px";
+});
+
+renderAll();
+</script>
+</body>
+</html>

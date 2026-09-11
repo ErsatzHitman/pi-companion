@@ -637,6 +637,8 @@ that recomputation has to be domain-specific:
 | T378   | The 48dp audit's component list was the last curated list, and a screen shipped tomorrow joined it by memory         | phase-9   | android          | P9-U   | T377                                                                  |
 | T379   | The handoff still described the tree as it stood seven tasks ago, and named no successor to the work                 | phase-9   | docs             | P9-U   | T378                                                                  |
 | T380   | Nine flow comments blamed a missing emulator for limits the emulator had stopped causing, one circularly             | phase-9   | android          | P9-U   | T379                                                                  |
+| T381   | Four flows have never run because no shard owns them, and correcting the reason did not give them one                | phase-9   | android          | P9-U   | T380                                                                  |
+| T382   | The two surfaces had no reviewable picture of themselves, only screenshots that cannot carry motion                  | phase-9   | docs             | P9-U   | T380                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -678,8 +680,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**589 tasks** (distinct IDs counted directly from the table above), recounted at T380 with
-`grep`/`sort -u` over the table's own rows — one past the **588** at T379, two past the **587** at T378, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**591 tasks** (distinct IDs counted directly from the table above), recounted at T382 with
+`grep`/`sort -u` over the table's own rows — two past the **589** at T380, three past the **588** at T379, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -19288,3 +19290,116 @@ entry would be inert on the shipping side.
 - [x] The dated wave headers are deliberately left alone, and that line is stated
 - [x] `guard-capability-prose` exits 0 with the new quotations in place, run rather than reasoned about
 - [ ] The four flows actually run — filed as T381, since correcting the reason is not the same as removing it
+
+#### T381 — Four flows have never run because no shard owns them, and correcting the reason did not give them one
+
+`labels: phase-9, area: android` · `depends-on: T380`
+
+**Filed, not done.** T380 corrected the reason `file-download`, `recovered-turn-banner`,
+`session-tree-sheet` and `queue-retry-compaction` give for never having run: not a missing
+device, but that none of them is assigned to a shard. Correcting a reason is not the same as
+removing it, so the four still do not run, and this task is where that is tracked rather than
+left implied by a corrected comment.
+
+**The constraint that makes this non-trivial, and why the obvious fix is wrong.**
+`apps/android/e2e/harness/shard-plan.ts`'s shard set is `plan.md` §14.4's ten scenarios, and the
+Phase 5 exit gate asserts exactly those ten. Adding a flow to that set changes what the gate
+MEANS — it would silently widen the definition of "Phase 5 exits green" — which is a `plan.md`
+decision, not a shard file's call. T380 kept the exclusion on precisely this reason after
+deleting the circular one beside it. Whatever ships here must not quietly re-open that.
+
+**The shape that satisfies both.** A second, explicitly non-gating shard that runs these four on
+the same booted emulator and reports, so a failure becomes visible without any flow joining the
+exit gate's ten. The exit gate keeps asserting the same set it asserts today; the four stop
+being unobserved. That is a sketch, not a decision — the alternative (leave them unrun, and
+record that they are deliberately unobserved) is cheaper and must be argued against rather than
+skipped past.
+
+- [ ] The four flows run on a real dispatch, with the run id recorded
+- [ ] The Phase 5 exit gate still asserts exactly `plan.md` §14.4's ten scenarios, proven by a test
+- [ ] Whichever way it lands, `NON_EXIT_GATE_FLOW_NAMES`'s per-flow reasons match what is true after it
+- [ ] The four flows' own headers stop saying they have never been run, if they have
+
+#### T382 — The two surfaces had no reviewable picture of themselves, only screenshots that cannot carry motion
+
+`labels: phase-9, area: docs` · `depends-on: T380`
+
+The owner reviews the Android and web surfaces by looking at them, and until now the only
+artifacts to look at were still screenshots and the running apps themselves. A screenshot
+cannot carry the part of these surfaces that actually distinguishes them: how a turn arrives,
+how a tool block resolves from pending to done, how the todo ring fills, how the context ring
+reacts to a compaction. Reviewing motion meant running the app.
+
+`docs/ui-reference/` adds two self-contained HTML pages — one per surface — that open in a
+browser with no build step and no server. `pi-companion-app.html` carries all nine Android
+screens (Chat, Sessions, Live, Settings, and the five extension detail screens Settings links
+to) and plays one whole turn end to end on a loop: the prompt typed and sent, thinking, two
+reads and a grep, the todo widget, an edit whose diff lands hunk line by hunk line, a test run
+with its loader and elapsed counter, the advisor's report, a delegated child and its monitor, a
+peer letter, and an `ask_user` popup that blocks the turn. `pi-companion-web.html` is the
+desktop console with Sessions, the transcript and Live visible at once.
+
+**What keeps these from becoming a second, lying implementation.** Three things, all stated in
+`docs/ui-reference/README.md` rather than left as etiquette:
+
+1. Nothing here is imported, bundled, tested or served. Both files are leaves — no module in
+   either app reaches them, and `orphan-modules.mjs` does not scan `.html`, so there is no
+   import-graph claim to keep true either.
+2. The README says outright that the apps are the product and a page here is stale whenever the
+   two disagree, and that no file in the directory may be cited as authority for behaviour.
+   This is the same boundary the reference-only-documents rule draws, applied forward.
+3. Every session, path, diff and test count in the pages is invented, and the README says so.
+   A mockup full of placeholder text shows nothing, so the copy reads like a real session — and
+   a reader who assumes it records one would be wrong.
+
+**What the pages are faithful to**, which is the whole point of committing them rather than
+leaving them in a download folder: colour is `packages/design-tokens/src/tokens.ts` —
+`beautifulLight` and `beautifulDark` including both shadow sets, copied value for value, with
+all three theme states honoured. Motion follows the same sources the Android surface does:
+2 characters every 9ms with a 6-character blur tail, and rows on `fade-up 320ms
+cubic-bezier(.23,1,.32,1)` staggered 120ms. And both composers carry the owner's amendment —
+no mode/model/effort/context pills above the prompt bar, a context ring immediately right of
+the attachment button, opening the same four groups `PromptControlsMenu.tsx` ships (MODE,
+MODEL & EFFORT, QUEUE, CONTEXT), with effort clamped to each model's own ceiling and the
+unavailable steps shown rather than hidden.
+
+**Two audit conventions written down in the README rather than left to be re-argued.**
+`Badge.tsx:14:` and the `-38`/`+38` diff markers inside these pages are rendered tool output,
+which is the fixture-content class `CLAUDE.md`'s T272 section already separates from real
+line-number citations — the rule governs prose a reader trusts as true today, not a mockup of a
+terminal. And because `isAppSourcePath` admits `docs/**`, both pages sit inside
+`guard-capability-prose`'s denial scan, so a sentence here asserting a shipped capability is
+missing would fail the guard like any other document; the README says to keep the copy
+descriptive for that reason. Confirmed by running the guard rather than reasoning about it.
+
+**One formatter exemption, and why it is not a convenience.** `.oxfmtrc.json`'s
+`ignorePatterns` gains `docs/ui-reference/*.html`. oxfmt does format HTML, and running it on
+these two files reindents the static transcript lines on the extension screens — which `.ln`'s
+`white-space: pre-wrap` then renders as visible leading space. The `pre-wrap` is not
+incidental: a mockup of a terminal has to keep the runner's own indentation
+(`  Test Files  1 passed (1)`), and collapsing it would be the defect, not the fix. Formatting
+these files changes what they show. The exemption is written into
+`docs/ui-reference/README.md` as well, because an ignore entry nobody can explain is how an
+exemption outlives its reason.
+
+Adding it falsified a restated list one file over:
+`scripts/ci/run-guard-format-check-per-commit.mjs`'s module header enumerated the pattern list
+inline, and went one entry stale the moment this one landed. Corrected in the same commit, by
+dropping the enumeration rather than re-pinning it — what that sentence needs to say is that
+each commit's OWN `.oxfmtrc.json` governs, not which patterns it holds today. That is the
+choice `CLAUDE.md` records twice already for restated counts, applied to a restated list.
+
+**No `CAPABILITIES` entry.** The same answer as the last six times, and for the plainest
+reason: this task ships no capability. It adds two HTML documents and a README.
+`isShippedSourcePath` returns `false` for every file it touches.
+
+- [x] Both surfaces have a page that opens with no build step and no server
+- [x] The Android page carries all nine screens, not only the four frames
+- [x] The turn plays end to end and loops, so motion can be reviewed without running the app
+- [x] Colour comes from the token file value for value, in all three theme states
+- [x] Both composers show the owner's amendment, matching the groups `PromptControlsMenu.tsx` ships
+- [x] The README states that the apps are the product and these pages are never authority
+- [x] The README states the session data is invented, so no reader mistakes it for a record
+- [x] The two audit conventions are written down, so the next sweep does not re-litigate them
+- [x] The one formatter exemption is justified in both the config's neighbour doc and the ledger
+- [x] The stale pattern list the exemption falsified is corrected in the same commit

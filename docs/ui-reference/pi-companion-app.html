@@ -1,0 +1,1928 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Companion — Android screens</title>
+<!--
+  Pi Companion — the Android app, every screen in one standalone page.
+
+  Screens: Chat (S7, a whole turn played end to end and looped), Sessions (A1),
+  Live (A2), Settings (A3), and the five extension detail screens Settings
+  links to. Pick one from the rail on the left, or press 1-9 / arrow keys.
+
+  Colours are packages/design-tokens/src/tokens.ts (beautifulLight /
+  beautifulDark) verbatim. Motion follows D:/beautiful-ui: StreamText streams
+  at 2 chars / 9ms with a 6-char blur tail, ThinkingState's trace rows arrive
+  on fade-up 320ms cubic-bezier(.23,1,.32,1) staggered 120ms.
+
+  The composer carries the amendment: no mode/model/effort/context pills above
+  the prompt bar — a context ring sits immediately right of +, and opens the
+  Mode, Model & effort, Queue and Context controls.
+
+  No build step and no network except Google Fonts. Open it directly.
+-->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* ===================================================================== *
+ * Tokens — packages/design-tokens/src/tokens.ts
+ * ===================================================================== */
+:root {
+  color-scheme: light dark;
+
+  --page: #fafafb;
+  --canvas: #f1f2f3;
+  --surface: #ffffff;
+  --inset: #f7f8f9;
+  --hover: #f4f5f6;
+  --hover-2: #e7e9eb;
+  --field: #f2f2f3;
+  --ink: #1f2124;
+  --ink-2: #62656b;
+  --ink-3: #6b6f76;
+  --line: #ecedef;
+  --line-strong: #e0e2e5;
+  --line-soft: #f3f4f5;
+  --accent: #006dd3;
+  --accent-ink: #005aaf;
+  --accent-tint: #e9f3ff;
+  --green: #157f40;
+  --orange: #b1540a;
+  --red: #d52026;
+  --green-tint: #e8f5ed;
+  --orange-tint: #fdf1e5;
+  --red-tint: #fcecec;
+  --purple: #6d3fbf;
+  --teal: #0f766e;
+  --tool-success-bg: #f0f6f1;
+  --tool-error-bg: #fff1f0;
+  --extension-bg: #f4f2fc;
+  --accent-highlight: rgba(0, 109, 211, 0.18);
+  --tooltip-bg: #25272b;
+  --tooltip-fg: #f6f7f8;
+
+  --sh-hairline: 0 0 0 1px #ecedef;
+  --sh-btn: 0 0 0 1px #e0e2e5, 0 1px 2px rgba(0, 0, 0, 0.05);
+  --sh-card: 0 0 0 1px #ecedef, 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --sh-raised: 0 0 0 1px #ecedef, 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --sh-overlay: 0 0 0 1px #ecedef, 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --sh-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+
+  --ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* the stage the phone sits on — outside the product's own palette */
+  --stage: #e9eaec;
+  --stage-ink: #4a4d53;
+  --stage-line: #d6d8dc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #17181a;
+    --canvas: #1c1d1f;
+    --surface: #232427;
+    --inset: #1f2022;
+    --hover: #2a2b2e;
+    --hover-2: #313236;
+    --field: #2b2c2f;
+    --ink: #f2f3f4;
+    --ink-2: #a5a8ad;
+    --ink-3: #92959b;
+    --line: #2e3033;
+    --line-strong: #3a3c40;
+    --line-soft: #27282b;
+    --accent: #4da3ff;
+    --accent-ink: #7ec0ff;
+    --accent-tint: rgba(61, 154, 255, 0.16);
+    --green: #3cbb72;
+    --orange: #f68f3c;
+    --red: #f17579;
+    --green-tint: rgba(60, 187, 114, 0.14);
+    --orange-tint: rgba(246, 143, 60, 0.14);
+    --red-tint: rgba(238, 92, 97, 0.14);
+    --purple: #b88fe6;
+    --teal: #8dc8c0;
+    --tool-success-bg: #28312e;
+    --tool-error-bg: #3b2f31;
+    --extension-bg: #373340;
+    --accent-highlight: rgba(61, 154, 255, 0.24);
+    --tooltip-bg: #111214;
+    --tooltip-fg: #f2f3f4;
+
+    --sh-hairline: 0 0 0 1px rgba(255, 255, 255, 0.11);
+    --sh-btn: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --sh-card: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.2);
+    --sh-raised: 0 0 0 1px rgba(255, 255, 255, 0.13), 0 2px 10px rgba(0, 0, 0, 0.22);
+    --sh-overlay: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 8px 28px rgba(0, 0, 0, 0.34);
+    --sh-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+
+    --stage: #0f1012;
+    --stage-ink: #9ea1a7;
+    --stage-line: #26282b;
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: #17181a;
+  --canvas: #1c1d1f;
+  --surface: #232427;
+  --inset: #1f2022;
+  --hover: #2a2b2e;
+  --hover-2: #313236;
+  --field: #2b2c2f;
+  --ink: #f2f3f4;
+  --ink-2: #a5a8ad;
+  --ink-3: #92959b;
+  --line: #2e3033;
+  --line-strong: #3a3c40;
+  --line-soft: #27282b;
+  --accent: #4da3ff;
+  --accent-ink: #7ec0ff;
+  --accent-tint: rgba(61, 154, 255, 0.16);
+  --green: #3cbb72;
+  --orange: #f68f3c;
+  --red: #f17579;
+  --green-tint: rgba(60, 187, 114, 0.14);
+  --orange-tint: rgba(246, 143, 60, 0.14);
+  --red-tint: rgba(238, 92, 97, 0.14);
+  --purple: #b88fe6;
+  --teal: #8dc8c0;
+  --tool-success-bg: #28312e;
+  --tool-error-bg: #3b2f31;
+  --extension-bg: #373340;
+  --accent-highlight: rgba(61, 154, 255, 0.24);
+  --tooltip-bg: #111214;
+  --tooltip-fg: #f2f3f4;
+
+  --sh-hairline: 0 0 0 1px rgba(255, 255, 255, 0.11);
+  --sh-btn: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --sh-card: 0 0 0 1px rgba(255, 255, 255, 0.11), 0 1px 2px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.2);
+  --sh-raised: 0 0 0 1px rgba(255, 255, 255, 0.13), 0 2px 10px rgba(0, 0, 0, 0.22);
+  --sh-overlay: 0 0 0 1px rgba(255, 255, 255, 0.15), 0 8px 28px rgba(0, 0, 0, 0.34);
+  --sh-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+
+  --stage: #0f1012;
+  --stage-ink: #9ea1a7;
+  --stage-line: #26282b;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+img { max-width: 100%; }
+[hidden]:not([hidden="until-found"]) { display: none !important; }
+
+body {
+  background: var(--stage);
+  color: var(--stage-ink);
+  font-family: var(--ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ===================================================================== *
+ * Stage: screen index + phone
+ * ===================================================================== */
+
+.stage {
+  display: grid;
+  grid-template-columns: 250px auto;
+  gap: 34px;
+  align-items: start;
+  justify-content: center;
+  padding: 28px 24px 44px;
+}
+
+.index { position: sticky; top: 28px; }
+.index h1 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+.index .sub {
+  margin: 0 0 16px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--stage-ink);
+  max-width: 30ch;
+}
+.index .grp {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--stage-ink);
+  opacity: 0.75;
+  margin: 14px 0 6px;
+}
+.ix {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 9px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.ix + .ix { margin-top: 1px; }
+.ix:hover { background: rgba(127, 127, 127, 0.12); }
+.ix[aria-current="true"] { background: var(--surface); box-shadow: var(--sh-card); }
+.ix .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.ix .nm { font-size: 12.5px; font-weight: 500; }
+.ix .de { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 1px; line-height: 1.45; }
+
+.index .foot {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stage-line);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--stage-ink);
+}
+.index .foot kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1px 4px;
+  box-shadow: var(--sh-hairline);
+  color: var(--ink-2);
+}
+.tbtn {
+  margin-top: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--sh-btn);
+  color: var(--ink);
+  padding: 6px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.tbtn:hover { background: var(--hover); }
+
+/* --- the device ------------------------------------------------------ */
+
+.device {
+  width: 390px;
+  height: 844px;
+  border-radius: 46px;
+  background: #101114;
+  padding: 11px;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.07), 0 30px 60px -18px rgba(0, 0, 0, 0.5), 0 8px 20px -8px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 36px;
+  overflow: hidden;
+  background: var(--page);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+
+.status {
+  height: 42px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--page);
+  position: relative;
+  z-index: 4;
+}
+.status .r { margin-left: auto; display: flex; align-items: center; gap: 6px; opacity: 0.85; }
+.status svg { width: 15px; height: 12px; }
+.notch {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 104px;
+  height: 25px;
+  border-radius: 999px;
+  background: #101114;
+  z-index: 6;
+}
+
+.frames { position: relative; flex: 1; min-height: 0; }
+.fr {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--page);
+  min-height: 0;
+}
+.fr[hidden] { display: none !important; }
+.fr.enter { animation: fr-in 0.22s cubic-bezier(0.23, 1, 0.32, 1) both; }
+@keyframes fr-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* ===================================================================== *
+ * Shared app chrome
+ * ===================================================================== */
+
+.bar {
+  flex: none;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+}
+.bar-t {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-s {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+  margin-left: 6px;
+}
+
+.ic {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.ic:hover { background: var(--hover); color: var(--ink); }
+.ic svg { width: 17px; height: 17px; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex: none;
+}
+.pill .dot, .pill i.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.pill.run { background: var(--accent-tint); color: var(--accent-ink); }
+.pill.info { background: var(--extension-bg); color: var(--purple); }
+.pill.wait { background: var(--orange-tint); color: var(--orange); }
+.pill.idle { background: var(--inset); color: var(--ink-3); box-shadow: var(--sh-hairline); }
+.pill.ok { background: var(--green-tint); color: var(--green); }
+.pill.run .dot, .pill.info .dot { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+.pad {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pad::-webkit-scrollbar, .t::-webkit-scrollbar { width: 0; }
+
+.lbl {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 8px 2px 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--sh-card);
+  cursor: pointer;
+  text-align: left;
+  border: 0;
+  color: inherit;
+  width: 100%;
+}
+.row:hover { background: var(--hover); }
+.row .g { flex: 1; min-width: 0; }
+.row .n { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .s {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card {
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--sh-card);
+  padding: 12px 13px;
+}
+.card h3 { margin: 0; font-size: 12.5px; font-weight: 600; }
+.card p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.card .mono { font-family: var(--mono); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--sh-btn);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+.chip[data-on] { background: var(--accent-tint); color: var(--accent-ink); box-shadow: none; }
+
+.sbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 11px;
+  border-radius: 10px;
+  background: var(--field);
+  box-shadow: var(--sh-inset-field);
+  color: var(--ink-3);
+}
+.sbar .inp { flex: 1; font-size: 12.5px; color: var(--ink); outline: none; }
+
+.sw {
+  width: 40px;
+  height: 24px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--line-strong);
+  padding: 2px;
+  display: flex;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+.sw i {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--sh-btn);
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.sw[data-on="on"] { background: var(--accent); }
+.sw[data-on="on"] i { transform: translateX(16px); }
+
+.dim { color: var(--ink-3); }
+.mu { color: var(--ink-3); }
+.tx { color: var(--ink); }
+.wa { color: var(--orange); }
+.er { color: var(--red); }
+.ok-t { color: var(--green); }
+
+/* ===================================================================== *
+ * S7 transcript
+ * ===================================================================== */
+
+.t {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 12px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  scroll-behavior: smooth;
+}
+
+.ln {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.62;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.blk {
+  border-radius: 14px;
+  padding: 9px 11px;
+  background: var(--inset);
+  box-shadow: var(--sh-hairline);
+}
+.blk.usr { background: var(--accent-tint); box-shadow: none; }
+.blk.usr .ln { color: var(--ink); }
+.blk.ok { background: var(--tool-success-bg); }
+.blk.pend { background: var(--inset); }
+.blk.err { background: var(--tool-error-bg); }
+.blk.ext { background: var(--extension-bg); }
+
+.tt { color: var(--ink); font-weight: 700; }
+.pa { color: var(--accent-ink); }
+.tchip {
+  background: var(--surface);
+  border-radius: 5px;
+  padding: 0 4px;
+  box-shadow: var(--sh-hairline);
+}
+.xl { color: var(--purple); font-weight: 700; }
+.hit { background: var(--accent-highlight); color: inherit; border-radius: 3px; }
+.inv { color: var(--ink); }
+
+.dl { display: block; border-radius: 4px; padding: 0 4px; }
+.dl.ctx { color: var(--ink-3); }
+.dl.add { background: var(--green-tint); color: var(--green); }
+.dl.rem { background: var(--red-tint); color: var(--red); }
+
+.md .ln { color: var(--ink); }
+.md { padding: 0 2px; }
+
+/* thinking */
+.think {
+  border-left: 2px solid var(--line-strong);
+  padding: 1px 0 1px 11px;
+}
+.thead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-family: var(--ui);
+}
+.thead svg { flex: none; }
+.thead .chev { transition: transform 0.18s ease; }
+.think.closed .ln { display: none; }
+.think.closed .chev { transform: rotate(-90deg); }
+.think .ln { color: var(--ink-3); font-style: italic; }
+
+.shim {
+  background: linear-gradient(90deg, var(--ink-3) 0%, var(--ink) 45%, var(--ink-3) 90%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shim 1.9s linear infinite;
+}
+@keyframes shim { from { background-position: 130% 0; } to { background-position: -80% 0; } }
+
+/* bash */
+.bash { display: flex; flex-direction: column; gap: 0; }
+.bash .bd { height: 1px; background: var(--line-strong); display: block; }
+.bash-in { padding: 8px 2px; display: flex; flex-direction: column; }
+.bash-cmd { color: var(--ink); }
+.load { display: flex; align-items: center; gap: 8px; }
+.cancel { font-size: 10.5px; }
+.bash-out { color: var(--ink-2); }
+
+.pxl {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 3px);
+  grid-auto-rows: 3px;
+  gap: 1px;
+  flex: none;
+}
+.pxl i { background: var(--accent); border-radius: 0.5px; opacity: 0.18; animation: pxl 1.05s linear infinite; }
+.pxl i:nth-child(1) { animation-delay: 0ms; }
+.pxl i:nth-child(2) { animation-delay: 60ms; }
+.pxl i:nth-child(3) { animation-delay: 120ms; }
+.pxl i:nth-child(4) { animation-delay: 420ms; }
+.pxl i:nth-child(5) { animation-delay: 180ms; }
+.pxl i:nth-child(6) { animation-delay: 240ms; }
+.pxl i:nth-child(7) { animation-delay: 360ms; }
+.pxl i:nth-child(8) { animation-delay: 330ms; }
+.pxl i:nth-child(9) { animation-delay: 300ms; }
+@keyframes pxl { 0%, 70%, 100% { opacity: 0.18; } 30% { opacity: 1; } }
+
+.elapsed { font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* streaming */
+.stream-tail { filter: blur(0.4px); opacity: 0.7; }
+.stream-caret {
+  display: inline-block;
+  width: 6px;
+  height: 1.05em;
+  vertical-align: -0.18em;
+  margin-left: 1px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: caret 1.05s step-end infinite;
+}
+.stream-caret.is-streaming { animation: none; }
+@keyframes caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* ===================================================================== *
+ * Todo overlay (docked above the composer)
+ * ===================================================================== */
+
+.ovslot { flex: none; padding: 0 12px; }
+.ovslot:empty { display: none; }
+.ov {
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--sh-card);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.ov-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.ov-head .lab { font-family: var(--mono); font-size: 11px; flex: 1; }
+.ov.closed .ov-row, .ov.closed .ov-hint { display: none; }
+.ov-row { display: flex; gap: 8px; font-size: 11px; line-height: 1.6; }
+.ov-row .g { width: 11px; flex: none; text-align: center; }
+.ov-row[data-todo="done"] .sj { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.ov-row[data-todo="now"] .sj { color: var(--ink); font-weight: 500; }
+.ov-row .sj { color: var(--ink-2); }
+.ov-hint { font-size: 10.5px; }
+
+.ring { display: inline-flex; flex: none; }
+.ring .bg { fill: none; stroke: var(--line-strong); stroke-width: 2; }
+.ring .p {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* ===================================================================== *
+ * Composer — + then the context ring (the amendment)
+ * ===================================================================== */
+
+.cmp { flex: none; padding: 4px 12px 12px; background: var(--page); position: relative; }
+.cmp::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 22px;
+  background: linear-gradient(to top, var(--page), transparent);
+  pointer-events: none;
+}
+.cmp-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: var(--sh-raised);
+  padding: 6px 6px 6px 4px;
+}
+.cmp-box .inp {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 7px 2px;
+  outline: none;
+  color: var(--ink);
+  max-height: 110px;
+  overflow-y: auto;
+}
+.cmp-box .inp:empty::before { content: attr(data-ph); color: var(--ink-3); }
+.cmp .ic.send { background: var(--accent); color: var(--surface); }
+:root[data-theme="dark"] .cmp .ic.send { color: #0d1b2a; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cmp .ic.send { color: #0d1b2a; }
+}
+.cmp .ic.send:hover { filter: brightness(1.06); }
+
+.ctxbtn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  position: relative;
+}
+.ctxbtn:hover { background: var(--hover); }
+.ctxbtn[data-open] { background: var(--accent-tint); }
+.ctx-ring .bg { fill: none; stroke: var(--line-strong); stroke-width: 2.5; }
+.ctx-ring .p {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ctx-ring.wa .p { stroke: var(--orange); }
+.ctx-ring.er .p { stroke: var(--red); }
+.ctx-ring .pct {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  fill: var(--ink-2);
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the controls sheet the ring opens */
+.pmenu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% - 4px);
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--sh-overlay);
+  padding: 6px;
+  z-index: 12;
+  animation: fade-up 0.2s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.pm-lbl {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 9px 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.pm-lbl b {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.pm-g + .pm-g { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
+.pm-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  padding: 9px 9px;
+  min-height: 40px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-size: 12.5px;
+}
+.pm-row:hover { background: var(--hover); }
+.pm-row .tick { opacity: 0; color: var(--accent); flex: none; }
+.pm-row[data-on] .tick { opacity: 1; }
+.pm-row[data-on] .pm-n { font-weight: 600; }
+.pm-row[data-off] { opacity: 0.42; cursor: default; }
+.pm-n { flex: 1; min-width: 0; }
+.pm-s { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+
+.seg {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  margin: 0 6px 5px;
+  background: var(--field);
+  border-radius: 10px;
+}
+.seg button {
+  flex: 1;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  min-height: 30px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-btn); }
+.seg button:disabled { opacity: 0.38; cursor: default; }
+
+.usebar { height: 6px; border-radius: 999px; background: var(--field); overflow: hidden; margin: 2px 9px 7px; display: flex; }
+.usebar i { display: block; height: 100%; }
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 0 9px 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 6px; height: 6px; border-radius: 2px; }
+
+/* ask_user popup, docked to the prompt bar */
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 11, 12, 0.4);
+  z-index: 10;
+  animation: fade 0.18s ease both;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.pop {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% - 4px);
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--sh-overlay);
+  padding: 13px 14px;
+  z-index: 12;
+  animation: fade-up 0.24s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.pop .h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pop .h .t { font-size: 12.5px; font-weight: 600; }
+.pop .q { font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--ink); margin-bottom: 10px; }
+.pop .opts { display: flex; flex-direction: column; gap: 6px; }
+.opt {
+  border: 0;
+  border-radius: 10px;
+  background: var(--inset);
+  box-shadow: var(--sh-hairline);
+  padding: 9px 11px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+  min-height: 44px;
+}
+.opt:hover { background: var(--hover); }
+.opt b { display: block; font-size: 12px; font-weight: 600; }
+.opt small { color: var(--ink-3); font-size: 10.5px; }
+
+/* sessions bottom action bar */
+.actbar { flex: none; display: flex; gap: 8px; padding: 0 12px 14px; }
+
+/* extension detail screens */
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; color: var(--ink); }
+.mini {
+  border-radius: 12px;
+  background: var(--inset);
+  box-shadow: var(--sh-hairline);
+  padding: 9px 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .stage { grid-template-columns: 1fr; gap: 20px; }
+  .index { position: static; }
+  .device { transform-origin: top left; }
+}
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <!-- ===================== screen index ===================== -->
+  <nav class="index" aria-label="Screens">
+    <h1>Pi Companion — Android</h1>
+    <p class="sub">Every screen the app ships, in the order a person meets them. The chat screen plays one whole turn end to end and loops.</p>
+
+    <div class="grp">Main</div>
+    <button class="ix" data-go="s7" aria-current="true"><span class="k">1</span><span><span class="nm">Chat</span><span class="de">S7 — a turn, played live</span></span></button>
+    <button class="ix" data-go="a1"><span class="k">2</span><span><span class="nm">Sessions</span><span class="de">A1 — every live session on the host</span></span></button>
+    <button class="ix" data-go="a2"><span class="k">3</span><span><span class="nm">Live</span><span class="de">A2 — subagents, workflow, context</span></span></button>
+    <button class="ix" data-go="a3"><span class="k">4</span><span><span class="nm">Settings</span><span class="de">A3 — host, defaults, extensions</span></span></button>
+
+    <div class="grp">Extensions that draw</div>
+    <button class="ix" data-go="e1"><span class="k">5</span><span><span class="nm">todo</span><span class="de">widget above the editor</span></span></button>
+    <button class="ix" data-go="e2"><span class="k">6</span><span><span class="nm">advisor</span><span class="de">pi-advisor-review</span></span></button>
+    <button class="ix" data-go="e3"><span class="k">7</span><span><span class="nm">delegate</span><span class="de">pi-herdr-delegate.monitor</span></span></button>
+    <button class="ix" data-go="e4"><span class="k">8</span><span><span class="nm">peer</span><span class="de">pi-herdr-peer</span></span></button>
+    <button class="ix" data-go="e5"><span class="k">9</span><span><span class="nm">ask-user · btw</span><span class="de">popup docked to the prompt bar</span></span></button>
+
+    <div class="foot">
+      <kbd>1</kbd>–<kbd>9</kbd> jump · <kbd>←</kbd> <kbd>→</kbd> step · <kbd>R</kbd> replay the turn
+      <br>
+      <button class="tbtn" id="theme-btn" type="button">Theme: System</button>
+    </div>
+  </nav>
+
+  <!-- ===================== the device ======================= -->
+  <div class="device">
+    <div class="notch" aria-hidden="true"></div>
+    <div class="screen">
+      <div class="status">
+        <span>9:41</span>
+        <span class="r">
+          <svg viewBox="0 0 24 18" fill="currentColor" aria-hidden="true"><rect x="0" y="12" width="3.4" height="6" rx="1"/><rect x="5.4" y="8.5" width="3.4" height="9.5" rx="1"/><rect x="10.8" y="5" width="3.4" height="13" rx="1"/><rect x="16.2" y="1" width="3.4" height="17" rx="1"/></svg>
+          <svg viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="0.7" y="0.7" width="21" height="12.6" rx="3.4"/><rect x="2.6" y="2.6" width="14" height="8.8" rx="2" fill="currentColor" stroke="none"/><path d="M23.6 5v4" stroke-linecap="round"/></svg>
+        </span>
+      </div>
+
+      <div class="frames" id="frames">
+
+        <!-- ============================================ S7 · chat -->
+        <section class="fr" data-frame="s7">
+          <div class="bar">
+            <button class="ic" data-go="a1" aria-label="Sessions">☰</button>
+            <div class="bar-t">pi-companion <span class="bar-s">⎇ phase3/t25a</span></div>
+            <span class="pill idle" id="s7-pill">Idle</span>
+            <button class="ic" data-go="a2" aria-label="Live">⧉</button>
+          </div>
+
+          <div class="t" data-flow></div>
+          <div class="ovslot"></div>
+
+          <div class="cmp">
+            <div class="cmp-box">
+              <button class="ic plus" aria-label="Add attachment">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button class="ctxbtn" id="ctxbtn" aria-label="Session controls">
+                <svg class="ctx-ring" id="ctx-ring" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+                  <circle class="bg" cx="14" cy="14" r="12"/>
+                  <circle class="p" id="ctx-arc" cx="14" cy="14" r="12" stroke-dasharray="75.40" stroke-dashoffset="75.40"/>
+                  <text class="pct" id="ctx-pct" x="14" y="17">12</text>
+                </svg>
+              </button>
+              <div class="inp" contenteditable="true" data-ph="Type a prompt…" aria-label="Prompt"></div>
+              <button class="ic voice" aria-label="Voice">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v3.5M9 21h6"/></svg>
+              </button>
+              <button class="ic send" aria-label="Send prompt">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================================= A1 · sessions -->
+        <section class="fr" data-frame="a1" hidden>
+          <div class="bar">
+            <button class="ic" data-go="s7" aria-label="Back to chat">✕</button>
+            <div class="bar-t">Sessions</div>
+            <button class="ic" aria-label="Search">⌕</button>
+          </div>
+          <div class="pad">
+            <div class="sbar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+              <span class="inp" contenteditable="true" data-ph="Search sessions"></span>
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <span class="chip" data-filt="all" data-on>All</span>
+              <span class="chip" data-filt="run">Active</span>
+              <span class="chip" data-filt="idle">Idle</span>
+              <span class="chip" data-filt="wait">Needs you</span>
+            </div>
+
+            <div class="lbl" data-grp>pi-companion · 4</div>
+            <button class="row" data-go="s7" data-st="run">
+              <span class="g"><span class="n">phase3/t25a — web primitives</span><span class="s">18 turns · 184k · 28m</span></span>
+              <span class="pill run"><i class="dot"></i>Working</span>
+            </button>
+            <button class="row" data-go="s7" data-st="run">
+              <span class="g"><span class="n">phase3/t26a — android primitives</span><span class="s">9 turns · 71k · 7m</span></span>
+              <span class="pill run"><i class="dot"></i>Working</span>
+            </button>
+            <button class="row" data-go="s7" data-st="wait">
+              <span class="g"><span class="n">phase2/t24</span><span class="s">31 turns · 402k · idle 2h</span></span>
+              <span class="pill wait"><i class="dot"></i>Needs you</span>
+            </button>
+            <button class="row" data-go="s7" data-st="idle">
+              <span class="g"><span class="n">main</span><span class="s">no session</span></span>
+              <span class="pill idle">Idle</span>
+            </button>
+
+            <div class="lbl" data-grp>aivigil · 1</div>
+            <button class="row" data-st="idle">
+              <span class="g"><span class="n">main</span><span class="s">4 turns · 22k · idle 40m</span></span>
+              <span class="pill idle">Idle</span>
+            </button>
+          </div>
+          <div class="actbar">
+            <span class="chip" style="flex:1;justify-content:center;height:44px">+ New session</span>
+            <button class="ic" data-go="s7" style="width:44px;height:44px;background:var(--surface);box-shadow:var(--sh-card)" aria-label="Home">⌂</button>
+            <button class="ic" data-go="a3" style="width:44px;height:44px" aria-label="Settings">⚙</button>
+          </div>
+        </section>
+
+        <!-- =========================================== A2 · live -->
+        <section class="fr" data-frame="a2" hidden>
+          <div class="bar">
+            <button class="ic" data-go="s7" aria-label="Back">‹</button>
+            <div class="bar-t">Live</div>
+            <span class="pill run"><i class="dot"></i><span class="elapsed" data-base="252">4m 12.0s</span></span>
+          </div>
+          <div class="pad">
+            <div class="card">
+              <h3>Subagents</h3>
+              <p>2 running · 5 total</p>
+              <div style="margin-top:9px;display:flex;flex-direction:column;gap:9px">
+                <div class="sub" style="display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px">
+                  <span class="pxl" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span style="flex:1;min-width:0;color:var(--ink)">ui-implementer</span>
+                  <span class="elapsed" data-base="1684.2">28m 4.2s</span>
+                </div>
+                <div class="sub" style="display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px">
+                  <span class="pxl" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span style="flex:1;min-width:0;color:var(--ink)">docs-writer</span>
+                  <span class="elapsed" data-base="421.7">7m 1.7s</span>
+                </div>
+                <div class="sub" style="display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px">
+                  <span class="dim" style="width:11px;text-align:center">○</span>
+                  <span style="flex:1;min-width:0;color:var(--ink)">test-writer</span>
+                  <span class="pill idle">Queued</span>
+                </div>
+                <div class="sub" style="display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px">
+                  <span class="ok-t" style="width:11px;text-align:center">✓</span>
+                  <span style="flex:1;min-width:0;color:var(--ink)">a11y-auditor</span>
+                  <span class="dim">12m</span>
+                </div>
+                <div class="sub" style="display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px">
+                  <span class="ok-t" style="width:11px;text-align:center">✓</span>
+                  <span style="flex:1;min-width:0;color:var(--ink)">token-linter</span>
+                  <span class="dim">4m</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Workflow</h3>
+              <p class="mono">phase3_design_system · round 1 · 1h 02m · 1.2M tokens</p>
+              <div style="margin-top:6px">
+                <div style="display:flex;align-items:center;gap:10px;height:34px;font-size:12px"><span style="flex:1">Implement</span><span class="dim mono" style="font-size:10.5px">2/4</span><span style="width:70px;height:5px;border-radius:99px;background:var(--inset);overflow:hidden"><span style="display:block;height:100%;width:50%;background:var(--accent);border-radius:99px"></span></span></div>
+                <div style="display:flex;align-items:center;gap:10px;height:34px;font-size:12px"><span style="flex:1">Verify</span><span class="dim mono" style="font-size:10.5px">0/1</span><span style="width:70px;height:5px;border-radius:99px;background:var(--inset);overflow:hidden"><span style="display:block;height:100%;width:0%;background:var(--accent);border-radius:99px"></span></span></div>
+                <div style="display:flex;align-items:center;gap:10px;height:34px;font-size:12px"><span style="flex:1">Merge</span><span class="dim mono" style="font-size:10.5px">0/1</span><span style="width:70px;height:5px;border-radius:99px;background:var(--inset);overflow:hidden"><span style="display:block;height:100%;width:0%;background:var(--accent);border-radius:99px"></span></span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Context</h3>
+              <p>41.2% of 200k · auto-compaction on</p>
+              <div style="height:6px;border-radius:99px;background:var(--inset);overflow:hidden;margin-top:8px"><span style="display:block;height:100%;width:41.2%;background:var(--accent);border-radius:99px"></span></div>
+              <p class="mono" style="margin-top:8px">↑12.4k ↓3.1k R84k W12k CH92.4% $0.312</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================================= A3 · settings -->
+        <section class="fr" data-frame="a3" hidden>
+          <div class="bar">
+            <button class="ic" data-go="a1" aria-label="Back">‹</button>
+            <div class="bar-t">Settings</div>
+          </div>
+          <div class="pad">
+            <div class="lbl">host</div>
+            <div class="row">
+              <span class="g"><span class="n">mbp-14</span><span class="s">192.168.1.40:6768 · paired Tue</span></span>
+              <span class="pill run"><i class="dot"></i>Online</span>
+            </div>
+
+            <div class="lbl">defaults</div>
+            <button class="row" data-cycle="claude-sonnet-5|claude-opus-5|claude-haiku-4-5">
+              <span class="g"><span class="n">Model</span><span class="s">claude-sonnet-5</span></span>
+              <span class="dim">›</span>
+            </button>
+            <button class="row" data-cycle="off|minimal|low|medium|high|xhigh|max">
+              <span class="g"><span class="n">Thinking effort</span><span class="s">high</span></span>
+              <span class="dim">›</span>
+            </button>
+            <div class="row">
+              <span class="g"><span class="n">Auto-compaction</span><span class="s">compact at 90% of the window</span></span>
+              <span class="sw" data-sw data-on="on"><i></i></span>
+            </div>
+            <div class="row">
+              <span class="g"><span class="n">Ask before every tool</span><span class="s">hold a block to approve</span></span>
+              <span class="sw" data-sw data-on="off"><i></i></span>
+            </div>
+
+            <div class="lbl">extensions that draw</div>
+            <button class="row" data-go="e1"><span class="g"><span class="n">todo</span><span class="s">widget above the editor</span></span><span class="dim">›</span></button>
+            <button class="row" data-go="e2"><span class="g"><span class="n">advisor</span><span class="s">pi-advisor-review</span></span><span class="dim">›</span></button>
+            <button class="row" data-go="e3"><span class="g"><span class="n">pi-herdr-delegate</span><span class="s">pi-herdr-delegate.monitor</span></span><span class="dim">›</span></button>
+            <button class="row" data-go="e4"><span class="g"><span class="n">pi-herdr-peer</span><span class="s">pi-herdr-peer</span></span><span class="dim">›</span></button>
+            <button class="row" data-go="e5"><span class="g"><span class="n">ask-user · btw</span><span class="s">popup docked to the prompt bar</span></span><span class="dim">›</span></button>
+
+            <div class="card">
+              <h3>Loaded but silent</h3>
+              <p>plan-mode, mcp, vision-proxy, project-memory, handoff, capabilities, web-access and prompt-arbitrage change what the model can do rather than what you see. Their evidence is the reply you read, the tool block in the transcript, or the file in Downloads.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================ E1 · todo extension -->
+        <section class="fr" data-frame="e1" hidden>
+          <div class="bar"><button class="ic" data-go="a3" aria-label="Back">‹</button><div class="bar-t">todo</div><span class="pill ok">drawing</span></div>
+          <div class="pad">
+            <div class="card">
+              <h3>Where it draws</h3>
+              <p>A widget docked above the prompt bar, not a transcript block. It stays put while the transcript scrolls, so the current task is readable at any scroll position.</p>
+            </div>
+            <div class="lbl">as it appears now</div>
+            <div class="ov">
+              <div class="ov-head"><span class="ring"><svg width="18" height="18" viewBox="0 0 18 18"><circle class="bg" cx="9" cy="9" r="8"/><circle class="p" cx="9" cy="9" r="8" stroke-dasharray="50.27" stroke-dashoffset="25.14"/></svg></span><span class="lab">◐ Todos (2/4)</span></div>
+              <div class="ov-row" data-todo="done"><span class="g ok-t">✓</span><span class="sj">Add ghost to ButtonVariant and the style map</span></div>
+              <div class="ov-row" data-todo="done"><span class="g ok-t">✓</span><span class="sj">Run the Button tests</span></div>
+              <div class="ov-row" data-todo="now"><span class="g" style="color:var(--accent)">◐</span><span class="sj">Advisor review of the diff</span></div>
+              <div class="ov-row" data-todo="wait"><span class="g dim">○</span><span class="sj">Answer the token-name question</span></div>
+              <div class="ov-hint dim">└─ tap the ring to collapse</div>
+            </div>
+            <div class="lbl">contract</div>
+            <dl class="kv">
+              <dt>channel</dt><dd>todo</dd>
+              <dt>payload</dt><dd>{ subjects: string[], states: wait|now|done }</dd>
+              <dt>states</dt><dd>○ wait · ◐ now · ✓ done</dd>
+              <dt>ring</dt><dd>done ÷ total, r=8, dasharray 50.27</dd>
+            </dl>
+          </div>
+        </section>
+
+        <!-- ============================= E2 · advisor extension -->
+        <section class="fr" data-frame="e2" hidden>
+          <div class="bar"><button class="ic" data-go="a3" aria-label="Back">‹</button><div class="bar-t">advisor</div><span class="pill ok">drawing</span></div>
+          <div class="pad">
+            <div class="card">
+              <h3>Where it draws</h3>
+              <p>An extension block in the transcript, purple-tinted so a report from a policy is never mistaken for the model's own reply. It writes itself out line by line rather than appearing finished.</p>
+            </div>
+            <div class="lbl">last report</div>
+            <div class="blk ext">
+              <div class="ln"><span class="xl">[pi-advisor-review]</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="tx">Reviewed 1 file, 6 lines added, 1 removed.</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="wa">!</span> <span class="tx">Button.tsx ghost uses tokens.color.transparent</span></div>
+              <div class="ln">  <span class="mu">that token does not exist yet — accent or brand is the open question</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="dim">policy: review-before-commit · 9.8s</span></div>
+            </div>
+            <div class="lbl">contract</div>
+            <dl class="kv">
+              <dt>channel</dt><dd>pi-advisor-review</dd>
+              <dt>trigger</dt><dd>before commit, on the staged diff</dd>
+              <dt>severity</dt><dd>! warn · ✕ block · ✓ clean</dd>
+            </dl>
+          </div>
+        </section>
+
+        <!-- ============================ E3 · delegate extension -->
+        <section class="fr" data-frame="e3" hidden>
+          <div class="bar"><button class="ic" data-go="a3" aria-label="Back">‹</button><div class="bar-t">pi-herdr-delegate</div><span class="pill ok">drawing</span></div>
+          <div class="pad">
+            <div class="card">
+              <h3>Where it draws</h3>
+              <p>The monitor reports a child session's end in the parent's transcript. The child has its own row on Sessions; this block is how the parent learns it stopped, and why.</p>
+            </div>
+            <div class="lbl">last report</div>
+            <div class="blk ext">
+              <div class="ln"><span class="xl">[pi-herdr-delegate.monitor]</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="tx">Child </span><span class="pa">t26a:android-ghost</span><span class="tx"> stopped.</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="mu">reason   </span><span class="tx">completed · 9 turns · 71k</span></div>
+              <div class="ln"><span class="mu">worktree </span><span class="tx">phase3/t26a</span></div>
+              <div class="ln"><span class="mu">handback </span><span class="tx">2 files changed, tests green</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="dim">monitor: poll 5s · 4m 18s watched</span></div>
+            </div>
+            <div class="lbl">contract</div>
+            <dl class="kv">
+              <dt>channel</dt><dd>pi-herdr-delegate.monitor</dd>
+              <dt>emits</dt><dd>started · stopped · failed</dd>
+              <dt>isolation</dt><dd>one git worktree per child</dd>
+            </dl>
+          </div>
+        </section>
+
+        <!-- ================================ E4 · peer extension -->
+        <section class="fr" data-frame="e4" hidden>
+          <div class="bar"><button class="ic" data-go="a3" aria-label="Back">‹</button><div class="bar-t">pi-herdr-peer</div><span class="pill ok">drawing</span></div>
+          <div class="pad">
+            <div class="card">
+              <h3>Where it draws</h3>
+              <p>A letter from another session on the same host. It is addressed, not broadcast — the sender is a peer with its own transcript, and replying opens that session rather than answering here.</p>
+            </div>
+            <div class="lbl">last letter</div>
+            <div class="blk ext">
+              <div class="ln"><span class="xl">[pi-herdr-peer]</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="mu">from </span><span class="pa">t26a:android-ghost</span></div>
+              <div class="ln"><span class="mu">re   </span><span class="tx">the token name</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="tx">Android has the same gap. I used color.surfaceTransparent locally so the</span></div>
+              <div class="ln"><span class="tx">build would pass — do not copy it, it is a placeholder. Whatever you</span></div>
+              <div class="ln"><span class="tx">settle on, I will rename to match.</span></div>
+              <div class="ln"></div>
+              <div class="ln"><span class="dim">peer · 1 unread · reply opens t26a</span></div>
+            </div>
+            <div class="lbl">contract</div>
+            <dl class="kv">
+              <dt>channel</dt><dd>pi-herdr-peer</dd>
+              <dt>addressing</dt><dd>session id, never broadcast</dd>
+              <dt>reply</dt><dd>opens the sender's session</dd>
+            </dl>
+          </div>
+        </section>
+
+        <!-- ============================= E5 · ask-user extension -->
+        <section class="fr" data-frame="e5" hidden>
+          <div class="bar"><button class="ic" data-go="a3" aria-label="Back">‹</button><div class="bar-t">ask-user · btw</div><span class="pill ok">drawing</span></div>
+          <div class="pad">
+            <div class="card">
+              <h3>Where it draws</h3>
+              <p>A popup docked to the prompt bar, over a scrim. It blocks the turn, so it is the one extension that changes the session pill to <b>Needs you</b> — and typing instead of choosing is allowed, which answers in your own words.</p>
+            </div>
+            <div class="lbl">as it appears</div>
+            <div class="mini" style="padding:0;overflow:hidden">
+              <div class="pop" style="position:static;box-shadow:none;border-radius:12px;animation:none">
+                <div class="h"><span class="pill info"><i class="dot"></i>ask_user</span><span class="t">token name</span></div>
+                <div class="q">ghost needs a transparent background token. Which name should it take?</div>
+                <div class="opts">
+                  <button class="opt" type="button"><b>color.transparent</b><small>new primitive, matches the CSS keyword</small></button>
+                  <button class="opt" type="button"><b>color.surface.none</b><small>fits the surface scale already in the file</small></button>
+                  <button class="opt" type="button"><b>Let me type it</b><small>answer in the prompt bar instead</small></button>
+                </div>
+              </div>
+            </div>
+            <div class="lbl">contract</div>
+            <dl class="kv">
+              <dt>channel</dt><dd>ask-user · btw</dd>
+              <dt>blocks</dt><dd>yes — session pill becomes Needs you</dd>
+              <dt>escape</dt><dd>type a free answer in the prompt bar</dd>
+            </dl>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ===================================================================== *
+ * helpers
+ * ===================================================================== */
+
+const escH = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+const SPARK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>';
+const CHEV = '<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+const PXL = '<span class="pxl" aria-hidden="true">' + "<i></i>".repeat(9) + "</span>";
+const TICK = '<svg class="tick" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg>';
+const RING =
+  '<span class="ring"><svg width="18" height="18" viewBox="0 0 18 18"><circle class="bg" cx="9" cy="9" r="8"/>' +
+  '<circle class="p" cx="9" cy="9" r="8" stroke-dasharray="50.27" stroke-dashoffset="50.27"/></svg></span>';
+
+const GL = { wait: ["○", "dim"], now: ["◐", "wa"], done: ["✓", "ok-t"] };
+const EFF = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const MODELS = { "claude-sonnet-5": "xhigh", "claude-opus-5": "max", "claude-haiku-4-5": "medium" };
+const shortM = (m) => m.replace("claude-", "");
+const fmtTok = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(Math.round(n)));
+const fmt = (s) => (s < 60 ? s.toFixed(1) + "s" : Math.floor(s / 60) + "m " + (s % 60).toFixed(1) + "s");
+
+/* session state the composer's controls read and write */
+const SESSION = { mode: "build", model: "claude-sonnet-5", eff: "high", pct: 12, total: 200000, steer: "Steer", follow: "Send queued" };
+
+/* ===================================================================== *
+ * screen routing
+ * ===================================================================== */
+
+const ORDER = ["s7", "a1", "a2", "a3", "e1", "e2", "e3", "e4", "e5"];
+const frames = () => [...document.querySelectorAll(".fr")];
+let current = "s7";
+
+function go(name) {
+  if (!ORDER.includes(name)) return;
+  current = name;
+  frames().forEach((f) => {
+    const on = f.dataset.frame === name;
+    f.hidden = !on;
+    if (on) {
+      f.classList.remove("enter");
+      void f.offsetWidth;
+      f.classList.add("enter");
+    }
+  });
+  document.querySelectorAll(".ix").forEach((b) => b.setAttribute("aria-current", String(b.dataset.go === name)));
+  closeMenu();
+  if (name === "s7") restartFlow();
+}
+
+document.addEventListener("click", (e) => {
+  const nav = e.target.closest("[data-go]");
+  if (nav) {
+    go(nav.dataset.go);
+    return;
+  }
+  if (!e.target.closest(".pmenu") && !e.target.closest("#ctxbtn")) closeMenu();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.isContentEditable) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= ORDER.length) return go(ORDER[n - 1]);
+  if (e.key === "ArrowRight") return go(ORDER[(ORDER.indexOf(current) + 1) % ORDER.length]);
+  if (e.key === "ArrowLeft") return go(ORDER[(ORDER.indexOf(current) - 1 + ORDER.length) % ORDER.length]);
+  if (e.key === "r" || e.key === "R") { go("s7"); restartFlow(); }
+  if (e.key === "Escape") closeMenu();
+});
+
+/* ===================================================================== *
+ * the context ring and its controls sheet (the amendment)
+ * ===================================================================== */
+
+const ctxBtn = document.getElementById("ctxbtn");
+const ctxArc = document.getElementById("ctx-arc");
+const ctxPct = document.getElementById("ctx-pct");
+const ctxRing = document.getElementById("ctx-ring");
+const C = 2 * Math.PI * 12;
+
+const CTX_SLICES = [
+  { k: "System + tools", f: 0.14, c: "var(--teal)" },
+  { k: "Files read", f: 0.47, c: "var(--accent)" },
+  { k: "Transcript", f: 0.31, c: "var(--purple)" },
+  { k: "Tool results", f: 0.08, c: "var(--orange)" },
+];
+
+function paintCtx() {
+  const p = Math.min(100, SESSION.pct);
+  ctxArc.setAttribute("stroke-dashoffset", (C * (1 - p / 100)).toFixed(2));
+  ctxPct.textContent = Math.round(p);
+  ctxRing.className = "ctx-ring " + (p > 90 ? "er" : p > 70 ? "wa" : "");
+  ctxBtn.title = "Session controls — " + Math.round(p) + "% of the context window used";
+  const m = document.querySelector(".pmenu");
+  if (m) renderMenu(m);
+}
+
+let menuOpen = false;
+
+function closeMenu() {
+  document.querySelectorAll(".pmenu").forEach((m) => m.remove());
+  ctxBtn.removeAttribute("data-open");
+  menuOpen = false;
+}
+
+function renderMenu(el) {
+  const maxI = EFF.indexOf(MODELS[SESSION.model] || "max");
+  const used = (SESSION.total * SESSION.pct) / 100;
+  const plan = SESSION.mode === "plan";
+
+  el.innerHTML =
+    '<div class="pm-g"><div class="pm-lbl"><span>Mode</span><b>' +
+    (plan ? "nothing is written" : "edits land as made") +
+    '</b></div><div class="seg" data-seg="mode">' +
+    '<button type="button" aria-pressed="' + !plan + '">Build</button>' +
+    '<button type="button" aria-pressed="' + plan + '">Plan</button></div></div>' +
+
+    '<div class="pm-g"><div class="pm-lbl"><span>Model &amp; effort</span><b>up to ' + MODELS[SESSION.model] + "</b></div>" +
+    Object.keys(MODELS)
+      .map(
+        (m) =>
+          '<button class="pm-row" type="button" data-set="model" data-v="' + m + '"' + (m === SESSION.model ? " data-on" : "") + ">" +
+          TICK + '<span class="pm-n">' + shortM(m) + '</span><span class="pm-s">up to ' + MODELS[m] + "</span></button>"
+      )
+      .join("") +
+    '<div class="seg" data-seg="eff">' +
+    EFF.slice(2)
+      .map((e) => {
+        const off = EFF.indexOf(e) > maxI;
+        return '<button type="button" aria-pressed="' + (e === SESSION.eff) + '"' + (off ? " disabled" : "") +
+          ' data-v="' + e + '">' + (e === "medium" ? "med" : e) + "</button>";
+      })
+      .join("") +
+    "</div></div>" +
+
+    '<div class="pm-g"><div class="pm-lbl"><span>Queue</span></div>' +
+    '<button class="pm-row" type="button" data-cyc="steer"><span class="pm-n">While a turn runs</span><span class="pm-s">' + SESSION.steer + " ›</span></button>" +
+    '<button class="pm-row" type="button" data-cyc="follow"><span class="pm-n">After it finishes</span><span class="pm-s">' + SESSION.follow + " ›</span></button></div>" +
+
+    '<div class="pm-g"><div class="pm-lbl"><span>Context</span><b>' + fmtTok(used) + " of " + fmtTok(SESSION.total) + "</b></div>" +
+    '<div class="usebar">' +
+    CTX_SLICES.map((s) => '<i style="width:' + (SESSION.pct * s.f).toFixed(1) + "%;background:" + s.c + '"></i>').join("") +
+    '<i style="flex:1;background:var(--field)"></i></div>' +
+    '<div class="legend">' +
+    CTX_SLICES.map((s) => '<span><i style="background:' + s.c + '"></i>' + s.k + " " + fmtTok(used * s.f) + "</span>").join("") +
+    "</div>" +
+    '<button class="pm-row" type="button" data-act="compact"><span class="pm-n">Compact now</span><span class="pm-s">auto at 90%</span></button></div>';
+}
+
+ctxBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (menuOpen) return closeMenu();
+  const cmp = ctxBtn.closest(".cmp");
+  const el = document.createElement("div");
+  el.className = "pmenu";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", "Session controls");
+  renderMenu(el);
+  cmp.appendChild(el);
+  ctxBtn.setAttribute("data-open", "");
+  menuOpen = true;
+});
+
+document.addEventListener("click", (e) => {
+  const m = e.target.closest(".pmenu");
+  if (!m) return;
+  const seg = e.target.closest("[data-seg] button");
+  if (seg) {
+    const kind = seg.closest("[data-seg]").dataset.seg;
+    if (kind === "mode") SESSION.mode = seg.textContent.trim() === "Plan" ? "plan" : "build";
+    else SESSION.eff = seg.dataset.v;
+    renderMenu(m);
+    return;
+  }
+  const set = e.target.closest("[data-set]");
+  if (set) {
+    SESSION.model = set.dataset.v;
+    const maxI = EFF.indexOf(MODELS[SESSION.model]);
+    if (EFF.indexOf(SESSION.eff) > maxI) SESSION.eff = EFF[maxI];
+    renderMenu(m);
+    return;
+  }
+  const cyc = e.target.closest("[data-cyc]");
+  if (cyc) {
+    const k = cyc.dataset.cyc;
+    const L = k === "steer" ? ["Steer", "Queue", "Reject"] : ["Send queued", "Hold for me", "Discard"];
+    SESSION[k] = L[(L.indexOf(SESSION[k]) + 1) % L.length];
+    renderMenu(m);
+    return;
+  }
+  if (e.target.closest('[data-act="compact"]')) {
+    SESSION.pct = Math.max(6, Math.round(SESSION.pct * 0.42));
+    paintCtx();
+  }
+});
+
+/* ===================================================================== *
+ * elapsed timers
+ * ===================================================================== */
+
+setInterval(() => {
+  document.querySelectorAll(".elapsed").forEach((el) => {
+    const base = parseFloat(el.dataset.base);
+    if (Number.isNaN(base)) return;
+    el.textContent = fmt(Math.max(0, base + (Date.now() - T0) / 1000));
+  });
+}, 100);
+const T0 = Date.now();
+
+/* ===================================================================== *
+ * Sessions: filter chips
+ * ===================================================================== */
+
+document.querySelectorAll("[data-filt]").forEach((chip) =>
+  chip.addEventListener("click", () => {
+    const f = chip.dataset.filt;
+    document.querySelectorAll("[data-filt]").forEach((c) => c.toggleAttribute("data-on", c === chip));
+    const pad = chip.closest(".pad");
+    pad.querySelectorAll(".row[data-st]").forEach((r) => {
+      r.hidden = f !== "all" && r.dataset.st !== f;
+    });
+    pad.querySelectorAll("[data-grp]").forEach((lbl) => {
+      let n = 0;
+      let el = lbl.nextElementSibling;
+      while (el && el.classList.contains("row")) {
+        if (!el.hidden) n++;
+        el = el.nextElementSibling;
+      }
+      lbl.hidden = n === 0;
+    });
+  })
+);
+
+/* Settings: cycling rows and switches */
+document.querySelectorAll("[data-cycle]").forEach((row) =>
+  row.addEventListener("click", () => {
+    const vals = row.dataset.cycle.split("|");
+    const s = row.querySelector(".s");
+    s.textContent = vals[(vals.indexOf(s.textContent) + 1) % vals.length];
+  })
+);
+document.querySelectorAll("[data-sw]").forEach((sw) =>
+  sw.addEventListener("click", () => sw.setAttribute("data-on", sw.dataset.on === "on" ? "off" : "on"))
+);
+
+/* theme */
+const THEMES = ["System", "Light", "Dark"];
+const themeBtn = document.getElementById("theme-btn");
+themeBtn.addEventListener("click", () => {
+  const cur = themeBtn.textContent.replace("Theme: ", "");
+  const next = THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length];
+  themeBtn.textContent = "Theme: " + next;
+  if (next === "System") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", next.toLowerCase());
+});
+
+/* ===================================================================== *
+ * S7 — one whole turn, played and looped
+ *
+ * Motion is D:/beautiful-ui's, not re-invented: StreamText streams 2 chars
+ * every 9ms with a 6-char blur tail and a solid caret while streaming;
+ * ThinkingState's trace rows arrive on fade-up 320ms cubic-bezier(.23,1,.32,1)
+ * staggered 120ms, applied here as arrival time rather than as a delay, so
+ * output accumulates instead of being pasted in whole.
+ * ===================================================================== */
+
+const FLOW_PROMPT = "add a ghost variant to Button";
+const CPT = 2, TICKMS = 9, TAIL = 6, STAGGER = 120;
+
+let flowGen = 0;
+let flowTimers = [];
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function initOv(ov) {
+  const rows = [...ov.querySelectorAll(".ov-row")];
+  const head = ov.querySelector(".ov-head");
+  const paint = () => {
+    const done = rows.filter((r) => r.dataset.todo === "done").length;
+    const active = rows.some((r) => r.dataset.todo === "now");
+    const arc = ov.querySelector(".ring .p");
+    if (arc) arc.setAttribute("stroke-dashoffset", (50.27 * (1 - done / rows.length)).toFixed(2));
+    const lab = ov.querySelector(".lab");
+    if (lab) {
+      lab.className = "lab " + (done === rows.length ? "ok-t" : active ? "" : "dim");
+      lab.textContent = (done === rows.length ? "✓" : active ? "◐" : "○") + " Todos (" + done + "/" + rows.length + ")";
+    }
+    rows.forEach((r) => {
+      const [g, cls] = GL[r.dataset.todo];
+      r.innerHTML = '<span class="g ' + cls + '">' + g + '</span><span class="sj">' + escH(r.dataset.subj) + "</span>";
+    });
+  };
+  head.addEventListener("click", () => ov.classList.toggle("closed"));
+  ov._paint = paint;
+  paint();
+  return ov;
+}
+
+function ovHtml(subjects) {
+  return (
+    '<div class="ov"><div class="ov-head">' + RING + '<span class="lab dim">○ Todos (0/' + subjects.length + ")</span></div>" +
+    subjects.map((sj) => '<div class="ov-row" data-todo="wait" data-subj="' + escH(sj) + '"></div>').join("") +
+    '<div class="ov-hint"><span class="dim">└─</span> <span class="dim">tap the ring to collapse</span></div></div>'
+  );
+}
+
+function toolHtml(st, title, path, extra) {
+  return '<div class="blk ' + st + '"><div class="ln"><span class="tt">' + title + '</span> <span class="pa tchip">' + escH(path) + "</span>" + (extra || "") + "</div></div>";
+}
+
+function restartFlow() {
+  const f = document.querySelector('.fr[data-frame="s7"]');
+  if (f) flow(f);
+}
+
+function flow(f) {
+  const gen = ++flowGen;
+  flowTimers.forEach(clearTimeout);
+  flowTimers = [];
+
+  const t = f.querySelector(".t[data-flow]");
+  const inp = f.querySelector(".cmp .inp");
+  const pill = document.getElementById("s7-pill");
+  const slot = f.querySelector(".ovslot");
+  const cmp = f.querySelector(".cmp");
+
+  let acc = 0;
+  const at = (ms, fn) => {
+    acc += ms;
+    flowTimers.push(setTimeout(() => { if (gen === flowGen) fn(); }, REDUCED ? Math.min(acc, 1) : acc));
+  };
+  const alive = () => gen === flowGen;
+  const bot = () => { t.scrollTop = t.scrollHeight; };
+  const add = (h) => { t.insertAdjacentHTML("beforeend", h); bot(); return t.lastElementChild; };
+  const setPill = (cls, txt) => { pill.className = "pill " + cls; pill.innerHTML = (cls === "idle" ? "" : '<i class="dot"></i>') + txt; };
+  const ctx = (p) => { SESSION.pct = p; paintCtx(); };
+  const base = () => (-(Date.now() - T0) / 1000).toFixed(3);
+
+  let live = null;
+  const settle = () => {
+    if (live) {
+      const c = live.querySelector(".stream-caret");
+      if (c) c.remove();
+      live = null;
+    }
+  };
+  const type = (el, txt, then) => {
+    if (!alive() || !el) return;
+    settle();
+    live = el;
+    if (REDUCED) { el.textContent = txt; if (then) then(); return; }
+    let n = 0;
+    const tick = () => {
+      if (!alive() || !el.isConnected) { if (live === el) live = null; return; }
+      n = Math.min(txt.length, n + CPT);
+      const cut = Math.max(0, n - TAIL), done = n >= txt.length;
+      el.innerHTML =
+        escH(txt.slice(0, cut)) +
+        (done ? "" : '<span class="stream-tail">' + escH(txt.slice(cut, n)) + "</span>") +
+        '<i class="stream-caret' + (done ? "" : " is-streaming") + '"></i>';
+      bot();
+      if (done) { if (then) then(); return; }
+      flowTimers.push(setTimeout(tick, TICKMS));
+    };
+    tick();
+  };
+  const say = (box, txt, then) => {
+    if (!alive() || !box) return;
+    box.insertAdjacentHTML("beforeend", '<div class="ln"></div>');
+    type(box.lastElementChild, txt, then);
+  };
+  const RA = "animation:fade-up 320ms cubic-bezier(.23,1,.32,1) both";
+  const rows = (box, list, then, cls) => {
+    if (!alive() || !box) return;
+    settle();
+    const c = cls ? " " + cls : "";
+    let i = 0;
+    const tick = () => {
+      if (!alive() || !box.isConnected) return;
+      if (i >= list.length) { if (then) then(); return; }
+      box.insertAdjacentHTML("beforeend", '<div class="ln' + c + '" style="' + RA + '">' + list[i++] + "</div>");
+      bot();
+      flowTimers.push(setTimeout(tick, REDUCED ? 1 : STAGGER));
+    };
+    tick();
+  };
+
+  let ov = null, cur = null, th = null, bashEl = null;
+  const todo = (i, st) => {
+    if (!ov) return;
+    const r = ov.querySelectorAll(".ov-row")[i];
+    if (r) { r.dataset.todo = st; ov._paint(); }
+  };
+  const finish = (b, label) => {
+    b.classList.remove("pend");
+    b.classList.add("ok");
+    if (label) b.insertAdjacentHTML("beforeend", '<div class="ln"><span class="ok-t">✓</span> <span class="mu">' + label + "</span></div>");
+    bot();
+  };
+
+  /* reset */
+  t.innerHTML = "";
+  slot.innerHTML = "";
+  inp.textContent = "";
+  setPill("idle", "Idle");
+  ctx(12);
+  cmp.querySelectorAll(".pop").forEach((x) => x.remove());
+  f.querySelectorAll(".scrim").forEach((x) => x.remove());
+  closeMenu();
+
+  /* 1 · the prompt is typed, then sent */
+  for (let i = 0; i < FLOW_PROMPT.length; i++) at(i ? 34 : 700, () => { inp.textContent = FLOW_PROMPT.slice(0, i + 1); });
+  at(700, () => {
+    inp.textContent = "";
+    add('<div class="blk usr"><div class="ln">' + escH(FLOW_PROMPT) + "</div></div>");
+    setPill("info", "Thinking");
+  });
+
+  /* 2 · thinking — the reasoning types out while the header still shimmers */
+  at(400, () => { th = add('<div class="think"><div class="thead">' + SPARK + '<span class="shim" style="flex:1">Thinking</span>' + CHEV + "</div></div>"); });
+  at(900, () => { say(th, "Ghost is a new variant, so the union changes too. Read the tokens and the existing variants before writing anything."); });
+  at(2600, () => {
+    const h = th.querySelector(".thead");
+    const sp = h.querySelector("span");
+    sp.className = "";
+    sp.style.flex = "1";
+    sp.textContent = "Thought for 2 seconds";
+    h.addEventListener("click", () => th.classList.toggle("closed"));
+    setPill("run", "Working");
+  });
+  at(400, () => { const m = add('<div class="md"></div>'); say(m, "I'll read the token exports and the current variant map first, then add ghost against the names that already exist."); });
+
+  /* 3 · reads and a search */
+  at(2200, () => { cur = add(toolHtml("pend", "read", "packages/ui/src/tokens.ts")); ctx(14); });
+  at(1200, () => { finish(cur, "read · 48 lines"); });
+  at(600, () => { cur = add('<div class="blk pend"><div class="ln"><span class="tt">grep</span> <span class="pa tchip">/variant/</span><span class="mu"> in packages/ui/src (*.tsx)</span></div></div>'); });
+  at(1100, () => {
+    cur.classList.remove("pend");
+    cur.classList.add("ok");
+    rows(cur, [
+      '<span class="mu">packages/ui/src/Badge.tsx:14:  <mark class="hit">variant</mark>?: BadgeVariant;</span>',
+      '<span class="mu">packages/ui/src/Button.tsx:22:  <mark class="hit">variant</mark>?: ButtonVariant;</span>',
+    ]);
+    ctx(17);
+  });
+
+  /* 4 · the todo widget appears above the prompt bar */
+  at(1000, () => {
+    add('<div class="blk ok"><div class="ln"><span class="tt">todo</span> <span class="mu">set 4 tasks</span></div></div>');
+    slot.innerHTML = ovHtml([
+      "Add ghost to ButtonVariant and the style map",
+      "Run the Button tests",
+      "Advisor review of the diff",
+      "Answer the token-name question",
+    ]);
+    ov = initOv(slot.querySelector(".ov"));
+    todo(0, "now");
+  });
+
+  /* 5 · the edit — the diff lands hunk line by hunk line */
+  at(900, () => { cur = add(toolHtml("pend", "edit", "packages/ui/src/Button.tsx")); });
+  at(1500, () => {
+    cur.classList.remove("pend");
+    cur.classList.add("ok");
+    rows(
+      cur,
+      [
+        "",
+        '<span class="dl ctx"> 22   variant?: ButtonVariant;</span>',
+        '<span class="dl rem">-38   ghost: <span class="inv">undefined</span>,</span>',
+        '<span class="dl add">+38   ghost: <span class="inv">tokens.color.transparent</span>,</span>',
+      ],
+      () => { todo(0, "done"); todo(1, "now"); ctx(24); }
+    );
+  });
+
+  /* 6 · bash: loader, elapsed, then the runner's own output */
+  at(1300, () => {
+    bashEl = add(
+      '<div class="bash"><i class="bd"></i><div class="bash-in">' +
+      '<div class="ln bash-cmd">$ pnpm vitest run src/Button.test.tsx</div>' +
+      '<div class="ln load">' + PXL + '<span class="shim">Running…</span>' +
+      '<span class="elapsed" data-base="' + base() + '">0.0s</span>' +
+      '<span class="dim cancel"> esc to cancel</span></div></div><i class="bd"></i></div>'
+    );
+  });
+  at(3200, () => {
+    const l = bashEl.querySelector(".load"), box = bashEl.querySelector(".bash-in");
+    if (l) l.remove();
+    rows(
+      box,
+      ["  ✓ src/Button.test.tsx (15 tests) 431ms", "", "  Test Files  1 passed (1)", "       Tests  15 passed (15)"],
+      () => { todo(1, "done"); todo(2, "now"); ctx(31); },
+      "bash-out"
+    );
+  });
+
+  /* 7 · advisor */
+  at(1200, () => { cur = add('<div class="blk pend"><div class="ln"><span class="tt">advisor</span> <span class="mu">review the diff before commit</span></div></div>'); });
+  at(1900, () => {
+    finish(cur);
+    const b = add('<div class="blk ext"><div class="ln"><span class="xl">[pi-advisor-review]</span></div><div class="ln"></div></div>');
+    rows(
+      b,
+      [
+        '<span class="tx">Reviewed 1 file, 6 lines added, 1 removed.</span>',
+        "",
+        '<span class="wa">!</span> <span class="tx">Button.tsx ghost uses tokens.color.transparent</span>',
+        '  <span class="mu">that token does not exist yet — accent or brand is the open question</span>',
+        "",
+        '<span class="dim">policy: review-before-commit · 9.8s</span>',
+      ],
+      () => { todo(2, "done"); ctx(38); }
+    );
+  });
+  at(1700, () => { const m = add('<div class="md"></div>'); say(m, "The token name is the real question. Handing the Android side to a child session while I settle it here."); });
+
+  /* 8 · delegation, and the monitor's report */
+  at(2100, () => { cur = add(toolHtml("pend", "delegate", "t26a:android-ghost")); });
+  at(1300, () => { finish(cur, "child started · worktree phase3/t26a"); });
+  at(1600, () => {
+    const b = add('<div class="blk ext"><div class="ln"><span class="xl">[pi-herdr-delegate.monitor]</span></div><div class="ln"></div></div>');
+    rows(b, [
+      '<span class="tx">Child </span><span class="pa">t26a:android-ghost</span><span class="tx"> stopped.</span>',
+      "",
+      '<span class="mu">reason   </span><span class="tx">completed · 9 turns · 71k</span>',
+      '<span class="mu">worktree </span><span class="tx">phase3/t26a</span>',
+      '<span class="mu">handback </span><span class="tx">2 files changed, tests green</span>',
+      "",
+      '<span class="dim">monitor: poll 5s · 4m 18s watched</span>',
+    ], () => ctx(41));
+  });
+
+  /* 9 · a letter from the peer session */
+  at(2000, () => {
+    const b = add('<div class="blk ext"><div class="ln"><span class="xl">[pi-herdr-peer]</span></div><div class="ln"></div></div>');
+    rows(b, [
+      '<span class="mu">from </span><span class="pa">t26a:android-ghost</span>',
+      '<span class="mu">re   </span><span class="tx">the token name</span>',
+      "",
+      '<span class="tx">Android has the same gap. I used color.surfaceTransparent locally so the</span>',
+      '<span class="tx">build would pass — do not copy it, it is a placeholder.</span>',
+      "",
+      '<span class="dim">peer · reply opens t26a</span>',
+    ]);
+  });
+
+  /* 10 · ask_user blocks the turn */
+  at(2400, () => {
+    setPill("wait", "Needs you");
+    todo(3, "now");
+    f.insertAdjacentHTML("beforeend", '<div class="scrim"></div>');
+    cmp.insertAdjacentHTML(
+      "beforeend",
+      '<div class="pop" role="dialog" aria-label="ask_user">' +
+      '<div class="h"><span class="pill info"><i class="dot"></i>ask_user</span><span class="t">token name</span></div>' +
+      '<div class="q">ghost needs a transparent background token. Which name should it take?</div>' +
+      '<div class="opts">' +
+      '<button class="opt" type="button"><b>color.transparent</b><small>new primitive, matches the CSS keyword</small></button>' +
+      '<button class="opt" type="button"><b>color.surface.none</b><small>fits the surface scale already in the file</small></button>' +
+      '<button class="opt" type="button"><b>Let me type it</b><small>answer in the prompt bar instead</small></button>' +
+      "</div></div>"
+    );
+  });
+  at(3000, () => {
+    const pop = cmp.querySelector(".pop");
+    const opt = pop && pop.querySelectorAll(".opt")[1];
+    if (opt) opt.style.background = "var(--accent-tint)";
+  });
+  at(700, () => {
+    cmp.querySelectorAll(".pop").forEach((x) => x.remove());
+    f.querySelectorAll(".scrim").forEach((x) => x.remove());
+    setPill("run", "Working");
+    add('<div class="blk usr"><div class="ln">color.surface.none</div></div>');
+    todo(3, "done");
+  });
+  at(700, () => {
+    cur = add(toolHtml("pend", "edit", "packages/ui/src/tokens.ts"));
+  });
+  at(1400, () => { finish(cur, "surface.none added · 1 line"); ctx(44); });
+  at(700, () => {
+    const m = add('<div class="md"></div>');
+    say(m, "ghost now resolves to color.surface.none, the tests still pass, and t26a has the name to rename against. Nothing is committed yet.", () => {
+      setPill("idle", "Idle");
+    });
+  });
+
+  /* 11 · loop */
+  at(6000, () => { if (alive()) flow(f); });
+}
+
+paintCtx();
+restartFlow();
+</script>
+</body>
+</html>
