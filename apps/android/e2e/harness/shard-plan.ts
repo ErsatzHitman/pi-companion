@@ -55,14 +55,31 @@ const REAL_SHARDS_PATH = fileURLToPath(new URL("../../maestro/shards.json", impo
  *
  * `queue-retry-compaction.yaml` (T39C) is excluded for the identical
  * reason as the three above — added long after T37F's ten-flow set
- * closed, not one of T37E1-T37E10 — with one addition that makes
- * the exclusion mandatory rather than merely consistent: that flow's
- * own header states it has never been run (no emulator, no device, no
- * Maestro binary here), and its real proof is the source-level
- * contract test `../flows/queue-retry-compaction.contract.test.ts`.
- * Putting an admittedly-unrun flow into the CI exit gate would assert
- * a run nobody has made. Runs the same one documented way once a
- * device exists:
+ * closed, not one of T37E1-T37E10.
+ *
+ * CORRECTED (T380). This paragraph used to add a second reason, which
+ * it called the one that made the exclusion "mandatory rather than
+ * merely consistent": that the flow "has never been run (no emulator,
+ * no device, no Maestro binary here)", so "putting an admittedly-unrun
+ * flow into the CI exit gate would assert a run nobody has made".
+ *
+ * Both halves have to go, for different reasons. The parenthetical is
+ * simply false now — the emulator boots on every dispatch and the ten
+ * sharded flows were green end to end in dispatch 34558058662. And the
+ * argument was circular even when the parenthetical was true: this set
+ * is what decides which flows CI runs, so "it has never run" cannot be
+ * a reason to keep it out of the thing that would run it. Adding a
+ * never-run flow to a gate does not assert a run; it performs one, and
+ * reports whatever happens.
+ *
+ * What survives is the first reason alone, which is sound and is the
+ * same one the three flows above carry: this set is `plan.md` §14.4's
+ * ten scenarios, and T39C is not one of them. Widening it would change
+ * what the Phase 5 exit gate MEANS, which is not a shard file's call to
+ * make. Giving these four flows a run of their own, outside the exit
+ * gate, is a different change and does not touch this set.
+ *
+ * Runs the same one documented way any flow does:
  * `npx tsx apps/android/e2e/run-flow.ts queue-retry-compaction`.
  */
 const NON_EXIT_GATE_FLOW_NAMES = new Set([

@@ -636,6 +636,7 @@ that recomputation has to be domain-specific:
 | T377   | A recipe left out of the audit on purpose was indistinguishable from one left out by accident                        | phase-9   | android          | P9-U   | T376                                                                  |
 | T378   | The 48dp audit's component list was the last curated list, and a screen shipped tomorrow joined it by memory         | phase-9   | android          | P9-U   | T377                                                                  |
 | T379   | The handoff still described the tree as it stood seven tasks ago, and named no successor to the work                 | phase-9   | docs             | P9-U   | T378                                                                  |
+| T380   | Nine flow comments blamed a missing emulator for limits the emulator had stopped causing, one circularly             | phase-9   | android          | P9-U   | T379                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                 | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                     | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                     | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -677,8 +678,8 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                  | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                  | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**588 tasks** (distinct IDs counted directly from the table above), recounted at T379 with
-`grep`/`sort -u` over the table's own rows — one past the **587** at T378, two past the **586** at T377, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**589 tasks** (distinct IDs counted directly from the table above), recounted at T380 with
+`grep`/`sort -u` over the table's own rows — one past the **588** at T379, two past the **587** at T378, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -19203,3 +19204,87 @@ file and the ledger. `isAppSourcePath` returns `false` for `HANDOFF.md` on both 
 - [x] The wave's defect shape and the pattern that closed it are written down, not left in commits
 - [x] §10 records that the owner's artifact amendment is delivered, verified by reading the menu
 - [x] The guard question is answered against T217's real condition rather than re-litigated
+
+#### T380 — Nine flow comments blamed a missing emulator for limits the emulator had stopped causing, one circularly
+
+`labels: phase-9, area: android` · `depends-on: T379`
+
+Every flow in `apps/android/maestro/` was written in a wave with no emulator, no device and no
+Maestro binary, and each says so in its header. That was true then. T320 put a booted emulator
+in CI, T324 fixed the KVM permission that made it reliable, and dispatch 34558058662 ran the ten
+§14.4 flows green end to end. Eleven of the fifteen flows in that directory now run on a real
+device on every dispatch.
+
+Nine comments never learned this, and they divide into two kinds with different consequences.
+
+**Kind one: a true conclusion propped up by a cause that has stopped being true.** These are the
+worse ones, because the conclusion keeps them looking correct while the reasoning rots
+underneath, and a reader who wants to remove the limit will go looking for a device.
+
+| Site                                       | Cause it gave                                                                          | What is actually true                                                                                                                                                                                                                                                               |
+| ------------------------------------------ | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `composer-inputs.yaml`, three sites        | "no emulator/device/Maestro binary to drive or read the native picker UI"              | this flow runs in shard-3 on a booted emulator every dispatch. The document/photo picker is a SYSTEM surface outside the app's process, so Maestro's view hierarchy cannot observe it — on any device. A device does not help, which is the opposite of what the old reason implies |
+| `files-and-terminal.yaml`                  | "this wave still has no emulator, no device, and no Maestro binary to run one against" | it runs in shard-5, green in 34558058662. T79's criterion is a navigation contract two modules must agree on, which `session-nav-actions-model.test.ts` proves exactly and a tap could only sample                                                                                  |
+| `queue-retry-compaction.yaml`, second site | "no emulator, no device, no Maestro binary, and no live daemon connection"             | only the last clause does any work, and it always did                                                                                                                                                                                                                               |
+
+In each case the conclusion survives with a better reason than the one it had. The native-picker
+one is the clearest gain: "unobservable to this driver by construction" is a permanent fact
+about Maestro, while "we have no device" invited someone to try again with a device.
+
+**Kind two: four flows that really have never run, for a reason nobody stated.**
+`file-download`, `recovered-turn-banner`, `session-tree-sheet` and `queue-retry-compaction` each
+open by claiming the "same standing limitation as every flow in this directory" — false for the
+other eleven — and conclude "so this flow has never been run", which is true. Two of them cite
+`apps/android/maestro/README.md`'s "What T37D proved, and what it did not" as the authority; **T371
+corrected that exact section to say the opposite**, so the citation resolves to its own
+refutation. A third cites `apps/android/e2e/README.md`, whose closing paragraph really did still
+carry the claim — corrected here, and kept rather than deleted because it is an accurate record
+of what its own wave proved.
+
+The real reason those four have never run is that none is assigned to a shard. The
+infrastructure exists; they sit outside the set that uses it. That is a materially different
+statement from "no device exists", and it is the one a reader needs.
+
+**The circular exclusion, which is the finding worth the task.**
+`apps/android/e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` gave
+`queue-retry-compaction` a second reason, and called it the one that made the exclusion
+"mandatory rather than merely consistent":
+
+> that flow's own header states it has never been run (no emulator, no device, no Maestro binary
+> here) ... Putting an admittedly-unrun flow into the CI exit gate would assert a run nobody has
+> made.
+
+Both halves had to go. The parenthetical is false now. And the argument was circular even when
+it was true: this set is precisely what decides which flows CI runs, so "it has never run"
+cannot be a reason to keep a flow out of the thing that would run it. Adding a never-run flow to
+a gate does not assert a run — it performs one and reports whatever happens. The exclusion is
+kept, on the first reason alone, which is sound and which the other three flows already carry:
+this set is `plan.md` §14.4's ten scenarios, T39C is not one of them, and widening it would
+change what the Phase 5 exit gate MEANS — not a shard file's call to make.
+
+**Nothing was deleted to make a claim go away.** Every correction quotes the sentence it
+replaces, with a `CORRECTED (T380)` marker, which is also what keeps `guard-capability-prose`
+from firing on the quotations themselves — `apps/android/maestro/*.yaml` has been inside that
+guard's denial scan since T281, and two of this change's own quoted phrases match a scan term.
+Confirmed by running it, not by reading `HISTORICAL_QUOTE_MARKERS`: exit 0.
+
+**Deliberately NOT changed: the dated headers.** Roughly twenty further comments say "This wave
+has no emulator, no device, and no Maestro binary" in a flow's opening paragraph. Those are
+dated statements about the wave that wrote the flow, which is the snapshot pattern `CLAUDE.md`'s
+T217 section identifies as the reason a count or status claim does not need a guard. They are
+left exactly as written. The nine corrected here are the ones that drew a PRESENT-TENSE
+conclusion from that past condition — "still has", "this flow has", "this environment still has"
+— which is the line between a record and a claim.
+
+**No `CAPABILITIES` entry.** The capability is "the emulator runs the flows", which ships in a
+workflow file and a shard config, not as a declared member `isShippedSourcePath` can see. An
+entry would be inert on the shipping side.
+
+- [x] Every present-tense "no emulator" claim in `apps/android/maestro/` and `apps/android/e2e/` is corrected
+- [x] Each correction quotes what it replaces rather than deleting it
+- [x] The conclusions that still hold are re-grounded on the reason that actually holds them up
+- [x] The four never-run flows say why they have never run, which is not the reason they gave
+- [x] The circular exclusion is named as circular and removed, with the sound reason kept
+- [x] The dated wave headers are deliberately left alone, and that line is stated
+- [x] `guard-capability-prose` exits 0 with the new quotations in place, run rather than reasoned about
+- [ ] The four flows actually run — filed as T381, since correcting the reason is not the same as removing it

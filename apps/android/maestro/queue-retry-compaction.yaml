@@ -16,6 +16,21 @@ tags:
 # "yaml itself, read from disk" gap `composer-inputs.yaml` used to have,
 # closed the same way here from the start).
 #
+# CORRECTED (T380): the sentence above says this flow shares a standing
+# limitation with "every flow in this directory", and cites `../e2e/README.md`.
+# That file's closing paragraph did carry the claim, and was itself
+# corrected at T380 for the same reason.
+#
+# What is still true is narrower, and the difference matters to anyone
+# deciding whether to run this. It is not that this flow CANNOT run for
+# want of a device: the emulator boots on every dispatch, `smoke.yaml`
+# runs in `packaged-app-smoke`, and the ten sharded flows were green end
+# to end in dispatch 34558058662. It is that this flow is not assigned to
+# a shard, so nothing runs it. The infrastructure exists; this flow sits
+# outside the set that uses it, and "has never been run" is the
+# consequence of that exclusion rather than evidence for it. See
+# `../e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` for this
+# flow's own stated reason.
 # ---------------------------------------------------------------------
 # WHY THIS FLOW ASSERTS ONLY AN UNAVAILABLE STATE — no round trip, no
 # retry, no compaction banner:
@@ -28,9 +43,9 @@ tags:
 # `queueModeClient={queueModeClient}` and
 # `turnStatusClient={turnStatusClient}` alongside `sessionId`,
 # `onSubmit`, `onMicPress`, `onAttachPress`, `turnRunning`,
-# `turnService`, `outbox`. This environment still has no emulator, no
-# device, no Maestro binary, and no live daemon connection, so both
-# still resolve to `undefined` here, same as before this task landed —
+# `turnService`, `outbox`. There is no live daemon connection in this
+# flow's setup, so both still resolve to `undefined` here, same as
+# before this task landed —
 # only the REASON changed, from "no route passes the prop at all" to
 # "the prop resolves to undefined with no active connection". So the
 # one production route this harness can reach still renders:

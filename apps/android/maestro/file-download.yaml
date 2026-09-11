@@ -19,6 +19,19 @@ tags:
 # `../e2e/flows/maestro-yaml.ts`, T72) so this flow cannot silently rot
 # before anyone with a device first runs it.
 #
+# CORRECTED (T380): the sentence above says this flow shares a standing
+# limitation with "every flow in this directory", though it cites nothing for it.
+#
+# What is still true is narrower, and the difference matters to anyone
+# deciding whether to run this. It is not that this flow CANNOT run for
+# want of a device: the emulator boots on every dispatch, `smoke.yaml`
+# runs in `packaged-app-smoke`, and the ten sharded flows were green end
+# to end in dispatch 34558058662. It is that this flow is not assigned to
+# a shard, so nothing runs it. The infrastructure exists; this flow sits
+# outside the set that uses it, and "has never been run" is the
+# consequence of that exclusion rather than evidence for it. See
+# `../e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` for this
+# flow's own stated reason.
 # ---------------------------------------------------------------------
 # NOT one of the ten §14.4 flows T37E1-T37E10 own, and deliberately not
 # added to ../maestro/shards.json / the T37F sharded exit gate.

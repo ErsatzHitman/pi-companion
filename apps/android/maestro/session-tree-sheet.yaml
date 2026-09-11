@@ -15,6 +15,22 @@ tags:
 # `recovered-turn-banner.contract.test.ts` (T106) already follows for a
 # dev-only lab route.
 #
+# CORRECTED (T380): the sentence above says this flow shares a standing
+# limitation with "every flow in this directory", and cites
+# `../README.md`'s "What T37D proved, and what it did not". That section
+# was corrected at T371 and now records the opposite, so the citation
+# points at its own refutation.
+#
+# What is still true is narrower, and the difference matters to anyone
+# deciding whether to run this. It is not that this flow CANNOT run for
+# want of a device: the emulator boots on every dispatch, `smoke.yaml`
+# runs in `packaged-app-smoke`, and the ten sharded flows were green end
+# to end in dispatch 34558058662. It is that this flow is not assigned to
+# a shard, so nothing runs it. The infrastructure exists; this flow sits
+# outside the set that uses it, and "has never been run" is the
+# consequence of that exclusion rather than evidence for it. See
+# `../e2e/harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES` for this
+# flow's own stated reason.
 # ---------------------------------------------------------------------
 # WHY THIS FLOW OPENS A DEV-ONLY LAB ROUTE, NOT A REAL SESSION SCREEN.
 #

@@ -46,10 +46,18 @@ tags:
 # `createExpoAttachmentSourcePort()` at the session mount — pressing
 # attach now opens the real native document/photo picker, the same
 # "live tap, unobservable outcome" shape as the MIC BUTTON section
-# above: this flow has no emulator/device/Maestro binary to drive or
-# read the native picker UI, so the ATTACH BUTTON section below stops
-# at the tap exactly like the mic one does, rather than asserting the
-# now-untrue "unavailable" banner.
+# above: Maestro cannot read the native picker UI, so the ATTACH BUTTON
+# section below stops at the tap exactly like the mic one does, rather
+# than asserting the now-untrue "unavailable" banner.
+#
+# CORRECTED (T380): this said the reason was that the flow "has no
+# emulator/device/Maestro binary to drive or read the native picker UI".
+# That cause stopped being true — this flow runs on a booted emulator in
+# every dispatch, green in 34558058662 — while the conclusion it
+# supported is still right, for a better reason: the document/photo
+# picker is a SYSTEM surface outside this app's process, and Maestro's
+# view hierarchy stops at the app under test. A device does not help;
+# the picker is unobservable to this driver on any device.
 #
 # So this flow proves what is actually true today, split into two
 # halves:
@@ -89,8 +97,13 @@ tags:
 #      `resolveTranscribeClient`), so a recording made against a
 #      connected daemon now genuinely transcribes through Groq and lands
 #      as editable composer draft text. This flow still cannot exercise
-#      that outcome itself (no emulator/device/Maestro binary — see this
-#      file's header), and there is no daemon connection in this flow's
+#      that outcome itself (no daemon connection in this flow's
+#      deep-link-only setup — CORRECTED (T380): this parenthetical said
+#      "no emulator/device/Maestro binary", a cause that stopped being
+#      true once this flow started running on a booted emulator every
+#      dispatch; the clause that actually blocks the outcome is the one
+#      immediately following, which was always the real one), and there
+#      is no daemon connection in this flow's
 #      own deep-link-only setup either way, so a recording made HERE
 #      would still resolve the honest "transcription-unavailable" state
 #      — not because the prop is unwired any more, but because this flow
@@ -253,9 +266,12 @@ tags:
 # --- "granted" — see its own doc comment) and pressing attach goes
 # --- straight to the real native document/photo picker. This flow stops
 # --- at the tap, the identical limitation the MIC BUTTON section above
-# --- already has: no emulator/device/Maestro binary in this wave to
-# --- drive or observe the native picker UI, so nothing below asserts
-# --- what follows.
+# --- already has: the native picker is a system surface outside this
+# --- app's process, so Maestro's view hierarchy cannot observe it and
+# --- nothing below asserts what follows. CORRECTED (T380): this read
+# --- "no emulator/device/Maestro binary in this wave to drive or
+# --- observe the native picker UI" — see this file's header for why
+# --- that cause is gone and this one was always the real one.
 - tapOn:
     id: "composer-attach"
 # --- SHARE INTENT: deliberately not exercised here — see this file's

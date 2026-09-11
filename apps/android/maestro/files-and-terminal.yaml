@@ -28,8 +28,14 @@ tags:
 # T79's own acceptance criterion is proven at the model layer (a fake
 # router standing in for the mounted screen, per this repository's
 # RN-in-vitest limitation — see that test file's doc comment), not by a
-# Maestro tap: this wave still has no emulator, no device, and no
-# Maestro binary to run one against.
+# Maestro tap. CORRECTED (T380): this went on to say "this wave still
+# has no emulator, no device, and no Maestro binary to run one against",
+# which stopped being true — this flow runs in shard-5 on a booted
+# emulator every dispatch and was green in 34558058662. The claim it
+# supported still stands on its own: T79's criterion is about a
+# navigation contract two modules must agree on, which
+# `session-nav-actions-model.test.ts` proves exactly and a tap could
+# only sample.
 #
 # This flow itself still opens both routes by deep link below, on
 # purpose, not because the gap above still stands: `composer-inputs.yaml`

@@ -50,3 +50,13 @@ Fully proven by `harness/*.test.ts`, without a device:
 Not proven here, and out of scope for this wave: that `run-flow.ts` actually starts a working
 daemon, that Maestro actually drives the emulator, or that any flow (including `smoke.yaml`)
 passes on a device. Those belong to the first `T37E*` task with a device.
+
+CORRECTED (T380): all three have since been proven, and this paragraph is the one four flow
+files cite — directly or through `../maestro/README.md` — as their standing reason for never
+having run. `run-flow.ts` starts the isolated daemon on every dispatch (T320); Maestro drives
+the emulator (T324 supplied the KVM fix that made it reliable); and `smoke.yaml` passes on a
+device in `packaged-app-smoke`, with the ten sharded flows green end to end in dispatch 34558058662. The paragraph is kept rather than deleted because it is an accurate record of what
+its own wave proved. What it must no longer be read as is a statement about today: four flows
+(`file-download`, `recovered-turn-banner`, `session-tree-sheet`, `queue-retry-compaction`) have
+still never run, and the reason is that none is assigned to a shard — not that a device is
+missing. See `harness/shard-plan.ts`'s `NON_EXIT_GATE_FLOW_NAMES`.
