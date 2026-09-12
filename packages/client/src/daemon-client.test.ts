@@ -6767,3 +6767,97 @@ test("T333 source pin: daemon-client.ts never calls the bare crypto global's UUI
   expect(code).not.toMatch(/\bcrypto\.randomUUID\(/);
   expect(code).toMatch(/import \{ safeRandomId \} from "\.\/daemon-client-transport-utils\.js";/);
 });
+
+test("rewindAgent omits `force` for a three-argument call and sends exactly what the caller gives", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "rewind_force_passthrough",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const plain = client.rewindAgent("agt_1", "msg_1", "files");
+  const plainRequest = parseSentFrame(mock.sent[mock.sent.length - 1]) as {
+    requestId: string;
+  };
+  expect(plainRequest).toEqual({
+    type: "agent.rewind.request",
+    requestId: expect.any(String),
+    agentId: "agt_1",
+    messageId: "msg_1",
+    mode: "files",
+  });
+  expect(plainRequest).not.toHaveProperty("force");
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.rewind.response",
+      payload: { requestId: plainRequest.requestId, agentId: "agt_1", ok: true, error: null },
+    }),
+  );
+  await expect(plain).resolves.toEqual({
+    requestId: plainRequest.requestId,
+    agentId: "agt_1",
+    ok: true,
+    error: null,
+  });
+
+  const forced = client.rewindAgent("agt_1", "msg_1", "both", { force: true });
+  const forcedRequest = parseSentFrame(mock.sent[mock.sent.length - 1]) as {
+    requestId: string;
+  };
+  expect(forcedRequest.force).toBe(true);
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.rewind.response",
+      payload: { requestId: forcedRequest.requestId, agentId: "agt_1", ok: true, error: null },
+    }),
+  );
+  await forced;
+
+  const unforced = client.rewindAgent("agt_1", "msg_1", "files", { force: false });
+  const unforcedRequest = parseSentFrame(mock.sent[mock.sent.length - 1]) as {
+    requestId: string;
+  };
+  expect(unforcedRequest.force).toBe(false);
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.rewind.response",
+      payload: { requestId: unforcedRequest.requestId, agentId: "agt_1", ok: true, error: null },
+    }),
+  );
+  await unforced;
+});
+
+test("rewindAgent rejects with the daemon's own error sentence, marker included", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "rewind_error_passthrough",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const marked =
+    "PI_COMPANION_REWIND_CONFLICT:The workspace changed after the checkpoint was taken.";
+  const promise = client.rewindAgent("agt_1", "msg_1", "files", { force: true });
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]) as { requestId: string };
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.rewind.response",
+      payload: { requestId: request.requestId, agentId: "agt_1", ok: false, error: marked },
+    }),
+  );
+
+  await expect(promise).rejects.toThrow(marked);
+});
