@@ -61,22 +61,26 @@ And the one amendment to S7, which supersedes the artifact for the prompt-bar co
 
 ## 1. Where things stand right now
 
-**The wave's last full CI read is RED on one job, and the fix for it is T396.** Run `34683663303` at
+**The wave's CI is GREEN, and T396 is what repaired the one red job.** CI run `34683663303` at
 `02b50b5` (the first commit carrying the Android rewind surface) completed **success, 44/44 jobs,
-zero failures**, and Maestro `34681211373` at `2cda7b7` completed success — but the tip's own run
+zero failures**, and Maestro `34681211373` at `2cda7b7` completed success — but the tip's next run
 `34683710279` at `4cb5a7c` failed `server-tests (windows-latest)` on
 `src/utils/checkout-git.test.ts` > "does not report incoming deletions when the base branch is
 behind its remote": `Error: Test timed out in 30000ms`, then `EBUSY ... rmdir
-...checkout-git-test-R0YjQh\repo` from the `afterEach`. That is the **second** occurrence of this
+...checkout-git-test-R0YjQh\repo` from the `afterEach`. That was the **second** occurrence of this
 exact stall — run `34352088001` at `285124d` hit a different test in the same file the same way,
-which T310's section recorded and asked to have filed if it returned. T396 does that filing and
-removes the three amplifiers we own: git's background maintenance is disabled for the whole suite
-through `GIT_CONFIG_COUNT`-style env config in the test file (no extra process, and it reaches the
-code under test because `spawnProcess` inherits `process.env`), the `afterEach` retries a Windows
+which T310's section recorded and asked to have filed if it returned. T396 filed it and removed the
+three amplifiers we own: git's background maintenance is disabled for the whole suite through
+`GIT_CONFIG_COUNT`-style env config in the test file (no extra process, and it reaches the code
+under test because `spawnProcess` inherits `process.env`), the `afterEach` retries a Windows
 handle-release race and still throws if it persists, and `server-tests (windows-latest)` excludes
 `$RUNNER_TEMP`/`$GITHUB_WORKSPACE` from Defender and prints whether that worked. `testTimeout` is
 untouched, and the file was not "serialised" because it is already the first member of
-`test:unit:serial`.
+`test:unit:serial`. **Read, not assumed:** CI `34687190809` at `4565200` (the T396 commit plus its
+merge) completed **success, 44/44 jobs, zero failures**, with the previously-red job green and
+`✓ src/utils/checkout-git.test.ts (144 tests | 1 skipped) 154051ms`, and its prep step logged
+`Defender exclusions now: C:\; D:\; D:\a\_temp; D:\a\pi-companion\pi-companion`; Maestro
+`34687209519` at that same commit completed **success, 9/9 jobs** (all five shards).
 
 **Wave 3 (2026-09-12): the Supernova adoptions, the Android stub closures and release plumbing.
 The table below is still true of `bd366dd`; this paragraph supersedes it.**
