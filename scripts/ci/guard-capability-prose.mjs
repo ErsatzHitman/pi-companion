@@ -2714,6 +2714,96 @@ export const CAPABILITIES = [
       /(?:a )?widget'?s (?:key|label) and (?:its )?value (?:are|is) (?:never|not) (?:aligned|on one line)/i,
     ],
   },
+  {
+    // T383 (packages/server/src/server/agent/checkpoints/): the daemon can
+    // actually snapshot a workspace and restore it, which is what made
+    // `supportsRewindFiles`/`supportsRewindBoth` true. Before this, every
+    // `mode: "files"`/`"both"` rewind failed and nothing under
+    // `packages/server/src` snapshotted anything — the exact sentence the
+    // ledger's T383 section used to carry. Registering it means a future
+    // comment that goes back to denying the files leg fails the guard.
+    name: "workspace checkpoint snapshots and a conflict-checked restore (createWorkspaceCheckpointStore)",
+    methodNames: ["createWorkspaceCheckpointStore", "applyRestorePlan", "CheckpointConflictError"],
+    denyingPhrases: [
+      /nothing under `?packages\/server\/src`? snapshots? a workspace/i,
+      /the daemon cannot (?:do the )?files[- ]rewind/i,
+      /every `?mode: "files"`? ?\/? ?"?both"?`? rewind fails?/i,
+      /no files[- ]rewind (?:exists|is implemented|ships)/i,
+    ],
+  },
+  {
+    // T388 (packages/frontend-core/src/timeline/work-groups.ts): a
+    // consecutive thinking/tool-call run is one work group with a head, and
+    // its members stay individually virtualized.
+    name: "transcript work groups with stable row keys (buildTranscriptWorkGroups)",
+    methodNames: [
+      "buildTranscriptWorkGroups",
+      "createWorkGroupCollapseState",
+      "isWorkGroupCollapsed",
+      "formatWorkGroupMeta",
+    ],
+    denyingPhrases: [
+      /(?:a )?work (?:run|group) (?:is|stays) (?:always )?(?:flat|ungrouped)/i,
+      /(?:the )?transcript (?:never|does not) groups? (?:consecutive )?(?:thinking|tool)/i,
+      /row keys? (?:are|stay) (?:positional|index-based)/i,
+      /streaming (?:append|update)s? re-?render the whole (?:list|transcript)/i,
+    ],
+  },
+  {
+    // T389 (packages/frontend-core/src/composer/): the composer keeps a
+    // per-session draft and can offer `@`-references. `DraftSessionController`
+    // and `draftKeyForSession` live in `drafts.ts`, the reference model in
+    // `references.ts` — two files, one capability, so the members are a flat
+    // OR-list across them (T168's AND-group would be the wrong shape: it
+    // requires every member in ONE file).
+    name: "composer drafts and @file/@skill references (DraftSessionController)",
+    methodNames: [
+      "DraftSessionController",
+      "draftKeyForSession",
+      "detectReferenceToken",
+      "findResolvedReferences",
+    ],
+    denyingPhrases: [
+      /(?:a )?composer draft (?:is|stays) (?:memory-only|in-memory only|never persisted)/i,
+      /no draft (?:survives|outlives) a (?:reload|restart)/i,
+      /the composer (?:has|offers|supports) no @(?:file|skill)? references?/i,
+    ],
+  },
+  {
+    // T390/T391/T392 (apps/android): the three stubs each port's own doc
+    // comment used to describe as "not installed". Each adapter is declared
+    // once, in its own file, beside the unavailable factory it replaces.
+    name: "Android's real Expo-backed stubs (sqlite, push, camera)",
+    methodNames: [
+      "createExpoSqliteDriverFactory",
+      "createExpoPushRegistrationPort",
+      "createExpoCameraScannerPort",
+    ],
+    denyingPhrases: [
+      /no (?:sqlite|camera|notifications) (?:module|dependency) is installed/i,
+      /(?:the )?offline (?:cache|outbox) (?:stays|remains|is) "?degraded"? (?:because|for want of)/i,
+      /(?:a|no) push token (?:cannot|can never) be obtained/i,
+      /(?:this build|production) (?:never|does not) open a camera preview/i,
+    ],
+  },
+  {
+    // T395 (packages/protocol/src/rewind-errors.ts + the server's wire
+    // formatter + frontend-core's controller): a rewind failure is
+    // classified by code, not by reading a human sentence in a screen.
+    name: "a rewind failure is classified by code (parseRewindFailureCode)",
+    methodNames: [
+      "parseRewindFailureCode",
+      "stripRewindFailureMarker",
+      "markerForRewindFailure",
+      "RewindController",
+    ],
+    denyingPhrases: [
+      /rewind conflicts? (?:are|is) (?:not |un)distinguishable (?:by|from) code/i,
+      /no (?:client|caller) can (?:answer|resolve|send) (?:a )?(?:checkpoint )?conflict/i,
+      /`?rewindAgent`? takes no `?force`?/i,
+      /a screen has to (?:string[- ]match|parse) the daemon'?s (?:error )?sentence/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
