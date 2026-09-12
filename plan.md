@@ -404,6 +404,16 @@ Adapted from Supernova (MIT, Copyright (c) 2026 Mattia Cerutti) by reimplementat
 Node — behaviour only, no file copied; `docs/T383-provenance.md` names every source file and
 symbol, and `THIRD_PARTY_NOTICES.md` §5 carries the licence.
 
+**A rewind failure carries its classification (T395).** `agent.rewind.response` has only `ok` and
+an `error` string, and that stays true: the classification travels as a documented **prefix on
+the message**, defined once in `packages/protocol/src/rewind-errors.ts`
+(`REWIND_CONFLICT_ERROR_MARKER`, `REWIND_UNSUPPORTED_ERROR_MARKER`) and applied at the one place
+that can tell the difference — the server's session boundary, through
+`formatRewindFailureForWire`. `parseRewindFailureCode` turns it into a typed outcome and
+`stripRewindFailureMarker` removes it before any surface shows the sentence, so a screen never has
+to read a human sentence to decide whether a conflict happened. An unrelated throw stays unmarked
+and is reported as a plain failure.
+
 ### 4.3 Keep the web-serving contract, change its artifact
 
 The daemon’s web middleware is useful and remains. It already provides SPA fallback, compression negotiation, caching, and `window.__PASEO_INITIAL_DAEMON_CONNECTION__` injection.
