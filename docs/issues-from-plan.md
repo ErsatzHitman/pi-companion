@@ -652,6 +652,7 @@ that recomputation has to be domain-specific:
 | T393   | The web console kept no offline copy of a transcript and the host route was a placeholder                               | phase-9   | web              | P9-W   | T387                                                                  |
 | T394   | The install doc told a user to run a command whose package has never been published                                     | phase-9   | docs             | P9-W   | —                                                                     |
 | T395   | A checkpoint could be taken but no client or screen could ask to restore one, or answer a conflict                      | phase-9   | frontend         | P9-W   | T383                                                                  |
+| T396   | A Windows-only stall failed one test in the server suite at its 30s budget twice, and left a locked temp dir behind     | phase-9   | tooling          | P9-W   | T240                                                                  |
 | T50    | Decide how the agent's configured surface is exposed                                                                    | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                        | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                        | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -20003,3 +20004,66 @@ could demonstrate a need for is worse than the gap it guesses at.
 run 49 files / 555 tests pass; `oxfmt --check` clean on every changed file. The mount also forced a
 real repair: this workspace's `node_modules` predated the wave's Expo additions, so
 `expo-camera`/`expo-notifications` only type-checked after `npm install` refreshed the tree.
+
+#### T396 — A Windows-only stall failed one test in the server suite at its 30s budget twice
+
+`labels: phase-9, area: tooling` · `depends-on: T240` · `wave: P9-W`
+
+**Filed because the recurrence T310 predicted actually happened.** T310's section records the first
+occurrence and tells the next reader what to do about a second one rather than folding it into an
+unrelated task: "That is a runner stall rather than a code defect on the evidence available, and it
+is deliberately NOT being fixed by raising `testTimeout` here; if it recurs, file it separately with
+the recurrence recorded". It recurred, so this section is that filing.
+
+Both occurrences are in `packages/server/src/utils/checkout-git.test.ts`, in
+`server-tests (windows-latest)`, in a test that pushes to a bare remote, and each passed on the run
+that followed it:
+
+| CI run        | Commit    | Test                                                                         | Reported                                                                                                                    |
+| ------------- | --------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `34352088001` | `285124d` | refreshes the tracked ref after pushing through a configured push remote     | `Error: Test timed out in 30000ms`, at 32476ms                                                                              |
+| `34683710279` | `4cb5a7c` | does not report incoming deletions when the base branch is behind its remote | `Error: Test timed out in 30000ms` at 30000ms, then `EBUSY ... rmdir ...checkout-git-test-R0YjQh\repo` from the `afterEach` |
+
+**The measurements, not the impressions.** The run that failed at `4cb5a7c` differs from the run
+that passed 30 minutes earlier (`34683663303` at `02b50b5`) by one `memory.md` commit, so neither
+occurrence is a regression. The file holds 144 tests, takes **108s** locally and about **3m** in CI,
+and the failing test alone passes in roughly **1.5s** — a 20x gap. The file is _already_ in
+`test:unit:serial`, whose `--no-file-parallelism` means no sibling file was running beside it, so
+"contention with another test file" was not available as an explanation here. A test with a 20x
+margin and nothing else running does not lose on its own merit; the remaining variable is the
+runner, and Windows Defender's real-time scan of the thousands of small git objects this suite
+writes under the runner's temp directory is the specific mechanism that costs 20x on a bad day.
+
+**Three amplifiers were ours, and all three are removed rather than retried** — the pattern T240's
+paragraph and the P6-W1 notes both ask for:
+
+1. Git's own background maintenance. `maintenance.auto` (on by default since git 2.30) can launch
+   `git maintenance run --auto` behind a commit, fetch or push: real repacking work that no test
+   asks for and no test waits for. The test file now sets `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
+   `GIT_CONFIG_VALUE_n` in `process.env` (`maintenance.auto=false`, `gc.auto=0`), which reaches
+   every git process the suite spawns **including the ones the code under test spawns**, because
+   `spawnProcess` inherits `process.env` — and costs no extra process per repository, unlike two
+   `git config` calls per test.
+2. The `afterEach` assumed Windows releases a temp directory's handles the instant the child holding
+   them exits. `removeTempDir` now retries `EBUSY`/`EPERM`/`ENOTEMPTY`/`EACCES` five times over
+   250ms, and **still throws** when they all fail, so the retry absorbs a handle-release race without
+   hiding a genuine leak.
+3. The job itself. `server-tests (windows-latest)` now excludes `$RUNNER_TEMP` and
+   `$GITHUB_WORKSPACE` from Defender before running the suite (`Add-MpPreference`), deliberately
+   non-fatal, and echoes the resulting exclusion list so the log states whether it applied instead
+   of leaving it assumed. That job can no longer share the `*server_test_steps` anchor with the
+   ubuntu job — a YAML anchor replaces a list rather than merging into one — so it carries the
+   anchor's four steps verbatim, with a comment saying both copies move together.
+
+**Deliberately not done:** `testTimeout` was not raised anywhere (T310's instruction), no retry of
+the test or of a git command was added (T240: "with the cause recorded rather than a retry bolted
+on"), and the file was not moved into the serial lane because it is already the first member of it.
+
+- [x] Filed with the recurrence recorded, as T310's section instructs, rather than folded into an
+      unrelated task
+- [x] The cause mechanism and the three amplifiers measured and named, with the two CI runs cited
+- [x] Git's background maintenance disabled for the suite at zero extra process cost
+- [x] The `afterEach` retries a Windows handle-release race and still fails loudly afterwards
+- [x] The Windows CI job excludes the git-heavy temp directories from Defender, and prints whether
+      that worked
+- [x] `testTimeout` untouched, no test-level retry added, no new serial-lane member
