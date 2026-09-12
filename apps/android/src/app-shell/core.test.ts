@@ -38,9 +38,6 @@ import { fireTranscriptStatusHaptic } from "../features/transcript/transcript-st
 import type { HostProfileRecord } from "../features/connect/credential-store.js";
 import { RELAY_PIN_MISSING_MESSAGE } from "../features/connect/host-profile-reconnect.js";
 import { buildDaemonHttpOrigin } from "../features/connect/daemon-connection-store.js";
-import { FILE_PICKER_UNAVAILABLE } from "../platform/file-picker.js";
-import { SHARING_FILES_UNAVAILABLE } from "../platform/sharing.js";
-
 // T32S9: records every `Vibration.vibrate(...)` call the mocked
 // `react-native` module receives, so `AppCore.vibrationPlatform (T32S9)`
 // below can prove `createRNVibrationPlatform()` was actually wired to a
@@ -56,6 +53,18 @@ const vibrationCalls = vi.hoisted(() => [] as unknown[][]);
 // registered construction — the same "registration is not receipt"
 // standard `vibrationCalls` above already meets for haptics.
 const shareCalls = vi.hoisted(() => [] as unknown[][]);
+
+// T32S11: records the options the real `createExpoFilePicker` passes to
+// `expo-document-picker`, so `AppCore.filePicker` below proves a generic
+// pick reaches the OS picker rather than a degraded refusal.
+const documentPickerCalls = vi.hoisted(() => [] as unknown[]);
+
+// T32S11: records the calls the real `createExpoSharing` makes into
+// `expo-file-system` (writes) and `expo-sharing` (the OS sheet), so
+// `AppCore.sharing` below proves a completed download reaches both, not
+// just that the adapter exists.
+const fileWriteCalls = vi.hoisted(() => [] as unknown[][]);
+const fileShareCalls = vi.hoisted(() => [] as unknown[][]);
 
 vi.mock("react-native", () => {
   function Stub(): null {
@@ -121,6 +130,18 @@ vi.mock("react-native-svg", () => {
   return { default: Stub, Circle: Stub, Path: Stub, Rect: Stub };
 });
 
+// T32S11: `./core.ts` imports the `../features/terminal` barrel, which
+// re-exports `TerminalScreen` -> `terminal-webview-host.tsx` -> the real
+// `react-native-webview`. Stood in for the same reason every other native
+// component above is: nothing here renders, and the real package drags a
+// native/`react-native` graph plain vitest cannot parse.
+vi.mock("react-native-webview", () => {
+  function Stub(): null {
+    return null;
+  }
+  return { WebView: Stub, default: Stub };
+});
+
 vi.mock("expo-secure-store", () => ({
   getItemAsync: async () => null,
   setItemAsync: async () => {},
@@ -155,6 +176,54 @@ vi.mock("expo-notifications", () => ({
 // honestly-degraded `ShareIntentPort` this file constructs everywhere else.
 vi.mock("expo-modules-core", () => ({
   requireOptionalNativeModule: () => null,
+}));
+
+// T32S11: `./core.ts` now constructs `createExpoFilePicker`, whose module
+// imports `expo-document-picker`/`expo-image-picker` at its top level
+// (see `../platform/expo-file-picker.ts`'s own header). Both are mocked
+// here for the same reason every other native module above is: importing
+// the real packages drags their native/`react-native` graph through plain
+// vitest. The document picker records its calls so the test below can
+// prove the real port is the one wired, and resolves `canceled: true` —
+// the honest "user dismissed the picker" answer for an unattended test.
+vi.mock("expo-document-picker", () => ({
+  getDocumentAsync: async (options: unknown) => {
+    documentPickerCalls.push(options);
+    return { canceled: true };
+  },
+}));
+vi.mock("expo-image-picker", () => ({
+  getMediaLibraryPermissionsAsync: async () => ({
+    granted: true,
+    status: "granted",
+    canAskAgain: true,
+  }),
+  requestMediaLibraryPermissionsAsync: async () => ({
+    granted: true,
+    status: "granted",
+    canAskAgain: true,
+  }),
+  launchImageLibraryAsync: async () => ({ canceled: true }),
+}));
+
+// T32S11: `./core.ts` now constructs `createExpoSharing`, whose module
+// imports `expo-sharing`/`expo-file-system/legacy` at its top level (see
+// `../platform/expo-sharing-port.ts`'s own header) and calls
+// `createRNShareModule()` (whose `react-native` import is already stood in
+// above). Both packages are mocked and record their calls for the sharing
+// tests below.
+vi.mock("expo-sharing", () => ({
+  isAvailableAsync: async () => true,
+  shareAsync: async (url: string, options: unknown) => {
+    fileShareCalls.push([url, options]);
+  },
+}));
+vi.mock("expo-file-system/legacy", () => ({
+  cacheDirectory: "file:///cache/",
+  EncodingType: { Base64: "base64", UTF8: "utf8" },
+  writeAsStringAsync: async (uri: string, contents: string, options: unknown) => {
+    fileWriteCalls.push([uri, contents, options]);
+  },
 }));
 
 const { createAppCore } = await import("./core");
@@ -806,16 +875,20 @@ describe("AppCore.shareIntentPort (T69, P5-W21)", () => {
   });
 });
 
-describe("AppCore.filePicker (T78)", () => {
-  it("is a real, present FilePicker — not undefined, not omitted — whose pickFiles() rejects with the real, honest FILE_PICKER_UNAVAILABLE sentinel (createAndroidFilePicker is not wired here yet — T32S11's job, not T290's; see core.ts's own filePicker doc comment)", async () => {
+describe("AppCore.filePicker (T78/T32S11)", () => {
+  it("is the real createExpoFilePicker — a generic pick reaches the OS document picker, not the degraded FILE_PICKER_UNAVAILABLE refusal", async () => {
+    documentPickerCalls.length = 0;
     const core = createAppCore();
 
     expect(core.filePicker).toBeDefined();
-    await expect(core.filePicker.pickFiles()).rejects.toThrow(FILE_PICKER_UNAVAILABLE);
+    await expect(core.filePicker.pickFiles({ accept: ["application/pdf"] })).resolves.toEqual([]);
+    expect(documentPickerCalls).toEqual([
+      { type: ["application/pdf"], multiple: false, copyToCacheDirectory: true },
+    ]);
   });
 });
 
-describe("AppCore.sharing (T78)", () => {
+describe("AppCore.sharing (T78/T32S11)", () => {
   it("shareText() reaches react-native's real Share.share with the exact message/title — a value actually arrives at the native module, not just a registered construction", async () => {
     shareCalls.length = 0;
     const core = createAppCore();
@@ -827,35 +900,82 @@ describe("AppCore.sharing (T78)", () => {
     ]);
   });
 
-  it("isAvailable() honestly reports false — no expo-sharing install exists in this workspace", async () => {
+  it("isAvailable() reflects expo-sharing's own isAvailableAsync", async () => {
     const core = createAppCore();
-    await expect(core.sharing.isAvailable()).resolves.toBe(false);
+    await expect(core.sharing.isAvailable()).resolves.toBe(true);
   });
 
-  it("shareFiles() rejects with the real, honest SHARING_FILES_UNAVAILABLE sentinel rather than a fabricated success", async () => {
+  it("shareFiles() writes the bytes to cache with expo-file-system and opens the OS sheet through expo-sharing", async () => {
+    fileWriteCalls.length = 0;
+    fileShareCalls.length = 0;
     const core = createAppCore();
-    await expect(
-      core.sharing.shareFiles([{ name: "a.txt", mimeType: "text/plain", data: new Uint8Array() }]),
-    ).rejects.toThrow(SHARING_FILES_UNAVAILABLE);
+
+    await core.sharing.shareFiles([
+      { name: "a.txt", mimeType: "text/plain", data: new Uint8Array([0x68, 0x69]) },
+    ]);
+
+    expect(fileWriteCalls).toEqual([["file:///cache/a.txt", "aGk=", { encoding: "base64" }]]);
+    expect(fileShareCalls).toEqual([
+      ["file:///cache/a.txt", { mimeType: "text/plain", dialogTitle: undefined }],
+    ]);
   });
 });
 
-describe("AppCore.terminalWebview (T80, P5-W23)", () => {
-  it("is a real, present TerminalWebViewPort — not undefined, not omitted — honestly reporting isAvailable: false (no react-native-webview install exists in this workspace)", () => {
+describe("AppCore.terminalWebview (T80/T32S11)", () => {
+  it("is the real createAndroidTerminalWebViewPort — present, available, and speaking its protocol to a bound host", () => {
     const core = createAppCore();
 
     expect(core.terminalWebview).toBeDefined();
-    expect(core.terminalWebview.isAvailable).toBe(false);
-  });
+    expect(core.terminalWebview.isAvailable).toBe(true);
+    expect(typeof core.terminalWebview.attachHost).toBe("function");
 
-  it("onReady never fires and write/restore/setTheme/resize/dispose are silent no-ops — the honest 'nothing to draw' fallback, not a stub that throws or pretends to render", () => {
-    const core = createAppCore();
+    const posted: string[] = [];
+    core.terminalWebview.attachHost!({ postMessage: (data) => posted.push(data) });
+
+    // Not yet ready: the port queues rather than dropping or writing early.
+    core.terminalWebview.write(new Uint8Array([0x68]));
+    core.terminalWebview.setTheme({
+      background: "#000",
+      foreground: "#fff",
+      cursor: "#fff",
+      cursorAccent: "#000",
+      selectionBackground: "#333",
+      fontFamily: "mono",
+      black: "#000",
+      red: "#f00",
+      green: "#0f0",
+      yellow: "#ff0",
+      blue: "#00f",
+      magenta: "#f0f",
+      cyan: "#0ff",
+      white: "#fff",
+      brightBlack: "#555",
+      brightRed: "#f55",
+      brightGreen: "#5f5",
+      brightYellow: "#ff5",
+      brightBlue: "#55f",
+      brightMagenta: "#f5f",
+      brightCyan: "#5ff",
+      brightWhite: "#fff",
+    });
+    expect(posted).toEqual([]);
 
     let readyFired = false;
     core.terminalWebview.onReady(() => {
       readyFired = true;
     });
-    expect(readyFired).toBe(false);
+    core.terminalWebview.handleHostMessage!(JSON.stringify({ type: "ready" }));
+
+    expect(readyFired).toBe(true);
+    expect(posted).toEqual([
+      JSON.stringify({ type: "writeBytes", data: "aA==" }),
+      expect.stringContaining('"type":"setTheme"'),
+    ]);
+  });
+
+  it("write/restore/setTheme/resize/dispose never throw before a host is bound", () => {
+    const core = createAppCore();
+
     expect(() => core.terminalWebview.write(new Uint8Array([1]))).not.toThrow();
     expect(() => core.terminalWebview.resize({ rows: 1, cols: 1 })).not.toThrow();
     expect(() => core.terminalWebview.dispose()).not.toThrow();

@@ -33,7 +33,9 @@ export {
 } from "./terminal-session-controller";
 export { buildTerminalTheme, type TerminalAnsiPalette, type TerminalTheme } from "./terminal-theme";
 export {
+  createAndroidTerminalWebViewPort,
   createUnavailableTerminalWebViewPort,
   type TerminalSize,
+  type TerminalWebViewHostBridge,
   type TerminalWebViewPort,
 } from "./terminal-webview-port";

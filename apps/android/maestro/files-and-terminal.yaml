@@ -122,19 +122,18 @@ tags:
 #      at all. T80 closed the second reason: the route now passes
 #      `webview={core.terminalWebview}` (`app-shell/core.ts`'s
 #      `AppCore["terminalWebview"]`), the same "read the field straight
-#      off `AppCore`" shape `transport` already used. The visible outcome
-#      below is UNCHANGED — `apps/android/package.json` still declares no
-#      `react-native-webview` (this task's `CLAUDE.md` lists it as
-#      known-uninstallable — no install grant exists in this wave), so
-#      `core.terminalWebview` is still `createUnavailableTerminalWebViewPort()`
-#      and the terminal screen still renders its own honest "Terminal
-#      unavailable" `EmptyState`. This flow asserts exactly that real,
-#      shipped fallback state, matching `terminal-screen.tsx`'s own
-#      "silent, honest 'nothing to draw' rather than a fake terminal"
-#      contract — never a live keystroke round-trip, which is T59's (real
-#      device, real WebView, and the `react-native-webview` install) to
-#      add once that remaining gap closes; no further route or screen
-#      wiring is needed once it does.
+#      off `AppCore`" shape `transport` already used. **T32S11 closed the
+#      first reason too**: `apps/android/package.json` now declares
+#      `react-native-webview@13.15.0`, the xterm page bundle and
+#      `terminal-webview-host.tsx` are in place, and `core.terminalWebview`
+#      is `createAndroidTerminalWebViewPort()`, so the terminal screen
+#      renders its live `<WebView>` branch. The one step this environment
+#      cannot perform is the native rebuild `react-native-webview` needs
+#      (`npx expo prebuild --platform android --no-install` then
+#      `npx expo run:android`, or an EAS build) — see
+#      `src/features/terminal/terminal-webview-port.ts`'s header. The
+#      assertions below therefore expect the live branch, and only pass on
+#      a binary with that native module linked.
 #
 # ---------------------------------------------------------------------
 # What this flow DOES prove for real, once a device is available:
@@ -143,8 +142,8 @@ tags:
 #     port — see ../README.md's "Isolation") succeeds.
 #   - Both routes mount without crashing and render their real,
 #     already-shipped bodies — `FilesScreen`'s connected browsing state
-#     (not its disconnected fallback) and `TerminalScreen`'s honest
-#     unavailable state.
+#     (not its disconnected fallback) and `TerminalScreen`'s live WebView
+#     host.
 #   - Leaving the terminal route unmounts `TerminalScreen`, whose own
 #     cleanup effect calls `controller.dispose()`
 #     (`terminal-session-controller.ts`), which cascades into
@@ -251,16 +250,14 @@ tags:
 - openLink: "picompanion://h/e2e-host/session/e2e-terminal-agent/terminal/e2e-terminal-1"
 - assertVisible:
     id: "terminal-screen"
-# --- KNOWN BLOCKER (2) above: no react-native-webview installed. The
-# --- route DOES now pass a real `webview` prop (T80, P5-W23) — this is
-# --- the screen's own honest fallback for a genuinely-unavailable port,
-# --- not a crash, not a blank screen, and not a missing prop.
+# --- T32S11: the route passes `webview={core.terminalWebview}`, which is now
+# --- the real `createAndroidTerminalWebViewPort()`, so the screen renders its
+# --- live `<WebView>` host instead of the fallback `EmptyState`. This only
+# --- passes on a binary with `react-native-webview` linked (see this file's
+# --- header); `terminal-screen.tsx`'s `terminal-unavailable` branch still
+# --- exists for the degraded port, and is proven by unit tests, not here.
 - assertVisible:
-    id: "terminal-unavailable"
-- assertVisible:
-    text: "Terminal unavailable"
-- assertVisible:
-    text: "This build has no embedded terminal renderer installed yet. Your session and its output are unaffected."
+    id: "terminal-webview"
 
 # --- Leave the terminal route: unmounts TerminalScreen, whose cleanup
 # --- effect disposes the real transport this run's pairing opened a

@@ -34,12 +34,13 @@ import { useAppCore } from "../../../../../core-context";
  * wiring even if one existed). This route now passes
  * `core.terminalWebview` (`../../../../../app-shell/core.ts`), the same
  * "read the field straight off `AppCore`" shape `transport` above uses.
- * `react-native-webview` is still not installed in this workspace, so
- * `core.terminalWebview` is still `createUnavailableTerminalWebViewPort()`
- * today and `TerminalScreen` still renders its named "Terminal
- * unavailable" empty state — see `AppCore["terminalWebview"]`'s doc
- * comment for exactly what installing the package and swapping that one
- * construction would change, with no further edit needed here.
+ * **T32S11 closed the first reason too**: `react-native-webview@13.15.0`
+ * is declared in `apps/android/package.json`, and `core.terminalWebview`
+ * is now the real `createAndroidTerminalWebViewPort()`, so
+ * `TerminalScreen` renders its live `<WebView>` host. The one remaining
+ * step is the native rebuild `react-native-webview` needs — see
+ * `features/terminal/terminal-webview-port.ts`'s header for the exact
+ * commands; no further edit is needed here.
  */
 export default function SessionTerminalRoute() {
   const { serverId, agentId, terminalId } = useLocalSearchParams<{

@@ -70,9 +70,11 @@ export const FILES_TERMINAL_FLOW = {
 
   /** `terminal-screen.tsx`'s outer container testID — present in both the "unavailable" and live branches. */
   terminalScreenTestId: "terminal-screen",
-  /** `terminal-screen.tsx`'s early-return `EmptyState` when `!resolvedWebview.isAvailable` — always true today, no `react-native-webview` installed (see this module's doc comment). */
+  /** `terminal-screen.tsx`'s early-return `EmptyState` when no host is available (`!resolvedWebview.isAvailable || !resolvedWebview.attachHost`) — the honestly-degraded port's state, still used by isolated tests. */
   terminalUnavailableTestId: "terminal-unavailable",
   terminalUnavailableTitle: "Terminal unavailable",
   terminalUnavailableDescription:
     "This build has no embedded terminal renderer installed yet. Your session and its output are unaffected.",
+  /** `terminal-webview-host.tsx`'s `<WebView>` testID — rendered by the live branch now that `core.terminalWebview` is the real `createAndroidTerminalWebViewPort()` (T32S11). */
+  terminalWebviewTestId: "terminal-webview",
 } as const;

@@ -10,6 +10,7 @@ import {
 } from "./terminal-binary-transport";
 import { TerminalSessionController } from "./terminal-session-controller";
 import { buildTerminalTheme } from "./terminal-theme";
+import { TerminalWebViewHost } from "./terminal-webview-host";
 import {
   createUnavailableTerminalWebViewPort,
   type TerminalWebViewPort,
@@ -30,10 +31,10 @@ export interface TerminalScreenProps {
   transport?: TerminalBinaryTransport;
   /**
    * Injectable WebView seam. Defaults to
-   * `createUnavailableTerminalWebViewPort()`: `apps/android/package.json`
-   * has no `react-native-webview` installed (see
-   * `terminal-webview-port.ts`'s module docstring) — see this module's
-   * docstring for what a real mount needs.
+   * `createUnavailableTerminalWebViewPort()` — the honestly-degraded port
+   * used by isolated tests. Production passes `AppCore["terminalWebview"]`
+   * (`app-shell/core.ts`), which is now the real
+   * `createAndroidTerminalWebViewPort()`.
    */
   webview?: TerminalWebViewPort;
   /** Fixed daemon terminal-stream slot for this screen's terminal. Defaults to `0` (single-terminal screen). */
@@ -61,9 +62,12 @@ export interface TerminalScreenProps {
  *
  * **What a real mount still needs, beyond this task's `Owns` grant:**
  *
- * 1. `npm install --workspace=@picompanion/android react-native-webview@13.16.1`
- *    plus a real `TerminalWebViewPort` implementation (see
- *    `terminal-webview-port.ts`'s module doc for the exact shape).
+ * 1. ~~Install `react-native-webview` and a real `TerminalWebViewPort`~~ —
+ *    done (T32S11): `react-native-webview@13.15.0` is declared in
+ *    `apps/android/package.json`, `terminal-webview-port.ts`'s
+ *    `createAndroidTerminalWebViewPort` speaks the JSON protocol to the
+ *    committed xterm page bundle, and `terminal-webview-host.tsx` renders
+ *    and binds the `<WebView>`.
  * 2. A real `TerminalBinaryTransport` backed by `AppCore`'s daemon
  *    connection (`packages/client`'s `DaemonClient.subscribeTerminal` /
  *    `sendTerminalInput` / `onTerminalStreamEvent` — see
@@ -72,20 +76,22 @@ export interface TerminalScreenProps {
  *    `subscribeTerminal`'s response passed as `slot`.
  * 3. Proof on an emulator/device (T37E, T59) — nothing here is proven
  *    beyond an injected fake transport and a scripted fake WebView port.
+ *    The one remaining step for the renderer itself is the native
+ *    rebuild `react-native-webview` requires: `npx expo prebuild
+ *    --platform android --no-install` then `npx expo run:android` (or an
+ *    EAS build) to link it into the APK — see
+ *    `terminal-webview-port.ts`'s own header.
  *
  * **T80 (P5-W23)**: route-level wiring for `webview` is done — the route
  * that renders this (`../../app/h/[serverId]/session/[agentId]/terminal/
  * [terminalId].tsx`) now passes `AppCore["terminalWebview"]`
  * (`../../app-shell/core.ts`) as this component's `webview` prop, the
- * same way it already passes `transport`. `react-native-webview` is
- * still not installed (item 1 above), so that field is still
- * `createUnavailableTerminalWebViewPort()`, which never fires `onReady`
- * — so this screen still renders `EmptyState` and never sends or
- * receives a single byte, an honest "nothing to draw" rather than a
- * simulated terminal. Once (1) resolves, swapping `AppCore
- * ["terminalWebview"]`'s single construction for a real implementation is
- * the only change needed — neither this component nor its route needs to
- * change again.
+ * same way it already passes `transport`. **T32S11** then replaced
+ * `AppCore["terminalWebview"]`'s construction with the real
+ * `createAndroidTerminalWebViewPort()`, so this screen now renders the
+ * `<WebView>` host (when the injected port is available and binds one —
+ * `createUnavailableTerminalWebViewPort` still renders `EmptyState`, which
+ * is what an isolated test or a future non-WebView build sees).
  */
 export function TerminalScreen({
   serverId: _serverId,
@@ -134,7 +140,7 @@ export function TerminalScreen({
     controllerRef.current?.setTheme(terminalTheme);
   }, [terminalTheme]);
 
-  if (!resolvedWebview.isAvailable) {
+  if (!resolvedWebview.isAvailable || !resolvedWebview.attachHost) {
     return (
       <View style={styles.container} testID="terminal-screen">
         <EmptyState
@@ -152,10 +158,7 @@ export function TerminalScreen({
       testID="terminal-screen"
       accessibilityLabel={`Terminal ${terminalId}`}
     >
-      {/* A real WebView host mounts here once `webview.isAvailable` — its
-          native rendering is out of vitest's reach and out of this
-          task's Owns grant to write until react-native-webview lands
-          (see module docstring). */}
+      <TerminalWebViewHost port={resolvedWebview} testId="terminal-webview" />
     </View>
   );
 }

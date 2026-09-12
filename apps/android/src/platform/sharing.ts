@@ -23,16 +23,13 @@ import { MAX_DOWNLOAD_BYTES } from "../features/files/file-browser-client.js";
  * `sharing.test.ts`) with zero `expo-sharing`/`react-native` import.
  *
  * ---------------------------------------------------------------------
- * Text sharing: genuinely installable today, still ported behind a port
+ * Text sharing: real, still ported behind a port
  * ---------------------------------------------------------------------
- * Unlike `expo-sharing` (not installed — see below; **CORRECTED
- * (T290)**: this used to also list `expo-document-picker`/
- * `expo-image-picker` here as uninstalled — the owner installed both at
- * `488c4dc` and T290 used them for `../features/composer`'s own
- * `AttachmentSourcePort`/`CameraCapturePort`; `expo-sharing` remains the
- * only one of the three still absent), plain-text sharing on Android needs
- * nothing beyond `react-native`'s own `Share.share()`, which *is*
- * already a dependency of this app. This module still declares
+ * Plain-text sharing on Android needs nothing beyond `react-native`'s own
+ * `Share.share()`, which *is* a dependency of this app. (`expo-sharing` is
+ * now installed too — it powers the file half below — but text sharing
+ * still uses RN's own API, which needs no file to write.) This module still
+ * declares
  * `NativeShareModule` as an injected port rather than importing
  * `react-native` directly, for the same reason `../platform/
  * lifecycle.ts` and `../platform/haptics/vibration-platform.ts` keep
@@ -43,11 +40,10 @@ import { MAX_DOWNLOAD_BYTES } from "../features/files/file-browser-client.js";
  * pattern here, not new to this task. `NativeShareModule.share` mirrors
  * RN's real `Share.share(content, options)` signature and resolves
  * shape exactly, so `Share.share` (imported at the construction site,
- * outside this task's grant — see this task's report) satisfies this
- * port with no wrapper.
+ * `./expo-sharing-port.ts`) satisfies this port with no wrapper.
  *
  * ---------------------------------------------------------------------
- * File sharing: genuinely blocked on two uninstalled packages
+ * File sharing: real, backed by two now-installed packages
  * ---------------------------------------------------------------------
  * `ShareableFile` carries raw `data: Uint8Array` — Android's native
  * share sheet (and `expo-sharing`'s `shareAsync`) takes a file URI, not
@@ -56,9 +52,10 @@ import { MAX_DOWNLOAD_BYTES } from "../features/files/file-browser-client.js";
  * (writes one `ShareableFile`'s bytes to a cache path and returns its
  * URI — the real implementation is `expo-file-system`'s
  * `writeAsStringAsync(uri, base64Data, { encoding: EncodingType.Base64
- * })` against a path under `FileSystem.cacheDirectory`, not installed)
- * and `NativeFileShareModule` (mirrors `expo-sharing`'s
- * `isAvailableAsync`/`shareAsync`, not installed either).
+ * })` against a path under `FileSystem.cacheDirectory`) and
+ * `NativeFileShareModule` (mirrors `expo-sharing`'s
+ * `isAvailableAsync`/`shareAsync`). Both are constructed in
+ * `./expo-sharing-port.ts` from the real packages.
  *
  * `expo-sharing`'s real `shareAsync(url, options)` accepts exactly one
  * URL — there is no `ACTION_SEND_MULTIPLE` equivalent in that API. This
@@ -111,24 +108,37 @@ import { MAX_DOWNLOAD_BYTES } from "../features/files/file-browser-client.js";
  *   and writing to this app's own cache directory needs none either.
  *
  * ---------------------------------------------------------------------
- * What is not yet installed, named exactly
+ * Where the real adapters are constructed (T32S11)
  * ---------------------------------------------------------------------
- * Nothing in this file constructs `createAndroidSharing` in production.
- * Once installed (versions pinned by *this app's own*
- * `apps/android/node_modules/expo/bundledNativeModules.json`, matching
- * `apps/android/package.json`'s `"expo": "^54.0.18"`):
+ * `createAndroidSharing` is now constructed in production:
+ * `./expo-sharing-port.ts` builds `NativeFileShareModule` from
+ * `expo-sharing`'s `isAvailableAsync`/`shareAsync`, `ShareableFileWriter`
+ * from `expo-file-system`'s `writeAsStringAsync` against
+ * `FileSystem.cacheDirectory + file.name`, and `NativeShareModule` from
+ * `./native-share-module.ts`'s `createRNShareModule()`;
+ * `../app-shell/core.ts`'s `AppCore["sharing"]` holds that factory's
+ * result. `createFileSharingUnavailableSharing` below remains as this
+ * module's named, honestly-degraded fallback for a caller (a test, or a
+ * future DI seam) that wants a present, real-for-text `Sharing` with no
+ * file-sharing target. **CORRECTED (T32S11)**: this section used to read
+ * "Nothing in this file constructs `createAndroidSharing` in production";
+ * T32S11 is the task that wired it.
  *
- *     npm install --workspace=@picompanion/android expo-sharing@~14.0.8
- *     npm install --workspace=@picompanion/android expo-file-system@~19.0.24
+ * The installs it used to be blocked on — both declared in
+ * `apps/android/package.json`, versions pinned by this app's own resolved
+ * `expo/bundledNativeModules.json` (`"expo": "^54.0.18"`):
+ *
+ *     expo-sharing@~14.0.8
+ *     expo-file-system@~19.0.24
  *
  * `expo-sharing`'s default export already structurally satisfies
  * `NativeFileShareModule` as declared below. `react-native`'s
  * `Share.share` already structurally satisfies `NativeShareModule` and
- * needs no new install at all. `ShareableFileWriter` has no single
+ * needs no install at all. `ShareableFileWriter` has no single
  * matching native export — the real implementation base64-encodes
- * `ShareableFile.data` and calls `expo-file-system`'s
- * `writeAsStringAsync` against a path under `FileSystem.
- * cacheDirectory + file.name`.
+ * `ShareableFile.data` (`./bytes-to-base64.ts`) and calls
+ * `expo-file-system`'s `writeAsStringAsync` against a path under
+ * `FileSystem.cacheDirectory + file.name`.
  */
 
 /** Sentinel `Error.message` `shareFiles()` rejects with when any file's `data.byteLength` exceeds `MAX_DOWNLOAD_BYTES`, before any write or share call is made. */
@@ -178,10 +188,10 @@ export interface AndroidSharingDeps {
 }
 
 /**
- * The real `Sharing` this task builds — see the module doc comment for
- * the full refusal rules. Not constructed anywhere in this app yet; see
- * this task's report for the exact `AppCore` seam T32S11 still needs to
- * wire, once the packages named above are installed.
+ * The real `Sharing` this module describes — constructed in production by
+ * `./expo-sharing-port.ts`'s `createExpoSharing`, which supplies the live
+ * `NativeFileShareModule`/`ShareableFileWriter` pair and RN's own
+ * `Share.share`. See this module's doc comment for the full refusal rules.
  */
 export function createAndroidSharing(deps: AndroidSharingDeps): Sharing {
   return {
@@ -219,21 +229,19 @@ export function createAndroidSharing(deps: AndroidSharingDeps): Sharing {
 }
 
 /**
- * A `Sharing` whose file-sharing half is honestly inert — both
- * uninstalled-package deps (`nativeFileShare`, `writeShareableFile`)
- * always report/reject unavailable — while `shareText` still goes
- * through a real, injected `nativeShare`. Deliberately *not* a single
- * blanket "everything unavailable" stub like `./file-picker.ts`'s
- * `createUnavailableFilePicker`: unlike every one of that module's
- * paths, this interface's text-sharing half needs no uninstalled
- * package at all — `react-native`'s own `Share.share` already
- * satisfies `NativeShareModule` today (see this module's doc comment).
- * A stub that also refused `shareText` would misrepresent that as
- * blocked when it is not. `../features/files/files-screen.tsx` already
- * treats a missing `sharing` prop as "no download affordance" (`canSave
- * ={Boolean(sharing)}`) — this export exists for a caller (T32S11) that
- * wants a present, real-for-text `Sharing` before the file-sharing
- * installs land, instead of `undefined` or a fully-fake object.
+ * A `Sharing` whose file-sharing half is honestly inert — the injected
+ * `nativeFileShare` always reports unavailable and `writeShareableFile` is
+ * never reached — while `shareText` still goes through a real, injected
+ * `nativeShare`. Deliberately *not* a single blanket "everything
+ * unavailable" stub like `./file-picker.ts`'s
+ * `createUnavailableFilePicker`: this interface's text-sharing half needs
+ * no native package at all — `react-native`'s own `Share.share` already
+ * satisfies `NativeShareModule` — so a stub that also refused `shareText`
+ * would misrepresent that as blocked when it is not.
+ * `../app-shell/core.ts` no longer uses this for `AppCore["sharing"]`
+ * (T32S11 wired `./expo-sharing-port.ts` instead); it remains the shape a
+ * caller that wants a real-for-text `Sharing` with no file target should
+ * reuse rather than re-inventing a second "unavailable" object.
  */
 export function createFileSharingUnavailableSharing(nativeShare: NativeShareModule): Sharing {
   return {

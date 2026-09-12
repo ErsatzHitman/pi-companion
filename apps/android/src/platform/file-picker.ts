@@ -111,51 +111,47 @@ import { resolvePermission } from "../features/composer/permission-recovery.js";
  *   belong on this task's two adapters.
  *
  * ---------------------------------------------------------------------
- * What is not yet installed, named exactly (T32P2's "name it" rule)
+ * Where the real triple is constructed (T32S11)
  * ---------------------------------------------------------------------
- * Nothing in this file constructs `createAndroidFilePicker` in
- * production — there is no live `DocumentPickerModule`/
- * `ImageLibraryPickerModule`/`FileUriBytesReader` to hand it yet, and
- * wiring one is the router root's job (T32S11), not this task's — see
- * this task's report for the exact call site. **CORRECTED (T290)**: the
- * two `npm install` commands below used to both be open; the owner ran
- * the first two (not the third) at `488c4dc`:
+ * `createAndroidFilePicker` is now constructed in production: `./expo-
+ * file-picker.ts` builds the `DocumentPickerModule`/
+ * `ImageLibraryPickerModule`/`FileUriBytesReader` triple from the real
+ * `expo-document-picker`/`expo-image-picker` packages (and
+ * `../features/composer/attachment-source-port.ts`'s `readUriAsBytes`
+ * reader) and `../app-shell/core.ts`'s `AppCore["filePicker"]` holds that
+ * factory's result. `createUnavailableFilePicker` below remains as this
+ * module's named, honestly-degraded fallback for a caller (a test, or a
+ * future DI seam) that has no live picker to hand in. **CORRECTED
+ * (T32S11)**: this section used to read "Nothing in this file constructs
+ * `createAndroidFilePicker` in production" and left that wiring as
+ * T32S11's job; T32S11 is the task that did it.
+ *
+ * The install lines, for the record — the owner ran the first two at
+ * `488c4dc`, and `expo-file-system` was never needed here (see the next
+ * paragraph):
  *
  *     npm install --workspace=@picompanion/android expo-document-picker@~14.0.8   [DONE, 488c4dc]
  *     npm install --workspace=@picompanion/android expo-image-picker@~17.0.11    [DONE, 488c4dc]
- *     npm install --workspace=@picompanion/android expo-file-system@~19.0.24     [still open]
+ *     npm install --workspace=@picompanion/android expo-file-system@~19.0.24     [NOT NEEDED — see below]
  *
- * (versions pinned by *this app's own*
- * `apps/android/node_modules/expo/bundledNativeModules.json`, matching
- * `apps/android/package.json`'s `"expo": "^54.0.18"` — not whatever a
- * differently-versioned `expo` hoisted from another worktree's install
- * happens to report at the repo root.) T290 used the first two for
- * `../features/composer`'s own `AttachmentSourcePort`/
- * `CameraCapturePort` — see that feature's `expo-attachment-source-
- * port.ts` for why `expo-file-system` turned out to be avoidable there
- * (a `copyToCacheDirectory: true` default makes every URI `file://`,
- * which `fetch`/`Blob`/`FileReader` reads reliably with no new
- * dependency). **Noticed, not resolved, while making that same check
- * here**: `createAndroidFilePicker`'s own document-picker branch below
- * also hardcodes `copyToCacheDirectory: true`, which — by the identical
- * reasoning — would also produce `file://` URIs, not the `content://`
- * ones this section's very next paragraph says motivate
- * `expo-file-system`. Whether that makes `expo-file-system` avoidable
- * here too (for the document-picker branch; the image-library branch's
- * URI shape was not checked) is `T32S11`'s question to answer when it
- * actually wires this file, not decided either way by this task.
+ * (versions pinned by this app's own resolved
+ * `expo/bundledNativeModules.json`, matching `apps/android/package.json`'s
+ * `"expo": "^54.0.18"`.)
  *
- * `expo-document-picker`'s and `expo-image-picker`'s default exports
- * already structurally satisfy `DocumentPickerModule` and
- * `ImageLibraryPickerModule` as declared below — no wrapper needed
- * beyond the import itself, exactly like `NetInfoModule`. `FileUriBytesReader`
- * has no single matching native export: the real implementation reads
- * `expo-file-system`'s `readAsStringAsync(uri, { encoding:
- * EncodingType.Base64 })` and decodes the result to `Uint8Array` — a
- * plain `fetch(uri)` is *not* a safe substitute here, because Android's
- * Storage Access Framework hands back `content://` URIs, which RN's
- * `fetch` polyfill does not reliably read.
- */
+ * **The `expo-file-system` question is now resolved, not merely
+ * noticed.** `readUriAsBytes` reads a picked file with
+ * `fetch`/`Blob`/`FileReader` — the same globals React Native ships — and
+ * `createAndroidFilePicker`'s document-picker branch below hardcodes
+ * `copyToCacheDirectory: true`, which (measured directly against
+ * `DocumentPickerModule.kt`'s `copyDocumentToCacheDirectory`, and
+ * independently in `../features/composer/attachment-model.ts`) makes every
+ * result URI a plain `file://` in the app's own cache directory. React
+ * Native's `fetch` reads a `file://` URI reliably, so the `content://`
+ * shape that originally motivated `expo-file-system` never arises. The
+ * image-library branch's `uri` was likewise measured to be a `file://`
+ * URI (`../features/composer/expo-camera-capture-port.ts`'s header names
+ * the `MediaHandler.kt` source), so neither branch needs it. No new
+ * dependency is required for this port.
 
 /** Sentinel `Error.message` this module rejects `pickFiles()` with when the image-library permission read/request settles on `"denied"`. */
 export const FILE_PICKER_PERMISSION_DENIED = "FILE_PICKER_PERMISSION_DENIED";
@@ -281,10 +277,11 @@ function permissionDenialSentinel(state: PermissionState): string {
 }
 
 /**
- * The real `FilePicker` this task builds — see the module doc comment
- * for the full routing/refusal rules. Not constructed anywhere in this
- * app yet; see this task's report for the exact `AppCore` seam T32S11
- * still needs to wire, once the packages named above are installed.
+ * The real `FilePicker` this module builds — constructed in production by
+ * `./expo-file-picker.ts`'s `createExpoFilePicker`, which supplies the
+ * live `DocumentPickerModule`/`ImageLibraryPickerModule`/
+ * `FileUriBytesReader` triple from the real native packages. See this
+ * module's doc comment for the full routing/refusal rules.
  */
 export function createAndroidFilePicker(deps: AndroidFilePickerDeps): FilePicker {
   return {
@@ -331,13 +328,14 @@ export function createAndroidFilePicker(deps: AndroidFilePickerDeps): FilePicker
 }
 
 /**
- * The only production `FilePicker` this build can construct today —
- * mirrors `../features/composer/attachment-source-port.ts`'s
- * `createUnavailableAttachmentSourcePort` exactly (same reason: no
- * picker package is installed). Every call rejects with
- * `FILE_PICKER_UNAVAILABLE`, landing in `file-upload-model.ts`'s
- * existing `selectFile()` `.catch()` — an honest "nothing happened",
- * never a fabricated empty success.
+ * The named, honestly-degraded `FilePicker` for a caller with no live
+ * picker to hand in (a test, or a future DI seam). Every call rejects with
+ * `FILE_PICKER_UNAVAILABLE`, landing in `file-upload-model.ts`'s existing
+ * `selectFile()` `.catch()` — an honest "nothing happened", never a
+ * fabricated empty success. `../app-shell/core.ts` no longer uses this for
+ * `AppCore["filePicker"]` (T32S11 wired `./expo-file-picker.ts` instead);
+ * it remains the shape any future degraded composition should reuse rather
+ * than re-inventing a second "unavailable" object.
  */
 export function createUnavailableFilePicker(): FilePicker {
   return {

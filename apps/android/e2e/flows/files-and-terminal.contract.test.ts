@@ -81,13 +81,15 @@ import { parseMaestroSteps } from "./maestro-yaml";
  * by a positive assertion that both props actually reach `TerminalScreen`
  * (see the terminal-route describe block below), plus a new
  * `app-shell/core.ts` assertion that `AppCore.terminalWebview` is
- * constructed from the real `createUnavailableTerminalWebViewPort()`, not
- * omitted or faked. The *visible outcome* this flow asserts is unchanged:
- * `core.terminalWebview.isAvailable` is still `false` (no
- * `react-native-webview` install exists in this workspace), so
- * `TerminalScreen` still takes its "unavailable" branch — only the reason
- * changed, from "no prop wired at all" to "a real, honestly-unavailable
- * port is wired".
+ * constructed from the real `createAndroidTerminalWebViewPort()`, not
+ * omitted or faked. **T32S11** flipped that from the previously-unavailable
+ * port to the real one: `react-native-webview@13.15.0` is now declared in
+ * `apps/android/package.json`, the xterm page bundle and
+ * `terminal-webview-host.tsx` are in place, and `TerminalScreen` renders the
+ * live `<WebView>` branch. The one step this environment cannot perform is
+ * the native rebuild `react-native-webview` needs; see
+ * `src/features/terminal/terminal-webview-port.ts`'s header for the exact
+ * commands.
  *
  * T86 — until this task, nothing in this directory ever parsed
  * `../../maestro/files-and-terminal.yaml`'s own steps (`grep -rn
@@ -308,13 +310,23 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
       expect(occurrences.length).toBe(2);
     });
 
-    it('the "unavailable" branch (taken whenever !resolvedWebview.isAvailable — always true with no react-native-webview installed) renders EmptyState with the exact title/description/testId this flow asserts', () => {
+    it('the "unavailable" branch (taken when no host is available — `!resolvedWebview.isAvailable || !resolvedWebview.attachHost`) renders EmptyState with the exact title/description/testId this file still pins for the degraded port', () => {
       const code = readComponentCode(
         "../../src/features/terminal/terminal-screen.tsx",
         "TerminalScreen",
       );
       expect(code).toMatch(
-        /if \(!resolvedWebview\.isAvailable\) \{\s*return \(\s*<View style=\{styles\.container\} testID="terminal-screen">\s*<EmptyState\s+title="Terminal unavailable"\s+description="This build has no embedded terminal renderer installed yet\. Your session and its output are unaffected\."\s+testId="terminal-unavailable"/,
+        /if \(!resolvedWebview\.isAvailable \|\| !resolvedWebview\.attachHost\) \{\s*return \(\s*<View style=\{styles\.container\} testID="terminal-screen">\s*<EmptyState\s+title="Terminal unavailable"\s+description="This build has no embedded terminal renderer installed yet\. Your session and its output are unaffected\."\s+testId="terminal-unavailable"/,
+      );
+    });
+
+    it("the live branch renders TerminalWebViewHost against the injected port, so a device with react-native-webview linked shows a real terminal", () => {
+      const code = readComponentCode(
+        "../../src/features/terminal/terminal-screen.tsx",
+        "TerminalScreen",
+      );
+      expect(code).toMatch(
+        /<TerminalWebViewHost port=\{resolvedWebview\} testId="terminal-webview" \/>/,
       );
     });
 
@@ -338,11 +350,12 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
     // includes that line instead. The visible outcome is UNCHANGED:
     // `core.terminalWebview` (`app-shell/core.ts`) is still
     // `createUnavailableTerminalWebViewPort()` — no `react-native-webview`
-    // install exists in this workspace — so `TerminalScreen` still takes
-    // its "unavailable" branch. This test now proves a real value
-    // actually reaches the prop, not merely that the field exists
-    // somewhere on `AppCore` (see the `app-shell/core.ts` describe block
-    // below for that half).
+    // install existed when T80 wrote this. T32S11 installed it and made
+    // `core.ts` construct `createAndroidTerminalWebViewPort()`, so the
+    // terminal route now takes the live branch. This test still proves a
+    // real value actually reaches the prop, not merely that the field
+    // exists somewhere on `AppCore` (see the `app-shell/core.ts` describe
+    // block below for that half).
     it("passes TerminalScreen a real transport (core.createTerminalTransport) AND a real webview (core.terminalWebview), never omitted", () => {
       const code = readCode(
         "../../src/app/h/[serverId]/session/[agentId]/terminal/[terminalId].tsx",
@@ -379,9 +392,9 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
     // omitted, `undefined`, or a locally-faked object that would make the
     // route-level regex above pass without a real value existing on
     // AppCore at all.
-    it("AppCore.terminalWebview is constructed from the real createUnavailableTerminalWebViewPort(), and returned from createAppCore()", () => {
+    it("AppCore.terminalWebview is constructed from the real createAndroidTerminalWebViewPort(), and returned from createAppCore()", () => {
       const code = readCode("../../src/app-shell/core.ts");
-      expect(code).toMatch(/const terminalWebview = createUnavailableTerminalWebViewPort\(\);/);
+      expect(code).toMatch(/const terminalWebview = createAndroidTerminalWebViewPort\(\);/);
       expect(code).toMatch(/return \{[\s\S]*?\bterminalWebview,[\s\S]*?\};/);
     });
   });
@@ -461,7 +474,7 @@ describe("files-and-terminal.yaml itself, read from disk", () => {
     },
   );
 
-  it("asserts the real terminal-screen and terminal-unavailable ids visible, and terminal-screen absent again after leaving the route", () => {
+  it("asserts the real terminal-screen and terminal-webview ids visible, and terminal-screen absent again after leaving the route", () => {
     const visibleIds = steps
       .filter((step) => step.kind === "assertVisible" && step.id !== undefined)
       .map((step) => step.id as string);
@@ -470,11 +483,12 @@ describe("files-and-terminal.yaml itself, read from disk", () => {
       .map((step) => step.id as string);
 
     expect(visibleIds).toContain(FILES_TERMINAL_FLOW.terminalScreenTestId);
-    expect(visibleIds).toContain(FILES_TERMINAL_FLOW.terminalUnavailableTestId);
+    expect(visibleIds).toContain(FILES_TERMINAL_FLOW.terminalWebviewTestId);
+    expect(visibleIds).not.toContain(FILES_TERMINAL_FLOW.terminalUnavailableTestId);
     expect(notVisibleIds).toContain(FILES_TERMINAL_FLOW.terminalScreenTestId);
   });
 
-  it("asserts terminal-unavailable's real title/description, and the sessions-screen arrival rather than the transient status text (T332)", () => {
+  it("asserts the sessions-screen arrival rather than the transient status text (T332)", () => {
     const visibleTexts = steps
       .filter((step) => step.kind === "assertVisible" && step.text !== undefined)
       .map((step) => step.text as string);
@@ -482,8 +496,6 @@ describe("files-and-terminal.yaml itself, read from disk", () => {
       .filter((step) => step.kind === "assertVisible" && step.id !== undefined)
       .map((step) => step.id as string);
 
-    expect(visibleTexts).toContain(FILES_TERMINAL_FLOW.terminalUnavailableTitle);
-    expect(visibleTexts).toContain(FILES_TERMINAL_FLOW.terminalUnavailableDescription);
     // Run 34459631677: the connect navigates away before "Connected via
     // direct connection" can be sampled, so the flow asserts the arrival.
     expect(visibleTexts).not.toContain("Connected via direct connection");
@@ -506,7 +518,7 @@ describe("files-and-terminal.yaml itself, read from disk", () => {
       FILES_TERMINAL_FLOW.filesNotConnectedTestId(filesTestId),
       FILES_TERMINAL_FLOW.filesUploadTestId(filesTestId),
       FILES_TERMINAL_FLOW.terminalScreenTestId,
-      FILES_TERMINAL_FLOW.terminalUnavailableTestId,
+      FILES_TERMINAL_FLOW.terminalWebviewTestId,
       FILES_TERMINAL_FLOW.connectFormSection,
       FILES_TERMINAL_FLOW.connectFormAddressField,
       FILES_TERMINAL_FLOW.connectFormSubmitButton,

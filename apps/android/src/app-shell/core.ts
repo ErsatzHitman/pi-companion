@@ -68,7 +68,7 @@ import {
 } from "../features/settings/settings-model.js";
 import type { TurnService } from "../features/composer/index.js";
 import {
-  createUnavailableTerminalWebViewPort,
+  createAndroidTerminalWebViewPort,
   type TerminalBinaryTransport,
   type TerminalWebViewPort,
 } from "../features/terminal/index.js";
@@ -76,14 +76,14 @@ import {
   createDaemonSessionService,
   type DaemonSessionServiceClient,
 } from "../platform/daemon-session-service";
-// T78: this app's real, honestly-degraded `FilePicker`/`Sharing`
-// production adapters — see `AppCore["filePicker"]`/`AppCore["sharing"]`'s
-// own doc comments below for exactly what each does and does not do yet.
-import { createUnavailableFilePicker } from "../platform/file-picker.js";
+// T78: this app's real `FilePicker`/`Sharing` production adapters — see
+// `AppCore["filePicker"]`/`AppCore["sharing"]`'s own doc comments below
+// for exactly what each does.
+import { createExpoFilePicker } from "../platform/expo-file-picker.js";
 import { createRNVibrationPlatform, type VibrationPlatform } from "../platform/haptics";
 import { createExpoKeyValueStorage } from "../platform/key-value-storage";
 import { createAppStateLifecycle } from "../platform/lifecycle";
-import { createRNShareModule } from "../platform/native-share-module.js";
+import { createExpoSharing } from "../platform/expo-sharing-port.js";
 import { createUnavailableAndroidNotificationsPlatform } from "../platform/notifications-platform.js";
 import {
   createExpoSqliteDriverFactory,
@@ -94,7 +94,6 @@ import {
   type TurnOutboxOwner,
 } from "../platform/offline/index.js";
 import { createExpoSecureStorage } from "../platform/secure-storage";
-import { createFileSharingUnavailableSharing } from "../platform/sharing.js";
 import {
   createDefaultAndroidProbe,
   createPollingNetworkReachability,
@@ -393,63 +392,58 @@ export interface AppCore {
    */
   fileBrowserClient: FileBrowserClient;
   /**
-   * T78: this build's real `FilePicker` — `../platform/file-picker.js`'s
-   * `createUnavailableFilePicker()`, constructed once here the same
+   * T78/T32S11: this build's real `FilePicker` — `../platform/expo-file-picker.js`'s
+   * `createExpoFilePicker()`, constructed once here the same
    * "one process-lifetime singleton, threaded down" way `vibrationPlatform`/
-   * `notifications`/`shareIntentPort` already are. Not
-   * `createAndroidFilePicker` (that factory needs a real
-   * `DocumentPickerModule`/`ImageLibraryPickerModule`/`FileUriBytesReader`
-   * this workspace cannot construct here). **CORRECTED (T290)**: this
-   * used to say `expo-document-picker` and `expo-image-picker` "are not
-   * installed" — the owner installed both at `488c4dc` and T290 used
-   * them for `../features/composer`'s own `AttachmentSourcePort`/
-   * `CameraCapturePort`. This field stays `createUnavailableFilePicker()`
-   * for a narrower, still-real reason: wiring `createAndroidFilePicker`
-   * here is `T32S11`'s job (a real `DocumentPickerModule`/
-   * `ImageLibraryPickerModule`/`FileUriBytesReader` triple constructed
-   * from those packages), not done by T290 (out of that task's `Owns`
-   * grant) — see `../platform/file-picker.ts`'s own doc comment. Every
-   * `pickFiles()` call therefore still rejects with the real, honest
-   * `FILE_PICKER_UNAVAILABLE` sentinel —
-   * never a stub that hangs or silently resolves an empty pick — which
-   * `../features/files/file-upload-model.ts`'s `selectFile()` now (T78)
-   * turns into a named, visible `"refused"` state via
-   * `explainFilePickerRefusal` instead of the silent no-op it used to be
-   * (see that function's own doc comment for why swallowing this
-   * rejection stopped being safe once this field was actually mounted
-   * below and in `app/h/[serverId]/session/[agentId]/files/[...path].tsx`).
+   * `notifications`/`shareIntentPort` already are. That factory builds the
+   * real `DocumentPickerModule`/`ImageLibraryPickerModule`/
+   * `FileUriBytesReader` triple from the installed `expo-document-picker` and
+   * `expo-image-picker` packages and hands it to
+   * `../platform/file-picker.ts`'s `createAndroidFilePicker`, so every
+   * `pickFiles()` call reaches the OS picker — a real value reaches the OS,
+   * never the honest `FILE_PICKER_UNAVAILABLE` refusal a degraded build would
+   * render. A picker rejection (permission denial, unsupported type) is
+   * turned by `../features/files/file-upload-model.ts`'s `selectFile()` into
+   * a named, visible `"refused"` state via `explainFilePickerRefusal`.
+   *
+   * **CORRECTED (T32S11)**: this used to be
+   * `createUnavailableFilePicker()`, and its doc comment used to split the
+   * reason into `expo-document-picker`/`expo-image-picker` being uninstalled
+   * (never true after `488c4dc`) and the triple being T32S11's unwired job.
+   * T32S11 wired it; `createUnavailableFilePicker` remains in
+   * `../platform/file-picker.ts` only as that module's named degraded
+   * fallback for a caller with no live picker to hand in.
    *
    * `../features/files/files-screen.tsx`'s `FilesScreen` is this field's
    * one production consumer, via that route's `filePicker={core.filePicker}`.
    */
   filePicker: FilePicker;
   /**
-   * T78: this build's real `Sharing` — `../platform/sharing.js`'s
-   * `createFileSharingUnavailableSharing`, over a real
-   * `../platform/native-share-module.js`'s `createRNShareModule()`
-   * (React Native's own `Share.share`, already installed — no package
-   * install needed for that half). Not `createAndroidSharing` (that
-   * factory's file-sharing half needs a real `NativeFileShareModule`/
-   * `ShareableFileWriter` this workspace cannot construct):
-   * `expo-sharing` and `expo-file-system` are not installed, and this
-   * task may not run an install (see `../platform/sharing.ts`'s own doc
-   * comment for the exact commands: `npm install
-   * --workspace=@picompanion/android expo-sharing@~14.0.8
-   * expo-file-system@~19.0.24`).
+   * T78/T32S11: this build's real `Sharing` — `../platform/expo-sharing-
+   * port.js`'s `createExpoSharing()`, constructed once here the same
+   * "one process-lifetime singleton, threaded down" way `filePicker` above
+   * already is. `shareText()` reaches the actual OS share sheet through
+   * RN's `Share.share` (`../platform/expo-sharing-port.ts` wires
+   * `../platform/native-share-module.ts`'s `createRNShareModule()`) while
+   * `shareFiles()` writes each file's bytes to this app's cache with
+   * `expo-file-system` and opens the same OS sheet through `expo-sharing` —
+   * both packages now declared in `apps/android/package.json`.
    *
-   * So `sharing.shareText()` is genuinely real — it reaches the actual
-   * OS share sheet through RN's `Share.share` — while `sharing.
-   * shareFiles()` always rejects `SHARING_FILES_UNAVAILABLE`, the real,
-   * honest answer for a file-sharing target that cannot be constructed
-   * yet, never a stub that silently "succeeds" without sharing anything.
+   * **CORRECTED (T32S11)**: this used to be
+   * `createFileSharingUnavailableSharing`, with `shareFiles()` always
+   * rejecting `SHARING_FILES_UNAVAILABLE` because `expo-sharing` and
+   * `expo-file-system` were uninstalled. T32S11 ran the installs named in
+   * `../platform/sharing.ts` and wired `createAndroidSharing` through
+   * `../platform/expo-sharing-port.ts`;
+   * `createFileSharingUnavailableSharing` remains in `../platform/
+   * sharing.ts` only as that module's named degraded fallback for a caller
+   * with no file-sharing target.
    *
    * `../features/files/files-screen.tsx`'s `FilesScreen` is this field's
-   * one production consumer, via that route's `sharing={core.sharing}`:
-   * a completed download's bytes are handed to `sharing.shareFiles(...)`
-   * exactly once (`FilesScreen`'s own doc comment), which today always
-   * settles that named refusal — a real value reaches this adapter, the
-   * adapter just cannot complete a file share without the installs
-   * above.
+   * one production consumer, via that route's `sharing={core.sharing}`: a
+   * completed download's bytes are handed to `sharing.shareFiles(...)`
+   * exactly once (`FilesScreen`'s own doc comment), which now reaches the
+   * OS share sheet instead of settling the named refusal.
    */
   sharing: Sharing;
   /**
@@ -588,38 +582,32 @@ export interface AppCore {
    */
   createTerminalTransport: (terminalId: string, slot: number) => TerminalBinaryTransport;
   /**
-   * T80 (P5-W23): this build's real `TerminalWebViewPort` —
+   * T80 (P5-W23)/T32S11: this build's real `TerminalWebViewPort` —
    * `../features/terminal/terminal-webview-port.js`'s
-   * `createUnavailableTerminalWebViewPort()`, constructed once here the
-   * same "one process-lifetime singleton, threaded down" way `filePicker`/
-   * `sharing` above already are.
+   * `createAndroidTerminalWebViewPort()`, constructed once here the same
+   * "one process-lifetime singleton, threaded down" way `filePicker`/
+   * `sharing` above already are. It is the RN-free half of the terminal: it
+   * queues outbound frames until the page reports ready, base64-encodes
+   * output bytes, and renders snapshots to ANSI through the protocol's own
+   * renderer; `../features/terminal/terminal-webview-host.tsx`'s `<WebView>`
+   * is what `terminal-screen.tsx` renders for it and binds through
+   * `attachHost`.
    *
    * The terminal route used to report "unavailable" for two independent,
-   * conflated reasons: `react-native-webview` is not installed (still
-   * true — `apps/android/package.json` carries no such dependency, and
-   * this task may not run an install; see
-   * `../features/terminal/terminal-webview-port.ts`'s own doc comment for
-   * the exact command: `npm install --workspace=@picompanion/android
-   * react-native-webview@13.16.1`), **and** no route ever passed a
-   * `webview` prop to `TerminalScreen` at all, so even a hypothetical
-   * build with the package installed would still have rendered the
-   * unavailable state — nothing wired a real implementation through.
-   * This field closes the second gap: `../app/h/[serverId]/session/
-   * [agentId]/terminal/[terminalId].tsx` is this field's one production
-   * consumer, via that route's `webview={core.terminalWebview}`, the same
-   * "read this field off `AppCore`, pass it straight through" shape that
-   * route's own `transport={core.createTerminalTransport(...)}` line
-   * already uses. Once `react-native-webview` is installed, swapping this
-   * single construction for a real `xterm.js`-backed implementation (see
-   * `terminal-webview-port.ts`'s module doc for the exact shape) is the
-   * *only* change a real mount needs — the route and `TerminalScreen`
-   * need not change at all, which is the point of this seam existing at
-   * the `AppCore` boundary rather than inline in the route.
+   * conflated reasons: `react-native-webview` was not installed, **and** no
+   * route ever passed a `webview` prop to `TerminalScreen` at all. T80 closed
+   * the second gap (`../app/h/[serverId]/session/[agentId]/terminal/
+   * [terminalId].tsx` passes this field as `webview={core.terminalWebview}`);
+   * **T32S11** closed the first by installing `react-native-webview@13.15.0`
+   * (the version this app's own resolved `expo/bundledNativeModules.json`
+   * pins), bundling the xterm page, and constructing this factory in place of
+   * `createUnavailableTerminalWebViewPort()`. `createUnavailableTerminalWebViewPort`
+   * remains that module's named, honestly-degraded fallback for a caller
+   * with no host.
    *
-   * `terminal-screen.tsx`'s own `isAvailable` check still renders its
-   * named, accessible `EmptyState` ("Terminal unavailable") for this
-   * field today — a real value now reaches the screen, it is just
-   * honestly unavailable, never a stub that pretends otherwise.
+   * The one step this environment cannot perform is the native rebuild
+   * `react-native-webview` needs — see `../features/terminal/
+   * terminal-webview-port.ts`'s own header for the exact commands.
    */
   terminalWebview: TerminalWebViewPort;
   /**
@@ -1406,13 +1394,13 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
   // T69: see `AppCore["shareIntentPort"]`'s doc comment.
   const shareIntentPort = createNativeShareIntentPort();
 
-  // T78: see `AppCore["filePicker"]`'s doc comment.
-  const filePicker = createUnavailableFilePicker();
-  // T78: see `AppCore["sharing"]`'s doc comment.
-  const sharing = createFileSharingUnavailableSharing(createRNShareModule());
+  // T78/T32S11: see `AppCore["filePicker"]`'s doc comment.
+  const filePicker = createExpoFilePicker();
+  // T78/T32S11: see `AppCore["sharing"]`'s doc comment.
+  const sharing = createExpoSharing();
 
-  // T80: see `AppCore["terminalWebview"]`'s doc comment.
-  const terminalWebview = createUnavailableTerminalWebViewPort();
+  // T80/T32S11: see `AppCore["terminalWebview"]`'s doc comment.
+  const terminalWebview = createAndroidTerminalWebViewPort();
 
   // T74: see `AppCore["shutdown"]`'s doc comment. `shutdownPromise` is
   // the idempotency latch — the same "cache the promise, never redo the

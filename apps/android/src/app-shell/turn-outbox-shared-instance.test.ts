@@ -130,6 +130,54 @@ vi.mock("expo-modules-core", () => ({
   requireOptionalNativeModule: () => null,
 }));
 
+// T32S11: `./core.ts` now constructs `createExpoFilePicker`, whose module
+// imports `expo-document-picker`/`expo-image-picker` at its top level (see
+// `../platform/expo-file-picker.ts`'s own header). Both are mocked the same
+// way every other native module in this file is, so importing the real
+// packages never drags their native/`react-native` graph through plain
+// vitest. This file never calls the picker.
+vi.mock("expo-document-picker", () => ({
+  getDocumentAsync: async () => ({ canceled: true }),
+}));
+vi.mock("expo-image-picker", () => ({
+  getMediaLibraryPermissionsAsync: async () => ({
+    granted: true,
+    status: "granted",
+    canAskAgain: true,
+  }),
+  requestMediaLibraryPermissionsAsync: async () => ({
+    granted: true,
+    status: "granted",
+    canAskAgain: true,
+  }),
+  launchImageLibraryAsync: async () => ({ canceled: true }),
+}));
+
+// T32S11: `./core.ts` now constructs `createExpoSharing`, whose module
+// imports `expo-sharing`/`expo-file-system/legacy` at its top level (see
+// `../platform/expo-sharing-port.ts`'s own header). Both are mocked for the
+// same reason above; this file never shares a file.
+vi.mock("expo-sharing", () => ({
+  isAvailableAsync: async () => true,
+  shareAsync: async () => {},
+}));
+vi.mock("expo-file-system/legacy", () => ({
+  cacheDirectory: "file:///cache/",
+  EncodingType: { Base64: "base64", UTF8: "utf8" },
+  writeAsStringAsync: async () => {},
+}));
+
+// T32S11: `./core.ts` imports the `../features/terminal` barrel, which
+// re-exports `TerminalScreen` -> `terminal-webview-host.tsx` -> the real
+// `react-native-webview`. Stood in for the same reason every other native
+// component above is; this file never renders.
+vi.mock("react-native-webview", () => {
+  function Stub(): null {
+    return null;
+  }
+  return { WebView: Stub, default: Stub };
+});
+
 const { createAppCore } = await import("./core.js");
 const { InMemorySqliteDriver } = await import("../platform/offline/in-memory-sqlite-driver.js");
 const { createInMemoryStructuredStorage } =
