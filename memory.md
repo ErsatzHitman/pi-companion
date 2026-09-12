@@ -994,3 +994,29 @@ Left deliberately: relay-pair downloads (needs an HTTP-over-relay proxy in
 display-only transcript attachments, the `app.paseo.sh` offer-URL placeholder which
 matches the real offer format). Write subagents share the main tree here — `git add -p`
 (or explicit path lists) per scope keeps their commits separable.
+
+### Extension-coverage wave (2026-09-12/13): every Pi extension's UI is reachable in both apps
+
+30 extensions inventoried (transports: 10 pi.ui kinds, pi_status, pi_widget,
+pi_notice, pi_composer, permission_requested, slash-commands; TUI panes and
+local channels have no remote path by design). Closed, each with green suites:
+`status` placement both apps (`e714ff9`, minimal-status/plan-mode/pi-goal
+surfaces); Android permission questions select/input/editor (parity with web
+`PermissionDialog`, `d0132b2`, ask-user/vision-proxy/workflows/pi-goal
+wizard); composer-kind accept fills the live draft both apps (`eced505` +
+route composition); web screen/sheet/inline hosts + shared PiUiSessionProvider
++ nested panel>section>row ids (`7af7829`); daemon multi-hop row descent to
+match (`960bcf9`, `findChild` generalized + 2 routing tests); Android files
+route resolves the real cwd via `useAgentCwd`; file-download flow scrolls to
+a below-fold error (proven by the run's own failure screenshot).
+
+#lesson NEVER force-push main: dorny/paths-filter fetches `event.before` by
+SHA with `--depth=1` when it is not an ancestor, which re-shallows the
+`fetch-depth: 0` checkout and fails the history-dependent
+`guard-format-check-per-commit` fixture in the `changes` job. Repair is a
+normal follow-up push (whose `before` is a proper ancestor), never another
+rewrite — this wave paid one red CI run (`34711902475`) learning it. The
+per-commit format guard judges each commit's own content, so a red commit is
+repaired by rebase+force-push ONLY when that is unavoidable (as with
+`960bcf9`'s two unformatted files); prefer getting the format right before
+the first push.
