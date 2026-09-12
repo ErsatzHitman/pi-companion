@@ -879,6 +879,23 @@ expo-camera QR pairing (`a756a99`) · **T393** web offline cache + `/h/:serverId
 implementer; the web one was still in flight when the wave closed. `docs/issues-from-plan.md`'s
 T395 section carries an unticked box for exactly that, so the next agent does not have to guess.
 
+**Update, same day: the web half of T395 landed.** `e59f324` (merged as `7234d80`, ledger in
+`dd70763`) adds `apps/web/src/features/transcript/rewind/` — scope choice, dialog, bounded local
+undone-turns record, a per-row affordance disabled with a stated reason when no checkpoint exists —
+and mounts it from `host-session-screen.tsx`. Two decisions worth keeping: the undone-turns list
+stores the turn the rewind **kept**, because the removed ids no longer resolve from the daemon after
+a success; and a success bumps a `refreshNonce` the transcript effect depends on, because a
+files-only rewind changes no timeline row and would otherwise wait forever on a stream push that
+never comes. `host-session-screen.tsx` also had to merge T393's cache wiring with T395's rewind
+wiring by hand — the branch predated the offline cache, so both signatures had to survive.
+
+**One more CI trap, measured this wave:** `.github/workflows/ci.yml` sets
+`concurrency: ci-${workflow}-${ref}` with `cancel-in-progress` only for pull requests, so pushes to
+`main` **serialise** — a new run sits `pending` with zero jobs until the previous one finishes. Three
+commits pushed in quick succession therefore mean three sequential ~40-minute runs, and reading the
+run for your own tip can take an hour after the push. Plan the gate read around that, or push once.
+
+
 **Test-runner lessons that cost real time in this wave** (all now in the section above):
 `npm test --workspace=@picompanion/web` resolves `@picompanion/frontend-core` through the workspace
 symlink into `packages/frontend-core/dist`, so a worktree with no local `dist` silently exercises
