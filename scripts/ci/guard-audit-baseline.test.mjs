@@ -21,11 +21,13 @@ test("every AUDIT_BASELINE entry carries a non-empty owner and reason", () => {
   }
 });
 
-test("AUDIT_BASELINE has exactly 35 entries — the real npm audit --json count measured at T326", () => {
+test("AUDIT_BASELINE has exactly 36 entries — the real npm audit --json count measured at T326", () => {
   // 36 when T44A3 measured it; T326 removed the SDK-57 tree, which took
   // `@expo/inline-modules` and `@expo/local-build-cache-provider` with it
-  // and surfaced `expo-audio` via the now-correct `expo-asset`.
-  assert.equal(AUDIT_BASELINE.length, 35);
+  // and surfaced `expo-audio` via the now-correct `expo-asset`, leaving 35;
+  // wave 3 installed `expo-notifications` (T391), and its own advisory came
+  // in with it, which is the 36th.
+  assert.equal(AUDIT_BASELINE.length, 36);
 });
 
 // --- findUnbaselinedAdvisories --------------------------------------------

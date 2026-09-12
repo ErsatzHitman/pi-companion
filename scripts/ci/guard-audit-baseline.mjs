@@ -220,10 +220,17 @@ export const AUDIT_BASELINE = [
     // affected range, and no fix exists without a semver-major Expo SDK bump
     // (T231's owner decision, unchanged by this wave). Recorded rather than
     // waived, with the same owner and reason the other Android entries carry.
+    // T391 follow-up, measured 2026-09-12: this guard matches on the exact
+    // range string, and npm reads advisories through its own cache, so a
+    // STALE local cache reports a longer range than a fresh one — this
+    // machine's cached copy appended a trailing `58.0.0-canary-*` segment
+    // that made CI's fresh runner disagree with the recorded entry in both
+    // directions at once (a stale entry AND an unbaselined advisory).
+    // `npm audit --json --cache <empty dir>` reproduces the string below.
     package: "expo-notifications",
     severity: "moderate",
     range:
-      "<=0.0.1-canary-20240418-8d74597 || 0.11.4 - 55.0.0-canary-20260223-05214f1 || 55.0.5-canary-20260128-67ce8d5 || 55.0.11-canary-20260424-7bedc9d - 55.0.11-canary-20260429-a5e59cf || 55.0.15-canary-20260327-0789fbc - 55.0.15-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 56.0.15-canary-20260526-6cd5e37 - 56.0.15-canary-20260701-9100865 || 57.0.0-canary-20260526-13e89ca - 57.0.0-canary-20260623-1c70a78 || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260909-ea7a89a",
+      "<=0.0.1-canary-20240418-8d74597 || 0.11.4 - 55.0.0-canary-20260223-05214f1 || 55.0.5-canary-20260128-67ce8d5 || 55.0.11-canary-20260424-7bedc9d - 55.0.11-canary-20260429-a5e59cf || 55.0.15-canary-20260327-0789fbc - 55.0.15-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 56.0.15-canary-20260526-6cd5e37 - 56.0.15-canary-20260701-9100865 || 57.0.0-canary-20260526-13e89ca - 57.0.0-canary-20260623-1c70a78",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },

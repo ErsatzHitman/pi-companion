@@ -280,7 +280,7 @@ hides real findings instead of documenting them.
 Instead, `scripts/ci/guard-audit-baseline.mjs` (wired as the
 `guard-audit-baseline` job, which runs `npm ci` then
 `node scripts/ci/run-guard-audit-baseline.mjs`) diffs `npm audit`'s live
-output against the 35-entry `AUDIT_BASELINE` above, matched by
+output against the 36-entry `AUDIT_BASELINE` above, matched by
 **(package, severity, range)** — not package name alone. This means:
 
 - **A genuinely new advisory** (a 37th package, or an existing package's
