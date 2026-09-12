@@ -19768,3 +19768,109 @@ and `apps/android/src/ui/primitives/Sheet.tsx` for the `.pop` figures.
 - [x] Widget rows are one aligned mono line, and log/markdown severity is a glyph plus its word
 - [x] The floating Sheet takes `.pop`'s own radius, padding and inset
 - [x] The frames are recorded as drawings, not routes, in `plan.md` §9.2 and the mockup README
+
+---
+
+## Wave 3 — the Supernova adoptions, the stub closures and release plumbing (2026-09-12)
+
+Nine tasks filed from the owner's own next-wave order: rewind → the three Supernova adoptions →
+the four stubs → release plumbing. Rows are in the master table above (T388–T395, wave `P9-W`);
+each section below records what shipped and what proves it. Two rules were adopted for the whole
+wave, both from harness failures rather than preference: **an implementer's work is verified by
+the workspace's own test script**, never by a bare `vitest run <path>` from a worktree root
+(whose configuration differs), and **a subagent job's isolation must be disabled or its diff
+landed deliberately** (`subagents.json`'s `worktreeWrites`), because a job otherwise edits a
+nested checkout its briefing could not see.
+
+#### T388 — The transcript re-derived identity from positions, drew tool runs one row at a time and re-rendered the list per append
+
+`labels: phase-9, area: frontend` · `depends-on: T387` · `wave: P9-W`
+
+**What shipped.** `packages/frontend-core/src/timeline/row-key.ts` derives every row's stable
+renderer identity from the row's own durable facts (`callId`, `clientMessageId`, `messageId`,
+falling back to `(epoch, seqStart)` only when the item carries none), and
+`transcript-projection.ts` turns that into a bounded incremental projection.
+`work-groups.ts` groups consecutive `thinking`/`tool-call` rows into a `TranscriptWorkGroup`
+with a summary (label, step count, thinking/tool counts, failure and running counts), a
+`defaultCollapsed` threshold, and `visibleTranscriptEntries` — which returns the SAME array
+reference when nothing is hidden, so a caller can use reference equality as a cheap "did the
+visible list change" check. Both platforms render a group head
+(`apps/web/src/features/transcript/work-group-row.tsx`,
+`apps/android/src/features/transcript/work-group-row.tsx`) above the group's first member,
+inside that member's virtual row, so grouping never shifts the virtualizer's indices.
+
+**Three fixes made at the gate, each with its reason.** The group head's accessible name no
+longer repeats its first member's first line: every member row already carries that text as its
+own name, and repeating it made `getByRole("button", { name: /…/ })` match two elements for one
+visible row — the pre-existing transcript pins query exactly that way and they are right to.
+The detail line renders only while the group is expanded (a collapsed head is one line, not a
+line plus an empty paragraph). And `TranscriptEntry.key` is optional on the _type_ even though
+every real flow sets it, because six pre-existing web test files build entries as literals and
+`transcriptEntryListKey` already falls back to `id`; the alternatives were editing six pins or
+forcing fixtures to invent a key, and neither is better than one fallback that was already the
+helper's documented contract.
+
+**Evidence.** `npx vitest run packages/frontend-core/src/timeline` → 18 files, 262 tests pass.
+`npm test --workspace=@picompanion/web` → 173 files / 1635 tests pass.
+`npm test --workspace=@picompanion/android` → 261 files / 3625 tests pass. Both typechecks exit 0. Merged as `4d65e57`; the branch's own commit is `fa7b311`.
+
+- [x] Row keys survive pagination, coalescing, reconnect and gap recovery, proven by test
+- [x] A work run groups into a head on both platforms, with members individually virtualized
+- [x] Streaming appends do bounded work rather than re-rendering the list, proven by measurement
+- [x] Zero wire change: nothing under `packages/protocol`, `packages/server` or the daemon moved
+
+#### T389 — The composer lost a draft on reload, had no @file/@skill references and previewed no attachment
+
+`labels: phase-9, area: frontend` · `depends-on: T387` · `wave: P9-W`
+
+**What shipped.** `packages/frontend-core/src/composer/references.ts` is the platform-neutral
+reference model (an `@` token at a word boundary, the candidates a host supplies, and the
+insertion of a chosen one), with `draft-session.test.ts` pinning the per-session draft key. On
+web, `use-composer-references.ts` / `reference-file-source.ts` / `ReferenceSuggestions.tsx`
+render the candidate list and the inserted chip, and the composer's `DraftStore` wiring persists
+a draft per session through the app's own structured storage — so a reload restores it and two
+sessions never share one. `ContextRing.tsx`'s unknown-usage state (a bare track and no
+percentage, never a fabricated number) is pinned by a test.
+
+**Evidence.** `npm test --workspace=@picompanion/web` → 175 files / 1655 tests pass;
+`packages/frontend-core/src/composer` → 4 files / 45 tests pass; frontend-core and web
+typechecks exit 0. Committed as `e7deef0` (web + core half; the Android half is filed separately).
+
+- [x] A draft persists per session and survives a reload, with a test
+- [x] `@` opens a candidate list and a chosen reference inserts as text plus a chip, with tests
+- [x] An image attachment renders its preview, with a test
+- [x] The context ring's unknown state draws no percentage, with a test
+
+#### T390 — Android's offline cache and turn outbox reported `degraded` because no SQLite driver was ever installed
+
+`labels: phase-9, area: android` · `depends-on: T387` · `wave: P9-W`
+
+**What shipped.** `expo-sqlite@~16.0.10` and `expo-constants@~18.0.9` are installed;
+`apps/android/src/platform/offline/expo-sqlite-driver-factory.ts` implements the
+`SqliteDriverFactory` port over `openDatabaseAsync`/`closeAsync`, and `app-shell/core.ts` binds
+`offlineCache` and `turnOutbox` each to their own database file through it. The
+`createUnavailableSqliteDriverFactory` stays for tests and for a build with no native module,
+where the owners still settle to an honest `degraded` rather than pretending.
+
+#### T391 — Android registered no push token and could not approve a permission from a notification
+
+`labels: phase-9, area: android` · `depends-on: T390` · `wave: P9-W`
+
+**What shipped.** `expo-notifications@~0.32.17` and `expo-device@~8.0.10` are installed;
+`apps/android/src/features/notifications/expo-push-registration-port.ts` implements
+`PushRegistrationPort` — permission reads and requests (including Android's "don't ask again"
+shape), `getExpoPushTokenAsync` with the project id from `expo-constants`, token refresh, and
+the T36B trio: a real notification category with approve/deny actions plus
+`addNotificationResponseReceivedListener`. The prose in the port's own doc comment that said the
+module was not installed is corrected in place, per the T124 rule.
+
+**Evidence for T390 and T391, which land as one commit** (`78ff2e7`): they share
+`app-shell/core.ts`'s wiring, `apps/android/package.json` and the lockfile, so an intermediate
+split would be a state neither the suite nor the typecheck ever ran.
+`npm test --workspace=@picompanion/android` → 262 files / 3646 tests pass;
+`npm run typecheck --workspace=@picompanion/android` exit 0.
+
+- [x] The offline cache and outbox open a real database file, with the unavailable factory kept for tests
+- [x] A push token can be obtained and refreshed behind the port
+- [x] A permission notification carries approve/deny actions that reach the same model the sheet uses
+- [x] Every falsified doc comment in the touched files is corrected
