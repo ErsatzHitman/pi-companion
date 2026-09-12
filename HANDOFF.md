@@ -92,9 +92,20 @@ The table below is still true of `bd366dd`; this paragraph supersedes it.**
   record and the conflict's "restore anyway", mounted from `host-session-screen.tsx` beside the
   transcript it rewinds. Verified by `npm test --workspace=@picompanion/web` in that branch's
   worktree (182 files / 1688 tests) and by a web typecheck on the merged tree (0 errors).
-- **In flight at the time of writing**: the CI run for `2cda7b7` and the Maestro dispatch whose
-  Android tree this wave changed. Read both before trusting anything above — the previous wave's
-  lesson (T93) is that a local green is only half the fact.
+- **CI and Maestro, read not inferred.** CI run `34681781434` at `56266ed` came back **red on two
+  jobs** — `guard / npm audit findings stay inside the documented baseline` and `changes` (whose
+  `guard-audit-baseline.test.mjs` pins `AUDIT_BASELINE.length`) — and both failures were this wave's
+  own doing: installing `expo-notifications` (T391) brought an advisory with it, and the range
+  recorded for it came from this machine's **stale npm advisory cache**, which reports a longer
+  affected range than a fresh runner does. Fixed in `40b6248` (the fresh range, with the lesson in the
+  entry's own comment and in `docs/security-and-version-drift.md` §2.2); `npm audit --json --cache
+<empty dir>` reproduces what CI sees. After the fix: CI `34682902502` at `39c9e8a` **completed
+  success** (42 success, 2 skipped, 0 failures), and CI `34683663303` at `02b50b5` — the first commit
+  carrying the Android rewind surface — **completed success with all 44 jobs and zero failures**.
+  The tip's own run (`34683710279` at `4cb5a7c`, whose only difference from `02b50b5` is a
+  memory-only commit) was still finishing with zero failures when this paragraph was written.
+  Maestro run `34681211373` at `2cda7b7` **completed success** across every job — the dispatch this
+  wave owed for changing the Android UI (T390–T392's Expo-backed surfaces).
 
 | Fact                             | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
