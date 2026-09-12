@@ -2,11 +2,18 @@ import { useCore } from "../../app/core-context.js";
 import { Composer } from "./Composer.js";
 import type { AgentTurnClient } from "./agent-turn-client.js";
 import type { DaemonEditorTextSource } from "./daemon-editor-text-client.js";
+import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
 export interface ComposerContainerProps {
   /** Conversation target this composer submits into (session or agent id). */
   sessionId: string;
+  /**
+   * The daemon/server `sessionId` lives on (T389) — half of the per-session
+   * draft key. Optional so a fixture-only mount can omit it; the route
+   * always has one from its own URL params.
+   */
+  serverId?: string;
   /**
    * Live turn-control client (T28B2/T28B3). `undefined` on a route with no
    * live `DaemonClient` connected yet — the same "no live client yet"
@@ -32,6 +39,12 @@ export interface ComposerContainerProps {
    * renders the ring's honest "not reported" state.
    */
   contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
+  /**
+   * T389: `@file` candidate listing for this session, built by the route
+   * from the connected daemon's own `listDirectory`. Omitted when there is
+   * no connection; the `@` list then offers only skills.
+   */
+  fileReferenceSource?: coreComposer.ReferenceFileSource;
 }
 
 /**
@@ -49,20 +62,24 @@ export interface ComposerContainerProps {
  */
 export function ComposerContainer({
   sessionId,
+  serverId,
   client,
   editorTextClient,
   contextTelemetry,
+  fileReferenceSource,
 }: ComposerContainerProps) {
   const { platform } = useCore();
   return (
     <Composer
       sessionId={sessionId}
+      serverId={serverId}
       clock={platform.clock}
       structuredStorage={platform.structuredStorage}
       filePicker={platform.filePicker}
       client={client}
       editorTextClient={editorTextClient}
       contextTelemetry={contextTelemetry}
+      fileReferenceSource={fileReferenceSource}
     />
   );
 }

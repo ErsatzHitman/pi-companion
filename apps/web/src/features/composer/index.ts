@@ -77,3 +77,16 @@ export type {
 } from "./use-drag-and-drop.js";
 export { useComposerPaste } from "./use-clipboard-paste.js";
 export type { UseClipboardPasteOptions } from "./use-clipboard-paste.js";
+export { ReferenceSuggestions } from "./ReferenceSuggestions.js";
+export type { ReferenceSuggestionsProps } from "./ReferenceSuggestions.js";
+export { useComposerReferences } from "./use-composer-references.js";
+export type {
+  ComposerReferencesState,
+  UseComposerReferencesOptions,
+} from "./use-composer-references.js";
+export {
+  createReferenceFileSource,
+  REFERENCE_FILE_MAX_DIRECTORIES,
+  REFERENCE_FILE_MAX_RESULTS,
+} from "./reference-file-source.js";
+export type { ReferenceFileSourceOptions } from "./reference-file-source.js";

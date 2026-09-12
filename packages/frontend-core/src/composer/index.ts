@@ -13,7 +13,33 @@
  */
 
 export type { Draft, DraftAttachmentRef, SaveDraftInput } from "./drafts.js";
-export { DraftStore } from "./drafts.js";
+export {
+  DEFAULT_DRAFT_SAVE_DEBOUNCE_MS,
+  DraftSessionController,
+  DraftStore,
+  draftKeyForSession,
+} from "./drafts.js";
+export type { DraftSessionControllerOptions, DraftSessionTarget } from "./drafts.js";
+
+export {
+  detectReferenceToken,
+  filterReferenceCandidates,
+  findResolvedReferences,
+  insertReference,
+  loadReferenceCandidates,
+  removeReference,
+} from "./references.js";
+export type {
+  FilterReferenceOptions,
+  ReferenceCandidate,
+  ReferenceCandidateSources,
+  ReferenceFileSource,
+  ReferenceInsertion,
+  ReferenceKind,
+  ReferenceSkillSource,
+  ReferenceToken,
+  ResolvedReference,
+} from "./references.js";
 
 export type {
   EnqueueInput,
