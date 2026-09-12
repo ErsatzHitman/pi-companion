@@ -829,3 +829,36 @@ after merging, so the ledger/notices/guard do not merge-conflict five ways.
   machine and `npm` is not authenticated (`npm whoami` → ENEEDAUTH; `@picompanion/cli` → 404), so
   the honest deliverable is a **verified from-source install path** plus `docs/clean-install-and-rollback.md`
   rewritten to it, with the registry path marked not-yet-live and what publishing would require.
+
+### Wave 3 harness lessons (2026-09-12, mid-wave)
+
+- #lesson **A `subagent_start` write job runs in its OWN nested git worktree** (default
+  `worktreeWrites: true`), a fresh checkout at the base commit — it does **not** see the parent
+  worktree's uncommitted files, even when `cwd` points at them. Three jobs in this wave were briefed
+  to "finish the uncommitted state in worktree X" and could only find a clean checkout: the timeline
+  job spent its whole 30-minute budget trying to rebase the sibling state into itself and produced
+  nothing. The nested tree is reported as
+  `<parent>/.pi/worktrees/<job-id>/` and its diff is landable with
+  `git -C <parent> apply --index <(git -C <nested> diff HEAD)`.
+  **Fix for the remaining jobs: `~/.pi/agent/subagents.json` now sets `"worktreeWrites": false`**
+  (backup at `subagents.json.bak-wave3`), so a write job edits the directory it is given. Commit a
+  parent worktree's state before briefing a job against it, or point the job at nothing and let it
+  start clean — never at a dirty sibling.
+- #lesson **Nested job worktrees poison `vitest` runs in the parent.** A bare
+  `npx vitest run apps/web/src/features/transcript` from a worktree root also scans
+  `<worktree>/.pi/worktrees/<job>/apps/web/...`, whose checkout has no `node_modules` junctions and
+  no `packages/*/dist`, so nine innocent test files "failed" with
+  `Failed to resolve entry for package "@picompanion/frontend-core"`. Remove the nested worktree
+  (`git worktree remove --force`) before measuring, and treat a path-filtered failure as suspect
+  until the workspace script agrees.
+- #lesson **Run a workspace suite through its own script, never through a bare `vitest run <path>`
+  from the repository or worktree root.** From the root, `apps/web`'s jsdom environment never
+  applies, so a `*.test.tsx` file fails with `ReferenceError: document is not defined` — a
+  configuration artifact that looks exactly like a broken component. The working gates are
+  `npm test --workspace=@picompanion/web` and `npm test --workspace=@picompanion/android`.
+- #lesson **Delegated sessions (`delegate`) died three times in a row in this wave** — at 784 s,
+  629 s and (cancelled by the owner's instruction) 20 min — each time with "child stopped: process
+  exited" and no report, while leaving real uncommitted work behind. Write-capable subagents
+  (`subagent_start` with `writeAccess`) hit their own 1800 s cap instead. Prefer subagents for
+  scoped implementation, and verify the worktree yourself before trusting a job's silence to mean
+  failure: the cancelled rewind delegate had in fact committed both of its commits and gone clean.
