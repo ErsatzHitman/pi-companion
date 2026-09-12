@@ -30,6 +30,7 @@ export {
   explainFileBrowserError,
   explainFileDownloadError,
   explainFileDownloadTokenResult,
+  explainFileOpsError,
   explainFileReadError,
   explainFileUploadError,
   explainFileUploadResult,

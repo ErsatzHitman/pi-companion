@@ -2462,6 +2462,14 @@ export class Session {
         return undefined;
       case "fs.file.write.request":
         return this.workspaceFilesSession.handleFileWriteRequest(msg);
+      case "fs.file.mkdir.request":
+        return this.workspaceFilesSession.handleFileMkdirRequest(msg);
+      case "fs.file.create.request":
+        return this.workspaceFilesSession.handleFileCreateRequest(msg);
+      case "fs.file.rename.request":
+        return this.workspaceFilesSession.handleFileRenameRequest(msg);
+      case "fs.file.delete.request":
+        return this.workspaceFilesSession.handleFileDeleteRequest(msg);
       case "project_icon_request":
         return this.workspaceFilesSession.handleProjectIconRequest(msg);
       case "project.icon.get.request":

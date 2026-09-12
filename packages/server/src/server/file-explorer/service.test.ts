@@ -3,8 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  createDirectoryEntry,
+  createExplorerFile,
+  deleteExplorerEntry,
   getExplorerFileVersion,
+  listDirectoryEntries,
   readExplorerFile,
+  renameExplorerEntry,
   streamExplorerFile,
   writeExplorerFile,
 } from "./service.js";
@@ -369,6 +374,115 @@ describe("file explorer service", () => {
           relativePath: "~/some/file.txt",
         }),
       ).rejects.toThrow("Access outside of workspace is not allowed");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("creates nested directories and lists them", async () => {
+    const root = await createTempDir("paseo-file-mkdir-");
+    try {
+      const result = await createDirectoryEntry({ root, relativePath: "a/b/c" });
+      expect(result.path).toBe("a/b/c");
+      const listing = await listDirectoryEntries({ root, relativePath: "a/b" });
+      expect(listing.entries.map((e) => e.name)).toContain("c");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to create the root directory or escape it", async () => {
+    const root = await createTempDir("paseo-file-mkdir-root-");
+    try {
+      await expect(createDirectoryEntry({ root, relativePath: "." })).rejects.toThrow(
+        "Cannot create the root directory",
+      );
+      await expect(createDirectoryEntry({ root, relativePath: "../escape" })).rejects.toThrow(
+        "Access outside of workspace is not allowed",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("creates a new file but never clobbers an existing one", async () => {
+    const root = await createTempDir("paseo-file-create-");
+    try {
+      const created = await createExplorerFile({
+        root,
+        relativePath: "notes/hello.txt",
+        content: "hi",
+      });
+      expect(created.path).toBe("notes/hello.txt");
+      expect((await readExplorerFile({ root, relativePath: "notes/hello.txt" })).content).toBe(
+        "hi",
+      );
+      await expect(createExplorerFile({ root, relativePath: "notes/hello.txt" })).rejects.toThrow(
+        /EEXIST|already exists/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("renames an entry and refuses occupied destinations", async () => {
+    const root = await createTempDir("paseo-file-rename-");
+    try {
+      await createExplorerFile({ root, relativePath: "a.txt", content: "a" });
+      await createExplorerFile({ root, relativePath: "b.txt", content: "b" });
+      await expect(
+        renameExplorerEntry({ root, oldPath: "a.txt", newPath: "b.txt" }),
+      ).rejects.toThrow("Destination already exists");
+      const renamed = await renameExplorerEntry({ root, oldPath: "a.txt", newPath: "c.txt" });
+      expect(renamed.newPath).toBe("c.txt");
+      await expect(readExplorerFile({ root, relativePath: "a.txt" })).rejects.toThrow();
+      expect((await readExplorerFile({ root, relativePath: "c.txt" })).content).toBe("a");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to rename the root or escape the jail", async () => {
+    const root = await createTempDir("paseo-file-rename-root-");
+    try {
+      await createExplorerFile({ root, relativePath: "a.txt", content: "a" });
+      await expect(renameExplorerEntry({ root, oldPath: ".", newPath: "b" })).rejects.toThrow(
+        "Cannot rename the root directory",
+      );
+      await expect(
+        renameExplorerEntry({ root, oldPath: "a.txt", newPath: "../evil.txt" }),
+      ).rejects.toThrow("Access outside of workspace is not allowed");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("deletes files, refuses non-empty dirs without recursive, deletes them with it", async () => {
+    const root = await createTempDir("paseo-file-delete-");
+    try {
+      await createExplorerFile({ root, relativePath: "gone.txt", content: "x" });
+      expect((await deleteExplorerEntry({ root, relativePath: "gone.txt" })).path).toBe("gone.txt");
+      await createExplorerFile({ root, relativePath: "dir/inner.txt", content: "y" });
+      await expect(deleteExplorerEntry({ root, relativePath: "dir" })).rejects.toThrow(
+        "Directory is not empty",
+      );
+      expect((await deleteExplorerEntry({ root, relativePath: "dir", recursive: true })).path).toBe(
+        "dir",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to delete the root or a missing path", async () => {
+    const root = await createTempDir("paseo-file-delete-root-");
+    try {
+      await expect(deleteExplorerEntry({ root, relativePath: "." })).rejects.toThrow(
+        "Cannot delete the root directory",
+      );
+      await expect(deleteExplorerEntry({ root, relativePath: "nope.txt" })).rejects.toThrow(
+        "Requested path does not exist",
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

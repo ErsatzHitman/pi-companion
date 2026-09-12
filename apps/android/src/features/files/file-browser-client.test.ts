@@ -20,6 +20,7 @@ import {
   explainFileDownloadError,
   explainFileDownloadTokenResult,
   explainFileReadError,
+  explainFileOpsError,
   explainFileUploadError,
   explainFileUploadResult,
   explainFileWriteError,
@@ -377,5 +378,52 @@ describe("download (T35A4)", () => {
       error: null,
     };
     expect(explainFileDownloadTokenResult(result)).toBeNull();
+  });
+});
+
+describe("explainFileOpsError", () => {
+  it("explains the root guards", () => {
+    for (const raw of [
+      "Cannot create the root directory",
+      "Cannot delete the root directory",
+      "Cannot rename the root directory",
+    ]) {
+      expect(explainFileOpsError(raw).title).toBe("The root folder is protected");
+    }
+  });
+
+  it("explains an occupied destination", () => {
+    expect(explainFileOpsError("Destination already exists").title).toBe(
+      "Something is already there",
+    );
+  });
+
+  it("explains a non-empty directory", () => {
+    expect(explainFileOpsError("Directory is not empty").title).toBe("This folder isn't empty");
+  });
+
+  it("explains a vanished path", () => {
+    expect(explainFileOpsError("Requested path does not exist").title).toBe(
+      "This no longer exists",
+    );
+  });
+
+  it("explains the shared workspace guards", () => {
+    expect(explainFileOpsError("Access outside of workspace is not allowed").title).toBe(
+      "Outside the workspace",
+    );
+    expect(explainFileOpsError("cwd is required").title).toBe("No workspace selected");
+  });
+
+  it("falls back to a generic explanation that still shows the raw message", () => {
+    const explanation = explainFileOpsError("something unexpected happened");
+    expect(explanation.title).toBe("Couldn't change this file");
+    expect(explanation.description).toBe("something unexpected happened");
+  });
+
+  it("matches web's explainFileOpsError vocabulary", () => {
+    // Both platforms must explain the same raw daemon strings the same
+    // way (see this file's module doc: a port, not an invention).
+    expect(explainFileOpsError("Destination already exists").description).toMatch(/different one/i);
   });
 });

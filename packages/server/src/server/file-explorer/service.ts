@@ -572,6 +572,163 @@ export async function getDownloadableFileInfo({ root, relativePath }: ReadFilePa
   }
 }
 
+export interface CreateDirectoryParams {
+  root: string;
+  relativePath: string;
+}
+
+export interface CreateFileParams {
+  root: string;
+  relativePath: string;
+  content?: string;
+}
+
+export interface RenameEntryParams {
+  root: string;
+  oldPath: string;
+  newPath: string;
+}
+
+export interface DeleteEntryParams {
+  root: string;
+  relativePath: string;
+  recursive?: boolean;
+}
+
+export interface ExplorerEntryMutationResult {
+  path: string;
+}
+
+export interface RenameEntryResult {
+  oldPath: string;
+  newPath: string;
+}
+
+function isRootRelativePath(relativePath: string): boolean {
+  const trimmed = relativePath.trim();
+  return trimmed === "" || trimmed === "." || trimmed === "/";
+}
+
+/**
+ * Creates a directory (and any missing parents) inside the scoped root.
+ * The jail is the same `resolveScopedPath` every other op uses: lexical
+ * containment first, `realpath` verification for anything that exists.
+ */
+export async function createDirectoryEntry({
+  root,
+  relativePath,
+}: CreateDirectoryParams): Promise<ExplorerEntryMutationResult> {
+  if (isRootRelativePath(relativePath)) {
+    throw new Error("Cannot create the root directory");
+  }
+  const dirPath = await resolveScopedPath({ root, relativePath });
+  await fs.mkdir(dirPath.resolvedPath, { recursive: true });
+  return {
+    path: normalizeRelativePath({ root, targetPath: dirPath.requestedPath }),
+  };
+}
+
+/**
+ * Creates a new file with optional initial content. Fails when the path
+ * already exists (`"wx"`), so a create can never silently clobber.
+ * Missing parents are created, like `mkdir -p`.
+ */
+export async function createExplorerFile({
+  root,
+  relativePath,
+  content = "",
+}: CreateFileParams): Promise<FileExplorerEntry> {
+  if (isRootRelativePath(relativePath)) {
+    throw new Error("Cannot create a file at the root directory");
+  }
+  const encoded = Buffer.from(content, "utf8");
+  if (encoded.byteLength > MAX_EDITABLE_FILE_BYTES) {
+    throw new Error("File is too large to edit");
+  }
+  const filePath = await resolveScopedPath({ root, relativePath });
+  await fs.mkdir(path.dirname(filePath.resolvedPath), { recursive: true });
+  const handle = await fs.open(filePath.resolvedPath, "wx", 0o600);
+  try {
+    if (encoded.byteLength > 0) {
+      await handle.writeFile(encoded);
+    }
+  } finally {
+    await handle.close();
+  }
+  const stats = await fs.stat(filePath.resolvedPath);
+  return {
+    name: path.basename(filePath.requestedPath),
+    path: normalizeRelativePath({ root, targetPath: filePath.requestedPath }),
+    kind: "file",
+    size: stats.size,
+    modifiedAt: stats.mtime.toISOString(),
+  };
+}
+
+/**
+ * Renames (or moves) an entry inside the scoped root. Both ends are jailed;
+ * the destination must not already exist and neither end may be the root.
+ */
+export async function renameExplorerEntry({
+  root,
+  oldPath,
+  newPath,
+}: RenameEntryParams): Promise<RenameEntryResult> {
+  if (isRootRelativePath(oldPath) || isRootRelativePath(newPath)) {
+    throw new Error("Cannot rename the root directory");
+  }
+  const source = await resolveScopedPath({ root, relativePath: oldPath });
+  try {
+    await fs.lstat(source.resolvedPath);
+  } catch {
+    throw new Error("Requested path does not exist");
+  }
+  const dest = await resolveScopedPath({ root, relativePath: newPath });
+  try {
+    await fs.lstat(dest.resolvedPath);
+    throw new Error("Destination already exists");
+  } catch (error) {
+    if (!isMissingEntryError(error)) throw error;
+  }
+  await fs.mkdir(path.dirname(dest.resolvedPath), { recursive: true });
+  await fs.rename(source.resolvedPath, dest.resolvedPath);
+  return {
+    oldPath: normalizeRelativePath({ root, targetPath: source.requestedPath }),
+    newPath: normalizeRelativePath({ root, targetPath: dest.requestedPath }),
+  };
+}
+
+/**
+ * Deletes a file or directory inside the scoped root. Directories need
+ * `recursive: true` (mirrors `rm -r`); the root itself can never be deleted.
+ */
+export async function deleteExplorerEntry({
+  root,
+  relativePath,
+  recursive = false,
+}: DeleteEntryParams): Promise<ExplorerEntryMutationResult> {
+  if (isRootRelativePath(relativePath)) {
+    throw new Error("Cannot delete the root directory");
+  }
+  const target = await resolveScopedPath({ root, relativePath });
+  let stats;
+  try {
+    stats = await fs.lstat(target.resolvedPath);
+  } catch {
+    throw new Error("Requested path does not exist");
+  }
+  if (stats.isDirectory() && !recursive) {
+    const children = await fs.readdir(target.resolvedPath);
+    if (children.length > 0) {
+      throw new Error("Directory is not empty");
+    }
+  }
+  await fs.rm(target.resolvedPath, { recursive, force: false });
+  return {
+    path: normalizeRelativePath({ root, targetPath: target.requestedPath }),
+  };
+}
+
 async function resolveScopedPath({
   root,
   relativePath = ".",

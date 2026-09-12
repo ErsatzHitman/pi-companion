@@ -13,15 +13,23 @@ import type {
   FileSubscribeRequest,
   FileUnsubscribeRequest,
   FileWriteRequest,
+  FsFileCreateRequest,
+  FsFileDeleteRequest,
+  FsFileMkdirRequest,
+  FsFileRenameRequest,
   SessionInboundMessage,
   SessionOutboundMessage,
 } from "../../messages.js";
 import { FileUploadStore } from "../../file-upload/index.js";
 import type { DownloadTokenStore } from "../../file-download/token-store.js";
 import {
+  createDirectoryEntry,
+  createExplorerFile,
+  deleteExplorerEntry,
   getDownloadableFileInfo,
   listDirectoryEntries,
   readExplorerFile,
+  renameExplorerEntry,
   streamExplorerFile,
   writeExplorerFile,
 } from "../../file-explorer/service.js";
@@ -158,6 +166,125 @@ export class WorkspaceFilesSession {
       type: "fs.file.write.response",
       payload: { result, requestId: request.requestId },
     });
+  }
+
+  async handleFileMkdirRequest(request: FsFileMkdirRequest): Promise<void> {
+    const cwd = request.cwd.trim();
+    if (!cwd) {
+      this.host.emit({
+        type: "fs.file.mkdir.response",
+        payload: { path: null, error: "cwd is required", requestId: request.requestId },
+      });
+      return;
+    }
+    try {
+      const result = await createDirectoryEntry({ root: cwd, relativePath: request.path });
+      this.host.emit({
+        type: "fs.file.mkdir.response",
+        payload: { path: result.path, error: null, requestId: request.requestId },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "fs.file.mkdir.response",
+        payload: { path: null, error: getErrorMessage(error), requestId: request.requestId },
+      });
+    }
+  }
+
+  async handleFileCreateRequest(request: FsFileCreateRequest): Promise<void> {
+    const cwd = request.cwd.trim();
+    if (!cwd) {
+      this.host.emit({
+        type: "fs.file.create.response",
+        payload: { path: null, error: "cwd is required", requestId: request.requestId },
+      });
+      return;
+    }
+    try {
+      const entry = await createExplorerFile({
+        root: cwd,
+        relativePath: request.path,
+        ...(request.content !== undefined ? { content: request.content } : {}),
+      });
+      this.host.emit({
+        type: "fs.file.create.response",
+        payload: { path: entry.path, error: null, requestId: request.requestId },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "fs.file.create.response",
+        payload: { path: null, error: getErrorMessage(error), requestId: request.requestId },
+      });
+    }
+  }
+
+  async handleFileRenameRequest(request: FsFileRenameRequest): Promise<void> {
+    const cwd = request.cwd.trim();
+    if (!cwd) {
+      this.host.emit({
+        type: "fs.file.rename.response",
+        payload: {
+          oldPath: null,
+          newPath: null,
+          error: "cwd is required",
+          requestId: request.requestId,
+        },
+      });
+      return;
+    }
+    try {
+      const result = await renameExplorerEntry({
+        root: cwd,
+        oldPath: request.oldPath,
+        newPath: request.newPath,
+      });
+      this.host.emit({
+        type: "fs.file.rename.response",
+        payload: {
+          oldPath: result.oldPath,
+          newPath: result.newPath,
+          error: null,
+          requestId: request.requestId,
+        },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "fs.file.rename.response",
+        payload: {
+          oldPath: null,
+          newPath: null,
+          error: getErrorMessage(error),
+          requestId: request.requestId,
+        },
+      });
+    }
+  }
+
+  async handleFileDeleteRequest(request: FsFileDeleteRequest): Promise<void> {
+    const cwd = request.cwd.trim();
+    if (!cwd) {
+      this.host.emit({
+        type: "fs.file.delete.response",
+        payload: { path: null, error: "cwd is required", requestId: request.requestId },
+      });
+      return;
+    }
+    try {
+      const result = await deleteExplorerEntry({
+        root: cwd,
+        relativePath: request.path,
+        ...(request.recursive !== undefined ? { recursive: request.recursive } : {}),
+      });
+      this.host.emit({
+        type: "fs.file.delete.response",
+        payload: { path: result.path, error: null, requestId: request.requestId },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "fs.file.delete.response",
+        payload: { path: null, error: getErrorMessage(error), requestId: request.requestId },
+      });
+    }
   }
 
   dispose(): void {

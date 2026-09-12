@@ -55,6 +55,9 @@ export type {
 
 export { createPendingConnectionFileWriteClient } from "./pending-connection-file-write-client.js";
 
+export { explainFileOpsError } from "./file-ops-client.js";
+export type { FileOpsClient, FileOpsErrorExplanation } from "./file-ops-client.js";
+
 export {
   FILE_UPLOAD_NOT_CONNECTED,
   explainFileUploadError,

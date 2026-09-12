@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   FileExplorerRequestSchema,
+  FsFileCreateRequestSchema,
+  FsFileDeleteRequestSchema,
   PaseoWorktreeArchiveRequestSchema,
   parseServerInfoStatusPayload,
   SessionInboundMessageSchema,
@@ -396,6 +398,98 @@ describe("file explorer request compatibility", () => {
       requestId: "req-new",
       acceptBinary: true,
     });
+  });
+});
+
+describe("fs file ops request/response compatibility", () => {
+  test("mkdir/create/rename/delete requests parse and belong to the inbound union", () => {
+    const requests = [
+      { type: "fs.file.mkdir.request", cwd: "/repo/app", path: "new-dir", requestId: "req-mkdir" },
+      { type: "fs.file.create.request", cwd: "/repo/app", path: "a.txt", requestId: "req-create" },
+      {
+        type: "fs.file.create.request",
+        cwd: "/repo/app",
+        path: "b.txt",
+        content: "hi",
+        requestId: "req-create-content",
+      },
+      {
+        type: "fs.file.rename.request",
+        cwd: "/repo/app",
+        oldPath: "a.txt",
+        newPath: "b.txt",
+        requestId: "req-rename",
+      },
+      { type: "fs.file.delete.request", cwd: "/repo/app", path: "a.txt", requestId: "req-delete" },
+      {
+        type: "fs.file.delete.request",
+        cwd: "/repo/app",
+        path: "dir",
+        recursive: true,
+        requestId: "req-delete-recursive",
+      },
+    ];
+    for (const request of requests) {
+      expect(SessionInboundMessageSchema.parse(request)).toMatchObject({
+        type: request.type,
+        requestId: request.requestId,
+      });
+    }
+    // optionals stay optional for old clients
+    expect(
+      FsFileCreateRequestSchema.parse({
+        type: "fs.file.create.request",
+        cwd: "/repo/app",
+        path: "a.txt",
+        requestId: "req-old",
+      }),
+    ).toEqual({
+      type: "fs.file.create.request",
+      cwd: "/repo/app",
+      path: "a.txt",
+      requestId: "req-old",
+    });
+    expect(
+      FsFileDeleteRequestSchema.parse({
+        type: "fs.file.delete.request",
+        cwd: "/repo/app",
+        path: "a.txt",
+        requestId: "req-old",
+      }),
+    ).toEqual({
+      type: "fs.file.delete.request",
+      cwd: "/repo/app",
+      path: "a.txt",
+      requestId: "req-old",
+    });
+  });
+
+  test("mkdir/create/rename/delete responses parse and belong to the outbound union", () => {
+    const responses = [
+      {
+        type: "fs.file.mkdir.response",
+        payload: { path: "new-dir", error: null, requestId: "req-mkdir" },
+      },
+      {
+        type: "fs.file.create.response",
+        payload: { path: "a.txt", error: null, requestId: "req-create" },
+      },
+      {
+        type: "fs.file.rename.response",
+        payload: { oldPath: "a.txt", newPath: "b.txt", error: null, requestId: "req-rename" },
+      },
+      {
+        type: "fs.file.delete.response",
+        payload: { path: "a.txt", error: null, requestId: "req-delete" },
+      },
+      {
+        type: "fs.file.delete.response",
+        payload: { path: null, error: "Requested path does not exist", requestId: "req-err" },
+      },
+    ];
+    for (const response of responses) {
+      expect(SessionOutboundMessageSchema.parse(response)).toMatchObject({ type: response.type });
+    }
   });
 });
 

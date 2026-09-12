@@ -167,6 +167,63 @@ export interface FileBrowserClient {
    * the request: `FILE_DOWNLOAD_NOT_CONNECTED`.
    */
   requestDownloadToken?(cwd: string, path: string): Promise<FileDownloadTokenResult>;
+
+  /**
+   * Creates a directory (and any missing parents) inside `cwd`
+   * (the `fs.file.mkdir.request`/`fs.file.mkdir.response` wire
+   * message — see `packages/protocol/src/messages.ts`'s
+   * `FsFileMkdirRequestSchema`/`FsFileMkdirResponseSchema` and
+   * `DaemonClient.mkdir(cwd, path)` in
+   * `packages/client/src/daemon-client.ts`, whose method shape this
+   * matches exactly so a real `DaemonClient` satisfies this optional
+   * member structurally with no adapter). Rejects with an `Error`
+   * whose `message` is the daemon's raw explanation on failure.
+   *
+   * Optional for the same reason every other member on this
+   * interface is: every existing `FileBrowserClient` test double
+   * keeps compiling unchanged with no `mkdir`.
+   */
+  mkdir?(cwd: string, path: string): Promise<{ path: string | null }>;
+
+  /**
+   * Creates a new file with optional initial content inside `cwd`
+   * (the `fs.file.create.request`/`fs.file.create.response` wire
+   * message — `FsFileCreateRequestSchema`/`FsFileCreateResponseSchema`
+   * and `DaemonClient.createFile(cwd, path, content?)`, matched
+   * exactly for the same structural reason as `mkdir`). Never
+   * clobbers: rejects when the path already exists.
+   *
+   * Optional for the same reason as `mkdir`.
+   */
+  createFile?(cwd: string, path: string, content?: string): Promise<{ path: string | null }>;
+
+  /**
+   * Renames (or moves) an entry within `cwd` (the
+   * `fs.file.rename.request`/`fs.file.rename.response` wire message —
+   * `FsFileRenameRequestSchema`/`FsFileRenameResponseSchema` and
+   * `DaemonClient.renameEntry(cwd, oldPath, newPath)`, matched exactly
+   * for the same structural reason as `mkdir`). Rejects when the
+   * destination already exists.
+   *
+   * Optional for the same reason as `mkdir`.
+   */
+  renameEntry?(
+    cwd: string,
+    oldPath: string,
+    newPath: string,
+  ): Promise<{ oldPath: string | null; newPath: string | null }>;
+
+  /**
+   * Deletes a file or directory inside `cwd` (the
+   * `fs.file.delete.request`/`fs.file.delete.response` wire message —
+   * `FsFileDeleteRequestSchema`/`FsFileDeleteResponseSchema` and
+   * `DaemonClient.deleteEntry(cwd, path, recursive?)`, matched exactly
+   * for the same structural reason as `mkdir`). Directories need
+   * `recursive: true` unless already empty.
+   *
+   * Optional for the same reason as `mkdir`.
+   */
+  deleteEntry?(cwd: string, path: string, recursive?: boolean): Promise<{ path: string | null }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -950,4 +1007,75 @@ export function explainFileDownloadTokenResult(
 export function buildFileDownloadUrl(origin: string, token: string): string {
   const trimmedOrigin = origin.endsWith("/") ? origin.slice(0, -1) : origin;
   return `${trimmedOrigin}/api/files/download?token=${encodeURIComponent(token)}`;
+}
+
+// ---------------------------------------------------------------------------
+// File mutation ops (mkdir/create/rename/delete)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a raw daemon `mkdir`/`createFile`/`renameEntry`/`deleteEntry`
+ * rejection (an `Error.message`) to a title and description a user can
+ * act on. Covers the shared `fs` errors and workspace guards
+ * `explainFileBrowserError` knows, plus this surface's own guards
+ * (`packages/server/src/server/file-explorer/service.ts`): the three
+ * root guards, "Destination already exists", "Directory is not
+ * empty", and "Requested path does not exist". Matches web's
+ * `explainFileOpsError` (`apps/web/src/features/files/
+ * file-ops-client.ts`) vocabulary.
+ */
+export function explainFileOpsError(rawMessage: string): FileBrowserErrorExplanation {
+  const message = rawMessage.trim();
+
+  if (/^(eacces|eperm)\b/i.test(message) || /permission denied/i.test(message)) {
+    return {
+      title: "Permission denied",
+      description: "The daemon does not have permission to change this file or folder.",
+    };
+  }
+  if (/access outside of workspace/i.test(message)) {
+    return {
+      title: "Outside the workspace",
+      description: "This path is outside the folders the daemon shares with this session.",
+    };
+  }
+  if (/cannot (create|delete|rename) the root directory/i.test(message)) {
+    return {
+      title: "The root folder is protected",
+      description: "The shared folder itself can't be created, renamed, or deleted.",
+    };
+  }
+  if (/destination already exists/i.test(message)) {
+    return {
+      title: "Something is already there",
+      description: "Another file or folder already uses that name. Pick a different one.",
+    };
+  }
+  if (/directory is not empty/i.test(message)) {
+    return {
+      title: "This folder isn't empty",
+      description: "Only empty folders can be deleted without confirming the whole contents.",
+    };
+  }
+  if (
+    /^enoent\b/i.test(message) ||
+    /no such file or directory/i.test(message) ||
+    /requested path does not exist/i.test(message)
+  ) {
+    return {
+      title: "This no longer exists",
+      description:
+        "It may have been moved, renamed, or deleted since it was last listed. Go back and try again.",
+    };
+  }
+  if (/cwd is required/i.test(message)) {
+    return {
+      title: "No workspace selected",
+      description: "This session does not have a workspace folder to change yet.",
+    };
+  }
+  return {
+    title: "Couldn't change this file",
+    description: message.length > 0 ? message : "The daemon returned an unknown error.",
+  };
 }

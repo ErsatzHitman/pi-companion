@@ -4711,6 +4711,68 @@ export class DaemonClient {
     return payload.result;
   }
 
+  async mkdir(cwd: string, path: string): Promise<{ path: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "fs.file.mkdir.request", cwd, path },
+      responseType: "fs.file.mkdir.response",
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { path: payload.path };
+  }
+
+  async createFile(cwd: string, path: string, content?: string): Promise<{ path: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "fs.file.create.request",
+        cwd,
+        path,
+        ...(content !== undefined ? { content } : {}),
+      },
+      responseType: "fs.file.create.response",
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { path: payload.path };
+  }
+
+  async renameEntry(
+    cwd: string,
+    oldPath: string,
+    newPath: string,
+  ): Promise<{ oldPath: string | null; newPath: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: { type: "fs.file.rename.request", cwd, oldPath, newPath },
+      responseType: "fs.file.rename.response",
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { oldPath: payload.oldPath, newPath: payload.newPath };
+  }
+
+  async deleteEntry(
+    cwd: string,
+    path: string,
+    recursive?: boolean,
+  ): Promise<{ path: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      message: {
+        type: "fs.file.delete.request",
+        cwd,
+        path,
+        ...(recursive !== undefined ? { recursive } : {}),
+      },
+      responseType: "fs.file.delete.response",
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { path: payload.path };
+  }
+
   async uploadFile(input: FileUploadInput): Promise<FileUploadResult> {
     const bytes = asUint8Array(input.bytes);
     if (!bytes) {

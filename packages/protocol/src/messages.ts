@@ -2556,6 +2556,37 @@ export const FileWriteRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const FsFileMkdirRequestSchema = z.object({
+  type: z.literal("fs.file.mkdir.request"),
+  cwd: z.string(),
+  path: z.string(),
+  requestId: z.string(),
+});
+
+export const FsFileCreateRequestSchema = z.object({
+  type: z.literal("fs.file.create.request"),
+  cwd: z.string(),
+  path: z.string(),
+  content: z.string().optional(),
+  requestId: z.string(),
+});
+
+export const FsFileRenameRequestSchema = z.object({
+  type: z.literal("fs.file.rename.request"),
+  cwd: z.string(),
+  oldPath: z.string(),
+  newPath: z.string(),
+  requestId: z.string(),
+});
+
+export const FsFileDeleteRequestSchema = z.object({
+  type: z.literal("fs.file.delete.request"),
+  cwd: z.string(),
+  path: z.string(),
+  recursive: z.boolean().optional(),
+  requestId: z.string(),
+});
+
 export const ProjectIconRequestSchema = z.object({
   type: z.literal("project_icon_request"),
   cwd: z.string(),
@@ -3046,6 +3077,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FileSubscribeRequestSchema,
   FileUnsubscribeRequestSchema,
   FileWriteRequestSchema,
+  FsFileMkdirRequestSchema,
+  FsFileCreateRequestSchema,
+  FsFileRenameRequestSchema,
+  FsFileDeleteRequestSchema,
   ProjectIconRequestSchema,
   ProjectIconGetRequestSchema,
   FileDownloadTokenRequestSchema,
@@ -5326,6 +5361,43 @@ export const FileWriteResponseSchema = z.object({
   }),
 });
 
+export const FsFileMkdirResponseSchema = z.object({
+  type: z.literal("fs.file.mkdir.response"),
+  payload: z.object({
+    path: z.string().nullable(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
+export const FsFileCreateResponseSchema = z.object({
+  type: z.literal("fs.file.create.response"),
+  payload: z.object({
+    path: z.string().nullable(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
+export const FsFileRenameResponseSchema = z.object({
+  type: z.literal("fs.file.rename.response"),
+  payload: z.object({
+    oldPath: z.string().nullable(),
+    newPath: z.string().nullable(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
+export const FsFileDeleteResponseSchema = z.object({
+  type: z.literal("fs.file.delete.response"),
+  payload: z.object({
+    path: z.string().nullable(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
 export const FileUpdateSchema = z.object({
   type: z.literal("fs.file.update"),
   payload: z.object({
@@ -5997,6 +6069,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FileSubscribeResponseSchema,
   FileUnsubscribeResponseSchema,
   FileWriteResponseSchema,
+  FsFileMkdirResponseSchema,
+  FsFileCreateResponseSchema,
+  FsFileRenameResponseSchema,
+  FsFileDeleteResponseSchema,
   FileUpdateSchema,
   ProjectIconResponseSchema,
   ProjectIconGetResponseSchema,
@@ -6453,6 +6529,14 @@ export type FileUnsubscribeRequest = z.infer<typeof FileUnsubscribeRequestSchema
 export type FileUnsubscribeResponse = z.infer<typeof FileUnsubscribeResponseSchema>;
 export type FileWriteRequest = z.infer<typeof FileWriteRequestSchema>;
 export type FileWriteResponse = z.infer<typeof FileWriteResponseSchema>;
+export type FsFileMkdirRequest = z.infer<typeof FsFileMkdirRequestSchema>;
+export type FsFileMkdirResponse = z.infer<typeof FsFileMkdirResponseSchema>;
+export type FsFileCreateRequest = z.infer<typeof FsFileCreateRequestSchema>;
+export type FsFileCreateResponse = z.infer<typeof FsFileCreateResponseSchema>;
+export type FsFileRenameRequest = z.infer<typeof FsFileRenameRequestSchema>;
+export type FsFileRenameResponse = z.infer<typeof FsFileRenameResponseSchema>;
+export type FsFileDeleteRequest = z.infer<typeof FsFileDeleteRequestSchema>;
+export type FsFileDeleteResponse = z.infer<typeof FsFileDeleteResponseSchema>;
 export type FileWriteResult = z.infer<typeof FileWriteResultSchema>;
 export type FileUpdate = z.infer<typeof FileUpdateSchema>;
 export type ProjectIconRequest = z.infer<typeof ProjectIconRequestSchema>;
