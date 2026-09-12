@@ -9,6 +9,7 @@ import { useDaemonClientContext } from "../../app/daemon-client-context.js";
 import { ApprovalsContainer } from "../../features/approvals/index.js";
 import { ComposerContainer } from "../../features/composer/index.js";
 import { createDaemonAgentTurnClient } from "../../features/composer/index.js";
+import { createReferenceFileSource } from "../../features/composer/index.js";
 import { useSessionContextTelemetry } from "../../features/composer/index.js";
 import { createDaemonSessionResumeClient } from "../../features/sessions/index.js";
 import { SessionResumeScreen } from "../../features/sessions/SessionResumeScreen.js";
@@ -337,6 +338,14 @@ export function HostSessionScreen() {
     () => (client ? createDaemonAgentTurnClient(client) : undefined),
     [client],
   );
+  // T389: `@file` completion reads the daemon's existing `listDirectory`
+  // (`FileBrowserClient`), walked lazily and bounded by
+  // `createReferenceFileSource`. `undefined` with no connection, so the `@`
+  // list offers only skills rather than inventing paths.
+  const fileReferenceSource = useMemo(
+    () => (client ? createReferenceFileSource(client) : undefined),
+    [client],
+  );
   const editFromHereClient = useMemo(() => adaptEditFromHereForkClient(client), [client]);
 
   const transcriptEntries = useSessionTranscriptEntries(client, agentId, info.status);
@@ -401,6 +410,7 @@ export function HostSessionScreen() {
       {latestTodoEntry ? <TodoDock entry={latestTodoEntry} testId="session-todo-dock" /> : null}
       <ComposerContainer
         sessionId={agentId}
+        serverId={serverId}
         client={agentTurnClient}
         // T293: a real `DaemonClient` satisfies `DaemonEditorTextSource`
         // structurally (`daemon-editor-text-client.ts`) — passed directly,
@@ -408,6 +418,8 @@ export function HostSessionScreen() {
         editorTextClient={client ?? undefined}
         // T386: the ring's derived context-window telemetry.
         contextTelemetry={contextTelemetry}
+        // T389: `@file` candidates from the connected daemon.
+        fileReferenceSource={fileReferenceSource}
       />
     </>
   );

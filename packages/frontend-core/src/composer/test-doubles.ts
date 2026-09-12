@@ -73,9 +73,16 @@ export class InMemoryStructuredStorage implements StructuredStorage {
   }
 }
 
-/** Deterministic, manually advanced `Clock` test double. */
+/**
+ * Deterministic, manually advanced `Clock` test double. `advance` fires
+ * every `setTimeout` whose due time has arrived, in due order, so a
+ * debounced writer (e.g. `DraftSessionController`) can be tested without a
+ * real timer. `setInterval` is unimplemented — nothing under test needs it.
+ */
 export class FakeClock implements Clock {
   private currentMs: number;
+  private readonly timers: Array<{ handle: TimerHandle; callback: () => void; dueAt: number }> = [];
+  private nextTimerId = 0;
 
   constructor(startMs: number = 0) {
     this.currentMs = startMs;
@@ -87,21 +94,35 @@ export class FakeClock implements Clock {
 
   advance(deltaMs: number): void {
     this.currentMs += deltaMs;
+    const due = this.timers
+      .filter((timer) => timer.dueAt <= this.currentMs)
+      .sort((a, b) => a.dueAt - b.dueAt);
+    for (const timer of due) {
+      const index = this.timers.indexOf(timer);
+      if (index !== -1) this.timers.splice(index, 1);
+    }
+    for (const timer of due) {
+      timer.callback();
+    }
   }
 
-  setTimeout(): TimerHandle {
-    throw new Error("FakeClock.setTimeout is not implemented; this test double is now-only.");
+  setTimeout(callback: () => void, delayMs: number): TimerHandle {
+    this.nextTimerId += 1;
+    const handle = { __timerHandleBrand: this.nextTimerId } as unknown as TimerHandle;
+    this.timers.push({ handle, callback, dueAt: this.currentMs + delayMs });
+    return handle;
   }
 
-  clearTimeout(): void {
-    throw new Error("FakeClock.clearTimeout is not implemented; this test double is now-only.");
+  clearTimeout(handle: TimerHandle): void {
+    const index = this.timers.findIndex((timer) => timer.handle === handle);
+    if (index !== -1) this.timers.splice(index, 1);
   }
 
   setInterval(): TimerHandle {
-    throw new Error("FakeClock.setInterval is not implemented; this test double is now-only.");
+    throw new Error("FakeClock.setInterval is not implemented; this test double is timer-only.");
   }
 
   clearInterval(): void {
-    throw new Error("FakeClock.clearInterval is not implemented; this test double is now-only.");
+    throw new Error("FakeClock.clearInterval is not implemented; this test double is timer-only.");
   }
 }

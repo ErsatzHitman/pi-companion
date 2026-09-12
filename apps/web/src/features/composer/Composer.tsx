@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
+import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
 import { Button, Chip, ChipGroup, Sheet, StatusIndicator } from "../../ui/primitives/index.js";
@@ -15,8 +16,10 @@ import { wireEditorTextResponder } from "./daemon-editor-text-client.js";
 import { ModelThinkingPicker } from "./ModelThinkingPicker.js";
 import { PromptRoutingPicker } from "./PromptRoutingPicker.js";
 import { QueueModePicker } from "./QueueModePicker.js";
+import { ReferenceSuggestions } from "./ReferenceSuggestions.js";
 import type { UseComposerOptions } from "./use-composer.js";
 import { useComposer } from "./use-composer.js";
+import { useComposerReferences } from "./use-composer-references.js";
 import type { ComposerAttachment } from "./use-attachments.js";
 import { formatAttachmentSize } from "./use-attachments.js";
 import { useComposerPaste } from "./use-clipboard-paste.js";
@@ -84,6 +87,14 @@ export interface ComposerProps extends UseComposerOptions {
    * "not reported" state rather than a fabricated 0%.
    */
   contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
+  /**
+   * `@file` candidate listing (T389). The route supplies this from the
+   * daemon's existing `listDirectory` when a connection exists. Omit it and
+   * `@` still completes skills (which come from the same `listCommands` the
+   * slash palette already uses) — file suggestions are simply absent, never
+   * invented.
+   */
+  fileReferenceSource?: coreComposer.ReferenceFileSource;
 }
 
 /** `ComposerAttachment.status` -> `Chip` tone (T28B6): status is always paired with visible text too, never colour alone (plan.md §10.5). */
@@ -250,6 +261,7 @@ export function Composer({
   testId,
   editorTextClient,
   contextTelemetry,
+  fileReferenceSource,
   ...composerOptions
 }: ComposerProps) {
   const {
@@ -291,6 +303,34 @@ export function Composer({
     now: () => composerOptions.clock.now(),
   });
 
+  // T389: the caret offset the `@` token search runs from, plus a queued
+  // caret position applied after a chosen reference rewrites the draft.
+  const [caretIndex, setCaretIndex] = useState(0);
+  const [pendingCaret, setPendingCaret] = useState<number | null>(null);
+
+  // Skills are the `skill` entries of the same `listCommands` result the
+  // slash palette already uses — no second daemon round trip, and no
+  // invented names when the daemon reports none.
+  const skillCandidates = useMemo<coreComposer.ReferenceCandidate[]>(
+    () =>
+      slashCommands.commands
+        .filter((command) => command.kind === "skill")
+        .map((command) => ({
+          kind: "skill",
+          id: command.name,
+          label: `@${command.name}`,
+          description: command.description,
+        })),
+    [slashCommands.commands],
+  );
+
+  const references = useComposerReferences({
+    draftText,
+    caret: caretIndex,
+    files: fileReferenceSource,
+    skills: skillCandidates,
+  });
+
   const wrapperRef = useRef<HTMLDivElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
   /** Whether the context ring's session-controls sheet is showing. */
@@ -318,6 +358,85 @@ export function Composer({
 
   function focusMessageInput(): void {
     wrapperRef.current?.querySelector<HTMLTextAreaElement>(".pc-prompt-bar__input")?.focus();
+  }
+
+  // Applies a caret position queued by a reference insertion, after React
+  // has committed the rewritten draft value.
+  useEffect(() => {
+    if (pendingCaret === null) return;
+    const input = wrapperRef.current?.querySelector<HTMLTextAreaElement>(".pc-prompt-bar__input");
+    if (input) {
+      input.focus();
+      input.setSelectionRange(pendingCaret, pendingCaret);
+    }
+    setPendingCaret(null);
+  }, [pendingCaret, draftText]);
+
+  /** Reads the textarea's caret offset from any bubbling form event. */
+  function readCaret(target: EventTarget | null): number | null {
+    const element = target as HTMLTextAreaElement | null;
+    return typeof element?.selectionStart === "number" ? element.selectionStart : null;
+  }
+
+  function handleComposerChangeCapture(event: React.FormEvent<HTMLDivElement>): void {
+    const caret = readCaret(event.target);
+    if (caret !== null) setCaretIndex(caret);
+  }
+
+  function handleComposerKeyUp(event: React.KeyboardEvent<HTMLDivElement>): void {
+    const caret = readCaret(event.target);
+    if (caret !== null) setCaretIndex(caret);
+  }
+
+  function applyReferenceInsertion(insertion: coreComposer.ReferenceInsertion | null): void {
+    if (insertion === null) return;
+    setDraftText(insertion.text);
+    setCaretIndex(insertion.caret);
+    setPendingCaret(insertion.caret);
+  }
+
+  function selectReference(candidate: coreComposer.ReferenceCandidate): void {
+    applyReferenceInsertion(references.choose(candidate));
+  }
+
+  function removeResolvedReference(reference: coreComposer.ResolvedReference): void {
+    const next = coreComposer.removeReference(draftText, reference);
+    setDraftText(next.text);
+    setCaretIndex(next.caret);
+    setPendingCaret(next.caret);
+  }
+
+  /**
+   * Keyboard contract for the open `@` candidate list (T389). Handled in
+   * the capture phase on the composer wrapper so ArrowUp/ArrowDown move the
+   * highlight and Enter chooses a candidate *before* `PromptBar`'s own
+   * textarea handler can send the message; Escape dismisses the list
+   * instead of interrupting the turn, exactly as the slash palette already
+   * does.
+   */
+  function handleReferenceKeyDownCapture(event: KeyboardEvent<HTMLDivElement>): void {
+    if (!references.isOpen) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      references.moveActive(1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      references.moveActive(-1);
+    } else if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      applyReferenceInsertion(references.choose());
+    } else if (event.key === "Tab") {
+      event.preventDefault();
+      event.stopPropagation();
+      applyReferenceInsertion(references.choose());
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      references.dismiss();
+    }
   }
 
   // Moves focus into `CommandSearch`'s own combobox input the instant the
@@ -379,6 +498,9 @@ export function Composer({
   const contextRingTestId = testId ? `${testId}-context-ring` : undefined;
   const controlsSheetTestId = testId ? `${testId}-session-controls` : undefined;
   const footerStateTestId = testId ? `${testId}-foot-state` : undefined;
+  const referencesTestId = testId ? `${testId}-references` : undefined;
+  const resolvedReferencesTestId = testId ? `${testId}-resolved-references` : undefined;
+  const referenceListboxId = useId();
   const composerClassName = dragAndDrop.isDraggingOver
     ? "pc-composer pc-composer--drop-active"
     : "pc-composer";
@@ -388,12 +510,24 @@ export function Composer({
       className={composerClassName}
       ref={wrapperRef}
       onPaste={handlePaste}
+      onChangeCapture={handleComposerChangeCapture}
+      onKeyUp={handleComposerKeyUp}
+      onKeyDownCapture={handleReferenceKeyDownCapture}
       {...dragAndDrop.dropZoneHandlers}
     >
       {dragAndDrop.isDraggingOver ? (
         <div className="pc-composer__drop-hint" data-testid={dropHintTestId} aria-hidden="true">
           Drop to attach
         </div>
+      ) : null}
+      {references.isOpen ? (
+        <ReferenceSuggestions
+          listboxId={referenceListboxId}
+          items={references.candidates}
+          activeIndex={references.activeIndex}
+          onSelect={selectReference}
+          testId={referencesTestId}
+        />
       ) : null}
       <PromptBar
         label={label}
@@ -491,6 +625,23 @@ export function Composer({
                   </Button>
                 ) : null}
               </span>
+            ))}
+          </ChipGroup>
+        </div>
+      ) : null}
+      {references.resolved.length > 0 ? (
+        <div className="pc-composer__resolved-references" data-testid={resolvedReferencesTestId}>
+          <ChipGroup ariaLabel="References in the draft">
+            {references.resolved.map((reference, index) => (
+              <Chip
+                key={`${reference.candidate.kind}:${reference.candidate.id}:${reference.start}`}
+                label={reference.candidate.label}
+                tone="info"
+                onRemove={() => removeResolvedReference(reference)}
+                testId={
+                  resolvedReferencesTestId ? `${resolvedReferencesTestId}-${index}` : undefined
+                }
+              />
             ))}
           </ChipGroup>
         </div>

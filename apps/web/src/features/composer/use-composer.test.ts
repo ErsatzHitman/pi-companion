@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { composer as coreComposer } from "@picompanion/frontend-core";
+
 import {
   FakeAgentTurnClient,
   FakeClock,
@@ -495,5 +497,156 @@ describe("useComposer", () => {
       "first",
       "second",
     ]);
+  });
+});
+
+describe("useComposer per-session draft persistence (T389)", () => {
+  /** Lets the controller's async save/load promises settle. */
+  const settle = (): Promise<void> =>
+    new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+  function draftKey(sessionId: string, serverId = "server-1"): string {
+    return coreComposer.draftKeyForSession({ serverId, agentId: sessionId });
+  }
+
+  it("restores a persisted draft for the session on mount", async () => {
+    const clock = new FakeClock(1_000);
+    const storage = new InMemoryStructuredStorage();
+    await new coreComposer.DraftStore(storage, clock).save(draftKey("session-1"), {
+      text: "restored from storage",
+    });
+
+    const { result } = renderHook(() =>
+      useComposer({
+        sessionId: "session-1",
+        serverId: "server-1",
+        clock,
+        structuredStorage: storage,
+        filePicker: new FakeFilePicker(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.draftText).toBe("restored from storage"));
+  });
+
+  it("persists a typed draft after the debounce and restores it on a fresh mount", async () => {
+    const clock = new FakeClock(1_000);
+    const storage = new InMemoryStructuredStorage();
+    const first = renderHook(() =>
+      useComposer({
+        sessionId: "session-1",
+        serverId: "server-1",
+        clock,
+        structuredStorage: storage,
+        filePicker: new FakeFilePicker(),
+      }),
+    );
+    await waitFor(() => expect(first.result.current.draftText).toBe(""));
+
+    act(() => first.result.current.setDraftText("survives a reload"));
+    act(() => clock.advance(300));
+    await act(async () => {
+      await settle();
+    });
+
+    // A brand-new hook over the same storage (a "reload") sees the draft.
+    const second = renderHook(() =>
+      useComposer({
+        sessionId: "session-1",
+        serverId: "server-1",
+        clock,
+        structuredStorage: storage,
+        filePicker: new FakeFilePicker(),
+      }),
+    );
+    await waitFor(() => expect(second.result.current.draftText).toBe("survives a reload"));
+  });
+
+  it("never leaks a draft between two sessions on the same server", async () => {
+    const clock = new FakeClock(1_000);
+    const storage = new InMemoryStructuredStorage();
+    const base = {
+      serverId: "server-1",
+      clock,
+      structuredStorage: storage,
+      filePicker: new FakeFilePicker(),
+    };
+    const { result, rerender } = renderHook(
+      (props: { sessionId: string }) => useComposer({ ...base, sessionId: props.sessionId }),
+      { initialProps: { sessionId: "session-a" } },
+    );
+    await waitFor(() => expect(result.current.draftText).toBe(""));
+
+    act(() => result.current.setDraftText("only for A"));
+    rerender({ sessionId: "session-b" });
+
+    // B starts empty, never showing A's text, and switching back restores A's.
+    await waitFor(() => expect(result.current.draftText).toBe(""));
+    expect(
+      await new coreComposer.DraftStore(storage, clock).load(draftKey("session-b")),
+    ).toBeNull();
+
+    rerender({ sessionId: "session-a" });
+    await waitFor(() => expect(result.current.draftText).toBe("only for A"));
+  });
+
+  it("keeps the same session id on two servers separate", async () => {
+    const clock = new FakeClock(1_000);
+    const storage = new InMemoryStructuredStorage();
+    const base = {
+      sessionId: "shared-id",
+      clock,
+      structuredStorage: storage,
+      filePicker: new FakeFilePicker(),
+    };
+    const { result, rerender } = renderHook(
+      (props: { serverId: string }) => useComposer({ ...base, serverId: props.serverId }),
+      { initialProps: { serverId: "server-a" } },
+    );
+    await waitFor(() => expect(result.current.draftText).toBe(""));
+
+    act(() => result.current.setDraftText("server A's draft"));
+    rerender({ serverId: "server-b" });
+    await waitFor(() => expect(result.current.draftText).toBe(""));
+
+    rerender({ serverId: "server-a" });
+    await waitFor(() => expect(result.current.draftText).toBe("server A's draft"));
+  });
+
+  it("clears the persisted draft once a submission is durably recorded", async () => {
+    const clock = new FakeClock(1_000);
+    const storage = new InMemoryStructuredStorage();
+    const client = new FakeAgentTurnClient();
+    const { result } = renderHook(() =>
+      useComposer({
+        sessionId: "session-1",
+        serverId: "server-1",
+        clock,
+        structuredStorage: storage,
+        filePicker: new FakeFilePicker(),
+        generateClientMessageId: () => "client-1",
+        client,
+      }),
+    );
+    await waitFor(() => expect(result.current.draftText).toBe(""));
+
+    act(() => result.current.setDraftText("send me"));
+    act(() => clock.advance(300));
+    await act(async () => {
+      await settle();
+    });
+    expect(
+      (await new coreComposer.DraftStore(storage, clock).load(draftKey("session-1")))?.text,
+    ).toBe("send me");
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(
+      await new coreComposer.DraftStore(storage, clock).load(draftKey("session-1")),
+    ).toBeNull();
   });
 });
