@@ -19874,3 +19874,81 @@ split would be a state neither the suite nor the typecheck ever ran.
 - [x] A push token can be obtained and refreshed behind the port
 - [x] A permission notification carries approve/deny actions that reach the same model the sheet uses
 - [x] Every falsified doc comment in the touched files is corrected
+
+#### T392 — Android pairing could not read a QR code because no camera module was installed
+
+`labels: phase-9, area: android` · `depends-on: T390` · `wave: P9-W`
+
+**What shipped.** `expo-camera@~17.0.10` is installed and declared in `app.config.ts`;
+`apps/android/src/features/connect/expo-camera-scanner-port.ts` implements the
+`CameraScannerPort` that port's own doc comment specified, and `QrPairingPanel`'s `"ready"` phase
+now renders `expo-camera-preview.tsx` — a real preview whose successful scan calls the existing
+`handleScannedText` path, so the RN-free phase machine is untouched. The unavailable factory stays
+for tests and for a build without the native module, and every doc comment that said the module
+was not installed is corrected in the same commit (T124). The pairing Maestro flow's narrative
+comments follow the new behaviour rather than the old "unavailable" copy.
+
+**Evidence.** `npm test --workspace=@picompanion/android` → 261 files / 3659 tests pass, with two
+filesystem-walking files (`src/ui/theme/fonts.test.ts` and the Maestro citation contract) exceeding
+their 5 s budget **only** while four suites ran concurrently; run alone they are 2 files / 40 tests
+green. Typecheck exit 0. Committed as `c21c78b`, merged as `a756a99`.
+
+#### T393 — The web console kept no offline copy of a transcript and the host route was a placeholder
+
+`labels: phase-9, area: web` · `depends-on: T387` · `wave: P9-W`
+
+**What shipped.** `apps/web/src/platform/offline/` is the browser-backed half of `frontend-core`'s
+offline domain: `cacheTimelineTail` writes a fresh (therefore `stale`) tail on every coalesced
+stream update through a single-flight, latest-wins writer; `loadTimelineCacheEnvelope` reads it
+**without re-stamping** `cachedAt`, so a banner reports when the data was last seen rather than when
+it was drawn; `confirmTimelineCatchUp` is the only call that marks it caught up, and only after an
+authoritative `fetch_agent_timeline_response` window. `host-session-screen.tsx` restores that tail
+before attaching to the daemon, and `OfflineTranscriptBanner` says plainly that the daemon is
+unreachable, what is unavailable, and when the copy was saved — with no time claimed when none was
+recorded. `/h/:serverId` replaces its `RoutePlaceholder` with a real landing: host identity, the live
+connection state through `useDaemonClientContext()`, and links to the host's Sessions, Settings and
+Diagnostics routes. The session rail stays the only session list.
+
+**One conflict, resolved by keeping both.** `host-session-screen.tsx`'s transcript effect is where
+T388's incremental projector and T393's cache-write path meet; the merge keeps both — the
+subscription projects incrementally **and** schedules the debounced cache write, with the
+restore/catch-up folds still excluded from re-stamping.
+
+**Evidence.** `npm test --workspace=@picompanion/web` → 178 files / 1663 tests pass; frontend-core
+and web typechecks exit 0. Committed as `8e7dc65`, merged as `4c88e47`.
+
+- [x] A cold open with no daemon renders the cached tail, with a test
+- [x] A restore never re-stamps `cachedAt`, with a test that advances the clock past the write
+- [x] The banner is honest about being offline and about when the copy was saved
+- [x] `/h/:serverId` is a real landing, and every test that pinned the placeholder is re-anchored
+
+#### T395 — A checkpoint could be taken but no client or screen could ask to restore one, or answer a conflict
+
+`labels: phase-9, area: frontend` · `depends-on: T383` · `wave: P9-W`
+
+**What shipped (core half, `927b0d2`).** The wire's `agent.rewind.response` carries only `ok` and an
+`error` string, and T383 deliberately added no error-code field, so a **documented marker
+convention** classifies a failure at the one place that knows the difference —
+`packages/protocol/src/rewind-errors.ts` defines `REWIND_CONFLICT_ERROR_MARKER` /
+`REWIND_UNSUPPORTED_ERROR_MARKER` with `markerForRewindFailure`, `parseRewindFailureCode` and
+`stripRewindFailureMarker`; `packages/server/src/server/agent/rewind/rewind-failure-wire.ts` stamps
+them at the session boundary (`formatRewindFailureForWire`), leaving every other throw unmarked and
+every domain message unchanged. `DaemonClient.rewindAgent` gains an optional
+`RewindAgentOptions { force?: boolean }` — an omitted options object sends **no** `force` key at
+all, so the pre-T395 three-argument call is byte-identical — and `frontend-core`'s
+`RewindController` maps every response into a typed `RewindOutcome` (`success` | `unsupported` |
+`conflict` | `failed`), with the marker stripped before a screen ever sees the sentence. The
+decision record the shipped code cites is `plan.md` §4.2's "A conflict refuses unless `force` is
+set"; the marker convention itself is recorded there too.
+
+**Evidence.** `npm test --workspace=@picompanion/frontend-core` → 46 files / 611 tests pass;
+`packages/client`'s daemon-client suite 137 tests pass; the server's rewind files 10 tests pass;
+typechecks exit 0 for `client`, `frontend-core` and `server`; the guard runs clean. The controller
+test covers all four outcomes and parses the real `AgentRewindResponseMessageSchema` before
+round-tripping the marker through JSON, so the classification is proven on the wire shape rather
+than on a hand-built object.
+
+- [x] A conflict and an unsupported mode are distinguishable by code, not by reading a sentence
+- [x] `force` is forwarded, and an omitted options object sends no `force` key at all
+- [x] Every outcome is a typed result a screen can render, with the marker stripped
+- [ ] The web and Android surfaces (in flight as `wave3/rewind-ui` for web; Android is a follow-up)
