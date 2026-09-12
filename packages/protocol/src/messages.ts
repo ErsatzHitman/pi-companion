@@ -1807,6 +1807,10 @@ export const AgentRewindRequestMessageSchema = z.object({
   agentId: z.string(),
   messageId: z.string(),
   mode: AgentRewindModeSchema,
+  // Optional so the wire stays backward compatible: absent means false. A files
+  // rewind that would discard a change made outside the checkpoint system is
+  // refused unless this is true.
+  force: z.boolean().optional(),
   requestId: z.string(),
 });
 

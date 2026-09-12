@@ -85,8 +85,20 @@ describe("AgentManager rewind", () => {
 
     await manager.rewind(agentId, "message-1", "files");
 
-    expect(session.recordedRewinds).toEqual([{ mode: "files", messageId: "message-1" }]);
+    expect(session.recordedRewinds).toEqual([
+      { mode: "files", messageId: "message-1", force: false },
+    ]);
     expect(session.historyReadCount).toBe(0);
+  });
+
+  test("forwards force to the provider for a files rewind", async () => {
+    const { manager, session, agentId } = await createRewindHarness();
+
+    await manager.rewind(agentId, "message-1", "files", { force: true });
+
+    expect(session.recordedRewinds).toEqual([
+      { mode: "files", messageId: "message-1", force: true },
+    ]);
   });
 
   test("aborts an in-flight turn before rewinding", async () => {
@@ -97,7 +109,9 @@ describe("AgentManager rewind", () => {
     await manager.rewind(agentId, "message-1", "files");
 
     expect(session.aborted).toBe(true);
-    expect(session.recordedRewinds).toEqual([{ mode: "files", messageId: "message-1" }]);
+    expect(session.recordedRewinds).toEqual([
+      { mode: "files", messageId: "message-1", force: false },
+    ]);
   });
 
   test("does not rewind when the in-flight turn rejects cancellation", async () => {

@@ -64,6 +64,10 @@ import {
 import { materializeProviderImage } from "../provider-image-output.js";
 import { PiCliRuntime } from "./cli-runtime.js";
 import { revertPiConversation } from "./rewind.js";
+import {
+  createWorkspaceCheckpointStore,
+  type WorkspaceCheckpointStore,
+} from "../../checkpoints/index.js";
 import { listPiImportableSessions, readPiImportSessionConfig } from "./session-descriptor.js";
 import type { PiRuntime, PiRuntimeSession, PiStartSessionInput } from "./runtime.js";
 import { PIUI_MARKER } from "./ui-bridge/schema.js";
@@ -207,6 +211,8 @@ export interface PiRpcAgentClientOptions {
   runtimeSettings?: ProviderRuntimeSettings;
   providerParams?: unknown;
   runtime?: PiRuntime;
+  /** Test seam: see `PiRpcAgentSessionOptions.checkpoints`. */
+  checkpoints?: WorkspaceCheckpointStore;
 }
 
 interface PiPromptPayload {
@@ -228,11 +234,17 @@ interface PiPersistenceMetadata {
 }
 
 function capabilitiesForClient(): AgentCapabilityFlags {
-  return withPiCapabilities(false);
+  // A workspace-free client capability cannot promise file rewind; the
+  // per-session capability below flips it on only for a workspace the store
+  // proved it can snapshot.
+  return withPiCapabilities(false, false);
 }
 
-function capabilitiesForSession(hasMcpConfig: boolean): AgentCapabilityFlags {
-  return withPiCapabilities(hasMcpConfig);
+function capabilitiesForSession(
+  hasMcpConfig: boolean,
+  supportsFileRewind: boolean,
+): AgentCapabilityFlags {
+  return withPiCapabilities(hasMcpConfig, supportsFileRewind);
 }
 
 interface StartTurnResult {
@@ -261,6 +273,11 @@ interface PiRpcAgentSessionOptions {
    */
   agentId?: string;
   capabilities: AgentCapabilityFlags;
+  /**
+   * The daemon's workspace checkpoint store. Injected so a test can root it at
+   * a scratch directory; production uses one store rooted at `$PASEO_HOME`.
+   */
+  checkpoints?: WorkspaceCheckpointStore;
   currentModeId?: string | null;
   cleanup?: () => void;
   extensionTimeoutMs?: number;
@@ -857,10 +874,15 @@ function isPiMcpAdapterCommand(command: PiRpcSlashCommand): boolean {
   return JSON.stringify(command.sourceInfo).includes("pi-mcp-adapter");
 }
 
-function withPiCapabilities(supportsMcpServers: boolean): AgentCapabilityFlags {
+function withPiCapabilities(
+  supportsMcpServers: boolean,
+  supportsFileRewind: boolean,
+): AgentCapabilityFlags {
   return {
     ...PI_CAPABILITIES,
     supportsMcpServers,
+    supportsRewindFiles: supportsFileRewind,
+    supportsRewindBoth: supportsFileRewind,
   };
 }
 
@@ -1345,6 +1367,24 @@ export class PiRpcAgentSession implements AgentSession {
   currentLeafOverrideId: string | null | undefined;
   private readonly capturedUserEntries: PiCapturedEntry[] = [];
   private readonly capturedUserEntriesById = new Map<string, PiCapturedEntry>();
+  /**
+   * Per-turn workspace snapshots (see `plan.md` §4.2). `turnSnapshots` maps a Pi
+   * turn id to its before/after checkpoint ids, `snapshotTurnByMessageId` maps a
+   * captured Pi user-entry id (or its client message id) to that turn, and
+   * `latestCheckpointId` is the baseline a restore compares the live work tree
+   * against.
+   */
+  private readonly checkpoints: WorkspaceCheckpointStore | null;
+  private readonly checkpointSessionId: string;
+  private readonly turnSnapshots = new Map<
+    string,
+    { beforeId: string | null; afterId: string | null }
+  >();
+  private readonly snapshotTurnByMessageId = new Map<string, string>();
+  private latestCheckpointId: string | null = null;
+  private readonly fileRewindAvailable: boolean;
+  /** The in-flight after-turn capture, awaited by a rewind so its baseline is current. */
+  private pendingTurnCapture: Promise<boolean> | null = null;
   private readonly pendingExtensionResults = new Map<string, PendingExtensionResult>();
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
   private outOfBandCompactionStarted = false;
@@ -1437,6 +1477,11 @@ export class PiRpcAgentSession implements AgentSession {
     });
     this.uiActionRouter = new PiUiActionRouter(this.runtimeSession, this.uiStateStore);
 
+    this.checkpoints = options.checkpoints ?? null;
+    this.checkpointSessionId = options.agentId ?? options.initialState.sessionId;
+    this.fileRewindAvailable =
+      options.capabilities.supportsRewindFiles === true && options.config.internal !== true;
+
     this.runtimeSession.onEvent((event) => {
       this.handleRuntimeEvent(event);
     });
@@ -1508,6 +1553,16 @@ export class PiRpcAgentSession implements AgentSession {
     this.clearNoTurnBuffers();
     this.activeNoTurnPromptText = payload.text;
     const shouldProbeForNoTurnPrompt = this.parseSlashCommandInput(payload.text) !== null;
+
+    // Snapshot before the prompt reaches Pi, so the snapshot represents the
+    // workspace the turn starts from (see `plan.md` §4.2).
+    if (this.fileRewindAvailable) {
+      await this.captureCheckpoint({
+        checkpointId: `before-turn:${turnId}`,
+        phase: "before-turn",
+        turnId,
+      });
+    }
 
     void (async () => {
       try {
@@ -1782,6 +1837,102 @@ export class PiRpcAgentSession implements AgentSession {
     });
     this.currentLeafOverrideId = targetEntry.parentId;
     this.activeToolCalls.clear();
+  }
+
+  /**
+   * Restores the workspace files to the state before the turn that owns
+   * `messageId`. A change made outside the checkpoint system refuses the
+   * restore with a conflict error unless `force` is set.
+   */
+  async revertFiles(input: { messageId: string; force?: boolean }): Promise<void> {
+    if (this.activeTurnId) {
+      throw new Error("Cannot rewind Pi files while a turn is active");
+    }
+    const store = this.checkpoints;
+    if (!store || !this.fileRewindAvailable) {
+      throw new Error("Workspace checkpointing is not available for this workspace");
+    }
+    const turnId = this.snapshotTurnByMessageId.get(input.messageId);
+    const beforeId = turnId ? (this.turnSnapshots.get(turnId)?.beforeId ?? null) : null;
+    if (!turnId || !beforeId) {
+      throw new Error(`No workspace snapshot is recorded for message ${input.messageId}`);
+    }
+    // A turn's after-snapshot may still be in flight; wait for it so the
+    // baseline really is the workspace's current state.
+    if (this.pendingTurnCapture) {
+      await this.pendingTurnCapture.catch(() => undefined);
+      this.pendingTurnCapture = null;
+    }
+
+    await store.restore({
+      checkpointId: beforeId,
+      force: input.force === true,
+      fromCheckpointId: this.latestCheckpointId ?? undefined,
+      sessionId: this.checkpointSessionId,
+      workspaceRoot: this.config.cwd,
+    });
+    // The workspace now equals the target, so a fresh snapshot of it is the
+    // baseline the next restore compares against.
+    await this.captureCheckpoint({
+      checkpointId: `after-rewind:${turnId}`,
+      phase: "after-turn",
+      turnId,
+    });
+  }
+
+  /** Restores both the Pi conversation and the workspace files for one turn. */
+  async revertBoth(input: { messageId: string; force?: boolean }): Promise<void> {
+    // Files first: a workspace conflict must refuse before the conversation
+    // tree moves, so a refused rewind leaves nothing half-applied.
+    await this.revertFiles(input);
+    await this.revertConversation({ messageId: input.messageId });
+  }
+
+  /**
+   * Captures one workspace checkpoint for a turn boundary. A capture failure is
+   * reported as a notice and never fails the turn itself.
+   */
+  private async captureCheckpoint(input: {
+    checkpointId: string;
+    phase: "before-turn" | "after-turn";
+    turnId: string;
+  }): Promise<boolean> {
+    const store = this.checkpoints;
+    if (!store || !this.fileRewindAvailable) {
+      return false;
+    }
+    try {
+      await store.capture({
+        checkpointId: input.checkpointId,
+        phase: input.phase,
+        sessionId: this.checkpointSessionId,
+        workspaceRoot: this.config.cwd,
+      });
+    } catch (error) {
+      this.emit({
+        type: "pi_notice",
+        provider: this.provider,
+        level: "warning",
+        message: `Workspace checkpoint capture failed: ${toDiagnosticErrorMessage(error)}`,
+      });
+      return false;
+    }
+    const record = this.turnSnapshots.get(input.turnId) ?? { beforeId: null, afterId: null };
+    if (input.phase === "before-turn") {
+      record.beforeId = input.checkpointId;
+    } else {
+      record.afterId = input.checkpointId;
+    }
+    this.turnSnapshots.set(input.turnId, record);
+    this.latestCheckpointId = input.checkpointId;
+    return true;
+  }
+
+  private recordSnapshotMessage(messageId: string): void {
+    if (!this.activeTurnId) {
+      return;
+    }
+    this.snapshotTurnByMessageId.set(messageId, this.activeTurnId);
   }
 
   private async runPiTreeExtensionCommand(targetId: string): Promise<unknown> {
@@ -2209,6 +2360,12 @@ export class PiRpcAgentSession implements AgentSession {
         ...(this.activeClientMessageId ? { clientMessageId: this.activeClientMessageId } : {}),
       },
     });
+    // Both ids can arrive at a rewind: the provider resolves to the Pi entry id,
+    // while a client with no submitted row falls back to its own message id.
+    this.recordSnapshotMessage(entry.id);
+    if (this.activeClientMessageId) {
+      this.recordSnapshotMessage(this.activeClientMessageId);
+    }
     return true;
   }
 
@@ -2965,6 +3122,13 @@ export class PiRpcAgentSession implements AgentSession {
       turnId,
     });
     void this.refreshAfterTurn(turnId);
+    if (turnId) {
+      this.pendingTurnCapture = this.captureCheckpoint({
+        checkpointId: `after-turn:${turnId}`,
+        phase: "after-turn",
+        turnId,
+      });
+    }
   }
 
   private async refreshState(): Promise<void> {
@@ -3033,6 +3197,7 @@ export class PiRpcAgentClient implements AgentClient {
   readonly provider: AgentProvider;
   readonly capabilities: AgentCapabilityFlags;
 
+  private readonly checkpoints: WorkspaceCheckpointStore;
   private readonly logger: Logger;
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly providerParams: PiProviderParams;
@@ -3041,6 +3206,7 @@ export class PiRpcAgentClient implements AgentClient {
   constructor(options: PiRpcAgentClientOptions) {
     this.provider = PI_PROVIDER;
     this.capabilities = capabilitiesForClient();
+    this.checkpoints = options.checkpoints ?? createWorkspaceCheckpointStore();
     this.logger = options.logger;
     this.runtimeSettings = options.runtimeSettings;
     this.providerParams = PiProviderParamsSchema.parse(options.providerParams ?? {});
@@ -3078,12 +3244,14 @@ export class PiRpcAgentClient implements AgentClient {
     }
     try {
       const initialState = await runtimeSession.getState();
+      const supportsFileRewind = await this.checkpoints.isSupported(config.cwd);
       const session = new PiRpcAgentSession({
         runtimeSession,
         config,
         initialState,
         agentId: launchContext?.agentId,
-        capabilities: capabilitiesForSession(mcpConfig !== null),
+        capabilities: capabilitiesForSession(mcpConfig !== null, supportsFileRewind),
+        checkpoints: this.checkpoints,
         cleanup: combineCleanup([mcpConfig?.cleanup, paseoExtension?.cleanup]),
         extensionTimeoutMs: this.providerParams.extensionTimeoutMs,
       });
@@ -3143,12 +3311,14 @@ export class PiRpcAgentClient implements AgentClient {
     }
     try {
       const initialState = await runtimeSession.getState();
+      const supportsFileRewind = await this.checkpoints.isSupported(resumeConfig.config.cwd);
       const session = new PiRpcAgentSession({
         runtimeSession,
         config: resumeConfig.config,
         initialState,
         agentId: launchContext?.agentId,
-        capabilities: capabilitiesForSession(mcpConfig !== null),
+        capabilities: capabilitiesForSession(mcpConfig !== null, supportsFileRewind),
+        checkpoints: this.checkpoints,
         cleanup: combineCleanup([mcpConfig?.cleanup, paseoExtension?.cleanup]),
         extensionTimeoutMs: this.providerParams.extensionTimeoutMs,
       });

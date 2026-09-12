@@ -11,7 +11,7 @@ export class RewindCapabilityError extends Error {
 
 export async function invokeRewindCapability(
   session: AgentSession,
-  input: { messageId: string; mode: RewindMode },
+  input: { messageId: string; mode: RewindMode; force?: boolean },
 ): Promise<void> {
   switch (input.mode) {
     case "conversation":
@@ -24,13 +24,13 @@ export async function invokeRewindCapability(
       if (!session.capabilities.supportsRewindFiles || !session.revertFiles) {
         throw new RewindCapabilityError(input.mode);
       }
-      await session.revertFiles({ messageId: input.messageId });
+      await session.revertFiles({ messageId: input.messageId, force: input.force });
       return;
     case "both":
       if (!session.capabilities.supportsRewindBoth || !session.revertBoth) {
         throw new RewindCapabilityError(input.mode);
       }
-      await session.revertBoth({ messageId: input.messageId });
+      await session.revertBoth({ messageId: input.messageId, force: input.force });
       return;
   }
 }

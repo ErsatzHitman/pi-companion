@@ -25,6 +25,7 @@ export const REWIND_TEST_CAPABILITIES: AgentCapabilityFlags = {
 export interface RecordedRewind {
   mode: "conversation" | "files" | "both";
   messageId: string;
+  force?: boolean;
 }
 
 export class FakeRewindSession implements AgentSession {
@@ -109,12 +110,12 @@ export class FakeRewindSession implements AgentSession {
     this.recordedRewinds.push({ mode: "conversation", messageId: input.messageId });
   }
 
-  async revertFiles(input: { messageId: string }): Promise<void> {
-    this.recordedRewinds.push({ mode: "files", messageId: input.messageId });
+  async revertFiles(input: { messageId: string; force?: boolean }): Promise<void> {
+    this.recordedRewinds.push({ mode: "files", messageId: input.messageId, force: input.force });
   }
 
-  async revertBoth(input: { messageId: string }): Promise<void> {
-    this.recordedRewinds.push({ mode: "both", messageId: input.messageId });
+  async revertBoth(input: { messageId: string; force?: boolean }): Promise<void> {
+    this.recordedRewinds.push({ mode: "both", messageId: input.messageId, force: input.force });
   }
 
   private emit(event: AgentStreamEvent): void {
