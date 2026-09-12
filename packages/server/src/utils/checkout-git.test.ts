@@ -61,6 +61,38 @@ import {
   type WorktreeConfig,
 } from "./worktree.js";
 
+/**
+ * Windows CI stalls this file (T396). Two runs failed a single test in it with
+ * `Test timed out in 30000ms` — `34352088001` at `285124d` (32476ms, "refreshes the tracked ref
+ * after pushing through a configured push remote") and `34683710279` at `4cb5a7c` (30000ms,
+ * "does not report incoming deletions when the base branch is behind its remote"). Both tests
+ * push to a bare remote, both run in roughly 1.5s alone, and both pass on the next run of the
+ * same commit. The second one left a git child still exiting, so the `afterEach` rmdir then
+ * failed with `EBUSY` on top of the timeout.
+ *
+ * Two of the causes are inside this file's control, and both are removed rather than retried:
+ *
+ * 1. Git's own background maintenance. `maintenance.auto` (on by default since git 2.30) can
+ *    launch `git maintenance run --auto` behind a commit, fetch or push — real repacking work
+ *    the test neither asks for nor waits for, on a runner that is already the slowest place
+ *    this suite runs. The two keys below switch it off for every git process the suite spawns,
+ *    including the ones the code under test spawns (`spawnProcess` inherits `process.env`),
+ *    and cost no extra process at all, unlike a `git config` call per repository.
+ * 2. The teardown's assumption that Windows releases a temp directory's handles the instant a
+ *    child exits. It does not always; `removeTempDir` retries briefly and then still throws, so
+ *    a real leak cannot hide behind the retry.
+ *
+ * The third cause is not in the test's control: an antivirus scan of the thousands of small git
+ * objects this suite writes under the runner's temp directory. `ci.yml`'s
+ * `server-tests (windows-latest)` job excludes those paths from Defender, which is where that
+ * one is addressed.
+ */
+process.env.GIT_CONFIG_COUNT = "2";
+process.env.GIT_CONFIG_KEY_0 = "maintenance.auto";
+process.env.GIT_CONFIG_VALUE_0 = "false";
+process.env.GIT_CONFIG_KEY_1 = "gc.auto";
+process.env.GIT_CONFIG_VALUE_1 = "0";
+
 interface LegacyCreateWorktreeTestOptions {
   branchName: string;
   cwd: string;
@@ -110,6 +142,25 @@ function initRepo(): { tempDir: string; repoDir: string } {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Windows can keep a directory handle busy for a moment after the child that held it exits, so a
+// recursive delete can lose that race. Five attempts over 250ms absorbs the race; anything still
+// locked after that is a leak, and throwing keeps it visible instead of swallowed.
+async function removeTempDir(dir: string): Promise<void> {
+  const retryable = new Set(["EBUSY", "EPERM", "ENOTEMPTY", "EACCES"]);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (attempt >= 5 || !retryable.has(code)) {
+        throw error;
+      }
+      await sleep(50);
+    }
+  }
 }
 
 function createGitHubServiceForStatus(
@@ -252,10 +303,10 @@ describe("checkout git utilities", () => {
     __resetPullRequestStatusCacheForTests();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     __resetCheckoutShortstatCacheForTests();
     __resetPullRequestStatusCacheForTests();
-    rmSync(tempDir, { recursive: true, force: true });
+    await removeTempDir(tempDir);
   });
 
   it("throws NotGitRepoError for non-git directories", async () => {

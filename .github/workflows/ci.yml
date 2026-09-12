@@ -956,7 +956,46 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full == 'true' || needs.changes.outputs.backend == 'true') }}
     runs-on: windows-latest
-    steps: *server_test_steps
+    # T396. This job can no longer share `*server_test_steps` with the ubuntu job: it needs one
+    # Windows-only prep step, and a YAML anchor replaces a whole list rather than merging into
+    # one. The four steps below are that anchor's contents verbatim -- change both when either
+    # changes.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+
+      # T396. `packages/server`'s suite writes thousands of small git objects under the runner's
+      # temp directory, and Windows Defender's real-time scan of them is the remaining
+      # unexplained cause of a stall this job has now hit twice -- run `34352088001` at `285124d`
+      # (32476ms) and run `34683710279` at `4cb5a7c` (30000ms), each one test in
+      # `src/utils/checkout-git.test.ts`, each in a test that pushes to a bare remote, each of
+      # which runs in ~1.5s alone. Deliberately non-fatal: a runner that refuses the exclusion
+      # must say so in the log rather than fail a job whose subject is the test suite, and the
+      # echoed exclusion list is what makes that visible instead of silently assumed.
+      - name: Keep Defender out of the git-heavy temp directories
+        shell: pwsh
+        run: |
+          try {
+            Add-MpPreference -ExclusionPath $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE -ErrorAction Stop
+            Write-Host "Defender exclusions now: $((Get-MpPreference).ExclusionPath -join '; ')"
+          } catch {
+            Write-Warning "Could not add Defender exclusions: $_"
+          }
+
+      - name: Build server dependency chain
+        run: |
+          npm run build --workspace=@picompanion/protocol
+          npm run build --workspace=@picompanion/relay
+          npm run build --workspace=@picompanion/highlight
+          npm run build --workspace=@picompanion/client
+          npm run build --workspace=@picompanion/server
+
+      - name: Run targeted server tests
+        run: npm run test:unit --workspace=@picompanion/server
 
   # T44A4: `@picompanion/cli` has a real `"test:unit": "vitest run src"`
   # script and 21 test files (173 tests) — see `scripts/ci/guard-workspace-

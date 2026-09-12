@@ -926,6 +926,26 @@ per-commit format guard is scoped in CI to `merge-base(base, HEAD)..HEAD` — ru
 commits pushed in quick succession therefore mean three sequential ~40-minute runs, and reading the
 run for your own tip can take an hour after the push. Plan the gate read around that, or push once.
 
+**The Windows git-suite stall recurred, and is now fixed as T396** (`packages/server/src/utils/checkout-git.test.ts`,
+`.github/workflows/ci.yml`). Run `34352088001` at `285124d` failed one test in that file with
+`Test timed out in 30000ms` at 32476ms; run `34683710279` at `4cb5a7c` failed a *different* test in
+the same file the same way, and then the `afterEach` `rmSync` added
+`EBUSY ... rmdir ...checkout-git-test-*\repo` on top because a git child was still exiting. Both
+tests push to a bare remote, both pass in ~1.5s alone, and each run passed on the next push of an
+almost identical commit — T310's section had logged the first one and explicitly asked for a filing
+if it came back, so T396 is that filing. The file is already first in `test:unit:serial`, whose
+`--no-file-parallelism` rules out sibling-file contention, which is why the answer is not
+"serialise it" this time. Three amplifiers were ours and are removed rather than retried: git's own
+background maintenance (`maintenance.auto` is on by default and can launch a repack behind any
+push/commit) is now off for the whole suite via `GIT_CONFIG_COUNT`-style env config, which costs no
+extra process and reaches the code under test because `spawnProcess` inherits `process.env`; the
+`afterEach` retries a Windows handle-release race five times over 250ms and **still throws** if it
+persists; and `server-tests (windows-latest)` now excludes `$RUNNER_TEMP`/`$GITHUB_WORKSPACE` from
+Defender before the suite, echoing the resulting list so the log says whether it applied. That job
+can no longer share the `*server_test_steps` YAML anchor with ubuntu — an anchor replaces a list, it
+does not merge into one — so its steps are duplicated verbatim with a comment tying the two copies
+together. `testTimeout` was deliberately left alone.
+
 
 **Test-runner lessons that cost real time in this wave** (all now in the section above):
 `npm test --workspace=@picompanion/web` resolves `@picompanion/frontend-core` through the workspace
