@@ -881,6 +881,24 @@ T395 section carries an unticked box for exactly that, so the next agent does no
 **Both halves have since landed** — web as `e59f324` (merged `7234d80`) and Android as `54b374a`
 (its ledger section closed in `b46575d`); see the two updates below.
 
+**Update, same day — T395 is now closed on BOTH platforms.** The Android half is `54b374a`
+(ledger box closed in `b46575d`): `apps/android/src/features/transcript/rewind/` carries
+`rewind-scopes.ts`, `undone-turns.ts`, `rewind-sheet-model.ts`, `use-rewind-to-here.ts`,
+`RewindSheet.tsx` + 5 test files, mounted in the session route behind a long-press on a user turn.
+Android-specific lessons worth keeping: this workspace **cannot render `react-native` under vitest**
+(any import graph that reaches it dies on a RolldownError), so every decision must live in a pure
+module and the hook/`.tsx` are pinned by **source-contract tests** that read the file and regex it —
+which means an oxfmt reflow or a casing difference (`testID` on RN's `Pressable` vs `testId` on this
+repo's own `Button`) breaks them in a way that looks like a code failure; `src/ui/primitives/
+touch-targets.test.ts` audits **every** interactive element in the app, so a new `Pressable` without
+a declared `minHeight: 48` (via a `styles.<name>` reference — a differently-named style object is not
+resolved) fails it; and T339's contract pins `setViewedAgentTimeline` at **exactly two call sites**,
+which is why the Android surface deliberately has no forced re-read after a rewind (the timeline
+arrives over the live `agent_stream`; a files-only rewind changes no row by design). One more
+environment fact: **this checkout's `node_modules` predated the wave's Expo additions**, so
+`expo-camera`/`expo-notifications` type-checked only after `npm install` refreshed the tree — a local
+red CI would never have seen.
+
 **Update, same day: the web half of T395 landed.** `e59f324` (merged as `7234d80`, ledger in
 `dd70763`) adds `apps/web/src/features/transcript/rewind/` — scope choice, dialog, bounded local
 undone-turns record, a per-row affordance disabled with a stated reason when no checkpoint exists —
