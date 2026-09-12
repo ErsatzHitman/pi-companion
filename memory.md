@@ -800,3 +800,32 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   capability-prose guard exit 0 with 65 groups, the per-commit format guard OK for the new commit and
   the clean-working-tree guard OK. Wave-2 product commits: `9afc612` (T384+T385), `bf47161` (T386),
   `aea1248` (T387), `34509d5` + `d44fc0f` (T386 follow-ups); `c05016d` + `aac2075` are prose.
+
+## Wave 3 (2026-09-12, in flight): rewind → Supernova → stubs → release plumbing
+
+The owner's next-wave order, taken literally: **T383 files-rewind → the three Supernova adoptions
+(checkpoint/restore surfaces, timeline upgrade, composer parity) → the four stubs (Android push
+notifications, Android sqlite offline, Android QR camera, web offline-cache wiring + host landing)
+→ release plumbing (publish the CLI or rewrite the install doc to a verified install path)**.
+
+Setup: five isolated `git worktree`s off `bd366dd`, one per independent workstream, each on its own
+`wave3/*` branch, each with `node_modules` junctions to the main checkout (w3-stubs got a real
+`npm ci` because it must add Expo dependencies). Children never push and never edit the shared
+files (`docs/issues-from-plan.md`, `plan.md`, `THIRD_PARTY_NOTICES.md`,
+`scripts/ci/guard-capability-prose.mjs`, `memory.md`, `HANDOFF.md`) — the orchestrator lands those
+after merging, so the ledger/notices/guard do not merge-conflict five ways.
+
+- `wave3/rewind` (T383): daemon files-rewind — per-turn snapshots outside the workspace,
+  conflict-checked restore, honest capability flags.
+- `wave3/timeline` (T388): timeline upgrade — stable row keys, work grouping, smooth streaming
+  reveal (pure frontend-core + both platforms, zero wire change).
+- `wave3/stubs` (T390/T391/T392): expo-sqlite offline cache/outbox, expo-notifications push +
+  Approve/Deny actions, expo-camera QR pairing. Their ports and RN-free models already exist and
+  each port's own doc comment names the exact install command and seam.
+- `wave3/composer` (T389, queued): composer parity — per-session drafts, `@file`/`@skill` refs,
+  attachment previews, honest context ring.
+- `wave3/web` (T393, queued): web offline-cache wiring + the `/h/:serverId` host landing page.
+- `wave3/release` (T394, in the orchestrator's own hands): docker and nix are NOT installed on this
+  machine and `npm` is not authenticated (`npm whoami` → ENEEDAUTH; `@picompanion/cli` → 404), so
+  the honest deliverable is a **verified from-source install path** plus `docs/clean-install-and-rollback.md`
+  rewritten to it, with the registry path marked not-yet-live and what publishing would require.

@@ -35,25 +35,71 @@ somewhere to talk to.
 
 ### A.2 Installing the daemon and CLI on your laptop
 
-**What you'll run** (a maintainer runs this, not an automated process — see
-§B.3 for why):
+**What you'll run.** The registry install this section used to show — a single
+`npm install -g @picompanion/cli` — **does not work today**, because nothing it
+needs is on the registry yet: `npm view @picompanion/cli version` answers
+`E404 Not Found`, and the workspace packages that install would resolve
+(`@picompanion/client`, `protocol`, `server`, `relay`, `highlight`) are
+unpublished too. There is no npm-publish workflow in this repository, and
+publishing needs an npm account that owns the `@picompanion` scope plus a
+token — owner-supplied credentials this repository does not carry.
+
+Until that changes, install **from source**, which is the path verified end to
+end on 2026-09-12 at commit `bd366dd` (§B.3a records the exact commands and
+their real output):
 
 ```
-npm install -g @picompanion/cli
+git clone https://github.com/ErsatzHitman/pi-companion.git
+cd pi-companion
+npm ci
+npm run build --workspace=@picompanion/protocol \
+  && npm run build --workspace=@picompanion/relay \
+  && npm run build --workspace=@picompanion/highlight \
+  && npm run build --workspace=@picompanion/client \
+  && npm run build --workspace=@picompanion/server \
+  && npm run build --workspace=@picompanion/cli
+node packages/cli/dist/index.js --version
 ```
 
-**What you should see:** npm prints a short summary ending in a line of the
-form `added N packages in Ms`, where **N is in the low hundreds, not 1**.
+**Why six builds and not just the last one.** `@picompanion/cli`'s own build
+script already builds `protocol`, `client` and `server`, but the daemon imports
+`@picompanion/relay` and `@picompanion/highlight` as workspace packages and a
+fresh checkout has no `dist/` for either — skipping them makes the last command
+fail with
+`ERR_MODULE_NOT_FOUND: Cannot find module ...@picompanion/highlight/dist/index.js`.
+This is a measured failure, not a guess: it is what the first run of this
+verification printed. `packaging/docker/Dockerfile` builds the same closure in
+the same order (plus `design-tokens`, `frontend-core` and `web`) for the
+packaged daemon; follow that order if you also want the web UI bundled.
 
-No exact figure is printed here on purpose. Two independent walks of this
-repository's `package-lock.json` at the P9-W6 merge gate returned 286 and 243
-registry packages, because hoisting, deduplication and platform-optional
-entries all move the number, and an npm upgrade moves it again. **A big number
-here is normal and is not a sign you installed the wrong thing** — it is the
-`paseo` program plus every library it depends on. If you see `added 1 package`,
-something is wrong: check you typed the package name in full.
+**The container path is not offered as verified here.** `packaging/docker/README.md`
+and `packaging/nix/README.md` carry real build steps, but no CI job has ever run
+a `docker build` or `nix build` against them — `docker-checks` and `nix-checks`
+are gated on filters that still match a repository-root `Dockerfile`/`flake.nix`,
+which this repository does not have, and `packaging/README.md` discloses that
+seam as open. So the path below is the one that was executed; treat a container
+install as unverified until that job is wired and read.
 
-A new command called `paseo` becomes available in your terminal.
+**What you should see:** `npm ci` ends with a line of the form
+`added N packages in Ms`, where **N is in the low thousands, because this is the
+whole repository, not one package** (measured 2026-09-12: `added 1698 packages
+in 30s`). Each build prints nothing on success — the first one took 2m17s on
+that machine, the rest well under a minute each. The last command prints the
+version string `0.3.0-beta.2`.
+
+**To get the `paseo` command itself on your `PATH`** — the one thing the
+registry install would have given you — link the workspace package you just
+built:
+
+```
+npm link ./packages/cli
+paseo --version
+```
+
+`npm link` writes a `paseo` shim into npm's global bin folder that points at
+`packages/cli/bin/paseo`, so the command follows the checkout: rebuild, and the
+next invocation runs the new code with no reinstall. Remove it with
+`npm unlink -g @picompanion/cli`.
 
 **Why the command is called `paseo` and not `pi-companion` or `picompanion`:**
 this is a decided naming choice (`plan.md` §1.1, T238), not a leftover from the
@@ -84,16 +130,19 @@ prefix folder itself) to your `PATH`, then open a new terminal window.
 **What actually landed on disk:** three things, and it is worth knowing which
 is which.
 
-1. **The `paseo` package itself** — a small launcher script (`bin/paseo`, 2
-   lines: it just loads the real program), the compiled program (`dist/`), and
-   its `package.json`. That is the whole published package; §B.1 lists it
-   exactly.
-2. **The libraries it depends on**, downloaded from npm at install time. These
-   are the majority of the files and the whole of that large "added N
-   packages" number. They live beside the package in npm's global folder and
-   are removed with it when you uninstall.
-3. **A `paseo` shortcut** in npm's global command folder, which is what makes
-   the word `paseo` work as a command anywhere.
+1. **The CLI program** — a small launcher script (`packages/cli/bin/paseo`, 2
+   lines: it just loads the real program), the compiled program
+   (`packages/cli/dist/`), and its `package.json`. That is the whole package a
+   publish would ship; §B.1 lists its contents exactly.
+2. **The libraries it depends on** — `packages/protocol/dist`,
+   `packages/relay/dist`, `packages/highlight/dist`, `packages/client/dist` and
+   `packages/server/dist`, built in place by the commands above. From the
+   registry these would arrive as downloaded packages beside it in npm's
+   global folder; from source they are built from this checkout, which is why
+   `npm ci` above reports a whole-repository package count.
+3. **A `paseo` shortcut** in npm's global command folder — only if you ran the
+   `npm link` step. That is what makes the word `paseo` work as a command
+   anywhere.
 
 The install step by itself does not create, read, or write your data directory
 — it only copies files into npm's own global package folder. See §B.1–§B.2
@@ -299,6 +348,12 @@ run, `npm pack --dry-run --workspace=@picompanion/cli` (read-only, explicitly
 permitted — it inspects what would ship without publishing or installing
 anything), is cited in §B.1.
 
+**Extended 2026-09-12 (T394):** a later task did run `npm ci`, a workspace
+build and `npm link` in a throwaway `git worktree` of this repository to verify
+the from-source install path — §B.3a records every command and its real output,
+including the one that failed. That work was scoped to the CLI: still no daemon
+was started, no socket opened, and no test APK installed.
+
 ### B.1 What actually ships — measured, not assumed
 
 `packages/cli/package.json`'s `"files"` field claims `["bin", "dist",
@@ -415,6 +470,36 @@ The Android half is blocked twice over, independently:
 Any sentence anywhere in this repository claiming this task installed an
 APK, ran a daemon, or verified either end to end is false; if you find one,
 it is a defect in this document, not a record of something that happened.
+
+### B.3a The from-source install was verified end to end (2026-09-12, T394)
+
+The paragraph above is true of T44B2 and of the registry path it describes.
+A later task did run the **from-source** path for real, because the registry
+path cannot work until the packages are published (see §A.2). It ran in a
+throwaway `git worktree` of this repository (`git worktree add --detach`,
+deleted afterwards) at commit `bd366dd`, so it touched no live daemon, no
+production data directory, and no socket:
+
+| Step      | Command                                            | Observed                                                                                        |
+| --------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| install   | `npm ci --no-audit --no-fund`                      | `added 1698 packages in 30s`                                                                    |
+| build     | `npm run build --workspace=@picompanion/cli`       | success, 2m17s (builds `protocol`, `client`, `server`, then the CLI)                            |
+| first run | `node packages/cli/dist/index.js --version`        | **failed**: `ERR_MODULE_NOT_FOUND: Cannot find module .../@picompanion/highlight/dist/index.js` |
+| fix       | `npm run build --workspace=@picompanion/highlight` | success, 31s                                                                                    |
+| re-run    | `node packages/cli/dist/index.js --version`        | `0.3.0-beta.2`                                                                                  |
+| link      | `npm link ./packages/cli` then `paseo --version`   | `paseo` resolved on `PATH`; printed `0.3.0-beta.2`                                              |
+
+The first-run failure is the reason §A.2 lists six builds: the CLI package's
+own build script does not build `relay` or `highlight`, which the daemon it
+loads imports at startup. The `npm link` from step six was removed again with
+`npm unlink -g @picompanion/cli` once the check was recorded, so this machine's
+global bin folder is as it was.
+
+**What this does not verify.** The daemon itself was never started (§B.3's two
+blockers still hold: port 6767 and `$PASEO_HOME` belong to the live production
+daemon on this machine), and no Android artifact was built or installed. What
+is verified is narrower and exact: from a clean checkout, the documented
+commands build the CLI and the `paseo` command answers `--version`.
 
 ### B.4 The read-versus-write question about `$PASEO_HOME` — answered, not restated
 
