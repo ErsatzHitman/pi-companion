@@ -60,27 +60,23 @@ tags:
 # closable from this flow or from `recovered-turn-banner.tsx`/
 # `recovered-turn-model.ts` alone:
 #
-#   1. `TurnOutboxOwner.getRecoveredTurns()` (`../src/platform/offline/
-#      turn-outbox-owner.ts`) returns `null` forever on this build,
-#      because `expo-sqlite` is not installed
-#      (`../src/platform/offline/sqlite-driver.ts`'s own doc comment
-#      names the exact command: `npm install expo-sqlite@~16.0.10
-#      --workspace=@picompanion/android`). `selectRecoveredTurnsForSession`
-#      then always returns `[]` — nothing this session route can render
-#      would ever show a banner, install or no.
+#   1. CORRECTED (T390): this reason no longer exists. `expo-sqlite` is
+#      installed and `TurnOutboxOwner` opens a real database file, so
+#      `getRecoveredTurns()` returns real rows on a device with the
+#      native `ExpoSQLite` module present.
 #
-#   2. Even once (1) is fixed, `Composer.tsx`'s own `OutboxController`
-#      instance (built by `../src/features/composer/in-memory-outbox-
-#      runtime.ts`'s `createInMemoryStructuredStorage()`) is a SEPARATE
-#      instance, over separate storage, from `AppCore.turnOutbox`'s
-#      `TurnOutboxOwner` (built over `SqliteStructuredStorage` once (1)
-#      lands) — `recovered-turn-banner.tsx`'s own doc comment names this
-#      finding in full. A real device send-then-kill scenario cannot
-#      produce a `RecoveredTurn` the session route's banner would ever
-#      see, independent of (1), because the two `OutboxController`
-#      instances never share data, and the mount site
-#      (`../src/app/index.tsx`) passes neither an `outbox` nor a
-#      `structuredStorage` prop into `Composer` today.
+#   2. CORRECTED (T121): `Composer.tsx` and this banner now share the one
+#      `AppCore.turnOutbox`-owned `OutboxController` —
+#      `../src/app/h/[serverId]/session/[agentId]/index.tsx` passes the
+#      identical `core.turnOutbox.getOutbox() ?? undefined` expression to
+#      both — so the "separate instance, separate storage" split this
+#      reason described is gone.
+#
+# What still justifies this lab: producing a real recovered row on a
+# device needs a real turn left mid-flight by a process kill, which a
+# Maestro flow cannot reliably stage. Lab seeding the fixture directly
+# keeps the banner's real rendering and its Resend/Discard actions
+# provable without that staged kill.
 #
 # So this task adds one small, `__DEV__`-gated surface —
 # `../src/dev/recovered-turn-lab.tsx` (content) plus

@@ -28,16 +28,14 @@ import { useTheme } from "../ui/theme/theme-context";
  *
  * **What this does NOT prove** — the real crash-recovery pipeline
  * (`TurnOutboxOwner.getRecoveredTurns()`, `../platform/offline/
- * turn-outbox-owner.ts`) stays blocked on the unavailable `expo-sqlite`
- * install (`../platform/offline/sqlite-driver.ts`'s own doc comment:
- * `npm install expo-sqlite@~16.0.10 --workspace=@picompanion/android`),
- * and even once that lands, `Composer`'s own `OutboxController` is a
- * *separate instance* over separate storage from `AppCore.turnOutbox`'s
- * (`recovered-turn-banner.tsx`'s own doc comment) — a disclosed,
- * pre-existing wiring gap this lab does not touch or paper over. This
- * lab seeds its fixture directly rather than pretending a real device
- * can reach "awaiting-confirmation" through any UI action today; see
- * this task's (T106) report for the exact chain of gaps still standing
+ * turn-outbox-owner.ts`) is real and mounted, but this lab seeds its
+ * fixture directly rather than driving a real device through the
+ * pipeline: producing an "awaiting-confirmation" row on-device would
+ * need a real turn to be left mid-flight by a process kill. Since T390
+ * the owner is backed by a real `expo-sqlite` file (and T121 shares one
+ * `OutboxController` between `Composer` and this banner), so the lab's
+ * fixture is a convenience, not a workaround for a missing driver; see
+ * this task's (T106) report for the exact chain of gaps that stood
  * between this and an on-device proof of the full pipeline.
  */
 const FIXTURE_TURNS: readonly AwaitingConfirmationTurn[] = [

@@ -10,42 +10,26 @@
  * `../composer/permission-recovery.js`'s `PermissionPort` rather than
  * declaring a fourth `getPermissionStatus`/`requestPermission` pair.
  *
- * **No push-notification dependency is installed in this workspace.**
- * `apps/android/package.json` carries neither `expo-notifications` nor
- * `expo-device` today, and this task may not run `npm install`.
- * `createUnavailablePushRegistrationPort` below is therefore this
- * module's only production implementation — the same shape
- * `../voice/voice-capture-port.ts`'s `createUnavailableVoiceCapturePort`
- * has (this once cited `../composer/mic-permission-port.ts`, deleted by
- * T94). CORRECTED at the P9-O merge gate: that function was cited here
- * as the PRECEDENT for "only production implementation", and T276 ended
- * that — `Composer.tsx` now defaults `voiceCapture` to a real
- * `createExpoAudioVoiceCapturePort()`, so voice has a production
- * implementation and push does not. The two stubs are still identically
- * shaped; it is the precedent, not the shape, that no longer holds. A push token
- * cannot be obtained without a real device and a real Expo/EAS project
- * id in any case, so nothing here claims to fetch one.
+ * **Push-notification dependencies are installed since T391.**
+ * `apps/android/package.json` declares `expo-notifications` and
+ * `expo-device` at the versions this app's own installed `expo`
+ * (`apps/android/node_modules/expo/bundledNativeModules.json`) pins for
+ * the installed SDK. The real `PushRegistrationPort` lives beside
+ * `createUnavailablePushRegistrationPort` in
+ * `./expo-push-registration-port.ts`'s `createExpoPushRegistrationPort`,
+ * and `app-shell/core.ts`/`app/h/[serverId]/devices.tsx` use it.
+ * `createUnavailablePushRegistrationPort` below remains the honest
+ * implementation for a build with no native `ExpoNotifications` module
+ * linked (and the fallback this module's own tests use) — the same
+ * relationship `../voice/voice-capture-port.ts`'s
+ * `createUnavailableVoiceCapturePort` has to its real sibling (the
+ * earlier CORRECTED note that voice's Unavailable factory was the
+ * *precedent* for "only production implementation" is now itself
+ * historical: both voice and push have a real production
+ * implementation).
  *
- * To wire a real push module once available (version pinned exactly
- * per *this app's own* installed `expo` — read from
- * `apps/android/node_modules/expo/bundledNativeModules.json`, not the
- * differently-versioned `expo` hoisted into the repo root from other
- * worktrees' installs, exactly as `../voice/voice-capture-port.ts`
- * and `../composer/attachment-source-port.ts` both note):
- *
- *   npm install --workspace=@picompanion/android expo-notifications@~0.32.17 expo-device@~8.0.10
- *
- * — then add a second implementation of `PushRegistrationPort` backed
- * by `expo-notifications`'s `getPermissionsAsync`/
- * `requestPermissionsAsync` (mapping its `PermissionStatus`/
- * `canAskAgain` onto `PermissionState`, exactly as
- * `../voice/voice-capture-port.ts`'s note describes for
- * `expo-audio`), `getExpoPushTokenAsync({ projectId })` for `getToken`
- * (the project id read from `expo-constants`, as
- * `D:\paseo\packages\app\src\hooks\use-push-token-registration.ts`'s
- * `getExpoProjectId` illustrates — read for behaviour only, never
- * copied: that file is Paseo's old frontend and may never enter this
- * repository), and `addPushTokenListener` for `onTokenRefresh`.
+ * The real implementation's own doc comment names the exact native API
+ * each half maps onto:
  *
  * **T36B extension (plan.md §9.3 "Permission notifications provide
  * Approve and Deny actions when safe"):** `postPermissionNotification`/
@@ -53,10 +37,10 @@
  * to *this* port, not a second one — the OS module that would back them
  * (`expo-notifications`'s `scheduleNotificationAsync` with a
  * `categoryIdentifier`/`setNotificationCategoryAsync` action set, and
- * its own `addNotificationResponseReceivedListener`) is the exact same
- * uninstalled dependency `getToken`/`onTokenRefresh` above already
- * describe, so a real implementation lives beside them, not in a
- * parallel port. See `permission-notification-model.ts` for the RN-free
+ * its own `addNotificationResponseReceivedListener`) is the same module
+ * `getToken`/`onTokenRefresh` above describe, so the real
+ * implementation lives beside them, not in a parallel port. See
+ * `permission-notification-model.ts` for the RN-free
  * logic that calls these three methods and for why the notification
  * content is split into a `publicTitle` vs. `privateTitle`/`privateBody`
  * pair.
@@ -168,7 +152,7 @@ export interface PushRegistrationPort extends PermissionPort {
   onNotificationAction(handler: (event: PermissionNotificationActionEvent) => void): () => void;
 }
 
-/** This build's only production `PushRegistrationPort` — see module docstring. */
+/** The honest `PushRegistrationPort` for a build with no native push module linked (and the fallback this module's tests use) — see module docstring. */
 export function createUnavailablePushRegistrationPort(): PushRegistrationPort {
   return {
     async getPermissionStatus(): Promise<PermissionState> {

@@ -78,18 +78,14 @@
  *
  * ## What a mount site needs
  *
- * Nothing in this repository constructs an `OutboxController` over this
- * task's storage yet, and nothing calls `recoverInFlightTurns`.
- * `app-shell/core.ts` (T32S9's grant this wave) is where `AppCore`
- * should call `createTurnOutbox` once at cold start (over the same
- * `SqliteStructuredStorage` instance this file's own doc comment and
- * `./index.ts` describe constructing, once T60C's `expo-sqlite` install
- * lands) and run `recoverInFlightTurns` before any UI reads the outbox,
- * then hand `"resumed"` rows to the composer's normal resend path and
- * surface `"awaiting-confirmation"` rows exactly as it would surface
- * any other outbox entry in that status (see `outbox.ts`'s own doc
- * comment — this module invents no new UI-facing state beyond what
- * `OutboxEntryStatus` already carries).
+ * `app-shell/core.ts` constructs a `TurnOutboxOwner` at cold start
+ * (T76) and runs `recoverInFlightTurns` before any UI reads the outbox;
+ * since T390 that owner sits over a real `expo-sqlite` database file,
+ * and `resumePendingTurnOutboxEntries` hands `"resumed"` rows to the
+ * composer's normal resend path. `"awaiting-confirmation"` rows are
+ * surfaced exactly as any other outbox entry in that status would be
+ * (see `outbox.ts`'s own doc comment — this module invents no new
+ * UI-facing state beyond what `OutboxEntryStatus` already carries).
  */
 import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { Clock, StructuredStorage } from "@picompanion/frontend-core";

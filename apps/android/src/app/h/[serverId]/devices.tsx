@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
 
 import { ANDROID_DAEMON_CLIENT_ID } from "../../../app-shell/core";
-import { createUnavailablePushRegistrationPort } from "../../../features/notifications/push-registration-port";
+import { createExpoPushRegistrationPort } from "../../../features/notifications/expo-push-registration-port";
 import { DevicesScreen } from "../../../features/devices";
 import type { TrustedDevicesClient } from "../../../features/devices";
 import { useAppCore } from "../../core-context";
@@ -33,14 +33,14 @@ import { useAppCore } from "../../core-context";
  *   the plain no-argument callback `useTrustedDevices`/
  *   `useDevicePushStatus` expect, so a reconnect re-fetches both the
  *   device list and this device's push status automatically.
- * - `getPermissionStatus` is `createUnavailablePushRegistrationPort()`'s
- *   `getPermissionStatus` — this build's only production
- *   `PushRegistrationPort` (no `expo-notifications`/`expo-device`
- *   install; see that port's own doc comment for the exact install
- *   command). Constructed fresh here rather than reading a persisted
- *   `AppCore` field, because the port is stateless (every method always
- *   resolves the same "unavailable" answer) — identical to how
- *   `AppCore.startPushRegistration` itself constructs one inline.
+ * - `getPermissionStatus` is `createExpoPushRegistrationPort()`'s
+ *   `getPermissionStatus` — the real `PushRegistrationPort` backed by
+ *   `expo-notifications` since T391 (see that port's own doc comment).
+ *   Constructed fresh here rather than reading a persisted `AppCore`
+ *   field: constructing the port performs no native work, and this route
+ *   only ever calls the stateless `getPermissionStatus` read (it never
+ *   requests a token or registers a listener), identical to how
+ *   `AppCore.startPushRegistration` constructs one inline.
  * - `isRegistered` reads `core.pushRegistration.getLastRegisteredToken()
  *   !== null` — the real T61B `PushRegistrationController` already
  *   threaded through `AppCore`, never a second one.
@@ -52,7 +52,7 @@ import { useAppCore } from "../../core-context";
 export default function DevicesRoute() {
   useLocalSearchParams<{ serverId: string }>();
   const core = useAppCore();
-  const pushPort = createUnavailablePushRegistrationPort();
+  const pushPort = createExpoPushRegistrationPort();
 
   return (
     <DevicesScreen

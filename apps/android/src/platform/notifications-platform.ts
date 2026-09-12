@@ -100,34 +100,29 @@ import { createUnavailablePushRegistrationPort } from "../features/notifications
  * argues against.
  *
  * ---------------------------------------------------------------------
- * What is not yet installed, named exactly
+ * The notification dependency is installed; this port's general half is
+ * not yet implemented
  * ---------------------------------------------------------------------
- * `expo-notifications` and `expo-device` are not in
- * `apps/android/package.json` and this task may not install them.
- * `createUnavailableAndroidNotificationsPlatform` below (built on
- * `../features/notifications/push-registration-port.js`'s existing
- * `createUnavailablePushRegistrationPort`) is this build's only
- * production implementation, mirroring `./file-picker.ts`'s
- * `createUnavailableFilePicker` precedent exactly. Once installable
- * (versions pinned by *this app's own*
- * `apps/android/node_modules/expo/bundledNativeModules.json`, which
- * pins `expo-notifications@~0.32.17` and `expo-device@~8.0.10` against
- * this app's `"expo": "^54.0.18"` — not a differently-versioned `expo`
- * hoisted from another worktree's install):
- *
- *     npm install --workspace=@picompanion/android expo-notifications@~0.32.17 expo-device@~8.0.10
- *
- * — a real `AndroidNotificationsPort` would back `getPermissionStatus`/
- * `requestPermission` with `expo-notifications`'s
- * `getPermissionsAsync`/`requestPermissionsAsync` (mapping `granted`/
- * `canAskAgain` onto `PermissionState` exactly as
- * `../features/notifications/push-registration-port.ts`'s own doc
- * comment already describes for the permission-notification methods it
- * shares this port with), `showNotification` with
- * `scheduleNotificationAsync`, and `onNotificationResponse` with
- * `addNotificationResponseReceivedListener`. **No permission dialog is
- * shown or claimed shown anywhere in this file or its tests** — every
- * proof here is against a scripted fake.
+ * `expo-notifications` and `expo-device` are in
+ * `apps/android/package.json` since T391 (versions pinned by *this
+ * app's own* `apps/android/node_modules/expo/bundledNativeModules.json`
+ * against this app's installed `expo`), and the *push-registration*
+ * half of that dependency now has a real production implementation:
+ * `../features/notifications/expo-push-registration-port.ts`'s
+ * `createExpoPushRegistrationPort`, which `app-shell/core.ts` and
+ * `app/h/[serverId]/devices.tsx` use. This module's own
+ * `AndroidNotificationsPort` adds the general-purpose
+ * `showNotification`/`onNotificationResponse` half on top of the same
+ * port, and THAT half has no real implementation yet: it would back
+ * `showNotification` with `expo-notifications`'s
+ * `scheduleNotificationAsync`, `onNotificationResponse` with
+ * `addNotificationResponseReceivedListener`, and reuse the real
+ * `createExpoPushRegistrationPort()` for `getPermissionStatus`/
+ * `requestPermission`. Until it exists,
+ * `createUnavailableAndroidNotificationsPlatform` below is the only
+ * production value. **No permission dialog is shown or claimed shown
+ * anywhere in this file or its tests** — every proof here is against a
+ * scripted fake.
  *
  * ---------------------------------------------------------------------
  * Sensitive content (T32P3's "nothing about a notification's content
@@ -144,13 +139,15 @@ import { createUnavailablePushRegistrationPort } from "../features/notifications
  * were ever invoked.
  *
  * ---------------------------------------------------------------------
- * Construction — the seam this task files against T32S12
+ * Construction — the seam T32S12 closed
  * ---------------------------------------------------------------------
- * Nothing in `apps/android/src/app/` or `app-shell/` constructs this
- * platform yet (both unowned this wave). See this task's report for
- * the exact `AppCore` field and call site T32S12 should add —
- * `createUnavailableAndroidNotificationsPlatform()` is the only
- * production value there is to hand it today.
+ * `app-shell/core.ts`'s `AppCore.notifications` is this platform's one
+ * production construction site (T32S12), still built with
+ * `createUnavailableAndroidNotificationsPlatform()` for the reason
+ * above — this module's general `showNotification`/
+ * `onNotificationResponse` half is unimplemented — while the
+ * push-registration half is real through
+ * `../features/notifications/expo-push-registration-port.ts`.
  */
 
 /**
@@ -253,11 +250,13 @@ export function getNativePermissionState(port: AndroidNotificationsPort): Promis
 }
 
 /**
- * This build's only production `AndroidNotificationsPort` — composes
- * `../features/notifications/push-registration-port.js`'s existing
- * `createUnavailablePushRegistrationPort` (no push module installed) with
- * no-op `showNotification`/`onNotificationResponse`, mirroring that
- * factory's own "silently drop rather than throw" convention exactly.
+ * This build's production `AndroidNotificationsPort` — composes
+ * `../features/notifications/push-registration-port.js`'s
+ * `createUnavailablePushRegistrationPort` (this module's general
+ * `showNotification`/`onNotificationResponse` half has no real
+ * implementation yet — see this module's header) with no-op
+ * `showNotification`/`onNotificationResponse`, mirroring that factory's
+ * own "silently drop rather than throw" convention exactly.
  */
 export function createUnavailableAndroidNotificationsPort(): AndroidNotificationsPort {
   return {
@@ -274,9 +273,10 @@ export function createUnavailableAndroidNotificationsPort(): AndroidNotification
 }
 
 /**
- * The only production `NotificationsPlatform` this build can construct
- * today. See this task's report for the exact `AppCore` seam T32S12
- * still needs to wire this into.
+ * The production `NotificationsPlatform` this build constructs today —
+ * see this module's header for why the general notification half is
+ * still unavailable even though the push-registration dependency is
+ * installed.
  */
 export function createUnavailableAndroidNotificationsPlatform(): NotificationsPlatform {
   return createAndroidNotificationsPlatform(createUnavailableAndroidNotificationsPort());

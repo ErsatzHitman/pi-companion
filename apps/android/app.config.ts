@@ -405,6 +405,15 @@ const config: ExpoConfig = {
   // daemon at all — Android's default policy for this target SDK refuses
   // cleartext, and only the DEBUG build type is opted in by Expo's
   // template. See the plugin's own doc comment for the measurement.
+  // T391: `expo-notifications`/`expo-device` are dependencies as of this
+  // task, and neither needs a `plugins` entry. Measured, not assumed:
+  // `expo-notifications`' own bundled `AndroidManifest.xml` already
+  // declares `POST_NOTIFICATIONS` and `RECEIVE_BOOT_COMPLETED`, which
+  // Android's manifest merger admits for every installed native module;
+  // its config plugin's only Android effects are cosmetic (notification
+  // icon/color/default-channel metadata and custom sounds), so adding it
+  // would change nothing this app relies on. `expo-device` has no config
+  // plugin and no permission at all.
   plugins: [
     "expo-router",
     "./plugins/with-share-intent-module",

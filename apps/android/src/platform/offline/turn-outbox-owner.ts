@@ -25,20 +25,21 @@
  * the identical open/degraded/dispose shape `OfflineCacheOwner` already
  * established (see that file's doc comment for the rationale each rule
  * below repeats). Both this owner and `OfflineCacheOwner` are
- * constructed with `createUnavailableSqliteDriverFactory()` in
- * production today (`expo-sqlite` is still not installed — T60C's
- * grant), so there is no real SQLite file for the two to actually race
- * over yet; the day a real factory lands, `app-shell/core.ts`'s mount
- * site can pass each owner its own `SqliteDriverFactory` bound to a
- * distinct database name (`SqliteDriverFactory.open()`'s own contract
- * says nothing about a fixed file), which is a construction-site change
- * only, not a change to either owner class.
+ * constructed with a real `expo-sqlite` factory in production since
+ * T390 — `app-shell/core.ts` passes each owner its own
+ * `SqliteDriverFactory` bound to a distinct database name
+ * (`APP_CORE_TURN_OUTBOX_DATABASE` vs `APP_CORE_OFFLINE_DATABASE`),
+ * because `expo-sqlite` returns the same cached connection per database
+ * name and each owner's `dispose()` closes the driver it opened. That
+ * distinct-name choice is a construction-site change only, not a change
+ * to either owner class.
  *
  * ## Degraded state (T76, mirroring T68's second acceptance criterion)
  *
  * `open()` never throws and never rejects. A `driverFactory.open()`
- * failure — including production's honest, permanent "expo-sqlite is
- * not installed" failure — lands the owner in `{ kind: "degraded",
+ * failure — including the honest "native `ExpoSQLite` module
+ * unavailable" failure `createUnavailableSqliteDriverFactory()`
+ * produces — lands the owner in `{ kind: "degraded",
  * reason }`, and `getOutbox()`/`getRecoveredTurns()` keep returning
  * `null` from then on. The app keeps running: a caller reading
  * `getOutbox()` sees the same "nothing to read yet, but nothing
@@ -101,7 +102,7 @@ export type TurnOutboxOwnerStatus =
   | { readonly kind: "disposed" };
 
 export interface TurnOutboxOwnerOptions {
-  /** Opens (or fails to open) this owner's backing `SqliteDriver`. Production passes `createUnavailableSqliteDriverFactory()` until `expo-sqlite` lands — see this module's doc comment. */
+  /** Opens (or fails to open) this owner's backing `SqliteDriver`. Production passes `createExpoSqliteDriverFactory(APP_CORE_TURN_OUTBOX_DATABASE)` since T390 — see this module's doc comment. */
   driverFactory: SqliteDriverFactory;
   /** Forwarded to `createTurnOutbox`'s `OutboxController`. */
   clock: Clock;

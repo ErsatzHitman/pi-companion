@@ -69,15 +69,16 @@
  *
  * ```ts
  * import {
+ *   createExpoSqliteDriverFactory,
  *   createOfflineCacheOwner,
- *   createUnavailableSqliteDriverFactory,
  * } from "../platform/offline/index.js";
  *
  * const offlineCacheOwner = createOfflineCacheOwner({
- *   driverFactory: createUnavailableSqliteDriverFactory(), // swap for a real
- *     // factory once expo-sqlite is installed — see
- *     // ./sqlite-driver-factory.ts's doc comment for the exact command
- *     // and what a real factory looks like.
+ *   driverFactory: createExpoSqliteDriverFactory("picompanion-offline-cache.db"),
+ *     // the real, expo-sqlite-backed factory — see
+ *     // ./expo-sqlite-driver-factory.ts. Bind each owner to its own
+ *     // database file: expo-sqlite caches a connection per name and each
+ *     // owner's dispose() closes the driver it opened.
  *   clock: someRealClock, // e.g. a small local `SystemClock`, the same
  *     // shape `features/approvals/ApprovalsContainer.tsx`'s already does
  *     // for `PermissionsController` — no shared `platform/clock.ts`
@@ -97,8 +98,9 @@
  * process exit; the tests below still prove `dispose()` itself works
  * correctly when a caller does invoke it).
  *
- * Once a real `SqliteDriverFactory` exists (post-`expo-sqlite`-install),
- * only the `driverFactory` argument above changes — nothing else in this
+ * `createExpoSqliteDriverFactory` (T390) is that real factory; the
+ * `driverFactory` argument above is the only thing the swap changed —
+ * nothing else in this
  * file, `AppCore`, or `@picompanion/frontend-core`.
  */
 import { offline as coreOffline, type Clock } from "@picompanion/frontend-core";
@@ -124,7 +126,7 @@ export type OfflineCacheOwnerStatus =
   | { readonly kind: "disposed" };
 
 export interface OfflineCacheOwnerOptions {
-  /** Opens (or fails to open) this owner's backing `SqliteDriver`. Production passes `createUnavailableSqliteDriverFactory()` until `expo-sqlite` lands — see this module's doc comment. */
+  /** Opens (or fails to open) this owner's backing `SqliteDriver`. Production passes `createExpoSqliteDriverFactory(APP_CORE_OFFLINE_DATABASE)` since T390 — see this module's doc comment. */
   driverFactory: SqliteDriverFactory;
   /** Forwarded to `OfflineCache`'s constructor. */
   clock: Clock;

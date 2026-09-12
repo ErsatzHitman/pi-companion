@@ -98,15 +98,17 @@ tags:
 # nothing about `OutboxController`/turn recovery — that attribution
 # does not actually hold today, and this task does not attempt to
 # settle it, only to record it plainly rather than assert an owner it
-# cannot confirm. Whichever task next mounts it should also install
-# `expo-sqlite` first (`./sqlite-driver.ts`'s pinned-version doc
-# comment), on this repository's known-uninstallable list (CLAUDE.md's
-# hard rules) and outside every android task's own reach — the same
-# blocker `OfflineCacheOwner` itself is `"degraded"` under today. The
-# assertions below are written to hold whether or not that mount ever
+# cannot confirm. CORRECTED: this paragraph's own premise is now
+# history. T76 (P5-W23) mounted `createTurnOutboxOwner` in
+# `app-shell/core.ts` (the contract test asserts that construction), and
+# T390 installed `expo-sqlite` and gave both offline owners a real driver
+# factory — `app-shell/core.ts` binds each to its own database file — so
+# production no longer runs `"degraded"` for want of a driver. The
+# assertions below were written to hold whether or not that mount ever
 # lands (restore must not crash, must not show a stuck or duplicated
-# entry either way) — they will keep passing once recovery is real;
-# they simply cannot yet prove recovery *happened*.
+# entry either way); they keep passing now that recovery is real, and
+# this flow still proves survival rather than composer-state recovery,
+# which `Composer.tsx`'s local `useState` state never provided.
 # ---------------------------------------------------------------------
 #
 # ## Reaching the composer without pairing

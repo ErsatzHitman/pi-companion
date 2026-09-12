@@ -72,8 +72,9 @@ import { useAppCore, useColdStartProfile } from "./core-context.js";
  * The in-memory `DraftStore`/`OutboxController` pair below is this
  * route's own module-level singleton, not threaded through `AppCore` —
  * `features/composer/Composer.tsx` already discloses the identical gap
- * (no shared `AppCore`-owned draft store exists yet, `expo-sqlite`
- * uninstalled, T60C's grant); this route does not invent a second
+ * (no shared `AppCore`-owned draft store exists yet — T390 installed
+ * `expo-sqlite`, but nothing threads a shared draft store through
+ * `AppCore`); this route does not invent a second
  * pattern, it reuses the same in-memory fallback
  * `in-memory-outbox-runtime.ts` already provides. A module-level
  * singleton (constructed once, not per mount) so a draft materialized

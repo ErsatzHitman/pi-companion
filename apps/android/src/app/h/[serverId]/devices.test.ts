@@ -49,11 +49,11 @@ describe("DevicesRoute source", () => {
     expect(code).toMatch(/core\.connection\.subscribe\(\(\)\s*=>\s*onChange\(\)\)/);
   });
 
-  it("reads push permission status from the real port, not a fabricated stub", () => {
+  it("reads push permission status from the real expo-notifications port, not a fabricated stub (T391)", () => {
     expect(code).toMatch(
-      /import \{ createUnavailablePushRegistrationPort \} from "\.\.\/\.\.\/\.\.\/features\/notifications\/push-registration-port"/,
+      /import \{ createExpoPushRegistrationPort \} from "\.\.\/\.\.\/\.\.\/features\/notifications\/expo-push-registration-port"/,
     );
-    expect(code).toMatch(/const pushPort = createUnavailablePushRegistrationPort\(\);/);
+    expect(code).toMatch(/const pushPort = createExpoPushRegistrationPort\(\);/);
     expect(code).toMatch(/getPermissionStatus=\{\(\)\s*=>\s*pushPort\.getPermissionStatus\(\)\}/);
   });
 

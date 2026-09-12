@@ -41,13 +41,12 @@
  * that a composer-style `enqueue`/`markFailed` and this component's
  * `confirmResend` call now land on the same instance.
  *
- * That instance is still `null` on every real device today:
- * `expo-sqlite` is not installed (T87 — run `npm install
- * expo-sqlite@~16.0.10 --workspace=@picompanion/android`; see
- * `../../platform/offline/sqlite-driver-factory.ts`'s own doc comment),
- * so `AppCore.turnOutbox` stays `"degraded"` and `getOutbox()` returns
- * `null`, and this component keeps rendering display-only. T121 wires
- * the prop through anyway, rather than leaving that gap invisible.
+ * Since T390 `AppCore.turnOutbox` opens a real `expo-sqlite` database
+ * file on a device with the native `ExpoSQLite` module present, so this
+ * instance supplies real recovered rows there; on a build with no native
+ * module it stays `null` (`AppCore.turnOutbox` `"degraded"`,
+ * `getOutbox()` `null`) and this component renders display-only. T121
+ * wired the prop through anyway, rather than leaving that gap invisible.
  */
 import { Fragment } from "react";
 import { StyleSheet, View } from "react-native";

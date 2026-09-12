@@ -43,9 +43,10 @@
  * one production mount (`../../app/h/[serverId]/session/[agentId]/
  * index.tsx`) to pass the real, shared `OutboxController` from
  * `AppCore.turnOutbox.getOutbox()` here, closing the separate wiring gap
- * this module's own doc comment used to disclose (that instance still
- * reads `null` on every real device — `expo-sqlite` is not installed,
- * T87 — so this stays display-only in production; see T121's report).
+ * this module's own doc comment used to disclose. That instance is backed
+ * by a real `expo-sqlite` file since T390 on a device with the native
+ * `ExpoSQLite` module present, so a recovered row can be displayed and
+ * acted on there.)
  */
 import { composer as coreComposer } from "@picompanion/frontend-core";
 
@@ -66,8 +67,8 @@ function isAwaitingConfirmation(turn: RecoveredTurn): turn is AwaitingConfirmati
  * re-sorted, never grouped.
  *
  * `null` input (every `TurnOutboxOwnerStatus` but `"ready"` — see that
- * getter's own doc comment, including production's honest, permanent
- * `"degraded"` today since `expo-sqlite` is not installed) yields an
+ * getter's own doc comment, including a `"degraded"` owner on a build
+ * with no native `ExpoSQLite` module) yields an
  * empty array, never a thrown error: "nothing recovered yet" and
  * "recovery ran and found nothing" render identically, both as nothing.
  */

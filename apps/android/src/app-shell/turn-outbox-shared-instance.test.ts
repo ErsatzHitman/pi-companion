@@ -23,9 +23,10 @@
  * proven by a value arriving at a counting fake through the real
  * mount". This suite proves it directly against the real, unmocked
  * `AppCore.turnOutbox` (an `InMemorySqliteDriver`-backed `driverFactory`
- * so the owner reaches `"ready"` rather than production's honest
- * `"degraded"` — see `./core.ts`'s `turnOutbox` doc comment for why
- * production stays `"degraded"` until `expo-sqlite` is installed):
+ * so the owner reaches `"ready"` without depending on the native
+ * `ExpoSQLite` module — production passes the real
+ * `createExpoSqliteDriverFactory` since T390; see `./core.ts`'s
+ * `turnOutbox` doc comment):
  *
  * 1. `core.turnOutbox.getOutbox()` called twice — standing in for
  *    `SessionTranscript`'s call and `SessionRoute`'s call, the two

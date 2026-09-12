@@ -5,8 +5,9 @@
  * Backs `@picompanion/frontend-core`'s `offline.OfflineCache` with a
  * real `StructuredStorage` — `SqliteStructuredStorage` — over an
  * injected `SqliteDriver` port. See `./sqlite-driver.ts` for why the
- * driver is a port rather than a direct `expo-sqlite` import (the
- * package is not installed and this task may not install it), and
+ * driver is a port rather than a direct `expo-sqlite` import (the real
+ * adapter lives in `./expo-sqlite-driver-factory.ts`, and the port keeps
+ * every rule provable without loading the native module), and
  * `./sqlite-structured-storage.ts` for the bound and secret-exclusion
  * policies.
  *
@@ -41,9 +42,9 @@
  * a `SqliteDriver` via an injected `SqliteDriverFactory`
  * (`./sqlite-driver-factory.ts`), constructs `SqliteStructuredStorage`
  * and `OfflineCache` over it exactly once, lands in a named
- * `"degraded"` state if opening fails (including production's honest
- * `createUnavailableSqliteDriverFactory()`, since `expo-sqlite` is still
- * not installed), and disposes both when its own `dispose()` is called.
+ * `"degraded"` state if opening fails (the honest answer whenever the
+ * native `ExpoSQLite` module is genuinely unavailable), and disposes
+ * both when its own `dispose()` is called.
  * `./offline-cache-owner.ts`'s own doc comment has the full contract
  * and the exact `AppCore`/`app-shell/core.ts` mount seam this task filed
  * (that file is this wave's router-root owner's — T32S14, not this
@@ -62,12 +63,13 @@
  * row is actually resent (never a silent auto-resend of an
  * `"awaiting-confirmation"` one).
  *
- * Until `expo-sqlite` is installed (see `./sqlite-driver.ts`'s doc
- * comment for the exact command and pinned version), `AppCore` has no
- * real `SqliteDriverFactory` to pass `createOfflineCacheOwner`/
- * `createTurnOutboxOwner` besides `createUnavailableSqliteDriverFactory()`
- * — every production owner of either kind is `"degraded"` today, and
- * that is the honest, currently-correct answer, not a bug.
+ * `expo-sqlite` is installed (T390; see `./sqlite-driver.ts`'s doc
+ * comment). `./expo-sqlite-driver-factory.ts`'s
+ * `createExpoSqliteDriverFactory` is what `AppCore` passes to both
+ * `createOfflineCacheOwner`/`createTurnOutboxOwner` in production — see
+ * `app-shell/core.ts`. `createUnavailableSqliteDriverFactory` remains
+ * the honest factory for a build where the native module is genuinely
+ * missing, and for tests/fakes.
  */
 export type { SqliteDriver, SqliteRunResult } from "./sqlite-driver.js";
 export {
@@ -93,6 +95,11 @@ export {
   createUnavailableSqliteDriverFactory,
   type SqliteDriverFactory,
 } from "./sqlite-driver-factory.js";
+export {
+  createExpoSqliteDriverFactory,
+  type ExpoSqliteBindings,
+  type ExpoSqliteDatabase,
+} from "./expo-sqlite-driver-factory.js";
 export {
   TIMELINE_SNAPSHOT_COLLECTION,
   cacheTimelineTail,

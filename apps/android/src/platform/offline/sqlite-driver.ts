@@ -2,28 +2,20 @@
  * The SQLite driver port `SqliteStructuredStorage` (`./sqlite-structured-
  * storage.ts`) is built against (T37A, plan.md §7.3/§12.5).
  *
- * `expo-sqlite` is not an installed dependency of `apps/android` today
- * (`apps/android/package.json` has no `expo-sqlite` entry, and
- * `node_modules/expo-sqlite` does not exist) and this task's grant does
- * not permit `npm install` (see this repo's root `CLAUDE.md`). So this
- * file defines a narrow port shaped after `expo-sqlite`'s real
- * `SQLiteDatabase` async API (`execAsync`/`runAsync`/`getAllAsync`/
- * `getFirstAsync`, all promise-returning, all parameterized with `?`
- * placeholders) rather than importing the package directly. Every rule
- * this task owns is proven against `./in-memory-sqlite-driver.ts`, an
- * in-memory implementation of exactly this port.
- *
- * When a maintainer runs
- * `npm install expo-sqlite@~16.0.10 --workspace=@picompanion/android`
- * (the version `apps/android/node_modules/expo/bundledNativeModules.json`
- * pins for the installed Expo SDK, confirmed by this task by reading
- * that file — `"expo-sqlite": "~16.0.10"`), a small adapter — e.g.
- * `./expo-sqlite-driver.ts`, `export function createExpoSqliteDriver():
- * SqliteDriver` wrapping `expo-sqlite`'s `openDatabaseAsync` — can
- * implement `SqliteDriver` without changing this file, without
- * changing `./sqlite-structured-storage.ts`, and without changing
- * anything in `@picompanion/frontend-core`. That adapter is not part of
- * this task: nothing in this repository imports `expo-sqlite` today.
+ * `expo-sqlite` is an installed dependency of `apps/android` since T390
+ * (`apps/android/package.json` declares `"expo-sqlite": "~16.0.10"`, the
+ * version `apps/android/node_modules/expo/bundledNativeModules.json`
+ * pins for the installed Expo SDK). This file still defines a narrow
+ * port shaped after `expo-sqlite`'s real `SQLiteDatabase` async API
+ * (`execAsync`/`runAsync`/`getAllAsync`/`getFirstAsync`, all
+ * promise-returning, all parameterized with `?` placeholders) rather
+ * than importing the package directly, so every rule this task owns
+ * remains provable against `./in-memory-sqlite-driver.ts` and other
+ * RN-free doubles. The real adapter over `expo-sqlite` lives in
+ * `./expo-sqlite-driver-factory.ts` (`createExpoSqliteDriverFactory`),
+ * implementing `SqliteDriverFactory` without changing this file,
+ * `./sqlite-structured-storage.ts`, or anything in
+ * `@picompanion/frontend-core`.
  *
  * T68 (P5-W20) added the optional `closeAsync` member below (a
  * lifecycle-disposal hook this port did not need until something

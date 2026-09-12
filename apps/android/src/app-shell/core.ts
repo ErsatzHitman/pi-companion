@@ -35,8 +35,8 @@ import {
 } from "../features/files";
 import {
   attachTokenRefresh,
+  createExpoPushRegistrationPort,
   createPushRegistrationController,
-  createUnavailablePushRegistrationPort,
   registerForPush,
   type PushRegistrationController,
 } from "../features/notifications/index.js";
@@ -84,9 +84,9 @@ import { createAppStateLifecycle } from "../platform/lifecycle";
 import { createRNShareModule } from "../platform/native-share-module.js";
 import { createUnavailableAndroidNotificationsPlatform } from "../platform/notifications-platform.js";
 import {
+  createExpoSqliteDriverFactory,
   createOfflineCacheOwner,
   createTurnOutboxOwner,
-  createUnavailableSqliteDriverFactory,
   type OfflineCacheOwner,
   type SqliteDriverFactory,
   type TurnOutboxOwner,
@@ -140,15 +140,28 @@ export const ANDROID_DAEMON_APP_VERSION = "0.1.0";
  * owners with different scopes therefore open the *same* store and race
  * each other's writes, which is precisely what the guard exists to
  * prevent. Harmless only while `createUnavailableSqliteDriverFactory()`
- * keeps both degraded; it would become a live corruption path the moment
- * a real `expo-sqlite` factory is swapped in — the one change
- * `sqlite-driver-factory.ts` promises is safe in isolation.
+ * kept both degraded; now that T390 swapped in a real `expo-sqlite`
+ * factory, a per-call scope would be a live corruption path rather than
+ * a harmless redundancy.
  *
  * A fixed scope restores the guard. `releaseAppCoreOfflineCacheOwner`
  * below is what keeps repeated `createAppCore()` calls (`core.test.ts`,
  * `resume-wiring.test.ts`) working under it.
  */
 export const APP_CORE_OFFLINE_SCOPE = "android-app-core";
+
+/**
+ * The `expo-sqlite` database file `AppCore.offlineCache` opens (T390).
+ *
+ * A file name distinct from `APP_CORE_TURN_OUTBOX_DATABASE` below, not
+ * a shared one: `expo-sqlite`'s `openDatabaseAsync` caches an open
+ * connection per name and hands the same `SQLiteDatabase` instance back
+ * to a second caller, while each `OfflineCacheOwner`'s `dispose()`
+ * closes the driver it opened — so one owner's disposal would close the
+ * other's live connection if both opened the same file. See
+ * `../platform/offline/expo-sqlite-driver-factory.ts`'s own doc comment.
+ */
+export const APP_CORE_OFFLINE_DATABASE = "picompanion-offline-cache.db";
 
 /**
  * The still-undisposed `OfflineCacheOwner` this module handed to the most
@@ -173,6 +186,14 @@ let activeAppCoreOfflineCacheOwner: OfflineCacheOwner | null = null;
  * which applies here unchanged.
  */
 export const APP_CORE_TURN_OUTBOX_SCOPE = "android-app-core-turn-outbox";
+
+/**
+ * The `expo-sqlite` database file `AppCore.turnOutbox` opens (T390) —
+ * deliberately distinct from `APP_CORE_OFFLINE_DATABASE` above; see
+ * that constant's doc comment for the shared-connection/close hazard
+ * the distinct names avoid.
+ */
+export const APP_CORE_TURN_OUTBOX_DATABASE = "picompanion-turn-outbox.db";
 
 /**
  * The still-undisposed `TurnOutboxOwner` this module handed to the most
@@ -541,17 +562,18 @@ export interface AppCore {
    * the same "one process-lifetime singleton, threaded down" shape
    * `vibrationPlatform`/`settings` above already follow.
    *
-   * Nothing installs `expo-notifications`/`expo-device` this wave (T60C
-   * still holds that grant), so this is always
-   * `createUnavailableAndroidNotificationsPlatform()` today — every
-   * method resolves a real, honest value (`getPermissionState()` ->
-   * `"unsupported"`, `show()` a silent no-op), never a stub that throws.
-   * See that factory's module doc for the fold decision, the exact
-   * install command, and `getNativePermissionState` — the finer
-   * `PermissionState` read a settings screen would call alongside this
-   * field to decide "re-prompt" vs. "open system Settings" via
-   * `describePermissionRecovery("notifications", state)`
-   * (`../features/composer/permission-recovery.ts`, T60D).
+   * This is still `createUnavailableAndroidNotificationsPlatform()`
+   * today, but no longer because the dependency is missing:
+   * `expo-notifications`/`expo-device` are installed since T391 (see
+   * `startPushRegistration` below, which now drives the real
+   * `PushRegistrationPort`). This general-purpose platform stays
+   * unavailable because its `showNotification`/`onNotificationResponse`
+   * half — `../platform/notifications-platform.ts`'s
+   * `AndroidNotificationsPort` — has no real implementation yet; every
+   * method it does expose still resolves a real, honest value
+   * (`getPermissionState()` -> `"unsupported"`, `show()` a silent
+   * no-op), never a stub that throws. See that factory's module doc for
+   * the fold decision and `getNativePermissionState`.
    */
   notifications: NotificationsPlatform;
   /**
@@ -671,24 +693,20 @@ export interface AppCore {
    */
   pushRegistration: PushRegistrationController;
   /**
-   * T32S13 (P5-W19): runs one `registerForPush` attempt against
-   * `createUnavailablePushRegistrationPort()` (T36A's only production
-   * `PushRegistrationPort` — no `expo-notifications`/`expo-device`
-   * install this wave, T60C's grant, same disclosed gap
-   * `AppCore["notifications"]`'s doc comment already names), then wires
-   * `attachTokenRefresh` to that same port. Both calls are real: the
-   * port's `getPermissionStatus()` genuinely resolves `"unavailable"`
-   * (never `"granted"`), so `registerForPush` genuinely, honestly
-   * returns `"permission-not-granted"` without ever touching
-   * `pushRegistration`'s registrar — the identical "real logic, real
-   * adapter, real answer, currently unable to do anything with a live
-   * device" shape `AppCore.notifications` already established, not a
-   * stub that throws or silently no-ops. `attachTokenRefresh`'s
-   * subscription is equally real; the unavailable port's
-   * `onTokenRefresh` never fires, so `pushRegistration.submitToken` is
-   * never called in production today — that remains for whichever task
-   * lands the `expo-notifications` install this doc comment's sibling
-   * fields already point at.
+   * T32S13 (P5-W19); real since T391: runs one `registerForPush`
+   * attempt against `createExpoPushRegistrationPort()`
+   * (`../features/notifications/expo-push-registration-port.js`), then
+   * wires `attachTokenRefresh` to that same port. `registerForPush`
+   * reads the real OS notification permission (never prompts — see
+   * `push-registration-model.ts`'s own doc comment for why prompting
+   * belongs at a user-initiated moment) and, when it is already
+   * `"granted"`, on a physical device with an EAS project id, mints an
+   * Expo push token and submits it to `pushRegistration`'s registrar.
+   * A build with no native `ExpoNotifications` module resolves
+   * `"unavailable"`, so `registerForPush` honestly returns
+   * `"permission-not-granted"` without touching the registrar — the
+   * same "real logic, real adapter, real answer" shape as before, no
+   * longer blocked on the install.
    *
    * Returns the token-refresh unsubscribe function. `app/core-context.tsx`'s
    * `AppCoreProvider` calls this once on mount and cleans it up on
@@ -745,16 +763,12 @@ export interface AppCore {
    * `getCache()`/`getStatus()` rather than awaiting a promise this
    * field does not expose.
    *
-   * Always settles to `{ kind: "degraded", reason }` in production
-   * today: this app installs no real `SqliteDriverFactory` yet (no
-   * `expo-sqlite` this wave — see `../platform/offline/
-   * sqlite-driver-factory.ts`'s doc comment for the exact install
-   * command), so `createUnavailableSqliteDriverFactory()` is what this
-   * is built with. `getCache()` therefore returns `null` for every
-   * caller today — a real, honest miss, not a stub that throws or
-   * silently no-ops, the same "real logic, real adapter, currently
-   * unable to do anything with a live device/install" shape
-   * `AppCore.notifications` already established.
+   * Open through the real `expo-sqlite` driver factory since T390
+   * (`createExpoSqliteDriverFactory(APP_CORE_OFFLINE_DATABASE)` — see
+   * that field's own doc comment). When the native `ExpoSQLite` module
+   * is genuinely unavailable the owner settles to
+   * `{ kind: "degraded", reason }` and `getCache()` returns `null` — a
+   * real, honest miss, not a stub that throws or silently no-ops.
    *
    * **Closed by T74**: this comment used to disclose that nothing called
    * `offlineCache.dispose()` anywhere in production, because
@@ -810,17 +824,16 @@ export interface AppCore {
    * that one instance now serves both a composer-style
    * `enqueue`/`markFailed` and a banner-style `confirmResend`.
    *
-   * Always settles to `{ kind: "degraded", reason }` in production
-   * today, for the identical reason `offlineCache` above does:
-   * `createUnavailableSqliteDriverFactory()` is what this is built
-   * with until `expo-sqlite` is installed (`npm install
-   * expo-sqlite@~16.0.10 --workspace=@picompanion/android` — see
-   * `../platform/offline/sqlite-driver-factory.ts`'s own doc comment for
-   * the exact command). So `getOutbox()` still returns `null` on every
-   * real device today, and `RecoveredTurnBanner`'s Resend/Discard
-   * actions and `Composer`'s shared outbox still cannot appear there —
-   * T121 wires the prop through anyway rather than leaving that gap
-   * invisible, per this task's own brief.
+   * Open through the real `expo-sqlite` driver factory since T390, for
+   * the identical reason `offlineCache` above does
+   * (`createExpoSqliteDriverFactory(APP_CORE_TURN_OUTBOX_DATABASE)`, a
+   * file distinct from that owner's). When the native `ExpoSQLite`
+   * module is genuinely unavailable the owner settles to
+   * `{ kind: "degraded", reason }` and `getOutbox()` returns `null` on
+   * that build, so `RecoveredTurnBanner`'s Resend/Discard actions and
+   * `Composer`'s shared outbox cannot appear there — T121 wired the prop
+   * through anyway rather than leaving that gap invisible, per its own
+   * brief.
    */
   turnOutbox: TurnOutboxOwner;
   /**
@@ -934,14 +947,13 @@ export interface CreateAppCoreOverrides {
    * the one fixed scope that keeps `OfflineCacheOwner`'s guard real.
    *
    * `driverFactory` (T74): overrides the driver factory
-   * `AppCore.offlineCache` is built with — production always passes
-   * `createUnavailableSqliteDriverFactory()` (see that field's doc
-   * comment), which settles `open()` in one microtask, too fast for a
-   * test to reliably observe `shutdown()` racing a still-open `open()`
-   * call. A test that needs to hold `open()` pending — to prove
-   * `shutdown()` correctly disposes an in-flight open rather than one
-   * already settled — passes its own controllable `SqliteDriverFactory`
-   * here instead.
+   * `AppCore.offlineCache` is built with — production passes
+   * `createExpoSqliteDriverFactory(APP_CORE_OFFLINE_DATABASE)` (see that
+   * field's doc comment). `createUnavailableSqliteDriverFactory()`
+   * settles `open()` in one microtask, too fast for a test to reliably
+   * observe `shutdown()` racing a still-open `open()` call, so a test
+   * that needs to hold `open()` pending passes its own controllable
+   * `SqliteDriverFactory` here instead.
    */
   offline?: {
     scope?: string;
@@ -954,8 +966,9 @@ export interface CreateAppCoreOverrides {
    * `APP_CORE_TURN_OUTBOX_SCOPE` (needed only when a test wants its own
    * owner to outlive a later `createAppCore()` call), and
    * `driverFactory` overrides production's
-   * `createUnavailableSqliteDriverFactory()` default so a test can hold
-   * `open()` pending, or seed rows into a `SqliteStructuredStorage`
+   * `createExpoSqliteDriverFactory(APP_CORE_TURN_OUTBOX_DATABASE)` default
+   * so a test can hold `open()` pending, or seed rows into a
+   * `SqliteStructuredStorage`
    * built over a shared `InMemorySqliteDriver` backing array before
    * `createAppCore()` ever runs `recoverInFlightTurns` — exactly what a
    * "recovered turn arrives at the transcript after a simulated process
@@ -1098,7 +1111,9 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     activeAppCoreTurnOutboxOwner = null;
   }
   const turnOutboxOwner = createTurnOutboxOwner({
-    driverFactory: overrides.turnOutbox?.driverFactory ?? createUnavailableSqliteDriverFactory(),
+    driverFactory:
+      overrides.turnOutbox?.driverFactory ??
+      createExpoSqliteDriverFactory(APP_CORE_TURN_OUTBOX_DATABASE),
     clock: new SystemClock(),
     scope: overrides.turnOutbox?.scope ?? APP_CORE_TURN_OUTBOX_SCOPE,
   });
@@ -1341,7 +1356,8 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     activeAppCoreOfflineCacheOwner = null;
   }
   const offlineCacheOwner = createOfflineCacheOwner({
-    driverFactory: overrides.offline?.driverFactory ?? createUnavailableSqliteDriverFactory(),
+    driverFactory:
+      overrides.offline?.driverFactory ?? createExpoSqliteDriverFactory(APP_CORE_OFFLINE_DATABASE),
     clock: new SystemClock(),
     scope: overrides.offline?.scope ?? APP_CORE_OFFLINE_SCOPE,
   });
@@ -1477,7 +1493,7 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     pushRegistration,
     // T32S13: see `AppCore["startPushRegistration"]`'s doc comment.
     startPushRegistration: async () => {
-      const port = createUnavailablePushRegistrationPort();
+      const port = createExpoPushRegistrationPort();
       await registerForPush(port, pushRegistration);
       return attachTokenRefresh(port, pushRegistration);
     },

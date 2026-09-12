@@ -12,10 +12,11 @@ import { encodeSecureStoreKey } from "./secure-store-key";
  * not an in-memory fake.
  *
  * SecureStore is the only always-available persistence primitive this
- * app can use without adding a package this task is not allowed to
- * install (see `../../../CLAUDE.md`'s "do not run npm install" rule):
- * neither `@react-native-async-storage/async-storage` nor `expo-sqlite`
- * is a dependency of `apps/android` today. SecureStore is semantically
+ * app can use without adding a package: `expo-sqlite` is installed since
+ * T390, but `@react-native-async-storage/async-storage` is not a
+ * dependency of `apps/android`, and this module's own `clear()`/`keys(prefix)`
+ * surface was built over SecureStore before the `expo-sqlite` install
+ * landed. SecureStore is semantically
  * meant for secrets, not plain values, but its API (`getItemAsync`/
  * `setItemAsync`/`deleteItemAsync`) is a perfectly usable plain
  * key-value store, and this module is a distinct instance from
