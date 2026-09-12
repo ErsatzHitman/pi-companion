@@ -862,3 +862,35 @@ after merging, so the ledger/notices/guard do not merge-conflict five ways.
   (`subagent_start` with `writeAccess`) hit their own 1800 s cap instead. Prefer subagents for
   scoped implementation, and verify the worktree yourself before trusting a job's silence to mean
   failure: the cancelled rewind delegate had in fact committed both of its commits and gone clean.
+
+### Wave 3 outcomes (2026-09-12): what landed, what did not
+
+Landed on `main` (each verified by its own workspace suite before merging, and by typecheck):
+**T383** files-rewind (merge `329576a`, notices + `plan.md` §4.2 in `06bd2c4`) · **T388** timeline
+row keys + work groups + incremental projection (`4d65e57`) · **T389** composer drafts, `@file`/
+`@skill` references, attachment preview (`e7deef0` → merge `adff288`) · **T390 + T391** Android
+expo-sqlite offline cache/outbox and expo-notifications push + Approve/Deny (`d1315dd`) · **T392**
+expo-camera QR pairing (`a756a99`) · **T393** web offline cache + `/h/:serverId` landing (`4c88e47`)
+· **T395 core** rewind failure markers, `force` pass-through, `RewindController` (`927b0d2`) ·
+**T394** the install doc rewritten around a from-source path that was actually run
+(`46ad818`/`45330d0` lineage; §B.3a carries the measured output).
+
+**Not landed, and why.** The **Android rewind surface** (a sheet + conflict confirm) had no
+implementer; the web one was still in flight when the wave closed. `docs/issues-from-plan.md`'s
+T395 section carries an unticked box for exactly that, so the next agent does not have to guess.
+
+**Test-runner lessons that cost real time in this wave** (all now in the section above):
+`npm test --workspace=@picompanion/web` resolves `@picompanion/frontend-core` through the workspace
+symlink into `packages/frontend-core/dist`, so a worktree with no local `dist` silently exercises
+the MAIN checkout's build — take main's `packages/frontend-core/src/composer` files AND rebuild the
+package before believing a failure; the same trap makes two branches' independent edits to
+`apps/web/src/features/composer/*` look compatible when they are not. Two Android filesystem-walking
+tests (`apps/android/src/ui/theme/fonts.test.ts`, the Maestro citation contract) exceed their 5 s
+budget whenever several suites run at once and pass alone — contention, not a defect, and the same
+signature CLAUDE.md's T240 paragraph describes.
+
+**Five new `CAPABILITIES` entries** were registered in `scripts/ci/guard-capability-prose.mjs`
+(70 groups total): workspace checkpoint snapshots, transcript work groups, composer drafts and
+references, Android's three Expo-backed stubs, and the rewind failure classification. Each was
+proven able to fire by appending its denying sentence to `docs/legacy-retirement.md`, reading the
+guard's `FAILED` line, and restoring the file from a scratchpad copy.
