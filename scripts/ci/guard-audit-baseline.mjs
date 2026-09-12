@@ -212,6 +212,22 @@ const NO_INSTALL_REASON =
 /** @type {AuditBaselineEntry[]} */
 export const AUDIT_BASELINE = [
   {
+    // T391 (wave 3): installing `expo-notifications@~0.32.17` — which is what
+    // gives Android a real push token and the Approve/Deny notification
+    // actions its own port documented as missing — brought this advisory in
+    // with it. It is upstream's own canary-range advisory against the Expo
+    // SDK 54 line; the installed version is a stable release inside the
+    // affected range, and no fix exists without a semver-major Expo SDK bump
+    // (T231's owner decision, unchanged by this wave). Recorded rather than
+    // waived, with the same owner and reason the other Android entries carry.
+    package: "expo-notifications",
+    severity: "moderate",
+    range:
+      "<=0.0.1-canary-20240418-8d74597 || 0.11.4 - 55.0.0-canary-20260223-05214f1 || 55.0.5-canary-20260128-67ce8d5 || 55.0.11-canary-20260424-7bedc9d - 55.0.11-canary-20260429-a5e59cf || 55.0.15-canary-20260327-0789fbc - 55.0.15-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 56.0.15-canary-20260526-6cd5e37 - 56.0.15-canary-20260701-9100865 || 57.0.0-canary-20260526-13e89ca - 57.0.0-canary-20260623-1c70a78 || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260909-ea7a89a",
+    owner: ANDROID_TOOLCHAIN_OWNER,
+    reason: NO_INSTALL_REASON,
+  },
+  {
     package: "@ai-sdk/gateway",
     severity: "low",
     // Range re-synced at the P9-Q merge gate, the third of three in the same

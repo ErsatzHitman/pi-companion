@@ -228,7 +228,7 @@ via-chain shape, and its named fix is the same SDK upgrade as every other
 entry with the Android owner. Net 36 → 35; the guard's stale-entry report
 is what surfaced all three changes.)
 
-### 2.2 Why every one of the 35 is currently un-fixable here, not silently waived
+### 2.2 Why every one of the 36 is currently un-fixable here, not silently waived
 
 Every advisory's only available fix (`npm audit --json`'s own
 `fixAvailable`) requires an `npm install`, and in every case here that
@@ -254,6 +254,12 @@ install is a semver-major bump:
   itself). The available fix for nearly all of these is `expo@57.0.20` — 3
   major versions ahead of the `^54.0.18` this app currently pins, and
   several of the individual package fixes are themselves semver-major.
+  **Wave 3 added the 36th**: installing `expo-notifications@~0.32.17` (T391,
+  which is what gives Android a real push token and the Approve/Deny actions
+  its port documented as missing) brought upstream's own canary-range advisory
+  against the SDK 54 line in with it — moderate, installed version inside the
+  range, and fixable only by the same Expo SDK upgrade this bullet already
+  names. Recorded in `AUDIT_BASELINE` under the same owner.
   **Owner: `apps/android` dependency owner (Expo SDK upgrade).**
 
 None of this is a "genuinely unfixable, forever" waiver — every one of these
