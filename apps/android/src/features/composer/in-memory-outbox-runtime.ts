@@ -3,10 +3,13 @@
  * `OutboxController` (T33B7, plan.md §7.1/§12.5's "Attachments flow
  * through the core outbox").
  *
- * `apps/android` has no real `StructuredStorage` backend wired anywhere
- * yet — `platform/offline/`'s `SqliteStructuredStorage` (T37A) exists
- * but nothing constructs it; `expo-sqlite` is not installed and T60C
- * holds that install grant (see this task's report). `Composer`'s
+ * `apps/android` has a real `StructuredStorage` backend wired in
+ * production since T390 — `app-shell/core.ts` threads
+ * `AppCore.turnOutbox.getOutbox()` into `Composer`'s `outbox` prop at
+ * the session route — but a caller that supplies no `outbox` still gets
+ * this in-memory adapter (and so does production whenever the native
+ * `ExpoSQLite` module is genuinely unavailable, since `getOutbox()` then
+ * returns `null`). `Composer`'s
  * `outbox`/`structuredStorage`/`clock` props are therefore all
  * optional, and default to the adapters this file provides when the
  * caller supplies none — exactly the "unavailable"-style default every

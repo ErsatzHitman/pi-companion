@@ -1,11 +1,13 @@
 /**
  * T76: proves `createTurnOutbox`/`recoverInFlightTurns` (T37C,
  * `../platform/offline/turn-recovery.ts`) now have a real production
- * caller, over the injected `SqliteDriverFactory` seam — never a real
- * `expo-sqlite` import (this task installs nothing; see
- * `../platform/offline/sqlite-driver-factory.ts`'s doc comment for the
- * exact install command `AppCore.turnOutbox` reports through its
- * `"degraded"` status when no real factory is supplied).
+ * caller, over the injected `SqliteDriverFactory` seam — this suite
+ * supplies an `InMemorySqliteDriver`-backed factory directly, so it
+ * proves the recovery wiring without depending on the native
+ * `ExpoSQLite` module (production passes the real
+ * `createExpoSqliteDriverFactory` since T390, and `AppCore.turnOutbox`
+ * reports `"degraded"` whenever that native module is genuinely
+ * unavailable).
  *
  * This is a dedicated file, not an addition to `./core.test.ts`,
  * specifically so this task's commit never needs to touch a file

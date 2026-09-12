@@ -224,8 +224,8 @@ describe("background-kill-restore.yaml anchors exist in source", () => {
     it("platform/offline/index.ts's own doc comment independently confirms the outbox/recovery half now also has a production construction site (T76, this wave — closed after T68 gave only the OfflineCache half an owner)", () => {
       const wholeSrc = readSource("../../src/platform/offline/index.ts");
       // Superseded twice now: T68 (P5-W20) gave `OfflineCache` a real
-      // (if `"degraded"`, since expo-sqlite is still missing) lifecycle
-      // owner and explicitly carved the `createTurnOutbox`/
+      // (if `"degraded"`, since no native `ExpoSQLite` module was linked
+      // then) lifecycle owner and explicitly carved the `createTurnOutbox`/
       // `recoverInFlightTurns` half out as still ownerless; T76 (this
       // wave, P5-W23) closed that half too — `./turn-outbox-owner.ts`'s
       // `TurnOutboxOwner`. This assertion pins the current claim, not
@@ -240,7 +240,7 @@ describe("background-kill-restore.yaml anchors exist in source", () => {
     });
   });
 
-  describe("PREMISE 3 — T37C's recoverInFlightTurns is real and unit-tested, but unmounted; restore proves survival, not recovery", () => {
+  describe("PREMISE 3 — T37C's recoverInFlightTurns is real and unit-tested and now mounted; restore proves survival, not composer-state recovery", () => {
     it("turn-recovery.ts really exports recoverInFlightTurns and createTurnOutbox (the unit-tested, unmounted recovery pass)", () => {
       const code = readCode("../../src/platform/offline/turn-recovery.ts");
       expect(code).toMatch(/export async function recoverInFlightTurns\(/);
@@ -279,11 +279,23 @@ describe("background-kill-restore.yaml anchors exist in source", () => {
       expect(code).not.toMatch(/OutboxController/);
     });
 
-    it("the real blocker is a real one: expo-sqlite is not installed, so there is no SqliteDriver to construct the mount with", () => {
-      const wholeSrc = readSource("../../src/platform/offline/sqlite-driver.ts");
-      expect(wholeSrc).toMatch(
-        /`expo-sqlite` is not an installed dependency of `apps\/android` today/,
+    it("the driver blocker is closed: the real expo-sqlite factory exists, and the remaining gap is composer-state persistence", () => {
+      // T390 installed `expo-sqlite` and added
+      // `./expo-sqlite-driver-factory.ts`; production now opens a real
+      // database file. The original assertion here pinned the opposite
+      // ("`expo-sqlite` is not an installed dependency"), which T390
+      // falsified, so it is flipped rather than deleted — the positive
+      // shape this file's header already uses for PREMISE 3's `core.ts`
+      // half. What still blocks this flow's *composer-state* premise is
+      // not driver availability: `Composer.tsx` holds its draft/entries
+      // in `useState` (PREMISE 2 above), and `recoverInFlightTurns`
+      // recovers outbox rows, never composer state.
+      const driverSrc = readSource("../../src/platform/offline/sqlite-driver.ts");
+      expect(driverSrc).toMatch(
+        /`expo-sqlite` is an installed dependency of `apps\/android` since T390/,
       );
+      const factorySrc = readSource("../../src/platform/offline/expo-sqlite-driver-factory.ts");
+      expect(factorySrc).toMatch(/export function createExpoSqliteDriverFactory\(/);
     });
   });
 

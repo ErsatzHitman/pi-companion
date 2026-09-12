@@ -9,10 +9,13 @@
  * inlined"). Mounted since T32S13 (P5-W19): `app-shell/core.ts`
  * imports this barrel to build `AppCore.pushRegistration` and
  * `AppCore.startPushRegistration`, which `app/core-context.tsx`
- * bootstraps once per `AppCoreProvider`. The registration attempt
- * still runs against `createUnavailablePushRegistrationPort()` — no
- * `expo-notifications`/`expo-device` is installed (T60C's grant) — so
- * it reports "unavailable" rather than producing a real token.
+ * bootstraps once per `AppCoreProvider`. The registration attempt runs
+ * against `createExpoPushRegistrationPort()` since T391 —
+ * `expo-notifications`/`expo-device` are installed — so it reads a real
+ * OS notification permission and mints a real Expo push token when the
+ * native module and an EAS project id are present; on a build without
+ * the native module it reports "unavailable" rather than producing a
+ * token.
  *
  * Notification-permission *copy* is no longer this barrel's concern
  * (T60F, P5-W17): call `describePermissionRecovery("notifications",
@@ -32,6 +35,7 @@ export type {
 } from "./push-registration-model";
 
 export { createUnavailablePushRegistrationPort } from "./push-registration-port";
+export { createExpoPushRegistrationPort } from "./expo-push-registration-port";
 export type {
   PermissionNotificationAction,
   PermissionNotificationActionEvent,

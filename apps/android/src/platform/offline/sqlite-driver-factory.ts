@@ -6,25 +6,22 @@
  * `expo-sqlite` directly and never constructs a `SqliteDriver` itself;
  * it takes one of these factories injected, for the same reason
  * `./sqlite-driver.ts` defines a port instead of importing the package
- * (see that file's doc comment): the package is not installed, and this
- * task's grant does not permit `npm install`.
+ * (see that file's doc comment).
  *
- * `createUnavailableSqliteDriverFactory` below is this build's only
- * production factory today. Its `open()` always rejects — **no real
- * SQLite file is ever opened by this task** — so any `OfflineCacheOwner`
+ * `createUnavailableSqliteDriverFactory` below is the honest
+ * factory for a build with no native `ExpoSQLite` module linked (and
+ * the factory tests/fakes use). Its `open()` always rejects — **no
+ * real SQLite file is ever opened by it** — so an `OfflineCacheOwner`
  * built with it lands in `OfflineCacheOwnerStatus`'s `"degraded"` state
  * rather than ever silently pretending to have a working cache.
  *
- * When a maintainer runs the exact command `./sqlite-driver.ts` names —
- * `npm install expo-sqlite@~16.0.10 --workspace=@picompanion/android` —
- * a real factory (e.g. `./expo-sqlite-driver-factory.ts`,
- * `export function createExpoSqliteDriverFactory(name: string):
- * SqliteDriverFactory` wrapping `expo-sqlite`'s `openDatabaseAsync` in
- * `open()`, and the resulting database's `closeAsync` as this port's
- * `closeAsync`) can implement `SqliteDriverFactory` without changing
- * `./offline-cache-owner.ts` at all — the production call site in
- * `app-shell/core.ts` (see `./offline-cache-owner.ts`'s doc comment for
- * the exact seam) would swap only which factory it passes.
+ * Production has a real factory since T390:
+ * `./expo-sqlite-driver-factory.ts`'s `createExpoSqliteDriverFactory`
+ * wraps `expo-sqlite`'s `openDatabaseAsync` in `open()` and the
+ * resulting database's `closeAsync` as this port's `closeAsync`, and
+ * `app-shell/core.ts` passes it at both mount sites. Nothing in
+ * `./offline-cache-owner.ts` changed for that swap — only which factory
+ * the call site passes.
  */
 import type { SqliteDriver } from "./sqlite-driver.js";
 
@@ -46,23 +43,21 @@ export interface SqliteDriverFactory {
 }
 
 /**
- * This build's only production `SqliteDriverFactory`. `open()` always
- * rejects with this exact, named reason — never a generic error, never a
- * silently-resolved fake driver — so `OfflineCacheOwner.getStatus()`
- * reads `{ kind: "degraded", reason }` with a reason a support/diagnostic
- * surface could show verbatim. The rejection message names the install
- * command a maintainer needs, matching every other "not installed in
- * this build" adapter in this app (e.g.
- * `../notifications-platform.ts`'s `createUnavailableAndroidNotifications
- * Port`).
+ * The honest `SqliteDriverFactory` for a build with no native
+ * `ExpoSQLite` module linked. `open()` always rejects with this exact,
+ * named reason — never a generic error, never a silently-resolved fake
+ * driver — so `OfflineCacheOwner.getStatus()` reads
+ * `{ kind: "degraded", reason }` with a reason a support/diagnostic
+ * surface could show verbatim. The rejection message names the package
+ * a maintainer would need, matching every other "not installed in this
+ * build" adapter in this app.
  */
 export function createUnavailableSqliteDriverFactory(): SqliteDriverFactory {
   return {
     open(): Promise<SqliteDriver> {
       return Promise.reject(
         new Error(
-          "expo-sqlite is not installed in this build (run `npm install expo-sqlite@~16.0.10 " +
-            "--workspace=@picompanion/android` — see ./sqlite-driver.ts's doc comment). " +
+          "expo-sqlite's native ExpoSQLite module is not available in this build. " +
             "OfflineCacheOwner is running in its degraded state; no real SQLite file was opened.",
         ),
       );

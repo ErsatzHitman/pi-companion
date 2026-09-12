@@ -193,8 +193,8 @@ describe("OfflineCacheOwner: degraded state when storage cannot be opened", () =
     const status = await owner.open();
     expect(status.kind).toBe("degraded");
     if (status.kind === "degraded") {
-      expect(status.reason).toMatch(/expo-sqlite is not installed/);
-      expect(status.reason).toMatch(/npm install expo-sqlite@~16\.0\.10/);
+      expect(status.reason).toMatch(/native ExpoSQLite module is not available/);
+      expect(status.reason).toMatch(/no real SQLite file was opened/);
     }
     expect(owner.getCache()).toBeNull();
     await owner.dispose();

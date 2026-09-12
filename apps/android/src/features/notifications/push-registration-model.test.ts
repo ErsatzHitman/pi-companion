@@ -505,7 +505,7 @@ describe("attachTokenRefresh — a live refresh stream drives the same dedupe/ra
   });
 });
 
-describe("createUnavailablePushRegistrationPort — the only production port in this build", () => {
+describe("createUnavailablePushRegistrationPort — the honest port for a build with no native push module", () => {
   it("reports unavailable permission and no token, and its refresh subscription is a harmless no-op", async () => {
     const port = createUnavailablePushRegistrationPort();
 

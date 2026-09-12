@@ -135,10 +135,10 @@ function handleAttachPress() {}
  * `restoreCachedTimeline` to flip it — so this banner is real wiring
  * over a real (always-empty-today) state, exactly like `entries` itself,
  * not a live announcement anyone can observe yet. Full `OfflineCache`/
- * `SqliteStructuredStorage` construction (the piece that WOULD populate
- * `stale: true` from a real cache restore) stays blocked on the
- * unavailable `expo-sqlite` install named in `platform/offline/
- * index.ts`'s own doc comment; this route changes nothing about that.
+ * `SqliteStructuredStorage` construction now exists (T390), but nothing
+ * in this repository calls `restoreCachedTimeline` off a real cached
+ * tail yet, so this route's banner is still never observable — this
+ * route changes nothing about that.
  *
  * **T32S10 mount**: the plain, unwindowed `ScrollView` over
  * `entries.map` is gone. T33A6's `TranscriptWindowList`
@@ -177,21 +177,16 @@ function handleAttachPress() {}
  * a composer-style `enqueue`/`markFailed` and a banner-style
  * `confirmResend` call).
  *
- * Still renders no actions on a real device today, and still renders
- * nothing when there is nothing recovered, which is every production
- * run today: `createUnavailableSqliteDriverFactory()` lands `turnOutbox`
- * in `"degraded"` before any real SQLite file is ever opened (no
- * `expo-sqlite` install this wave — run
- * `npm install expo-sqlite@~16.0.10 --workspace=@picompanion/android`
- * to close that, per `../../../../../platform/offline/sqlite-driver-
- * factory.ts`'s own doc comment), so `getOutbox()`/`getRecoveredTurns()`
- * return `null` in production, not a real instance or an empty array
- * reached by a real recovery pass — see that field's own doc comment.
- * Wiring the prop through anyway (rather than leaving it disconnected
- * until `expo-sqlite` lands) is deliberate: T106's report and this
- * task's brief both say to close the wiring gap now and state the
- * `expo-sqlite` blocker plainly, not to make the gap invisible by
- * leaving the prop unpassed.
+ * Still renders no actions on a real device when there is nothing to act
+ * on, and renders nothing when nothing was recovered. Since T390
+ * `AppCore.turnOutbox` opens a real `expo-sqlite` database file, so on a
+ * device with the native `ExpoSQLite` module present
+ * `getOutbox()`/`getRecoveredTurns()` return a real instance and real
+ * rows; on a build without it they return `null`.
+ * Wiring the prop through (rather than leaving it disconnected) is
+ * deliberate: T106's report and this task's brief both say to close the
+ * wiring gap now and state the remaining `restoreCachedTimeline` gap
+ * plainly, not to make the gap invisible by leaving the prop unpassed.
  *
  * **T284 mount.** `TranscriptMessageRow` used to get no `resolveImageUri`
  * prop at all, so a message attachment (a phone photo sent from
@@ -692,9 +687,10 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * `outbox={core.turnOutbox.getOutbox() ?? undefined}` — the identical
  * expression `SessionTranscript`'s `RecoveredTurnBanner` mount passes,
  * so both read off the one `TurnOutboxOwner`-owned instance. See this
- * task's report for the counting-fake proof and the still-standing
- * `expo-sqlite` blocker (T87) that keeps this `undefined` on every real
- * device today.
+ * task's report for the counting-fake proof; since T390 that instance
+ * is backed by a real `expo-sqlite` file on a device with the native
+ * `ExpoSQLite` module present, and is `undefined` only on a build
+ * without it.
  *
  * `Composer.tsx` itself is unowned by this task and untouched: unifying
  * the instance only required the composition root (this file) to pass

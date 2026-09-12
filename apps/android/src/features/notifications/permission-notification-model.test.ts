@@ -9,11 +9,11 @@
  *
  * What this file does NOT prove, on purpose: that a real Android
  * notification with real action buttons is ever shown, or that a real
- * OS delivers a real tap/action event — `expo-notifications` is not
- * installed (see `push-registration-port.ts`'s doc comment for the
- * exact install command) and `createUnavailablePushRegistrationPort`'s
- * three new methods are no-ops. T37E (Maestro) and T59 (real device)
- * own that half.
+ * OS delivers a real tap/action event. This suite drives scripted
+ * `PushRegistrationPort` fakes, not the real port;
+ * `expo-push-registration-port.ts`'s `createExpoPushRegistrationPort`
+ * (T391) is where the real `expo-notifications` calls live. T37E
+ * (Maestro) and T59 (real device) own the on-device half.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

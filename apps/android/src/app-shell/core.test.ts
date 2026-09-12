@@ -123,6 +123,21 @@ vi.mock("expo-secure-store", () => ({
   isAvailableAsync: async () => true,
 }));
 
+// T391: `AppCore.startPushRegistration` now drives the real
+// `createExpoPushRegistrationPort`, whose permission read dynamically
+// imports `expo-notifications`. Loading the real module here would drag
+// its whole native/react-native graph through plain vitest and starve
+// sibling files in this suite's parallel lane, so — like every other
+// native module above — it is stood in for. `undetermined` is the
+// honest answer for this sandbox: no OS dialog was ever shown, so
+// `registerForPush` returns "permission-not-granted" without a token.
+vi.mock("expo-notifications", () => ({
+  getPermissionsAsync: async () => ({ status: "undetermined", canAskAgain: true }),
+  requestPermissionsAsync: async () => ({ status: "undetermined", canAskAgain: true }),
+  addPushTokenListener: () => ({ remove: () => undefined }),
+  getExpoPushTokenAsync: async () => ({ type: "expo", data: "unused-in-this-sandbox" }),
+}));
+
 // T69: `./core.ts` imports `createNativeShareIntentPort` — as of T115
 // through `../features/share/index.js` (previously a deep import of
 // `../features/share/share-intent-native-port.js`, T36F) — which reaches
@@ -894,13 +909,13 @@ describe("AppCore.startTurn (T32S13, P5-W19)", () => {
  * other suite in this file needs them.
  */
 describe("AppCore.pushRegistration / startPushRegistration (T32S13, P5-W19)", () => {
-  it("startPushRegistration() resolves 'permission-not-granted' against the only production PushRegistrationPort (unavailable, no expo-notifications install this wave) -- never throws, never silently no-ops", async () => {
+  it("startPushRegistration() resolves 'permission-not-granted' when notification permission is not granted -- never throws, never silently no-ops (T391)", async () => {
     const core = createAppCore();
     const unsubscribe = await core.startPushRegistration();
-    // No token was ever submitted (the unavailable port's getPermissionStatus()
-    // never resolves "granted"), so the shared, real controller's own
-    // registration-call counter stayed at zero -- a genuine "real logic,
-    // real adapter, honestly nothing to do yet" answer, not a stub.
+    // No token was ever submitted (the mocked native permission resolves
+    // "undetermined", never "granted"), so the shared, real controller's
+    // own registration-call counter stayed at zero -- a genuine "real
+    // logic, real adapter, honestly nothing to do yet" answer, not a stub.
     expect(core.pushRegistration.getRegistrationCallCount()).toBe(0);
     expect(core.pushRegistration.getLastRegisteredToken()).toBeNull();
     unsubscribe();
@@ -1076,14 +1091,12 @@ describe("AppCore.reconnectHostProfile (T32S14)", () => {
 
 /**
  * `AppCore.offlineCache` (T68/T32S14, P5-W20) — T68's own module doc
- * comment filed this exact mount seam against this file. Proven the
- * same "real logic, real adapter, honestly degraded until expo-sqlite is
- * installed" shape `AppCore.notifications` already established: `open()`
- * is called (fire-and-forget) at construction, and settles to
- * `"degraded"` against the only production `SqliteDriverFactory` this
- * wave has (`createUnavailableSqliteDriverFactory()` — T60C's `expo-
- * sqlite` install still has not landed), never left "opening" forever
- * and never a crash.
+ * comment filed this exact mount seam against this file. Since T390
+ * production passes the real `createExpoSqliteDriverFactory`; this
+ * vitest sandbox has no native `ExpoSQLite` module linked, so `open()`
+ * (called fire-and-forget at construction) settles to the same honest
+ * `"degraded"` status the unavailable factory used to produce, never
+ * left `"opening"` forever and never a crash.
  */
 /**
  * Minimal `Clock` double for the scope-guard test below. The guard throws
@@ -1111,7 +1124,7 @@ class NowOnlyClock implements Clock {
 }
 
 describe("AppCore.offlineCache (T68/T32S14)", () => {
-  it("open() was already called at construction and settles to a named 'degraded' status — expo-sqlite is not installed this wave", async () => {
+  it("open() was already called at construction and settles to a named 'degraded' status — no native ExpoSQLite module in this vitest sandbox", async () => {
     const core = createAppCore();
     const status = await core.offlineCache.open();
     expect(status.kind).toBe("degraded");
