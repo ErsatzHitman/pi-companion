@@ -10,7 +10,12 @@ import {
   subscribePiUiActionResponses,
 } from "../features/extensions/action-transport.js";
 import { PiNoticeBannerContainer } from "../features/notices/index.js";
-import { ContextMeter, PiExtensionRail, usePiUiRailElements } from "../features/rail/index.js";
+import {
+  ContextMeter,
+  PiExtensionRail,
+  PiExtensionStatusStrip,
+  usePiUiRailElements,
+} from "../features/rail/index.js";
 import {
   SESSIONS_NOT_CONNECTED,
   SessionRail,
@@ -43,10 +48,11 @@ import { RouteErrorScreen } from "./route-error-screen.js";
  * This file is pure assembly: it composes already-built, already-tested
  * pieces (`useSessionListSync` + `groupSessions`/`statusPresentation` for
  * the left rail's live session list; `PiUiElementStore` +
- * `ExtensionActionController` + `PiExtensionRail`/`ContextMeter` +
- * `SessionCostMeterContainer` for the right rail) against the live
- * `DaemonClient` T53A1 provides via `useDaemonClientContext()`. It adds no
- * new feature behaviour of its own beyond the wiring glue documented below.
+ * `ExtensionActionController` + `PiExtensionRail`/`PiExtensionStatusStrip`/
+ * `ContextMeter` + `SessionCostMeterContainer` for the right rail) against
+ * the live `DaemonClient` T53A1 provides via `useDaemonClientContext()`. It
+ * adds no new feature behaviour of its own beyond the wiring glue documented
+ * below.
  *
  * **Why this file does not simply reuse `features/sessions`' `SessionList`/
  * `SessionsScreen` components or `features/rail`'s existing per-kind
@@ -166,11 +172,14 @@ interface ExtensionRailContentProps {
 
 /**
  * The right Pi extension rail's live content for one open session
- * (plan.md §8.3, §11.5): pinned fleet/workflow/loop/goal elements
- * (`PiExtensionRail`), the context-window/cache meter (`ContextMeter`),
- * the session cost meter (`SessionCostMeterContainer`) — the exact trio
- * `SessionCostMeterContainer`'s own module doc already names as
- * "ready to mount as a sibling of `ContextMeter` inside `PiExtensionRail`/
+ * (plan.md §8.3, §11.5): status-placement elements (`PiExtensionStatusStrip`
+ * — `status` is "header or right-rail status" per §11.3, and this column
+ * is the right-rail half of that; until this mount, every daemon-
+ * synthesized `status` element sat unrendered), pinned fleet/workflow/loop/
+ * goal elements (`PiExtensionRail`), the context-window/cache meter
+ * (`ContextMeter`), the session cost meter (`SessionCostMeterContainer`) —
+ * the exact trio `SessionCostMeterContainer`'s own module doc already names
+ * as "ready to mount as a sibling of `ContextMeter` inside `PiExtensionRail`/
  * `Shell`'s `extensionRail` slot" — and, since T112, live `pi_notice`
  * warnings (`PiNoticeBannerContainer`, `features/notices/`): the Pi
  * provider's only channel for out-of-band operator-visible notices,
@@ -249,6 +258,11 @@ function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentPro
       <ContextMeter telemetry={windowTelemetry} />
       <SessionCostMeterContainer agentId={agentId} client={client ?? undefined} />
       <PiNoticeBannerContainer agentId={agentId} client={client ?? undefined} />
+      <PiExtensionStatusStrip
+        elements={elements}
+        agentId={agentId}
+        actionController={actionController}
+      />
       <PiExtensionRail elements={elements} agentId={agentId} actionController={actionController} />
     </>
   );

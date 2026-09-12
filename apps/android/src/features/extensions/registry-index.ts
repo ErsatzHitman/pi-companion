@@ -328,6 +328,11 @@ export {
   type PinnedAreaVisibility,
 } from "./pinned-model";
 export { selectInlineElements } from "./inline-model";
+export { selectStatusElements } from "./status-model";
+export {
+  StatusLiveExtensionStrip,
+  type StatusLiveExtensionStripProps,
+} from "./status-live-extension-strip";
 export {
   PinnedLiveExtensionArea,
   type PinnedLiveExtensionAreaProps,

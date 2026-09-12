@@ -18,6 +18,7 @@ import { useConnectionStatus } from "../../../../../features/connect";
 import {
   PiUiElementView,
   PinnedLiveExtensionArea,
+  StatusLiveExtensionStrip,
   resolvePinnedAreaVisibility,
   selectInlineElements,
   usePiUiElements,
@@ -664,6 +665,44 @@ function createInlineExtensionStyles(theme: ReturnType<typeof useTheme>["theme"]
   });
 }
 
+/**
+ * The `statusStrip` slot's extension content: every `placement === "status"`
+ * element for this agent, rendered by the `status`-placement sibling of
+ * T34A4's `PinnedLiveExtensionArea` (`StatusLiveExtensionStrip`, in
+ * `features/extensions/`) against T34A5's real
+ * `AppCore.piUiSession.store` and `.actionController`, never a fake
+ * constructed here — the same wiring
+ * `SessionLiveExtension`/`SessionInlineExtensions`/`SessionSheetExtensions`
+ * use for the other placements.
+ *
+ * Mounted as a sibling of `TranscriptStatusStrip` inside `CompactSessionShell`'s
+ * `statusStrip` slot (`app-shell/compact-shell.tsx`), which is plan.md
+ * §11.3's Android presentation for `status` ("compact status strip") and
+ * §11.5's "`status` appears in the session header/status strip". Before
+ * this mount, nothing in the app selected `placement === "status"` —
+ * `selectPinnedElements` keeps only `pinned` — so the daemon's synthesized
+ * `workflow:progress`/`pi-goal:status` status elements and the status
+ * footers the `minimal-status`, `prompt-arbitrage`, plan-mode, and advisor
+ * extensions publish were stored but never drawn.
+ *
+ * `usePiUiElements` live-subscribes this one agent's elements/revision out
+ * of that store, the same hook the other three mounts read; the strip
+ * renders each element through the shared `PiUiElementView` pipeline and
+ * contributes nothing when no element is `status`-placed.
+ */
+function SessionStatusExtensions({ agentId }: { agentId: string }) {
+  const core = useAppCore();
+  const { elements, revision } = usePiUiElements(core.piUiSession.store, agentId);
+  return (
+    <StatusLiveExtensionStrip
+      elements={elements}
+      agentId={agentId}
+      actionController={core.piUiSession.actionController}
+      revision={revision}
+    />
+  );
+}
+
 /** plan.md §9.3's touch floor, in dp — measured by `touch-targets.test.ts`. */
 const MIN_TOUCH_TARGET = 48;
 
@@ -753,9 +792,10 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * exactly. Renders `CompactSessionShell`
  * (`../../../../../app-shell/compact-shell.tsx`, T32S1) with `header`
  * (T33A1's `TranscriptHeader`), `statusStrip` (T33A1's
- * `TranscriptStatusStrip`), `transcript` (`SessionTranscript` above),
- * `liveExtension` (`SessionLiveExtension` above), and `composer` (T33B1's
- * `Composer`) filled.
+ * `TranscriptStatusStrip`, plus `SessionStatusExtensions` above for
+ * `status`-placement Pi UI elements), `transcript` (`SessionTranscript`
+ * above), `liveExtension` (`SessionLiveExtension` above), and `composer`
+ * (T33B1's `Composer`) filled.
  *
  * `status`, passed to both `TranscriptHeader` and `TranscriptStatusStrip`,
  * comes from `AppCore.connection` (`../../../../../app-shell/core.ts`)
@@ -1226,7 +1266,12 @@ export default function SessionRoute() {
             onOpenLive={openLive}
           />
         }
-        statusStrip={<TranscriptStatusStrip status={status} />}
+        statusStrip={
+          <>
+            <TranscriptStatusStrip status={status} />
+            <SessionStatusExtensions agentId={agentId ?? ""} />
+          </>
+        }
         transcript={
           <SessionTranscript
             status={status}

@@ -1,0 +1,18 @@
+/**
+ * `PiExtensionStatusStrip` styles (plan.md §11.3, §11.5). Colocated with
+ * the component the way `pi-extension-rail.css` sits next to
+ * `pi-extension-rail.tsx`. Every value is a design token.
+ */
+
+.pi-extension-status-strip__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pi-extension-status-strip__item {
+  display: block;
+}

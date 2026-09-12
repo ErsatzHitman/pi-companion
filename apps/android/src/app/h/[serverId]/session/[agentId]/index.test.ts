@@ -70,7 +70,7 @@ describe("SessionRoute source", () => {
   it("fills header with TranscriptHeader and statusStrip with TranscriptStatusStrip, both from features/transcript", () => {
     expect(readCode()).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/transcript"/);
     expect(readCode()).toMatch(/header=\{[\s\S]*?<TranscriptHeader\b/);
-    expect(readCode()).toMatch(/statusStrip=\{<TranscriptStatusStrip\b/);
+    expect(readCode()).toMatch(/statusStrip=\{[\s\S]*?<TranscriptStatusStrip\b/);
   });
 
   // --- T350: Files/Terminal moved off this screen onto the Live route.
@@ -271,6 +271,26 @@ describe("SessionRoute source", () => {
     expect(readCode()).toMatch(/actionController=\{core\.piUiSession\.actionController\}/);
     expect(readCode()).not.toMatch(/new (extensions\.)?PiUiElementStore\(/);
     expect(readCode()).not.toMatch(/new (extensions\.)?ExtensionActionController\(/);
+  });
+
+  // --- status placement: the missing `statusStrip` extension consumer ---
+
+  it("fills statusStrip with TranscriptStatusStrip plus SessionStatusExtensions, mounting StatusLiveExtensionStrip from features/extensions/registry-index", () => {
+    expect(readCode()).toMatch(
+      /statusStrip=\{[\s\S]*?<TranscriptStatusStrip status=\{status\} \/>[\s\S]*?<SessionStatusExtensions agentId=\{agentId \?\? ""\} \/>/,
+    );
+    expect(readCode()).toMatch(/<StatusLiveExtensionStrip\b/);
+    expect(readCode()).toMatch(
+      /from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/extensions\/registry-index"/,
+    );
+  });
+
+  it("reads SessionStatusExtensions' elements/revision from the real AppCore.piUiSession.store via usePiUiElements, and passes the real actionController", () => {
+    const body = readComponentCode("SessionStatusExtensions");
+    expect(body).toMatch(/usePiUiElements\(core\.piUiSession\.store, agentId\)/);
+    expect(body).toMatch(/actionController=\{core\.piUiSession\.actionController\}/);
+    expect(body).not.toMatch(/new (extensions\.)?PiUiElementStore\(/);
+    expect(body).not.toMatch(/new (extensions\.)?ExtensionActionController\(/);
   });
 
   // --- T32S3 item (6): live connection status ---------------------------
