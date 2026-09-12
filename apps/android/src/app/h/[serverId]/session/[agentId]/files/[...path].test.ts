@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 
 /**
  * `/h/:serverId/session/:agentId/files/*` route stub coverage — T32S1C,
- * extended by T32S4 for the real `client`/`workspaceRoot` wiring.
- * Source-level contract test, same reason as `../index.test.ts`.
+ * extended by T32S4 for the real `client` wiring and (2026-09-12) by the
+ * real workspace-root resolution. Source-level contract test, same
+ * reason as `../index.test.ts`.
  */
 describe("SessionFilesRoute source", () => {
   const source = readFileSync(fileURLToPath(new URL("./[...path].tsx", import.meta.url)), "utf8");
@@ -25,8 +26,19 @@ describe("SessionFilesRoute source", () => {
     expect(source).toMatch(/client=\{core\.fileBrowserClient\}/);
   });
 
-  it("passes a workspaceRoot prop, so FilesScreen's client-and-workspaceRoot 'not connected' gate no longer trips on this route alone", () => {
-    expect(source).toMatch(/workspaceRoot="/);
+  it("resolves the session's real workspace root through useAgentCwd/resolveAgentSnapshotClient and passes it as workspaceRoot, never a hardcoded literal", () => {
+    expect(source).toMatch(
+      /import \{ resolveAgentSnapshotClient \} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+    );
+    expect(source).toMatch(
+      /import \{ useAgentCwd \} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/transcript";/,
+    );
+    // One contiguous match, not two independent ones: a mutation that
+    // drops either the resolver or the `agentId` fallback fails this.
+    expect(source).toMatch(
+      /const cwd = useAgentCwd\(resolveAgentSnapshotClient\(core\.connection\), agentId \?\? ""\);\n\s*return \(\n\s*<FilesScreen\s*\n\s*serverId=\{serverId\}\s*\n\s*agentId=\{agentId\}\s*\n\s*path=\{path \?\? \[\]\}\s*\n\s*workspaceRoot=\{cwd \?\? ""\}/,
+    );
+    expect(source).not.toMatch(/workspaceRoot="/);
   });
 
   // T32S13 (P5-W19): `downloadOrigin` used to be omitted entirely, so

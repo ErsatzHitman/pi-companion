@@ -1,9 +1,11 @@
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 
+import { resolveAgentSnapshotClient } from "../../../../../../app-shell/session-route-daemon-clients";
 import { buildDaemonHttpOrigin } from "../../../../../../features/connect/daemon-connection-store.js";
 import { useConnectionStatus } from "../../../../../../features/connect";
 import { FilesScreen } from "../../../../../../features/files";
+import { useAgentCwd } from "../../../../../../features/transcript";
 import { createFetchDownload } from "../../../../../../platform/file-download-fetch.js";
 import { useAppCore } from "../../../../../core-context";
 
@@ -21,30 +23,33 @@ import { useAppCore } from "../../../../../core-context";
  * containing any feature logic itself, so T35A2 replaces `FilesScreen`'s
  * body without ever touching this file.
  *
- * **T32S4's fix**: until now this route passed no `client` and no
- * `workspaceRoot`, so `FilesScreen`'s "Not connected" `ErrorState`
- * rendered permanently regardless of any real connection — the exact
- * defect this task's brief names. `client` is now `AppCore.fileBrowserClient`
+ * **T32S4's fix**: until now this route passed no `client`, so
+ * `FilesScreen`'s "Not connected" `ErrorState` rendered permanently
+ * regardless of any real connection — the exact defect this task's brief
+ * names. `client` is now `AppCore.fileBrowserClient`
  * (`../../../../../app-shell/core.ts`), the same "always a real, stable
  * object; every method reads the live connection fresh" adapter
  * `AppCore.sessionService` already established — never a client
- * constructed in this route file. `workspaceRoot` is `""`, the daemon-side
- * workspace root's placeholder value, mirroring `apps/web/src/features/
- * files/file-browser-screen.tsx`'s own `workspaceRoot = ""` default and
- * its doc comment's reason: resolving a session's *real* workspace root
- * depends on `packages/frontend-core/src/sessions/index.ts`'s Phase 1
- * stub (see docs/issues-from-plan.md), which is outside both that file's
- * and this route's scope.
+ * constructed in this route file.
  *
- * **Note, corrected at the P5-W9 merge gate:** when this comment was
- * written it added "so this placeholder never reaches a real daemon with
- * the wrong root", because `AppCore.connection` was never fed by a real
- * `ConnectForm` submission. T32A4 closed that loop in the same wave, so
- * the placeholder *can* now reach a live daemon — exactly as web's
- * `workspaceRoot = ""` default already does, which is why this stays
- * `""` rather than becoming a guess. Whichever task replaces
- * `packages/frontend-core/src/sessions/index.ts`'s Phase 1 stub owns
- * resolving the session's real workspace root for both platforms.
+ * **Workspace root (2026-09-12).** `workspaceRoot` used to be the literal
+ * `""`, which sent every listing to the daemon with an empty `cwd` and
+ * made the daemon's own `"cwd is required"` guard reject it before it
+ * touched a single path — no directory listing could ever succeed through
+ * this route, no matter how real or healthy the connection was. It is now
+ * the session's real daemon-side workspace root, resolved through the
+ * existing `AgentSnapshotSource` seam: `useAgentCwd` (`../../../../../
+ * features/transcript/use-agent-cwd.ts`) reads it from the same
+ * `fetchAgent` result the session app bar's cwd subtitle already uses,
+ * narrowed to `AgentSnapshotSource` by `resolveAgentSnapshotClient`
+ * (`../../../../../app-shell/session-route-daemon-clients.ts`). That is
+ * the Android half of `apps/web/src/routes/screens/
+ * use-session-workspace-root.ts`'s own `fetchAgent` -> `cwd` resolution.
+ * `useAgentCwd` returns `undefined` while the snapshot is still loading,
+ * when the agent is unknown, or when the read fails; this route passes
+ * `""` in exactly that case — the same "pending, never fabricated"
+ * placeholder both apps already accept — so no request is ever issued
+ * against a guessed root.
  *
  * **T32S13 mount (P5-W19)**: `downloadOrigin` used to be omitted
  * entirely, so `FilesScreen`'s own `DownloadPanel` was never reachable
@@ -118,12 +123,14 @@ export default function SessionFilesRoute() {
   const downloadOrigin = daemonAddress ? buildDaemonHttpOrigin(daemonAddress) : null;
   // T32S14: see this route's own doc comment's "T32S14 mount" section.
   const fetchImpl = useMemo(() => createFetchDownload(), []);
+  // See this route's own doc comment's "Workspace root" section.
+  const cwd = useAgentCwd(resolveAgentSnapshotClient(core.connection), agentId ?? "");
   return (
     <FilesScreen
       serverId={serverId}
       agentId={agentId}
       path={path ?? []}
-      workspaceRoot=""
+      workspaceRoot={cwd ?? ""}
       client={core.fileBrowserClient}
       filePicker={core.filePicker}
       sharing={core.sharing}

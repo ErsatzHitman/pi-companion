@@ -46,7 +46,7 @@ export const FILE_DOWNLOAD_FLOW = {
   /** `sessions-screen.tsx`'s root testId is `sessions-screen-${serverId}`, the serverId being the connected endpoint -- unknown until run time, hence the wildcard. The stable post-connect state every flow asserts since T332 (the "Connected via direct connection" status text is replaced by the navigation before Maestro can sample it). */
   sessionsScreenArrival: "sessions-screen-.*",
 
-  /** `explainFileBrowserError("cwd is required")`'s exact title (`file-browser-client.ts`) — the real state a REAL round trip to a REAL (isolated, never production-port) daemon reaches from this route today, because `SessionFilesRoute` hardcodes `workspaceRoot=""` (see this flow's header comment for the full gap and its owner). */
+  /** `explainFileBrowserError("cwd is required")`'s exact title (`file-browser-client.ts`) — the real state a REAL round trip to a REAL (isolated, never production-port) daemon reaches from this route today. CORRECTED 2026-09-12: this used to say the cause was the route hardcoding `workspaceRoot=""` — the route now resolves the session's real root via `useAgentCwd`, but this flow's e2e agent is unknown to the daemon, so the root stays unresolved (`""`) and the same honest error is still what this flow reaches (see this flow's header comment). */
   noWorkspaceSelectedTitle: "No workspace selected",
   noWorkspaceSelectedDescription: "This session does not have a workspace folder to browse yet.",
 

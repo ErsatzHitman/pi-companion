@@ -229,7 +229,7 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
     it("passes FilesScreen a real client (core.fileBrowserClient), a real fetchImpl, and — since T78 (P5-W22) — a real filePicker/sharing from AppCore, never omitted or locally constructed", () => {
       const code = readCode("../../src/app/h/[serverId]/session/[agentId]/files/[...path].tsx");
       expect(code).toMatch(
-        /<FilesScreen\s*\n\s*serverId=\{serverId\}\s*\n\s*agentId=\{agentId\}\s*\n\s*path=\{path \?\? \[\]\}\s*\n\s*workspaceRoot=""\s*\n\s*client=\{core\.fileBrowserClient\}\s*\n\s*filePicker=\{core\.filePicker\}\s*\n\s*sharing=\{core\.sharing\}\s*\n\s*downloadOrigin=\{downloadOrigin\}\s*\n\s*connectionPath=\{connectionPath\}\s*\n\s*fetchImpl=\{fetchImpl\}\s*\n\s*\/>/,
+        /<FilesScreen\s*\n\s*serverId=\{serverId\}\s*\n\s*agentId=\{agentId\}\s*\n\s*path=\{path \?\? \[\]\}\s*\n\s*workspaceRoot=\{cwd \?\? ""\}\s*\n\s*client=\{core\.fileBrowserClient\}\s*\n\s*filePicker=\{core\.filePicker\}\s*\n\s*sharing=\{core\.sharing\}\s*\n\s*downloadOrigin=\{downloadOrigin\}\s*\n\s*connectionPath=\{connectionPath\}\s*\n\s*fetchImpl=\{fetchImpl\}\s*\n\s*\/>/,
       );
     });
   });

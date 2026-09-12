@@ -96,11 +96,12 @@ const WORKSPACE_FILES_SESSION_TS =
 
 describe("file-download.yaml anchors exist in source", () => {
   describe("the route this flow's deep link opens", () => {
-    it('hardcodes workspaceRoot="" — the exact, disclosed cause of this flow\'s "No workspace selected" state', () => {
+    it('resolves the session\'s real workspace root via useAgentCwd, "" only while unresolved — the route no longer hardcodes workspaceRoot="" (2026-09-12; this flow\'s e2e agent is unknown to the daemon, so the unresolved case is what this flow still reaches, and "No workspace selected" stays its honest state)', () => {
       const code = readCode(FILES_ROUTE_TSX);
       expect(code).toMatch(
-        /<FilesScreen\s*\n\s*serverId=\{serverId\}\s*\n\s*agentId=\{agentId\}\s*\n\s*path=\{path \?\? \[\]\}\s*\n\s*workspaceRoot=""/,
+        /<FilesScreen\s*\n\s*serverId=\{serverId\}\s*\n\s*agentId=\{agentId\}\s*\n\s*path=\{path \?\? \[\]\}\s*\n\s*workspaceRoot=\{cwd \?\? ""\}/,
       );
+      expect(code).toMatch(/useAgentCwd\(resolveAgentSnapshotClient\(core\.connection\), agentId/);
     });
 
     it("passes a real client, downloadOrigin, connectionPath and fetchImpl through — a real HTTP origin is genuinely wired once paired", () => {

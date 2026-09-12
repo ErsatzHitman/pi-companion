@@ -59,13 +59,16 @@ tags:
 # KNOWN BLOCKER, discovered by this task — read before "fixing" anything
 # below that looks incomplete.
 # ---------------------------------------------------------------------
+# CORRECTED 2026-09-12: this block used to say the route hardcodes
+# `workspaceRoot=""`. The route now resolves the session's real root via
+# `useAgentCwd` — but THIS flow's e2e agent is unknown to the daemon, so
+# the root stays unresolved (`""`) and everything below still holds for
+# this flow exactly as written. For a real session with a real agent the
+# listing now succeeds; that path is covered by files-and-terminal.yaml.
+# Original note, kept for the mechanism it documents:
 # `app/h/[serverId]/session/[agentId]/files/[...path].tsx` (the shipped
-# route this flow's deep link opens) hardcodes `workspaceRoot=""` — its
-# own doc comment says why: resolving a session's REAL workspace root
-# depends on `packages/frontend-core/src/sessions/index.ts`'s Phase 1
-# stub, "outside both that file's and this route's scope", and names
-# whichever task replaces that stub as the owner of fixing it for both
-# platforms. `files-model.ts` passes `workspaceRoot` straight through as
+# route this flow's deep link opens) passed `workspaceRoot=""` when the
+# root could not be resolved. `files-model.ts` passes `workspaceRoot` straight through as
 # the daemon's `cwd` parameter with no transformation
 # (`createFilesBrowserController`'s own `workspaceRoot` field, read
 # verbatim by `listDirectoryWithTimeout`), and the daemon's own
@@ -200,9 +203,19 @@ tags:
 # --- no-client fallback never shows.
 - assertNotVisible:
     id: "files-screen-e2e-host-e2e-download-agent-not-connected"
-# --- The real, honest, named state this route's own workspaceRoot="" gap
+# --- The real, honest, named state this route's unresolved workspace root
 # --- (this flow's header comment) makes the only one reachable today —
-# --- never a crash, never a silent stall.
+# --- never a crash, never a silent stall. The listing body sits below
+# --- the upload and file-ops panels, so scroll it into view first:
+# --- assertVisible only sees the viewport, and the error is terminal
+# --- (no auto-retry), so once scrolled to it stays put for the text
+# --- asserts below. (2026-09-12: the file-ops panel lengthened this
+# --- screen past the fold; without this scroll the assert below fails
+# --- while the element sits rendered but off-screen — seen directly in
+# --- Maestro run 34698500134's failure screenshot and hierarchy.)
+- scrollUntilVisible:
+    element:
+      id: "files-screen-e2e-host-e2e-download-agent-error"
 - assertVisible:
     id: "files-screen-e2e-host-e2e-download-agent-error"
 - assertVisible:
