@@ -42,13 +42,19 @@
  * by default, mirroring `roster.tsx`'s own row-scoped binding, rather than
  * inventing a different identity scheme for panel sections.
  *
- * Known limitation, out of this task's scope: that composite id format
- * supports exactly one `#`-hop (`packages/server/.../pi-ui-bridge/
- * identity.ts` `parseCompositeElementId` only looks for the first `#`), so
- * a `roster` section's own per-*row* actions (a second hop below the
- * section) are not resolvable by the current daemon — only a section's own
- * top-level `actions` are. Fixing that would require a protocol change and
- * is not part of T29B4's acceptance criteria.
+ * Nested child identity: a section renderer may itself scope one hop
+ * deeper for its own children — `roster.tsx` composes a row as
+ * `${section.id}#${row.id}`. This renderer prefixes any such local id with
+ * this section's own `${parent.id}#` scope, so the identity handed to the
+ * bound dispatch pair is `panel#section#row`, never the bare
+ * `section#row` that would silently drop the panel. This is what keeps two
+ * nested roster rows' pending/settled action state distinct in
+ * `ExtensionActionController` (they share the section's element id
+ * otherwise) and composes the whole chain in the one place that knows the
+ * parent, rather than leaving every nested renderer to reassemble it. The
+ * wire identity is sent unchanged; resolving a multi-hop chain against
+ * daemon state is `packages/server/.../pi-ui-bridge/identity.ts`
+ * `parseCompositeElementId`'s concern, outside this file.
  */
 import type { PiUiElement, PiUiPanelSection } from "@picompanion/protocol/pi-ui-bridge/schema";
 
@@ -129,6 +135,11 @@ function PanelSectionView({
   }
 
   const sectionElementId = `${parent.id}#${section.id}`;
+  // Prefixes any deeper local id a section renderer composed for its own
+  // child (e.g. `roster.tsx`'s `${section.id}#${row.id}`) with this
+  // section's scope, producing `panel#section#row` rather than the bare
+  // `section#row`. See this module's header comment.
+  const scopeChildElementId = (childElementId: string) => `${parent.id}#${childElementId}`;
   const sectionElement: PiUiElement = {
     id: section.id,
     ns: section.ns ?? parent.ns,
@@ -141,12 +152,19 @@ function PanelSectionView({
   const sectionDispatch: PiUiDispatchAction = (actionId, options) =>
     dispatchAction(actionId, {
       ...options,
-      elementId: options?.elementId ?? sectionElementId,
+      elementId:
+        options?.elementId !== undefined
+          ? scopeChildElementId(options.elementId)
+          : sectionElementId,
     });
   const sectionGetActionState: PiUiElementRendererProps<"panel">["getActionState"] = (
     actionId,
     elementIdOverride,
-  ) => getActionState(actionId, elementIdOverride ?? sectionElementId);
+  ) =>
+    getActionState(
+      actionId,
+      elementIdOverride !== undefined ? scopeChildElementId(elementIdOverride) : sectionElementId,
+    );
   const sectionLogger = logger.child({
     ns: sectionElement.ns,
     kind: sectionElement.kind,

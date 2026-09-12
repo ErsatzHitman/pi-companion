@@ -7,7 +7,11 @@ type PiUiElementStore = InstanceType<typeof extensions.PiUiElementStore>;
 /**
  * Live-subscribes one agent's Pi UI elements out of a `PiUiElementStore`
  * (`@picompanion/frontend-core`'s ephemeral projection of the Pi UI Bridge
- * stream, plan.md §7.1/§11.5) for `PiExtensionRail`.
+ * stream, plan.md §7.1/§11.5). `features/extensions/pi-ui-session-context.tsx`'s
+ * `PiUiSessionProvider` uses this to publish one live element list to every
+ * placement destination (the right rail's pinned/status strips and the
+ * centre column's inline/sheet/screen hosts); the name is historical — this
+ * is no longer rail-only.
  *
  * `PiUiElementStore.getElements` allocates a fresh array on every call, which
  * violates `useSyncExternalStore`'s requirement that an unchanged snapshot
@@ -17,10 +21,9 @@ type PiUiElementStore = InstanceType<typeof extensions.PiUiElementStore>;
  * actually moved — cheap, and correct even across a `reset`/resync, since
  * every mutation path in `state.ts` bumps the tracked revision.
  *
- * Not wired to `CoreProvider` yet — connecting a real `PiUiElementStore` to a
- * live session is a later task's concern (plan.md §12.2); this hook only
- * needs *a* store and an agent id, so it is fully testable against a bare
- * `PiUiElementStore` today.
+ * Not tied to any single destination: it only needs *a* store and an agent
+ * id, so it is fully testable against a bare `PiUiElementStore` and is
+ * reused by every placement host through `PiUiSessionProvider`.
  */
 export function usePiUiRailElements(
   store: PiUiElementStore,

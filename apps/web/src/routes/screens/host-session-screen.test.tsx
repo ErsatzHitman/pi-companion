@@ -187,3 +187,37 @@ describe("HostSessionScreen attachment-image wiring (T284)", () => {
     expect(code).not.toMatch(/resolveImageSrc=\{undefined\}/);
   });
 });
+
+/**
+ * Pi UI placement wiring (plan.md §11.3, §11.5). The three hosts' own
+ * components are proven in `features/extensions/placements/*.test.tsx`;
+ * what those cannot observe is that THIS route mounts them and feeds each
+ * one the session's single shared `PiUiSessionProvider` value, rather than
+ * a second store or a fixture. A full render cannot observe that here for
+ * the same reason the attachment-image block above gives: this route's
+ * client comes from a `HostController` nothing in this suite can inject.
+ */
+describe("HostSessionScreen Pi UI placement wiring", () => {
+  it("reads the one shared session value from usePiUiSession", () => {
+    expect(readHostSessionScreenCode()).toMatch(/const piUiSession = usePiUiSession\(\);/);
+  });
+
+  it("mounts the screen, sheet, and inline hosts, each fed by the shared session's elements", () => {
+    const code = readHostSessionScreenCode();
+    for (const host of [
+      "PiExtensionScreenHost",
+      "PiExtensionSheetHost",
+      "PiExtensionInlineStack",
+    ]) {
+      expect(code).toMatch(new RegExp(`<${host}[\\s\\S]*?elements=\\{piUiSession\\.elements\\}`));
+    }
+  });
+
+  it("mounts the inline stack above the composer, not inside the transcript", () => {
+    const code = readHostSessionScreenCode();
+    const inlineIndex = code.indexOf("<PiExtensionInlineStack");
+    const composerIndex = code.indexOf("<ComposerContainer");
+    expect(inlineIndex).toBeGreaterThan(-1);
+    expect(composerIndex).toBeGreaterThan(inlineIndex);
+  });
+});

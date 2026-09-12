@@ -7,16 +7,14 @@ import { PiUiElementView } from "../extensions/registry-index.js";
 // (`status`, `widget`, `panel`, `progress`, `roster`, `log`, `markdown`,
 // `diff`, `form`, `composer` — T29A1-T29B4) into the shared
 // `piUiRendererRegistry` singleton `registry-view.tsx`'s `PiUiElementView`
-// reads from. Nothing else in `apps/web`'s non-test code imports this
-// module yet (each renderer test file imports it itself, per that
-// module's own header comment, "individual renderer modules never
-// register themselves at their own definition site" so a test can import
-// one renderer directly without double-registering it) — this card is the
-// first real (non-test) consumer of `PiUiElementView`, so it is the one
-// that turns the registrations on for the running app. Importing it here,
-// once, keeps that side effect co-located with the one place in this
-// feature that actually needs it, rather than requiring some other,
-// unrelated app-bootstrap file to know this rail depends on it.
+// reads from. Each renderer test file imports it itself, per that module's
+// own header comment ("individual renderer modules never register
+// themselves at their own definition site" so a test can import one renderer
+// directly without double-registering it); this card and the sibling
+// placement hosts (`features/extensions/placements/`) import it in the
+// running app so the registrations are on before any element renders.
+// Importing it from more than one host costs nothing: a module's side
+// effects run once.
 import "../extensions/renderers/index.js";
 import "./pi-extension-rail.css";
 

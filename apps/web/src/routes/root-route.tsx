@@ -1,21 +1,14 @@
-import type { AgentStreamEvent } from "@picompanion/protocol/agent-types";
-import { extensions, telemetry as coreTelemetry } from "@picompanion/frontend-core";
+import { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 import { Outlet, createRootRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
-import { useCore } from "../app/core-context.js";
 import { useDaemonClientContext } from "../app/daemon-client-context.js";
 import {
-  sendPiUiActionRequest,
-  subscribePiUiActionResponses,
-} from "../features/extensions/action-transport.js";
+  PiUiSessionProvider,
+  usePiUiSession,
+} from "../features/extensions/pi-ui-session-context.js";
 import { PiNoticeBannerContainer } from "../features/notices/index.js";
-import {
-  ContextMeter,
-  PiExtensionRail,
-  PiExtensionStatusStrip,
-  usePiUiRailElements,
-} from "../features/rail/index.js";
+import { ContextMeter, PiExtensionRail, PiExtensionStatusStrip } from "../features/rail/index.js";
 import {
   SESSIONS_NOT_CONNECTED,
   SessionRail,
@@ -59,7 +52,7 @@ import { RouteErrorScreen } from "./route-error-screen.js";
  * cards' exact same DOM structure for its own inline rendering.** Those
  * already exist and are reused directly wherever there is no risk of
  * double-mounting the same live data (`ContextMeter`, `PiExtensionRail`,
- * `SessionCostMeterContainer`, `usePiUiRailElements`) — this file adds no
+ * `SessionCostMeterContainer`, `PiUiSessionProvider`) — this file adds no
  * parallel implementation of any of them. The one deliberate exception is
  * the *left* rail's row rendering: `HostSessionsScreen`
  * (`routes/screens/host-sessions-screen.tsx`, a different, already-merged
@@ -187,67 +180,40 @@ interface ExtensionRailContentProps {
  * nobody until now (found by the P6-W4 import-graph walk, confirmed by
  * `grep -rn pi_notice`).
  *
- * A fresh `PiUiElementStore` is created per `agentId` (`useMemo`, T29R1's
- * existing convention) so switching sessions never carries a stale
- * element from the previous one; `client.on("agent_stream", ...)` is
- * this rail's only live input, filtered to this `agentId`, feeding both
- * the element store and the action controller's async result channel.
+ * A fresh `PiUiElementStore` is created per `agentId` and a single
+ * `agent_stream` subscription feeds both the element store and the action
+ * controller's async result channel — but that ownership now lives in
+ * `features/extensions/pi-ui-session-context.tsx`'s `PiUiSessionProvider`
+ * (which wraps `Shell`, so both this rail and the routed screen see one
+ * session), not here: the same live store now feeds the `inline`, `sheet`,
+ * and `screen` destinations in the centre column as well as this rail.
  *
- * **Action round trip, wired in full:** the controller's `sendRequest`
- * forwards each `pi.ui.action.request` through
+ * **Action round trip, wired in full (by the provider this component
+ * reads):** each dispatch forwards through
  * `features/extensions/action-transport.ts`'s `sendPiUiActionRequest` to
- * the live `DaemonClient.sendPiUiAction`, and the effect below subscribes
- * to `pi.ui.action.response` so the daemon's synchronous ack reaches
+ * the live `DaemonClient.sendPiUiAction`, and the provider subscribes to
+ * `pi.ui.action.response` so the daemon's synchronous ack reaches
  * `ExtensionActionController.ingestActionResponse`. The async half —
- * `agent_stream`'s `pi_ui_action_result` — already reaches
- * `ingestAgentStreamEvent` from the same effect's `agent_stream`
- * listener. A dispatch with no connected client is left to settle as the
- * controller's honest `"timeout"`, never a faked success.
+ * `agent_stream`'s `pi_ui_action_result` — reaches `ingestAgentStreamEvent`
+ * from the same subscription. A dispatch with no connected client is left
+ * to settle as the controller's honest `"timeout"`, never a faked success.
  */
 function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentProps) {
   const { client } = useDaemonClientContext();
-  const { platform } = useCore();
   const session = useSessionSnapshot(chromeClient, agentId);
+  const piUiSession = usePiUiSession();
 
-  const store = useMemo(() => new extensions.PiUiElementStore(), [agentId]);
-  const actionController = useMemo(
-    () =>
-      new extensions.ExtensionActionController({
-        clock: platform.clock,
-        getElementRevision: (id) => store.getRevision(id),
-        sendRequest: (message) => sendPiUiActionRequest(client, message),
-      }),
-    [client, platform, store],
-  );
-
-  useEffect(() => {
-    if (!client) return undefined;
-    // The synchronous ack (`pi.ui.action.response`) and the async result
-    // (`agent_stream`'s `pi_ui_action_result`, fed below) are the two
-    // channels `ExtensionActionController` settles dispatches from.
-    const unsubscribeResponses = subscribePiUiActionResponses(client, actionController);
-    const unsubscribeAgentStream = client.on("agent_stream", (message) => {
-      if (message.payload.agentId !== agentId) return;
-      // `AgentStreamEventPayload` (the wire-validated shape `DaemonClient`
-      // actually delivers) and `AgentStreamEvent` (frontend-core's
-      // hand-written parser input) describe the same daemon events with
-      // independently declared, structurally identical types — the same
-      // relationship `daemon-session-cost-client.ts` documents for
-      // `AgentSnapshotPayload`. Neither `PiUiElementStore.ingestEvent` nor
-      // `ExtensionActionController.ingestAgentStreamEvent` reads anything
-      // outside that shared shape.
-      const event = message.payload.event as unknown as AgentStreamEvent;
-      store.ingestEvent(event);
-      actionController.ingestAgentStreamEvent(agentId, event);
-    });
-    return () => {
-      unsubscribeResponses();
-      unsubscribeAgentStream();
-    };
-  }, [client, agentId, store, actionController]);
-
-  const elements = usePiUiRailElements(store, agentId);
   const windowTelemetry = coreTelemetry.deriveContextWindowTelemetry(session?.lastUsage);
+
+  // The provider wrapping `Shell` owns this session's live store and action
+  // controller; on every session route this rail renders for, its value is
+  // non-null. Guarding keeps a non-session render from throwing rather than
+  // silently assuming the invariant.
+  if (!piUiSession) {
+    return null;
+  }
+
+  const { elements, actionController, revision } = piUiSession;
 
   return (
     <>
@@ -262,8 +228,14 @@ function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentPro
         elements={elements}
         agentId={agentId}
         actionController={actionController}
+        revision={revision}
       />
-      <PiExtensionRail elements={elements} agentId={agentId} actionController={actionController} />
+      <PiExtensionRail
+        elements={elements}
+        agentId={agentId}
+        actionController={actionController}
+        revision={revision}
+      />
     </>
   );
 }
@@ -297,19 +269,23 @@ function RootRouteComponent() {
   }, [client]);
 
   return (
-    <Shell
-      sessionRail={
-        serverId ? (
-          <SessionRailContent serverId={serverId} selectedSessionId={agentId} />
-        ) : undefined
-      }
-      extensionRail={
-        agentId ? <ExtensionRailContent agentId={agentId} chromeClient={chromeClient} /> : undefined
-      }
-      headerWorkspace={<SessionWorkspaceCrumb agentId={agentId ?? null} client={chromeClient} />}
-    >
-      <Outlet />
-    </Shell>
+    <PiUiSessionProvider agentId={agentId}>
+      <Shell
+        sessionRail={
+          serverId ? (
+            <SessionRailContent serverId={serverId} selectedSessionId={agentId} />
+          ) : undefined
+        }
+        extensionRail={
+          agentId ? (
+            <ExtensionRailContent agentId={agentId} chromeClient={chromeClient} />
+          ) : undefined
+        }
+        headerWorkspace={<SessionWorkspaceCrumb agentId={agentId ?? null} client={chromeClient} />}
+      >
+        <Outlet />
+      </Shell>
+    </PiUiSessionProvider>
   );
 }
 

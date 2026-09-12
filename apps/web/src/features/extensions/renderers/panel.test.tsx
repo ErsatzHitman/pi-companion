@@ -193,6 +193,64 @@ describe("panel renderer", () => {
     ).toBe("pending");
   });
 
+  it("dispatches a nested roster row action against the full panel>section>row composite id", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const controller = makeController((message) => sent.push(message as Record<string, unknown>));
+    const user = userEvent.setup();
+
+    // A panel whose roster section carries a per-row action — the second
+    // `#` hop below the panel that `PanelSectionView`'s scope prefix exists
+    // for. The row's own renderer composes `fleet#sub_1`; the panel must
+    // prefix it to `run-9#fleet#sub_1`, never send the bare `fleet#sub_1`.
+    const nestedRowActionPanel: PiUiElement = {
+      ...loopPanelElement,
+      id: "run-9",
+      actions: undefined,
+      payload: {
+        kind: "panel",
+        sections: [
+          {
+            id: "fleet",
+            kind: "roster",
+            title: "Fleet",
+            payload: {
+              kind: "roster",
+              rows: [
+                {
+                  id: "sub_1",
+                  label: "reviewer",
+                  state: "running",
+                  actions: [{ id: "cancel", label: "Cancel" }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    } as PiUiElement;
+
+    view(nestedRowActionPanel, controller);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(sent).toEqual([
+      expect.objectContaining({
+        type: "pi.ui.action.request",
+        actionId: "cancel",
+        elementId: "run-9#fleet#sub_1",
+      }),
+    ]);
+    // The nested row's pending state is keyed on the full chain, so it
+    // cannot collide with the section's own action state.
+    expect(
+      controller.getActionState({
+        agentId: "agt_1",
+        namespace: "loop",
+        elementId: "run-9#fleet#sub_1",
+        actionId: "cancel",
+      }).status,
+    ).toBe("pending");
+  });
+
   it("requires confirmation before a dangerous section action dispatches, naming the action and its consequence", async () => {
     const sent: Array<Record<string, unknown>> = [];
     const controller = makeController((message) => sent.push(message as Record<string, unknown>));

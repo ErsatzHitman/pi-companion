@@ -12,6 +12,12 @@ import { ComposerContainer } from "../../features/composer/index.js";
 import { createDaemonAgentTurnClient } from "../../features/composer/index.js";
 import { createReferenceFileSource } from "../../features/composer/index.js";
 import { useSessionContextTelemetry } from "../../features/composer/index.js";
+import { usePiUiSession } from "../../features/extensions/pi-ui-session-context.js";
+import {
+  PiExtensionInlineStack,
+  PiExtensionScreenHost,
+  PiExtensionSheetHost,
+} from "../../features/extensions/placements/index.js";
 import { createDaemonSessionResumeClient } from "../../features/sessions/index.js";
 import { SessionResumeScreen } from "../../features/sessions/SessionResumeScreen.js";
 import {
@@ -419,6 +425,15 @@ export function useSessionTranscriptEntries(
  * above — this is now the full three-region-column layout plan.md §8.3
  * describes for the centre column (transcript, then composer).
  *
+ * The three non-rail Pi UI placement destinations also mount here, fed by
+ * the one live store `root-route.tsx`'s `PiUiSessionProvider` owns: the
+ * `screen` region (`PiExtensionScreenHost`, §11.5's "`screen` owns a
+ * route" — web renders it in this session route's screen area, below the
+ * header), the `sheet` host (`PiExtensionSheetHost`, a modal `Sheet`),
+ * and the transcript-adjacent `inline` stack (`PiExtensionInlineStack`,
+ * above the composer, the same slot the todo dock occupies). The right
+ * rail's pinned/status strips read the same store through that provider.
+ *
  * Every surface below is given the live `client` `useDaemonClient()`
  * (T53A1) resolves once a `DaemonClient` connection exists: the resume
  * half (`SessionResumeScreen`'s `client` prop, via
@@ -457,6 +472,13 @@ export function HostSessionScreen() {
   const { client, info, hostController } = useDaemonClientContext();
   const { platform } = useCore();
   const navigate = useNavigate();
+
+  // The one live Pi UI store/controller for this session, owned by
+  // `root-route.tsx`'s `PiUiSessionProvider`. The right rail (pinned/status)
+  // and the three placement hosts below (screen/sheet/inline) all read this
+  // same value, so there is one subscription and one action controller for
+  // the session rather than one per destination.
+  const piUiSession = usePiUiSession();
 
   const sessionResumeClient = useMemo(
     () => (client ? createDaemonSessionResumeClient(client) : undefined),
@@ -556,6 +578,26 @@ export function HostSessionScreen() {
   return (
     <>
       <SessionResumeScreen serverId={serverId} agentId={agentId} client={sessionResumeClient} />
+      {piUiSession ? (
+        <>
+          {/* plan.md §11.5: `screen` owns a route; web mounts it in this
+              session route's own screen area, below the session header. */}
+          <PiExtensionScreenHost
+            elements={piUiSession.elements}
+            agentId={piUiSession.agentId}
+            actionController={piUiSession.actionController}
+            revision={piUiSession.revision}
+          />
+          {/* plan.md §11.5: `sheet` opens a focused panel. A modal host;
+              it renders nothing until a sheet-placement element arrives. */}
+          <PiExtensionSheetHost
+            elements={piUiSession.elements}
+            agentId={piUiSession.agentId}
+            actionController={piUiSession.actionController}
+            revision={piUiSession.revision}
+          />
+        </>
+      ) : null}
       <OfflineTranscriptBanner
         connected={info.status === "connected"}
         hasEntries={transcriptEntries.length > 0}
@@ -585,6 +627,19 @@ export function HostSessionScreen() {
       />
       <ApprovalsContainer sessionId={agentId} client={client ?? undefined} />
       {latestTodoEntry ? <TodoDock entry={latestTodoEntry} testId="session-todo-dock" /> : null}
+      {/* plan.md §11.5: `inline` becomes a transcript-adjacent card. Mounted
+          here, beside the transcript, rather than inside it —
+          `transcript.tsx` deliberately excludes extension entries from its
+          own scroll, so this footer stack above the composer is the
+          session column's transcript-adjacent slot. */}
+      {piUiSession ? (
+        <PiExtensionInlineStack
+          elements={piUiSession.elements}
+          agentId={piUiSession.agentId}
+          actionController={piUiSession.actionController}
+          revision={piUiSession.revision}
+        />
+      ) : null}
       <ComposerContainer
         sessionId={agentId}
         serverId={serverId}
