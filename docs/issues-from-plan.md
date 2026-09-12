@@ -19951,4 +19951,26 @@ than on a hand-built object.
 - [x] A conflict and an unsupported mode are distinguishable by code, not by reading a sentence
 - [x] `force` is forwarded, and an omitted options object sends no `force` key at all
 - [x] Every outcome is a typed result a screen can render, with the marker stripped
-- [ ] The web and Android surfaces (in flight as `wave3/rewind-ui` for web; Android is a follow-up)
+- [x] The web surface: a rewind affordance on the message row, the scope dialog, and a conflict
+      that offers "restore anyway" rather than a dead end (`e59f324`, merged `7234d80`)
+- [ ] The Android surface — still a follow-up, and the only part of this task not done
+
+**What shipped (web half, `e59f324` merged as `7234d80`).**
+`apps/web/src/features/transcript/rewind/` holds the whole surface: `rewind-scopes.ts` (the two
+scopes a rewind may take — transcript only, or transcript plus the workspace files T383 checkpoints
+— with their labels), `undone-turns.ts` (a bounded local record of what a rewind discarded),
+`use-rewind-to-here.ts` (drives `RewindController` through the three states a dialog needs: idle,
+sending, and the answer, conflict included) and `RewindDialog.tsx`, mounted from
+`host-session-screen.tsx` alongside the surface it rewinds. `EditFromHereSurface` gained the
+per-row affordance, disabled with a stated reason when no checkpoint exists.
+
+Two decisions the code records rather than hides. First, the undone-turns list stores the turn the
+rewind **kept** — after a successful rewind the removed rows no longer resolve from the daemon, so a
+list of removed ids would render empty exactly when it is needed. Second, a successful rewind bumps
+a `refreshNonce` the transcript effect depends on, forcing one authoritative re-resume: a
+files-only rewind legitimately changes no timeline row, so waiting for the live stream to push a
+change would hang on the one case the feature exists for.
+
+**Evidence.** `npm test --workspace=@picompanion/web` in the branch worktree → 182 files / 1688
+tests pass; web typecheck exit 0 on the merged tree; the targeted rewind and host-session files pass
+alone; `oxfmt --check .` clean.
