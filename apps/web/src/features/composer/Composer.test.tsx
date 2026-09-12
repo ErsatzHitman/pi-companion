@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { composer as coreComposer } from "@picompanion/frontend-core";
+
 import { Composer } from "./Composer.js";
 import type { AgentModelOption } from "./agent-turn-client.js";
 import {
@@ -1324,6 +1326,25 @@ describe("Composer drag-and-drop, paste, and inline previews (T279)", () => {
       expect(preview.getAttribute("src")).toBe("blob:mock-preview");
     });
 
+    it("renders an inline preview thumbnail for an image chosen through the file picker", async () => {
+      URL.createObjectURL = vi.fn(
+        () => "blob:picked-preview",
+      ) as unknown as typeof URL.createObjectURL;
+      URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+      const client = new FakeAgentTurnClient();
+      const filePicker = new FakeFilePicker();
+      filePicker.enqueue([makeFakePickedFile({ name: "photo.png", mimeType: "image/png" })]);
+      render(
+        <Composer {...baseProps()} filePicker={filePicker} client={client} testId="composer" />,
+      );
+
+      await userEvent.setup().click(screen.getByRole("button", { name: "Attach files" }));
+
+      const preview = await screen.findByAltText("");
+      expect(preview.tagName).toBe("IMG");
+      expect(preview.getAttribute("src")).toBe("blob:picked-preview");
+    });
+
     it("revokes the preview's object URL when the attachment is removed", async () => {
       const revokeObjectURL = vi.fn();
       URL.createObjectURL = vi.fn(
@@ -1431,4 +1452,122 @@ describe("Composer editor-text bridge (T293)", () => {
     // yet" degradation in this file.
     expect(input.value).toBe("hello");
   });
+});
+
+describe("Composer @file/@skill references and per-session drafts (T389)", () => {
+  function skill(name: string, description: string) {
+    return { name, description, argumentHint: "", kind: "skill" as const };
+  }
+
+  it("opens the candidate list from the daemon's skill list and inserts on Enter without sending", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    client.commandsToReturn = [skill("release", "Cut a release"), skill("review", "Review a diff")];
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.click(input);
+    await user.type(input, "@");
+
+    const list = await screen.findByTestId("composer-references");
+    expect(list.textContent).toContain("@release");
+    expect(list.textContent).toContain("@review");
+
+    // First candidate is `release` (id order); ArrowDown highlights `review`.
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+
+    expect(input.value).toBe("@review ");
+    expect(screen.queryByTestId("composer-references")).toBeNull();
+    // Enter chose a candidate — it must not also have sent the message.
+    expect(client.sentMessages).toEqual([]);
+
+    const chips = await screen.findByTestId("composer-resolved-references");
+    expect(chips.textContent).toContain("@review");
+  });
+
+  it("Escape dismisses the candidate list instead of interrupting the turn", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    client.commandsToReturn = [skill("review", "Review a diff")];
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.click(input);
+    await user.type(input, "@");
+    await screen.findByTestId("composer-references");
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("composer-references")).toBeNull();
+    expect(client.canceledAgentIds).toEqual([]);
+    expect(input.value).toBe("@");
+  });
+
+  it("offers @file candidates from the supplied listing port", async () => {
+    const user = userEvent.setup();
+    render(
+      <Composer
+        {...baseProps()}
+        fileReferenceSource={{
+          listFiles: async () => [{ kind: "file", id: "src/index.ts", label: "src/index.ts" }],
+        }}
+        testId="composer"
+      />,
+    );
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.click(input);
+    await user.type(input, "@src");
+
+    const list = await screen.findByTestId("composer-references");
+    expect(list.textContent).toContain("src/index.ts");
+
+    await user.keyboard("{Enter}");
+    expect(input.value).toBe("@src/index.ts ");
+  });
+
+  it("keeps the context ring honest: no telemetry, no percentage", () => {
+    render(<Composer {...baseProps()} testId="composer" />);
+    const ring = screen.getByTestId("composer-context-ring");
+    expect(ring.querySelector(".pc-context-ring__pct")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Session controls — context usage not reported" }),
+    ).toBeTruthy();
+  });
+
+  it("restores the session's persisted draft on mount", async () => {
+    const clock = new FakeClock(1_000);
+    const storage = new InMemoryStructuredStorage();
+    await new coreComposer.DraftStore(storage, clock).save(
+      coreComposer.draftKeyForSession({ serverId: "", agentId: "session-1" }),
+      { text: "restored draft" },
+    );
+    render(
+      <Composer
+        sessionId="session-1"
+        clock={clock}
+        structuredStorage={storage}
+        filePicker={new FakeFilePicker()}
+        testId="composer"
+      />,
+    );
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await waitFor(() => expect(input.value).toBe("restored draft"));
+  });
+
+  it("has no axe violations with the candidate list open", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    client.commandsToReturn = [skill("review", "Review a diff")];
+    const { container } = render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const input = screen.getByLabelText("Message Pi");
+    await user.click(input);
+    await user.type(input, "@");
+    await screen.findByTestId("composer-references");
+
+    expect(await axe(container)).toHaveNoViolations();
+  }, 20_000);
 });

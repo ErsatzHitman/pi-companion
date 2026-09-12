@@ -217,3 +217,63 @@
   object-fit: cover;
   box-shadow: var(--shadow-hairline);
 }
+
+/* `@` reference suggestions (T389): the candidate list above the prompt
+ * bar while an `@file`/`@skill` token is open. Styled like the slash
+ * palette's list, in the composer's own file because it is composer
+ * chrome rather than a reusable recipe. */
+.pc-composer__references {
+  display: flex;
+  flex-direction: column;
+}
+
+.pc-composer__reference-list {
+  margin: 0;
+  padding: var(--spacing-1);
+  list-style: none;
+  background-color: var(--color-canvas);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-overlay);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.pc-composer__reference-option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  border-radius: var(--radius-chip);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+.pc-composer__reference-option--active {
+  background-color: var(--color-accent-tint);
+}
+
+.pc-composer__reference-label {
+  font-family: var(--font-family-mono);
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-composer__reference-kind {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+}
+
+.pc-composer__reference-hint {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+
+/* Resolved references (T389): a chip per `@id` already present in the draft
+ * and matched to a known candidate, beside the attachment tray. */
+.pc-composer__resolved-references {
+  display: flex;
+}

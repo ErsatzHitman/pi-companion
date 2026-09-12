@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 
 import { timeline as coreTimeline } from "@picompanion/frontend-core";
+import type { Clock, StructuredStorage } from "@picompanion/frontend-core";
 import type { DaemonClient } from "@picompanion/client";
 
 import { useCore } from "../../app/core-context.js";
@@ -23,6 +24,13 @@ import type {
   EditFromHereOutcome,
 } from "../../features/transcript/index.js";
 import { createBrowserFrameClock } from "../../platform/frame-clock.js";
+import {
+  cacheTimelineTail,
+  confirmTimelineCatchUp,
+  createTimelineCache,
+  loadTimelineCacheEnvelope,
+} from "../../platform/offline/index.js";
+import { OfflineTranscriptBanner } from "../../features/transcript/OfflineTranscriptBanner.js";
 
 const routeApi = getRouteApi("/h/$serverId/session/$agentId");
 
@@ -97,30 +105,47 @@ export function adaptEditFromHereForkClient(
 }
 
 /**
- * Live-streamed `TranscriptEntry[]` for one session (T53A2), sourced from
- * the same `DaemonClient` `daemon-client-context.tsx` (T53A1) provides.
+ * Live-streamed transcript state for one session (T53A2, extended by T393),
+ * sourced from the same `DaemonClient` `daemon-client-context.tsx` (T53A1)
+ * provides and backed by this app's real IndexedDB display-only cache
+ * (plan.md §2.2 "offline-readable cache", §7.4/§12.5).
  *
  * Two independent reads of the same session's timeline exist by design:
  * `SessionResumeScreen` below keeps its own `useResumeSession` call for
  * the route's identity/status/queue-count summary (T27B3's already-built,
- * already-tested surface — untouched here, per this task's "resume ...
- * behaviour is unchanged" acceptance criterion), and this hook keeps a
- * second, purpose-built `TimelineState` — fed forward live — for the
- * transcript itself. Folding the two into one shared fetch would mean
- * reaching into `SessionResumeScreen`'s internals, which is outside the
- * one file (`host-session-screen.tsx`) this task owns.
+ * already-tested surface, untouched here), and this hook keeps a second,
+ * purpose-built `TimelineState` — fed forward live — for the transcript
+ * itself. Folding the two into one shared fetch would mean reaching into
+ * `SessionResumeScreen`'s internals.
  *
- * The initial page comes from `createDaemonSessionResumeClient`'s own
- * `resumeSession` (the same bounded `direction: "tail", limit: 200`
- * cold-open window `SessionResumeScreen` already uses), applied
- * immediately (not batched) since it is a one-shot snapshot, not a live
- * push. Every subsequent `agent_stream` push for this session is queued
- * onto a `timeline.TimelineCoalescer` (T45A2) — batched onto this app's
- * real `createBrowserFrameClock()` (T45A3) so a burst of streaming
- * deltas applies as one state transition per frame tick — and never
- * dropped, replaced, or reordered (plan.md §7.4's delta-based-end-to-end
- * contract; see `coalescer.ts`'s own module doc for the verified,
- * concatenation-free wire behaviour this must not contradict).
+ * ## Catch-up
+ *
+ * The initial page is a real `fetch_agent_timeline_request` (`direction:
+ * "tail", limit: 200`; the same bounded cold-open window
+ * `SessionResumeScreen` uses), folded through `timeline.ingestTimelineWindow`
+ * against whatever the coalescer already holds — not against a pre-built
+ * empty state — so an authoritative window reconciles with a restored
+ * cached tail by (epoch, seq) instead of discarding it. That fold is also
+ * this hook's catch-up signal: `ingestTimelineWindow` is the only thing
+ * that clears `TimelineState.stale`, and the hook then marks the
+ * cache-level entry caught up (`confirmTimelineCatchUp`).
+ *
+ * ## Cache
+ *
+ * On mount the session's cached tail is restored first, so the transcript
+ * can render from disk before (or without) a daemon connection; a restored
+ * state is always `stale: true` until the authoritative window above
+ * lands. Every subsequent `agent_stream` push is queued onto a
+ * `timeline.TimelineCoalescer` (T45A2) — batched onto this app's real
+ * `createBrowserFrameClock()` (T45A3) so a burst of streaming deltas
+ * applies as one state transition per frame tick — and never dropped,
+ * replaced, or reordered (plan.md §7.4's delta-based-end-to-end contract;
+ * see `coalescer.ts`'s own module doc for the verified,
+ * concatenation-free wire behaviour this must not contradict). The
+ * coalescer's confirmed rows are written back to the cache as they stream
+ * (at most one write in flight, always the latest state), so a later
+ * offline open has something to show. `cachedAt` is returned so the route
+ * renders an honest last-seen time rather than a fabricated one.
  *
  * T31B3: those `agent_stream` pushes only ever arrive at all once this
  * hook also calls `client.setAgentTimelineSubscription([sessionId])` --
@@ -130,14 +155,16 @@ export function adaptEditFromHereForkClient(
  * `"agent_stream"` but never registered the session as viewed, so no
  * push for it was ever forwarded.
  *
- * Resolves to an empty entry list (not an error) whenever there is no
- * live `client` yet — `Transcript`'s own empty state already covers that
- * case, matching this app's "absence of a connection is a normal state"
- * convention (T53A1).
+ * Resolves to `{ entries: [], cachedAt: null }` (not an error) whenever
+ * there is neither a live `client` nor a cached tail — `Transcript`'s own
+ * empty state already covers that case, matching this app's "absence of a
+ * connection is a normal state" convention (T53A1).
  */
-function useSessionTranscriptEntries(
-  client: DaemonClient | null,
-  sessionId: string,
+export interface SessionTranscriptOptions {
+  /** The live `DaemonClient` for this connection generation, or `null`. */
+  client: DaemonClient | null;
+  /** The open session's id. */
+  sessionId: string;
   /**
    * `daemon-client-context.tsx`'s `client` becomes non-null (a real,
    * constructed `DaemonClient`) as soon as `HostController` starts
@@ -153,115 +180,200 @@ function useSessionTranscriptEntries(
    * `agent_stream` push for this agent forever, since nothing ever
    * re-subscribes once the handshake actually completes. Re-running this
    * effect once `connectionStatus` reaches `"connected"` (cheap: one
-   * extra `resumeSession` call and an idempotent re-subscribe) is what
-   * closes that gap.
+   * extra `fetchAgentTimeline` call and an idempotent re-subscribe) is
+   * what closes that gap.
    */
-  connectionStatus: string,
-): readonly coreTimeline.TranscriptEntry[] {
+  connectionStatus: string;
+  /** This app's real `platform.structuredStorage` (IndexedDB). */
+  storage: StructuredStorage;
+  /** This app's real `platform.clock`, used for cache-envelope timestamps. */
+  clock: Clock;
+}
+
+/** The transcript entries plus the cache-level freshness of the tail behind them. */
+export interface SessionTranscriptResult {
+  entries: readonly coreTimeline.TranscriptEntry[];
+  /** `CacheEnvelope.cachedAt` for the tail on screen, or `null` when nothing has been cached. */
+  cachedAt: number | null;
+}
+
+/**
+ * The bounded cold-open timeline window this hook requests, matching
+ * `daemon-session-resume-client.ts`'s own `INITIAL_TIMELINE_OPTIONS`
+ * (`direction: "tail", limit: 200`) so the transcript and the resume
+ * summary read the same tail.
+ */
+const TRANSCRIPT_INITIAL_TIMELINE = { direction: "tail", limit: 200 } as const;
+
+export function useSessionTranscriptEntries(
+  options: SessionTranscriptOptions,
+): SessionTranscriptResult {
+  const { client, sessionId, connectionStatus, storage, clock } = options;
   const [entries, setEntries] = useState<readonly coreTimeline.TranscriptEntry[]>([]);
-  // Guards a resume response that resolves after this effect's own
-  // cleanup already ran (session switched, or the client changed out
-  // from under it) from ever reaching a disposed coalescer.
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  // Guards a response that resolves after this effect's own cleanup already
+  // ran (session switched, or the client changed out from under it) from
+  // ever reaching a disposed coalescer.
   const generationRef = useRef(0);
+  const cache = useMemo(() => createTimelineCache(storage, clock), [storage, clock]);
 
   useEffect(() => {
     generationRef.current += 1;
     const generation = generationRef.current;
     setEntries([]);
-
-    if (!client) {
-      return;
-    }
+    setCachedAt(null);
 
     const frameClock = createBrowserFrameClock();
     const coalescer = new coreTimeline.TimelineCoalescer(
       frameClock,
       coreTimeline.createEmptyTimelineState(),
     );
+    const disposers: Array<() => void> = [];
+    let disposed = false;
+    const isCurrent = () => !disposed && generationRef.current === generation;
+
+    // Cache write path: at most one write in flight, always the latest
+    // state. A restore or catch-up fold is excluded from this path (it is
+    // already on disk / about to be written by `confirmTimelineCatchUp`),
+    // so a just-restored tail is never re-stamped with a fresh `cachedAt`
+    // the data does not have.
+    let writeInFlight = false;
+    let pendingWrite: coreTimeline.TimelineState | null = null;
+    let suppressNextWrite = false;
+
+    const flushWrite = () => {
+      if (writeInFlight || pendingWrite === null) return;
+      const state = pendingWrite;
+      pendingWrite = null;
+      if (state.epoch === null || state.rows.length === 0) return;
+      writeInFlight = true;
+      cacheTimelineTail(cache, sessionId, state)
+        .then((envelope) => {
+          if (isCurrent()) setCachedAt(envelope.cachedAt);
+        })
+        .catch(() => {})
+        .finally(() => {
+          writeInFlight = false;
+          if (pendingWrite !== null) flushWrite();
+        });
+    };
+
+    const scheduleWrite = (state: coreTimeline.TimelineState) => {
+      if (suppressNextWrite) {
+        suppressNextWrite = false;
+        return;
+      }
+      if (state.epoch === null || state.rows.length === 0) return;
+      pendingWrite = state;
+      flushWrite();
+    };
 
     const unsubscribeState = coalescer.subscribe((state) => {
-      if (generationRef.current !== generation) return;
+      if (!isCurrent()) return;
       setEntries(coreTimeline.buildTranscriptView(state).entries);
+      scheduleWrite(state);
     });
+    disposers.push(unsubscribeState);
 
-    const unsubscribeStream = client.on("agent_stream", (message) => {
-      if (message.payload.agentId !== sessionId) return;
-      coalescer.push(message);
-    });
+    void (async () => {
+      // Restore first (so a cold offline open shows the cached tail), then
+      // attach the live subscriptions and catch up. Reading the cache is a
+      // bounded local operation; anything the daemon streams while it is in
+      // flight is re-covered by the authoritative window below.
+      const envelope = await loadTimelineCacheEnvelope(cache, sessionId).catch(() => null);
+      if (!isCurrent()) return;
+      if (envelope) {
+        setCachedAt(envelope.cachedAt);
+        suppressNextWrite = true;
+        coalescer.applyImmediate(() => coreTimeline.restoreCachedTimeline(envelope.data));
+      }
 
-    // T31B1/T31B3 (both tasks diagnosed this independently): the ported
-    // daemon (`packages/server/src/server/session.ts`,
-    // `usesSelectiveTimelineDelivery` / `CLIENT_CAPS.selectiveAgentTimeline`)
-    // forwards `agent_stream` pushes only for agent ids this connection has
-    // explicitly marked as viewed via `agent.timeline.set_subscription.request`
-    // once that capability is negotiated -- and the real `DaemonClient`
-    // declares it in every `hello` unconditionally (`daemon-client.ts`),
-    // never this app's choice. Without the call below, a real
-    // `send_agent_message_request` still resolves `accepted: true` and the
-    // provider really runs, but not one `agent_stream` push (not even the
-    // daemon's own synthesized `user_message` echo) reaches the subscription
-    // above, so the transcript stays empty forever -- proved end to end by
-    // both `deep-link-restore.spec.ts` and `session-steer-and-follow-up.spec.ts`.
-    //
-    // `HostController.getDaemonClient()` hands back a `DaemonClient` the
-    // moment it is *constructed*, not once its hello handshake resolves, so
-    // `client` here is routinely non-null before `lastServerInfoMessage`
-    // exists. `setAgentTimelineSubscription` reads that field synchronously
-    // and silently no-ops (resolves, sends nothing, never retries) while it
-    // is still `null`, so the call must be gated on the first `server_info`
-    // `status` push -- mirroring `DaemonClient`'s own `HELLO_SERVER_INFO`
-    // gate, which is also exactly when it flips to `connected`.
-    //
-    // The `status` listener stays attached for this effect's lifetime rather
-    // than detaching after the first hit: `DaemonClient` re-emits
-    // `server_info` after every reconnect and re-establishes only its
-    // checkout-diff/terminal-directory/file subscriptions itself (see the
-    // `resubscribe*` calls in `daemon-client.ts`) -- never agent-timeline
-    // ones -- so a dropped-and-restored socket would otherwise silently stop
-    // delivering `agent_stream` for this session
-    // (`reconnect-and-catch-up.spec.ts`).
-    const unsubscribeServerInfo = client.on("status", (message) => {
-      if (message.payload.status !== "server_info") return;
-      client.setAgentTimelineSubscription([sessionId]).catch(() => {});
-    });
-    if (client.getLastServerInfoMessage()) {
-      client.setAgentTimelineSubscription([sessionId]).catch(() => {});
-    }
-    // T31B4 additionally re-runs this whole effect when the connection
-    // status changes (see the `connectionStatus` parameter's own doc
-    // comment): the listener above covers the handshake completing while
-    // this screen stays mounted, and the extra run covers a fresh
-    // `resumeSession` snapshot for the newly live connection.
+      if (!client) return;
 
-    const resumeClient = createDaemonSessionResumeClient(client);
-    resumeClient
-      .resumeSession(sessionId)
-      .then((result) => {
-        if (generationRef.current !== generation) return;
-        coalescer.applyImmediate(() => result.timeline);
-      })
-      .catch(() => {
-        // `SessionResumeScreen`'s own controller already surfaces a
-        // resume failure (retryable error state); this hook only feeds
-        // the transcript view and has nothing further to show beyond
-        // leaving it empty.
+      const unsubscribeStream = client.on("agent_stream", (message) => {
+        if (message.payload.agentId !== sessionId) return;
+        coalescer.push(message);
       });
+      disposers.push(unsubscribeStream);
 
-    return () => {
-      unsubscribeServerInfo();
-      unsubscribeStream();
-      unsubscribeState();
-      coalescer.dispose();
-      client.setAgentTimelineSubscription([]).catch(() => {
+      // T31B1/T31B3 (both tasks diagnosed this independently): the ported
+      // daemon (`packages/server/src/server/session.ts`,
+      // `usesSelectiveTimelineDelivery` / `CLIENT_CAPS.selectiveAgentTimeline`)
+      // forwards `agent_stream` pushes only for agent ids this connection has
+      // explicitly marked as viewed via `agent.timeline.set_subscription.request`
+      // once that capability is negotiated -- and the real `DaemonClient`
+      // declares it in every `hello` unconditionally (`daemon-client.ts`),
+      // never this app's choice. Without the call below, a real
+      // `send_agent_message_request` still resolves `accepted: true` and the
+      // provider really runs, but not one `agent_stream` push (not even the
+      // daemon's own synthesized `user_message` echo) reaches the subscription
+      // above, so the transcript stays empty forever -- proved end to end by
+      // both `deep-link-restore.spec.ts` and `session-steer-and-follow-up.spec.ts`.
+      //
+      // `HostController.getDaemonClient()` hands back a `DaemonClient` the
+      // moment it is *constructed*, not once its hello handshake resolves, so
+      // `client` here is routinely non-null before `lastServerInfoMessage`
+      // exists. `setAgentTimelineSubscription` reads that field synchronously
+      // and silently no-ops (resolves, sends nothing, never retries) while it
+      // is still `null`, so the call must be gated on the first `server_info`
+      // `status` push -- mirroring `DaemonClient`'s own `HELLO_SERVER_INFO`
+      // gate, which is also exactly when it flips to `connected`.
+      //
+      // The `status` listener stays attached for this effect's lifetime rather
+      // than detaching after the first hit: `DaemonClient` re-emits
+      // `server_info` after every reconnect and re-establishes only its
+      // checkout-diff/terminal-directory/file subscriptions itself (see the
+      // `resubscribe*` calls in `daemon-client.ts`) -- never agent-timeline
+      // ones -- so a dropped-and-restored socket would otherwise silently stop
+      // delivering `agent_stream` for this session
+      // (`reconnect-and-catch-up.spec.ts`).
+      const unsubscribeServerInfo = client.on("status", (message) => {
+        if (message.payload.status !== "server_info") return;
+        client.setAgentTimelineSubscription([sessionId]).catch(() => {});
+      });
+      disposers.push(unsubscribeServerInfo);
+      if (client.getLastServerInfoMessage()) {
+        client.setAgentTimelineSubscription([sessionId]).catch(() => {});
+      }
+      disposers.push(() => {
         // Best-effort: dropping this session's live-view registration on
         // navigation away is a courtesy, not a correctness requirement --
         // the next screen this client visits (if any) replaces the set
         // itself.
+        client.setAgentTimelineSubscription([]).catch(() => {});
       });
-    };
-  }, [client, sessionId, connectionStatus]);
 
-  return entries;
+      try {
+        const payload = await client.fetchAgentTimeline(sessionId, TRANSCRIPT_INITIAL_TIMELINE);
+        if (!isCurrent()) return;
+        suppressNextWrite = true;
+        const caughtUp = coalescer.applyImmediate((current) =>
+          coreTimeline.ingestTimelineWindow(current, {
+            type: "fetch_agent_timeline_response",
+            payload,
+          }),
+        );
+        await confirmTimelineCatchUp(cache, sessionId, caughtUp)
+          .then((confirmed) => {
+            if (isCurrent()) setCachedAt(confirmed.cachedAt);
+          })
+          .catch(() => {});
+      } catch {
+        // `SessionResumeScreen`'s own controller already surfaces a resume
+        // failure (retryable error state); this hook only feeds the
+        // transcript view and has nothing further to show beyond leaving
+        // whatever was restored in place.
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      for (const dispose of disposers) dispose();
+      coalescer.dispose();
+    };
+  }, [cache, client, sessionId, connectionStatus]);
+
+  return { entries, cachedAt };
 }
 
 /**
@@ -339,7 +451,18 @@ export function HostSessionScreen() {
   );
   const editFromHereClient = useMemo(() => adaptEditFromHereForkClient(client), [client]);
 
-  const transcriptEntries = useSessionTranscriptEntries(client, agentId, info.status);
+  const { entries: transcriptEntries, cachedAt: transcriptCachedAt } = useSessionTranscriptEntries({
+    client,
+    sessionId: agentId,
+    connectionStatus: info.status,
+    storage: platform.structuredStorage,
+    clock: platform.clock,
+  });
+
+  // T393: honest offline banner. `OfflineTranscriptBanner` returns nothing
+  // while connected (or with nothing to show), so the transcript only ever
+  // carries it — never a fabricated last-seen time — when it is really
+  // rendering off cached rows, per plan.md §12.5.
 
   // T386: the todo dock above the composer reads the same live entry list
   // the transcript does (plan.md §8.3's centre column) — the latest `todo`
@@ -388,6 +511,13 @@ export function HostSessionScreen() {
   return (
     <>
       <SessionResumeScreen serverId={serverId} agentId={agentId} client={sessionResumeClient} />
+      <OfflineTranscriptBanner
+        connected={info.status === "connected"}
+        hasEntries={transcriptEntries.length > 0}
+        cachedAt={transcriptCachedAt}
+        now={platform.clock.now()}
+        testId="session-offline-banner"
+      />
       <EditFromHereSurface
         sessionId={agentId}
         entries={transcriptEntries}

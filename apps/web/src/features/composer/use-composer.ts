@@ -89,6 +89,13 @@ const EMPTY_QUEUE_UPDATE: AgentQueueUpdate = { steering: [], followUp: [] };
 export interface UseComposerOptions {
   /** Conversation target this composer submits into (session or agent id). */
   sessionId: string;
+  /**
+   * The daemon/server `sessionId` lives on (T389). Drafts are keyed by
+   * `serverId` + `sessionId` so the same session id on two daemons never
+   * shares one draft; omit it only for a standalone composer with no server
+   * identity (tests, fixtures), which keys on the session id alone.
+   */
+  serverId?: string;
   clock: Clock;
   structuredStorage: StructuredStorage;
   /**
@@ -168,10 +175,17 @@ function defaultGenerateClientMessageId(clock: Clock): string {
 }
 
 export function useComposer(options: UseComposerOptions): ComposerState {
-  const { sessionId, clock, structuredStorage, generateClientMessageId, client, filePicker } =
-    options;
+  const {
+    sessionId,
+    serverId = "",
+    clock,
+    structuredStorage,
+    generateClientMessageId,
+    client,
+    filePicker,
+  } = options;
 
-  const [draftText, setDraftText] = useState("");
+  const [draftText, setDraftTextState] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [visibleRows, setVisibleRows] = useState<coreTimeline.TimelineRow[]>([]);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -182,6 +196,47 @@ export function useComposer(options: UseComposerOptions): ComposerState {
   const attachments = useAttachments({ client, filePicker });
 
   const timelineRef = useRef<coreTimeline.TimelineState>(coreTimeline.createEmptyTimelineState());
+
+  // T389: drafts are persisted per conversation target (server + session).
+  // `DraftSessionController` owns the debounce and the switch-safety rules;
+  // this hook only feeds it. Constructed once (the platform storage/clock
+  // are stable for a mounted composer's lifetime, and a caller that passes
+  // fresh option objects per render must not rebuild the hydration state).
+  const draftControllerRef = useRef<coreComposer.DraftSessionController | null>(null);
+  draftControllerRef.current ??= new coreComposer.DraftSessionController(
+    new coreComposer.DraftStore(structuredStorage, clock),
+    clock,
+  );
+  const draftController = draftControllerRef.current;
+
+  // Restore on mount and whenever the target changes. The displayed draft is
+  // cleared first so session B never briefly shows session A's text while the
+  // load is in flight; the effect's cleanup flushes A's pending change.
+  useEffect(() => {
+    let cancelled = false;
+    setDraftTextState("");
+    void draftController
+      .open({ serverId, agentId: sessionId })
+      .then((restored) => {
+        if (!cancelled && restored !== "") setDraftTextState(restored);
+      })
+      .catch(() => {
+        // Draft restoration is best-effort; a storage failure leaves the
+        // composer mounted and empty rather than surfacing an error.
+      });
+    return () => {
+      cancelled = true;
+      void draftController.flush();
+    };
+  }, [draftController, serverId, sessionId]);
+
+  const setDraftText = useCallback(
+    (text: string): void => {
+      setDraftTextState(text);
+      draftController.update(text);
+    },
+    [draftController],
+  );
 
   // Live queue-depth subscription (T28B3): resets to empty and
   // re-subscribes whenever the agent or client identity changes, and
@@ -240,7 +295,10 @@ export function useComposer(options: UseComposerOptions): ComposerState {
       timestamp,
     });
     setVisibleRows(coreTimeline.getVisibleTimelineRows(timelineRef.current));
-    setDraftText("");
+    // Clear the visible draft immediately (the optimistic row above must not
+    // wait), but keep the persisted draft until the submission is durably in
+    // the outbox: a crash between here and the enqueue leaves it restorable.
+    setDraftTextState("");
     // Clear staged attachments now: they travel with this specific
     // submission's outbox entry and `sendAgentMessage` call below, not as
     // ambient state a later, unrelated submission could pick up.
@@ -256,6 +314,9 @@ export function useComposer(options: UseComposerOptions): ComposerState {
         kind: "prompt",
         payload: { text, clientMessageId, attachments: uploadedAttachments },
       });
+
+      // The submission is durably recorded now, so the draft can go for good.
+      await draftController.clear();
 
       // No live client (plan.md §12.4's "no client yet" seam): the
       // submission stays durably `pending` in the outbox and this hook
@@ -292,6 +353,7 @@ export function useComposer(options: UseComposerOptions): ComposerState {
     makeClientMessageId,
     clock,
     outbox,
+    draftController,
     sessionId,
     client,
     attachments,

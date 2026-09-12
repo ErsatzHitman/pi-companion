@@ -49,7 +49,11 @@ describe("root route rail wiring (T53A3)", () => {
   it("fills the session rail once a host is open, and leaves the extension rail on Shell's own fallback with no session open", async () => {
     renderAt("/h/host-1");
 
-    await screen.findByRole("heading", { name: "Host" }, { timeout: 15_000 });
+    // T393: `/h/:serverId` now renders a real host landing (identity,
+    // connection state, quick links) instead of the old `RoutePlaceholder`
+    // stub; anchor on the screen's own test id rather than the stub's
+    // heading. This test's subject is still the rails, below.
+    await screen.findByTestId("host-screen", {}, { timeout: 15_000 });
 
     const sessionRail = screen.getByRole("navigation", { name: "Sessions" });
     // Real content (`SessionRailContent`'s own empty state), not Shell's

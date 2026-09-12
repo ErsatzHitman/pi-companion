@@ -1,0 +1,66 @@
+/**
+ * Host landing styles (T393, plan.md §10.2). Token-only, same rule as
+ * `session-resume.css`/`terminal-route.css`/`diagnostics.css`: no raw hex,
+ * no raw pixel spacing — every value reads a `@picompanion/design-tokens`
+ * custom property.
+ */
+
+.pc-host-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-5);
+  padding: var(--spacing-5);
+}
+
+.pc-host-screen__copy {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  color: var(--color-ink-2);
+}
+
+.pc-host-screen__facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-2);
+  margin: var(--spacing-4) 0 0;
+}
+
+.pc-host-screen__fact {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-3);
+  min-width: 0;
+  padding: var(--spacing-2) 0;
+  border-bottom: 1px solid var(--color-line-soft);
+}
+
+.pc-host-screen__term {
+  flex: 0 0 auto;
+  min-width: 10rem;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink-3);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.pc-host-screen__value {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.pc-host-screen__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
