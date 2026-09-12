@@ -61,6 +61,34 @@ And the one amendment to S7, which supersedes the artifact for the prompt-bar co
 
 ## 1. Where things stand right now
 
+**Wave 3 (2026-09-12): the Supernova adoptions, the Android stub closures and release plumbing.
+The table below is still true of `bd366dd`; this paragraph supersedes it.**
+
+- **HEAD is `2cda7b7`** (pushed `72ba66f..2cda7b7`). The wave's commits, all rebased so that
+  `guard-format-check-per-commit` accepts every one of them as of its own content (19 commits
+  scanned, OK): T383 files-rewind (`f346313`, `1cd680e`, merge `329576a`, notices + `plan.md` §4.2
+  in `06bd2c4`), T388 timeline row keys/work groups (`fa7b311` → `4d65e57`), T389 composer drafts,
+  `@file`/`@skill` references and attachment preview (`e7deef0` → `adff288`), T390+T391 Android
+  expo-sqlite offline plus expo-notifications push (`78ff2e7` → `d1315dd`), T392 expo-camera QR
+  pairing (`c21c78b` → `a756a99`), T393 web offline cache + `/h/:serverId` landing (`8e7dc65` →
+  `4c88e47`, plus the cached-envelope/format repairs in `5655507`/`2cda7b7`), T395's core
+  (protocol markers, `force` pass-through, `RewindController`: `e0a344a`…`379a887` → `927b0d2`) and
+  T394's rewritten install doc (`46ad818` lineage).
+- **Where each was verified**: frontend-core 46 files/611 tests, web 178 files/1663 tests (then
+  179/1680 once T395's web surface landed in its own worktree), android 261–263 files/3646–3661
+  tests, client 137 tests, server rewind files 10 tests, every touched workspace's typecheck at 0
+  errors, `oxfmt --check .` clean over 2665 files, and the capability-prose guard green over
+  70 groups (five new entries, each proven to fire).
+- **Two known-contention tests**: `apps/android/src/ui/theme/fonts.test.ts` and the Maestro
+  citation contract walk the filesystem and exceed their 5 s budget when several suites run at
+  once; run alone they pass (2 files / 40 tests). This is CLAUDE.md's T240 signature, not a defect.
+- **Still open from this wave**: the **Android rewind surface** (a sheet plus conflict confirm) was
+  never implemented — `docs/issues-from-plan.md`'s T395 section carries the unticked box, and the
+  web half of that surface is on `wave3/rewind-ui` (its own worktree, not yet merged).
+- **In flight at the time of writing**: the CI run for `2cda7b7` and the Maestro dispatch whose
+  Android tree this wave changed. Read both before trusting anything above — the previous wave's
+  lesson (T93) is that a local green is only half the fact.
+
 | Fact                             | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HEAD                             | `aac2075` — "T387 follow-up: record the wave's two green gates"; the commit you are reading is one past it. The wave's product commits: `9afc612` (T384 + T385, Android chrome/Sessions/Live/chat), `bf47161` (T386, the web console), `aea1248` (T387, inline extension elements), `34509d5` and `d44fc0f` (the two T386 follow-ups); `c05016d` and `aac2075` carry prose only                                                                                                                                                                                                                                                                                                                                                                                                                     |
