@@ -889,6 +889,17 @@ files-only rewind changes no timeline row and would otherwise wait forever on a 
 never comes. `host-session-screen.tsx` also had to merge T393's cache wiring with T395's rewind
 wiring by hand — the branch predated the offline cache, so both signatures had to survive.
 
+**A third CI trap, and the one that actually turned the wave red:** `scripts/ci/guard-audit-baseline.mjs`
+matches advisories on the exact `(package, severity, range)` triple, and **npm reads advisories through
+its own cache** — a stale local cache reported `expo-notifications` with a longer affected range
+(an extra trailing `58.0.0-canary-*` segment) than a fresh cache or CI's runner does. Recording the
+cached string made CI fail twice over: the entry looked stale AND the advisory looked unbaselined.
+`npm audit --json --cache <empty dir>` reproduces what CI sees; `npm cache clean --force` then makes
+the local guard agree. Two other CI-only facts from the same red run: the `changes` job pins
+`AUDIT_BASELINE.length` in `guard-audit-baseline.test.mjs` (35 → 36 with T391's entry), and the
+per-commit format guard is scoped in CI to `merge-base(base, HEAD)..HEAD` — running it over a
+300-commit range locally just times out, which is the guard's own cost signal, not a finding.
+
 **One more CI trap, measured this wave:** `.github/workflows/ci.yml` sets
 `concurrency: ci-${workflow}-${ref}` with `cancel-in-progress` only for pull requests, so pushes to
 `main` **serialise** — a new run sits `pending` with zero jobs until the previous one finishes. Three
