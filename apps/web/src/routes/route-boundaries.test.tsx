@@ -77,7 +77,7 @@ describe("route boundaries (T27S2)", () => {
     { path: "/connect", heading: "Connect" },
     { path: "/h/host-1", heading: "Host" },
     { path: "/h/host-1/sessions", heading: "Sessions" },
-    { path: "/h/host-1/settings", heading: "Settings" },
+    { path: "/h/host-1/settings", heading: "Host settings" },
   ])(
     "lazily loads and renders the $path screen",
     async ({ path, heading }) => {
@@ -103,12 +103,13 @@ describe("route boundaries (T27S2)", () => {
     // full barrel (for `terminal.TerminalController`) the first time it
     // transforms, well past testing-library's 1s default wait — an explicit
     // timeout here, not a weaker assertion (plan.md CLAUDE.md test hygiene).
+    // With no daemon connection in this tree (`CoreProvider` only — no
+    // `DaemonClientProvider`), the route renders its honest waiting state
+    // rather than echoing the `:terminalId` param.
     expect(
       await screen.findByRole("heading", { name: "Terminal" }, { timeout: 15_000 }),
     ).toBeTruthy();
-    expect(screen.getByText("host-42")).toBeTruthy();
-    expect(screen.getByText("agent-9")).toBeTruthy();
-    expect(screen.getByText("term-7")).toBeTruthy();
+    expect(screen.getByTestId("terminal-route-no-client")).toBeTruthy();
   }, 20_000);
 
   it("wires the root route's boundaries to these T27S2 screens", async () => {

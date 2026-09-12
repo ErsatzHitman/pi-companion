@@ -158,6 +158,60 @@ describe("Shell", () => {
     expect(await screen.findByTestId("settings-route")).toBeTruthy();
   });
 
+  it("links the open session to its files and terminal routes", async () => {
+    const sessionRootRoute = createRootRoute({
+      component: () => (
+        <Shell>
+          <Outlet />
+        </Shell>
+      ),
+    });
+    const sessionRoute = createRoute({
+      getParentRoute: () => sessionRootRoute,
+      path: "/h/$serverId/session/$agentId",
+      component: () => null,
+    });
+    const filesRoute = createRoute({
+      getParentRoute: () => sessionRootRoute,
+      path: "/h/$serverId/session/$agentId/files/$",
+      component: () => <div data-testid="files-route" />,
+    });
+    const terminalRoute = createRoute({
+      getParentRoute: () => sessionRootRoute,
+      path: "/h/$serverId/session/$agentId/terminal/$terminalId",
+      component: () => null,
+    });
+    const router = createRouter({
+      routeTree: sessionRootRoute.addChildren([sessionRoute, filesRoute, terminalRoute]),
+      history: createMemoryHistory({ initialEntries: ["/h/srv-1/session/agt-1"] }),
+    });
+    const user = userEvent.setup();
+    render(
+      <CoreProvider>
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- test-local router, not the app's registered one */}
+        <RouterProvider router={router as any} />
+      </CoreProvider>,
+    );
+
+    const filesLink = await screen.findByTestId("shell-files-link");
+    expect(filesLink.getAttribute("href")).toMatch(/\/h\/srv-1\/session\/agt-1\/files\/?$/);
+    const terminalLink = screen.getByTestId("shell-terminal-link");
+    expect(terminalLink.getAttribute("href")).toBe("/h/srv-1/session/agt-1/terminal/new");
+
+    await user.click(filesLink);
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/h/srv-1/session/agt-1/files"),
+    );
+    expect(await screen.findByTestId("files-route")).toBeTruthy();
+  });
+
+  it("shows no session links where there is no open session", async () => {
+    renderShell({}, { pattern: "/h/$serverId/diagnostics", href: "/h/srv-1/diagnostics" });
+    await screen.findByTestId("shell-settings-trigger");
+    expect(screen.queryByTestId("shell-files-link")).toBeNull();
+    expect(screen.queryByTestId("shell-terminal-link")).toBeNull();
+  });
+
   it("declares a compact-fallback media query pinned to the design-tokens wide breakpoint", () => {
     // `import.meta.url` is already a real `file:` URL string here; under
     // jsdom, `new URL(x, import.meta.url)` throws `ERR_INVALID_URL_SCHEME`

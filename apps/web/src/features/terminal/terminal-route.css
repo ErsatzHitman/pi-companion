@@ -3,24 +3,34 @@
  * `terminal-view.css`.
  */
 
-.pc-terminal-route__params {
+.pc-terminal-route__switcher {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-4);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
   margin: 0 0 var(--spacing-3) 0;
-  font-family: var(--font-family-mono);
-  font-variant-numeric: tabular-nums;
 }
 
-.pc-terminal-route__params dt {
-  font-size: var(--font-size-xs);
-  color: var(--color-ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.pc-terminal-route__params dd {
+.pc-terminal-route__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
   margin: 0;
-  font-size: var(--font-size-base);
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+}
+
+.pc-terminal-route__list [aria-current="page"] {
+  font-weight: var(--font-weight-semibold);
   color: var(--color-ink);
+}
+
+.pc-terminal-route__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-3);
 }

@@ -61,7 +61,7 @@ describe("HostSettingsScreen route wiring (T131)", () => {
     expect(screen.getByTestId("host-settings-agent-settings-auto-retry-toggle")).toBeTruthy();
   }, 20_000);
 
-  it("mounts the persisted Theme control alongside the existing placeholder facts", async () => {
+  it("mounts the persisted Theme control without the old route placeholder", async () => {
     const router = createRouter({
       routeTree,
       history: createMemoryHistory({ initialEntries: ["/h/host-1/settings"] }),
@@ -78,9 +78,11 @@ describe("HostSettingsScreen route wiring (T131)", () => {
       { timeout: 15_000 },
     )) as HTMLSelectElement;
     expect(theme.value).toBe("system");
-    // The route's own placeholder facts stay put.
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
-    expect(screen.getByText("host-1")).toBeTruthy();
+    // The route's real controls render under the shell's own heading; the
+    // leftover `RoutePlaceholder` facts (`host-1` echo, "Settings" title)
+    // are gone.
+    expect(screen.getByRole("heading", { name: "Host settings" })).toBeTruthy();
+    expect(screen.queryByText("host-1")).toBeNull();
   }, 20_000);
 });
 

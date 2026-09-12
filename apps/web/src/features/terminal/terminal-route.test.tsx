@@ -1,5 +1,12 @@
-import type { terminal } from "@picompanion/frontend-core";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { axe } from "jest-axe";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -39,10 +46,27 @@ vi.mock("@xterm/xterm", () => ({ Terminal: FakeTerminal }));
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: FakeFitAddon }));
 
 const { TerminalRoute } = await import("./terminal-route.js");
+const { NEW_TERMINAL_ROUTE_SEGMENT } = await import("./terminal-route-params.js");
 
 afterEach(cleanup);
 
-class NoopTerminalRpcClient implements terminal.TerminalRpcClient {
+/**
+ * A `SessionTerminalClient` double. `TerminalView` only needs the
+ * `TerminalRpcClient` slice; the two workspace RPCs let the route resolve
+ * a real terminal id.
+ */
+class FakeSessionTerminalClient {
+  constructor(
+    private readonly terminals: Array<{ id: string; name: string }> = [],
+    private readonly createdId = "term-new",
+  ) {}
+
+  listTerminals = vi.fn(async () => ({ terminals: this.terminals }));
+  createTerminal = vi.fn(async () => ({
+    terminal: { id: this.createdId, name: "Terminal" },
+    error: null,
+  }));
+
   async subscribeTerminal(terminalId: string) {
     return { terminalId, slot: 0, error: null };
   }
@@ -53,41 +77,108 @@ class NoopTerminalRpcClient implements terminal.TerminalRpcClient {
   }
 }
 
-describe("TerminalRoute", () => {
-  it("names the route and shows the host/session/terminal identity as visible text", () => {
-    render(<TerminalRoute serverId="host-42" agentId="agent-9" terminalId="term-7" />);
-
-    expect(screen.getByRole("heading", { name: "Terminal" })).toBeTruthy();
-    expect(screen.getByText("host-42")).toBeTruthy();
-    expect(screen.getByText("agent-9")).toBeTruthy();
-    expect(screen.getByText("term-7")).toBeTruthy();
+/**
+ * `TerminalRoute` renders terminal-switcher `Link`s, so it has to mount
+ * inside a real router; the terminal path itself is registered so the
+ * links resolve.
+ */
+function renderTerminalRoute(props: {
+  serverId: string;
+  agentId: string;
+  terminalId: string;
+  client?: InstanceType<typeof FakeSessionTerminalClient>;
+  workspaceRoot?: string;
+}) {
+  const rootRoute = createRootRoute({
+    component: () => <TerminalRoute {...props} />,
   });
+  const terminalRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/h/$serverId/session/$agentId/terminal/$terminalId",
+    component: () => null,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([terminalRoute]),
+    history: createMemoryHistory({
+      initialEntries: [
+        `/h/${props.serverId}/session/${props.agentId}/terminal/${props.terminalId}`,
+      ],
+    }),
+  });
+  return { ...render(<RouterProvider router={router} />), router };
+}
 
-  it("shows a waiting state instead of mounting xterm when there is no client yet", () => {
-    render(<TerminalRoute serverId="host-42" agentId="agent-9" terminalId="term-7" />);
+describe("TerminalRoute", () => {
+  it("names the route and waits for a daemon connection when there is no client", async () => {
+    renderTerminalRoute({ serverId: "host-42", agentId: "agent-9", terminalId: "term-7" });
 
+    expect(await screen.findByRole("heading", { name: "Terminal" })).toBeTruthy();
     expect(screen.getByTestId("terminal-route-no-client")).toBeTruthy();
     expect(screen.queryByTestId("terminal-view")).toBeNull();
   });
 
-  it("mounts the terminal view once a client is supplied", async () => {
-    render(
-      <TerminalRoute
-        serverId="host-42"
-        agentId="agent-9"
-        terminalId="term-7"
-        client={new NoopTerminalRpcClient()}
-      />,
-    );
+  it("opens an existing terminal the daemon lists for the session", async () => {
+    const client = new FakeSessionTerminalClient([{ id: "term-7", name: "Terminal" }]);
+    renderTerminalRoute({
+      serverId: "host-42",
+      agentId: "agent-9",
+      terminalId: "term-7",
+      client,
+      workspaceRoot: "/work",
+    });
 
     await waitFor(() => expect(screen.getByTestId("terminal-view")).toBeTruthy());
-    expect(screen.queryByTestId("terminal-route-no-client")).toBeNull();
+    expect(client.listTerminals).toHaveBeenCalledWith("/work");
+    expect(client.createTerminal).not.toHaveBeenCalled();
+  });
+
+  it("creates and opens a real terminal when the requested id is the 'new' link segment", async () => {
+    const client = new FakeSessionTerminalClient([], "term-created");
+    const { router } = renderTerminalRoute({
+      serverId: "host-42",
+      agentId: "agent-9",
+      terminalId: NEW_TERMINAL_ROUTE_SEGMENT,
+      client,
+      workspaceRoot: "/work",
+    });
+
+    await waitFor(() => expect(screen.getByTestId("terminal-view")).toBeTruthy());
+    expect(client.createTerminal).toHaveBeenCalledWith("/work", "Terminal");
+    // The URL is replaced with the real terminal id so a refresh lands on it.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/h/host-42/session/agent-9/terminal/term-created",
+      ),
+    );
+  });
+
+  it("explains a list failure and recovers via Retry", async () => {
+    const client = new FakeSessionTerminalClient();
+    client.listTerminals.mockRejectedValueOnce(new Error("socket hang up")).mockResolvedValueOnce({
+      terminals: [{ id: "term-7", name: "Terminal" }],
+    });
+    renderTerminalRoute({
+      serverId: "host-42",
+      agentId: "agent-9",
+      terminalId: "term-7",
+      client,
+      workspaceRoot: "/work",
+    });
+    const user = userEvent.setup();
+
+    const error = await screen.findByTestId("terminal-route-error");
+    expect(error.textContent).toMatch(/socket hang up/i);
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByTestId("terminal-view")).toBeTruthy());
   });
 
   it("has no axe violations in the waiting state", async () => {
-    const { container } = render(
-      <TerminalRoute serverId="host-42" agentId="agent-9" terminalId="term-7" />,
-    );
+    const { container } = renderTerminalRoute({
+      serverId: "host-42",
+      agentId: "agent-9",
+      terminalId: "term-7",
+    });
 
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);

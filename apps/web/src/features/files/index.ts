@@ -55,8 +55,19 @@ export type {
 
 export { createPendingConnectionFileWriteClient } from "./pending-connection-file-write-client.js";
 
-export { explainFileOpsError } from "./file-ops-client.js";
+export { explainFileOpsError, FILE_OPS_NOT_CONNECTED } from "./file-ops-client.js";
 export type { FileOpsClient, FileOpsErrorExplanation } from "./file-ops-client.js";
+export { createPendingConnectionFileOpsClient } from "./pending-connection-file-ops-client.js";
+export { FileOpsPanel } from "./file-ops-panel.js";
+export type { FileOpsPanelProps } from "./file-ops-panel.js";
+export { useFileOps } from "./use-file-ops.js";
+export type {
+  FileOpsController,
+  FileOpsOperation,
+  FileOpsState,
+  FileOpsStatus,
+  UseFileOpsOptions,
+} from "./use-file-ops.js";
 
 export {
   FILE_UPLOAD_NOT_CONNECTED,

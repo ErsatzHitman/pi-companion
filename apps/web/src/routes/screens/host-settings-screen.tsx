@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { getRouteApi } from "@tanstack/react-router";
 import type { DaemonClient } from "@picompanion/client";
 
 import { useDaemonClientContext } from "../../app/daemon-client-context.js";
@@ -11,9 +10,6 @@ import {
   useAutoRetry,
 } from "../../features/settings/index.js";
 import { Section } from "../../ui/primitives/index.js";
-import { RoutePlaceholder } from "../../ui/route-placeholder.js";
-
-const routeApi = getRouteApi("/h/$serverId/settings");
 
 /**
  * Resolved agent context for the settings panel: which agent these
@@ -115,8 +111,7 @@ export function useCurrentAgentId(client: DaemonClient | null): CurrentAgentStat
  * throws.
  */
 export function HostSettingsScreen() {
-  const { serverId } = routeApi.useParams();
-  const { client, info } = useDaemonClientContext();
+  const { client } = useDaemonClientContext();
   const agent = useCurrentAgentId(client);
 
   const settingsClient = useMemo(
@@ -130,7 +125,6 @@ export function HostSettingsScreen() {
 
   return (
     <>
-      <RoutePlaceholder title="Settings" params={{ serverId, connection: info.status }} />
       {agent.status === "empty" || agent.status === "error" ? (
         <p className="pc-agent-settings__note">{agent.reason}</p>
       ) : null}

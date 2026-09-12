@@ -7,6 +7,19 @@
  */
 export { TerminalRoute } from "./terminal-route.js";
 export type { TerminalRouteProps } from "./terminal-route.js";
+export { NEW_TERMINAL_ROUTE_SEGMENT } from "./terminal-route-params.js";
+export { useSessionTerminal, explainTerminalError } from "./use-session-terminal.js";
+export type {
+  CreateTerminalResult,
+  ListTerminalsResult,
+  SessionTerminalClient,
+  SessionTerminalController,
+  SessionTerminalState,
+  SessionTerminalStatus,
+  TerminalErrorExplanation,
+  TerminalSummary,
+  UseSessionTerminalOptions,
+} from "./use-session-terminal.js";
 export { TerminalResizeOwnership } from "./terminal-resize-ownership.js";
 export type { TerminalResizeIntent } from "./terminal-resize-ownership.js";
 export { TerminalView } from "./terminal-view.js";

@@ -64,11 +64,12 @@ export const FILE_DOWNLOAD_NOT_CONNECTED = "FILE_DOWNLOAD_NOT_CONNECTED";
 
 /**
  * Sentinel error message `use-file-download.ts` raises when a token was
- * issued but no reachable HTTP origin is available yet to fetch it from
- * (this app has no route that can resolve the connected daemon's HTTP
- * origin yet — the same "no live wiring yet" state
- * `pending-connection-file-browser-client.ts` and friends already
- * document for the WebSocket-RPC clients).
+ * issued but no reachable HTTP origin is available to fetch it from:
+ * the connected route is a relay (which proxies only the encrypted
+ * WebSocket, with no direct HTTP endpoint — see
+ * `attachment-image-resolver.ts`'s `resolveDirectHttpOrigin`), or no
+ * connection exists yet. `routes/screens/host-session-files-screen.tsx`
+ * resolves the direct origin when one is available.
  */
 export const FILE_DOWNLOAD_NO_ORIGIN = "FILE_DOWNLOAD_NO_ORIGIN";
 

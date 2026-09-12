@@ -61,6 +61,14 @@ export interface FileOpsErrorExplanation {
 }
 
 /**
+ * Sentinel error message used by `createPendingConnectionFileOpsClient`
+ * so `explainFileOpsError` can give it a dedicated explanation instead
+ * of falling through to the generic "couldn't change this file"
+ * message. Mirrors `FILE_UPLOAD_NOT_CONNECTED` et al.
+ */
+export const FILE_OPS_NOT_CONNECTED = "FILE_OPS_NOT_CONNECTED";
+
+/**
  * Maps a raw daemon `mkdir`/`createFile`/`renameEntry`/`deleteEntry`
  * rejection (an `Error.message`) to a title and description a user can
  * act on. Covers the shared `fs` errors and workspace guards
@@ -72,6 +80,12 @@ export interface FileOpsErrorExplanation {
 export function explainFileOpsError(rawMessage: string): FileOpsErrorExplanation {
   const message = rawMessage.trim();
 
+  if (message === FILE_OPS_NOT_CONNECTED) {
+    return {
+      title: "Not connected",
+      description: "Connect to a daemon to change files in this session.",
+    };
+  }
   if (/^(eacces|eperm)\b/i.test(message) || /permission denied/i.test(message)) {
     return {
       title: "Permission denied",

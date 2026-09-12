@@ -85,10 +85,11 @@ export interface UseFileDownloadOptions {
   client: FileDownloadClient;
   /**
    * The daemon's HTTP origin (e.g. `"http://127.0.0.1:6768"`), or `null`
-   * until a route can resolve it for the connected daemon (see
-   * `FILE_DOWNLOAD_NO_ORIGIN`'s doc comment). `FileBrowserScreen`
-   * defaults this to `null`, matching every other file-feature client
-   * prop's "not wired yet" default.
+   * with no direct HTTP endpoint — a relay connection, or no connection
+   * yet (see `FILE_DOWNLOAD_NO_ORIGIN`'s doc comment).
+   * `routes/screens/host-session-files-screen.tsx` resolves it through
+   * `resolveDirectHttpOrigin`; `FileBrowserScreen` still defaults it to
+   * `null` for callers/tests that inject fake clients.
    */
   downloadOrigin: string | null;
   /** Defaults to `globalThis.fetch`; overridable for tests. */

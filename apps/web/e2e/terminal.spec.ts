@@ -2,17 +2,15 @@
  * plan.md §8.4/§12.4 terminal scenarios, T30A1-T30A3/T53A5, and this
  * task's own three acceptance criteria (T31C3).
  *
- * There is no in-app affordance (link/button) anywhere in `apps/web/src`
- * that creates a terminal or navigates to
- * `/h/:serverId/session/:agentId/terminal/:terminalId` yet -- the route
- * only exists as a directly-linkable URL (confirmed by grepping
- * `apps/web/src/routes` and `apps/web/src/features/session` for any
- * `<Link to=".../terminal/...">`; there is none). This mirrors every
- * other T31B/T31C spec's own pattern of reaching its route by a direct
- * deep link (`approvals.spec.ts`, `session-lifecycle.spec.ts`), so this
- * file does the same: it creates a terminal through the daemon's public
- * RPC (exactly what a "New terminal" affordance would call once one
- * exists) and opens the route by URL.
+ * `ui/shell.tsx` links the open session to
+ * `/h/:serverId/session/:agentId/terminal/new`, and the terminal route
+ * lists the session's terminals and creates one when the requested id is
+ * not among them. This spec still creates its terminal through the
+ * daemon's public RPC and opens the route by URL, because it needs a
+ * specific, known terminal id to drive typed input into (rather than
+ * whichever terminal the route would create) — the same
+ * direct-deep-link pattern every other T31B/T31C spec uses
+ * (`approvals.spec.ts`, `session-lifecycle.spec.ts`).
  *
  * A terminal is a real, spawned `node-pty` shell process
  * (`packages/server/src/terminal/terminal.ts`) -- unlike the fake `pi`

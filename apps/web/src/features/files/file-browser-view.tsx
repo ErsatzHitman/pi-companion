@@ -12,6 +12,8 @@ import type { FileDownloadClient } from "./file-download-client.js";
 import { FileBrowserBreadcrumbs } from "./file-browser-breadcrumbs.js";
 import { FileBrowserEntryList } from "./file-browser-entry-list.js";
 import { FileEditorPanel } from "./file-editor-panel.js";
+import { FileOpsPanel } from "./file-ops-panel.js";
+import type { FileOpsClient } from "./file-ops-client.js";
 import type { FileReadClient } from "./file-read-client.js";
 import { FileSearchPanel } from "./file-search-panel.js";
 import { FileUploadPanel } from "./file-upload-panel.js";
@@ -19,6 +21,7 @@ import type { FileUploadClient } from "./file-upload-client.js";
 import type { FileWriteClient } from "./file-write-client.js";
 import { useFileDownload } from "./use-file-download.js";
 import type { FileExplorerController } from "./use-file-explorer.js";
+import { useFileOps } from "./use-file-ops.js";
 import { useFileUpload } from "./use-file-upload.js";
 import "./files.css";
 
@@ -38,7 +41,8 @@ export interface FileBrowserViewProps {
    */
   readClient: FileReadClient;
   downloadClient: FileDownloadClient;
-  /** The daemon's HTTP origin, or `null` until a route can resolve it (`use-file-download.ts`). */
+  opsClient: FileOpsClient;
+  /** The daemon's HTTP origin, or `null` for a relay/no connection (`use-file-download.ts`). */
   downloadOrigin: string | null;
   uploadClient: FileUploadClient;
   filePicker: FilePicker;
@@ -65,6 +69,7 @@ export function FileBrowserView({
   writeClient,
   readClient,
   downloadClient,
+  opsClient,
   downloadOrigin,
   uploadClient,
   filePicker,
@@ -72,10 +77,12 @@ export function FileBrowserView({
   const { state, retry } = controller;
   const downloadController = useFileDownload({ client: downloadClient, downloadOrigin });
   const uploadController = useFileUpload({ client: uploadClient, filePicker });
+  const opsController = useFileOps({ client: opsClient, workspaceRoot, onChanged: retry });
 
   return (
     <Section title="Files" className="pc-file-browser">
       <FileUploadPanel controller={uploadController} />
+      <FileOpsPanel controller={opsController} />
       <FileSearchPanel
         serverId={serverId}
         agentId={agentId}

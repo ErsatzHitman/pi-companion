@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useMatches, useNavigate, useParams } from "@tanstack/react-router";
 
 import { ConnectionStatus } from "../features/connection/connection-status.js";
+import { NEW_TERMINAL_ROUTE_SEGMENT } from "../features/terminal/terminal-route-params.js";
 import { EmptyState, IconButton } from "./primitives/index.js";
 import "./shell.css";
 
@@ -99,12 +100,21 @@ function useRouteHeading(): string {
  * `serverId` from the currently matched route (the same loose-params
  * read `root-route.tsx` uses) and renders only when a host is genuinely
  * in context — on `/connect` there is no host to open settings for.
+ *
+ * The `Files` and `Terminal` links are the session-scoped counterparts
+ * of that gear: they render only when an `agentId` is also in context
+ * (i.e. on a session route), and point at the two session-tool routes
+ * plan.md §8.2 declares. The terminal link targets
+ * `NEW_TERMINAL_ROUTE_SEGMENT`; the terminal screen lists the session's
+ * real terminals and creates one when the requested id does not match
+ * an existing one, so the link always lands on a live terminal.
  */
 export function Shell({ sessionRail, extensionRail, headerWorkspace, children }: ShellProps) {
   const hasExtensionContent = extensionRail != null;
   const heading = useRouteHeading();
-  const params = useParams({ strict: false }) as { serverId?: string };
+  const params = useParams({ strict: false }) as { serverId?: string; agentId?: string };
   const serverId = params.serverId;
+  const agentId = params.agentId;
   const navigate = useNavigate();
 
   return (
@@ -133,6 +143,26 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
         {headerWorkspace}
         <div className="shell__header-spacer" />
         <div className="shell__header-tools">
+          {serverId && agentId ? (
+            <>
+              <Link
+                className="pc-link shell__nav-link"
+                to="/h/$serverId/session/$agentId/files/$"
+                params={{ serverId, agentId, _splat: "" }}
+                data-testid="shell-files-link"
+              >
+                Files
+              </Link>
+              <Link
+                className="pc-link shell__nav-link"
+                to="/h/$serverId/session/$agentId/terminal/$terminalId"
+                params={{ serverId, agentId, terminalId: NEW_TERMINAL_ROUTE_SEGMENT }}
+                data-testid="shell-terminal-link"
+              >
+                Terminal
+              </Link>
+            </>
+          ) : null}
           <ConnectionStatus />
           {serverId ? (
             <IconButton

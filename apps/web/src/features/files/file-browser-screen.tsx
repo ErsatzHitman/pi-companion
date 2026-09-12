@@ -6,11 +6,13 @@ import { useCore } from "../../app/core-context.js";
 import type { FileBrowserClient } from "./file-browser-client.js";
 import type { FileDownloadClient } from "./file-download-client.js";
 import { FileBrowserView } from "./file-browser-view.js";
+import type { FileOpsClient } from "./file-ops-client.js";
 import type { FileReadClient } from "./file-read-client.js";
 import type { FileUploadClient } from "./file-upload-client.js";
 import type { FileWriteClient } from "./file-write-client.js";
 import { createPendingConnectionFileBrowserClient } from "./pending-connection-file-browser-client.js";
 import { createPendingConnectionFileDownloadClient } from "./pending-connection-file-download-client.js";
+import { createPendingConnectionFileOpsClient } from "./pending-connection-file-ops-client.js";
 import { createPendingConnectionFileReadClient } from "./pending-connection-file-read-client.js";
 import { createPendingConnectionFileUploadClient } from "./pending-connection-file-upload-client.js";
 import { createPendingConnectionFileWriteClient } from "./pending-connection-file-write-client.js";
@@ -23,12 +25,12 @@ export interface FileBrowserScreenProps {
   path: string;
   /**
    * The daemon-side workspace root (protocol `cwd`) to browse. Defaults
-   * to `""`, a placeholder until this session's real workspace root is
-   * available here — resolving it depends on the sessions domain
-   * (currently `packages/frontend-core/src/sessions/index.ts`'s stub;
-   * see docs/issues-from-plan.md). The default `client` below rejects
-   * every request regardless, so this placeholder never reaches a real
-   * daemon with the wrong root.
+   * to `""` for callers/tests that inject a fake client; the real route
+   * (`routes/screens/host-session-files-screen.tsx`) resolves the open
+   * session's `cwd` through `useSessionWorkspaceRoot` and passes it here.
+   * While unresolved, the pending-connection client below rejects every
+   * request, so the empty default never reaches a real daemon with the
+   * wrong root.
    */
   workspaceRoot?: string;
   /**
@@ -66,12 +68,21 @@ export interface FileBrowserScreenProps {
    */
   downloadClient?: FileDownloadClient;
   /**
-   * The daemon's HTTP origin (T30B4). Defaults to `null`: this app has
-   * no route that can resolve the connected daemon's HTTP origin yet
-   * (see `use-file-download.ts`'s `FILE_DOWNLOAD_NO_ORIGIN`); a download
-   * still round-trips its token request against a real `downloadClient`
-   * with this default, it just cannot fetch the bytes until a real
-   * origin is wired in.
+   * Defaults to `createPendingConnectionFileOpsClient()` (same reason as
+   * `uploadClient` above). A real, session-scoped client — typically the
+   * same `DaemonClient` passed as every other client prop here, since
+   * `mkdir`/`createFile`/`renameEntry`/`deleteEntry` satisfy
+   * `FileOpsClient` structurally.
+   */
+  opsClient?: FileOpsClient;
+  /**
+   * The daemon's HTTP origin (T30B4). Defaults to `null` — a download
+   * still round-trips its token request against a real `downloadClient`,
+   * it just cannot fetch the bytes. The real route
+   * (`routes/screens/host-session-files-screen.tsx`) derives it off the
+   * connected `HostProfile` via `resolveDirectHttpOrigin`, which is
+   * `null` on a relay connection by design (a relay has no direct HTTP
+   * endpoint; see `attachment-image-resolver.ts`).
    */
   downloadOrigin?: string | null;
   /**
@@ -97,6 +108,7 @@ export function FileBrowserScreen({
   writeClient,
   uploadClient,
   downloadClient,
+  opsClient,
   downloadOrigin = null,
   filePicker,
 }: FileBrowserScreenProps) {
@@ -121,6 +133,10 @@ export function FileBrowserScreen({
     () => downloadClient ?? createPendingConnectionFileDownloadClient(),
     [downloadClient],
   );
+  const resolvedOpsClient = useMemo(
+    () => opsClient ?? createPendingConnectionFileOpsClient(),
+    [opsClient],
+  );
   const resolvedFilePicker = filePicker ?? platform.filePicker;
   const controller = useFileExplorer({
     client: resolvedClient,
@@ -140,6 +156,7 @@ export function FileBrowserScreen({
       readClient={resolvedReadClient}
       uploadClient={resolvedUploadClient}
       downloadClient={resolvedDownloadClient}
+      opsClient={resolvedOpsClient}
       downloadOrigin={downloadOrigin}
       filePicker={resolvedFilePicker}
     />

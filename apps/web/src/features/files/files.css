@@ -301,6 +301,40 @@ a.pc-file-browser__row--file:focus-visible {
 }
 
 /**
+ * File mutation panel (mkdir/create-file/rename/delete). Sits directly
+ * below the upload affordance and above the search field, so every
+ * mutation entry point is available from every browser state just like
+ * upload; each group is a small field/button row in the same language.
+ */
+
+.pc-file-ops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3);
+  margin-bottom: var(--spacing-3);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+}
+
+.pc-file-ops__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-2);
+}
+
+.pc-file-ops__group > .pc-field {
+  flex: 1 1 12rem;
+}
+
+.pc-file-ops__hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+}
+
+/**
  * File search panel (T30B5). Sits above the breadcrumbs, next to the
  * upload panel, so it is available from every browser state; results
  * reuse `.pc-file-browser__row` (defined above) so a hit reads exactly
