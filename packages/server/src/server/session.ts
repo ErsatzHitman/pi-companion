@@ -72,6 +72,7 @@ import {
 } from "./lifecycle-reasons.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
+import { formatRewindFailureForWire } from "./agent/rewind/rewind-failure-wire.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 // COMPAT(piUiPayloadV2): added 2026-08-31, remove after 2027-02-28.
 import {
@@ -4048,7 +4049,7 @@ export class Session {
           requestId: msg.requestId,
           agentId: msg.agentId,
           ok: false,
-          error: error instanceof Error ? error.message : "Failed to rewind agent",
+          error: formatRewindFailureForWire(error),
         },
       });
     }

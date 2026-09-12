@@ -13,7 +13,8 @@
  * `sessions/`, `timeline/`, `composer/`, `permissions/`, `extensions/`,
  * `tools/`, `files/`, `offline/`, `navigation/`, `telemetry/`,
  * `testing/`, `security/`, `actions/` (T103 — single-answer arbitration for
- * approvals and dialogs, plan.md §12.3)). As of T14 (Phase 1) those
+ * approvals and dialogs, plan.md §12.3), `rewind/` (T395 — the platform-neutral
+ * rewind/checkpoint controller, plan.md §4.2)). As of T14 (Phase 1) those
  * directories are skeleton stubs; the Phase 2+ tasks listed in
  * docs/issues-from-plan.md fill them in.
  *
@@ -75,6 +76,7 @@ export * as hosts from "./hosts/index.js";
 export * as navigation from "./navigation/index.js";
 export * as offline from "./offline/index.js";
 export * as permissions from "./permissions/index.js";
+export * as rewind from "./rewind/index.js";
 export * as security from "./security/index.js";
 export * as sessions from "./sessions/index.js";
 export * as telemetry from "./telemetry/index.js";

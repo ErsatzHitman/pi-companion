@@ -88,6 +88,7 @@ import type {
   DaemonGetPairingOfferResponse,
   DiagnosticsResponse,
   AgentRewindResponseMessage,
+  AgentRewindMode,
   ListTerminalsResponse,
   CreateTerminalResponse,
   SubscribeTerminalResponse,
@@ -352,6 +353,18 @@ export interface SendMessageOptions {
    * daemon's own default.
    */
   streamingBehavior?: SendAgentMessageRequest["streamingBehavior"];
+}
+
+export interface RewindAgentOptions {
+  /**
+   * Send `force: true` on `agent.rewind.request` so a files/both restore
+   * discards work-tree changes made outside the checkpoint system instead
+   * of being refused (plan.md §4.2, "A conflict refuses unless `force` is
+   * set"). Omitting this option leaves the `force` key off the wire
+   * entirely — the exact frame a pre-T395 three-argument call sent — and
+   * the daemon's own absent-means-false default applies.
+   */
+  force?: boolean;
 }
 
 export interface AgentAttentionRequiredNotification {
@@ -3175,10 +3188,19 @@ export class DaemonClient {
     await this.sendAgentMessage(agentId, text, options);
   }
 
+  /**
+   * Rewinds an agent's conversation, workspace files, or both.
+   *
+   * The three-argument call is unchanged: with no `options`, the outbound
+   * frame carries no `force` key at all, exactly as before `options`
+   * existed. Pass `{ force: true }` to override a checkpoint conflict
+   * (plan.md §4.2); `{ force: false }` sends `force: false` explicitly.
+   */
   async rewindAgent(
     agentId: string,
     messageId: string,
-    mode: "conversation" | "files" | "both",
+    mode: AgentRewindMode,
+    options?: RewindAgentOptions,
   ): Promise<AgentRewindResponseMessage["payload"]> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
@@ -3187,6 +3209,10 @@ export class DaemonClient {
       agentId,
       messageId,
       mode,
+      // Field presence mirrors the caller's intent: omitted -> absent,
+      // `true`/`false` -> sent as given. The schema treats absent as false,
+      // so a three-argument call is wire-identical to the pre-T395 shape.
+      ...(options?.force !== undefined ? { force: options.force } : {}),
     });
     const payload = await this.sendRequest({
       requestId,
