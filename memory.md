@@ -962,3 +962,35 @@ signature CLAUDE.md's T240 paragraph describes.
 references, Android's three Expo-backed stubs, and the rewind failure classification. Each was
 proven able to fire by appending its denying sentence to `docs/legacy-retirement.md`, reading the
 guard's `FAILED` line, and restoring the file from a scratchpad copy.
+
+### Completion wave (2026-09-12): file explorer ops + nine audited gaps closed
+
+Two user-visible audits (web, Android) found 9 end-to-end blockers; all are fixed on main
+(`c8382dd` → `2a9ec98` → `42ccbeb` → `de32d36` → `e02d9c9`):
+
+- **Remote file explorer ops** (`c8382dd`): scoped mkdir/create/rename/delete at every layer
+  (protocol schemas, `DaemonClient` methods, jailed service fns, session handlers, web
+  `FileOpsClient`, Android optional client members) + `docs/remote-file-explorer.md`. The
+  `cwd` parameter IS the configurable root (pass `codebases/` as `cwd`). No external
+  sidecar embedded: three research subagents agreed a sidecar means split auth + extra
+  port, and every JS file-manager UI is DOM-only.
+- **Extension actions dispatch** (`2a9ec98`): the only missing piece was the client sender;
+  `DaemonClient.sendPiUiAction` + web/Android rail wiring closed the universal
+  click-then-"Timed out" failure.
+- **Web files correctness + nav** (`42ccbeb`): files route passes the real `agent.cwd`
+  workspace root and a `resolveDirectHttpOrigin` download origin (null on relay
+  by-design), shell links to files/terminal, terminal route lists/creates via the
+  existing RPCs, settings placeholder removed, file-ops panel (mkdir/create/rename/
+  delete with delete confirm) behind the `authorizeWorkspacePath` door.
+- **Android picker/sharing/terminal** (`de32d36`): real `createExpoFilePicker` (T32S11's
+  documented job), `createAndroidSharing` over installed expo-sharing/file-system,
+  live terminal webview (react-native-webview + xterm). `package-lock.json -diff`
+  keeps the lockfile out of diffs — its "Bin" display is that attribute, not damage.
+- **Android file-ops UI** (`e02d9c9`): pure controller + screen section, two-step delete.
+
+Left deliberately: relay-pair downloads (needs an HTTP-over-relay proxy in
+`packages/relay` — architecture work, not a bug), and honest by-design states
+(disabled auto-retry, attach-while-disconnected chip, mid-turn queue-mode revert,
+display-only transcript attachments, the `app.paseo.sh` offer-URL placeholder which
+matches the real offer format). Write subagents share the main tree here — `git add -p`
+(or explicit path lists) per scope keeps their commits separable.
