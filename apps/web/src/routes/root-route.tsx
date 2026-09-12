@@ -5,6 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useCore } from "../app/core-context.js";
 import { useDaemonClientContext } from "../app/daemon-client-context.js";
+import {
+  sendPiUiActionRequest,
+  subscribePiUiActionResponses,
+} from "../features/extensions/action-transport.js";
 import { PiNoticeBannerContainer } from "../features/notices/index.js";
 import { ContextMeter, PiExtensionRail, usePiUiRailElements } from "../features/rail/index.js";
 import {
@@ -180,20 +184,16 @@ interface ExtensionRailContentProps {
  * this rail's only live input, filtered to this `agentId`, feeding both
  * the element store and the action controller's async result channel.
  *
- * **Known gap, not silently dropped:** `ExtensionActionController`
- * requires a `sendRequest` that actually delivers a
- * `pi.ui.action.request` `SessionInboundMessage` to the daemon.
- * `@picompanion/client`'s `DaemonClient`
- * (`packages/client/src/daemon-client.ts`) has no public method that
- * sends this message type — it was never ported (grep the file for
- * `pi.ui.action`/`pi_ui`: nothing sends one; T51 tracks auditing the full
- * RPC mirror gap this is one instance of). So every pinned element still
- * renders at full fidelity and *reads* every live update, but activating
- * an action button here will dispatch, sit `"pending"` for
- * `ExtensionActionController`'s 60s default timeout, and then settle as
- * `"timeout"` — a real, honestly-surfaced outcome, not a silent no-op or
- * a faked success. Fixing this requires adding a sender to
- * `packages/client`, a different package than this task owns.
+ * **Action round trip, wired in full:** the controller's `sendRequest`
+ * forwards each `pi.ui.action.request` through
+ * `features/extensions/action-transport.ts`'s `sendPiUiActionRequest` to
+ * the live `DaemonClient.sendPiUiAction`, and the effect below subscribes
+ * to `pi.ui.action.response` so the daemon's synchronous ack reaches
+ * `ExtensionActionController.ingestActionResponse`. The async half —
+ * `agent_stream`'s `pi_ui_action_result` — already reaches
+ * `ingestAgentStreamEvent` from the same effect's `agent_stream`
+ * listener. A dispatch with no connected client is left to settle as the
+ * controller's honest `"timeout"`, never a faked success.
  */
 function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentProps) {
   const { client } = useDaemonClientContext();
@@ -206,22 +206,18 @@ function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentPro
       new extensions.ExtensionActionController({
         clock: platform.clock,
         getElementRevision: (id) => store.getRevision(id),
-        sendRequest: () => {
-          // See this component's doc comment: `DaemonClient` has no
-          // `pi.ui.action.request` sender yet. Logged once per dispatch
-          // rather than silently dropped, so the gap is discoverable
-          // from the running app, not just from source.
-          platform.logger.warn(
-            "Pi UI action dispatch is not supported yet: DaemonClient has no pi.ui.action.request sender (packages/client/src/daemon-client.ts)",
-          );
-        },
+        sendRequest: (message) => sendPiUiActionRequest(client, message),
       }),
-    [platform, store],
+    [client, platform, store],
   );
 
   useEffect(() => {
     if (!client) return undefined;
-    return client.on("agent_stream", (message) => {
+    // The synchronous ack (`pi.ui.action.response`) and the async result
+    // (`agent_stream`'s `pi_ui_action_result`, fed below) are the two
+    // channels `ExtensionActionController` settles dispatches from.
+    const unsubscribeResponses = subscribePiUiActionResponses(client, actionController);
+    const unsubscribeAgentStream = client.on("agent_stream", (message) => {
       if (message.payload.agentId !== agentId) return;
       // `AgentStreamEventPayload` (the wire-validated shape `DaemonClient`
       // actually delivers) and `AgentStreamEvent` (frontend-core's
@@ -235,6 +231,10 @@ function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentPro
       store.ingestEvent(event);
       actionController.ingestAgentStreamEvent(agentId, event);
     });
+    return () => {
+      unsubscribeResponses();
+      unsubscribeAgentStream();
+    };
   }, [client, agentId, store, actionController]);
 
   const elements = usePiUiRailElements(store, agentId);

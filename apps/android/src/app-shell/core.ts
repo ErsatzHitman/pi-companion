@@ -9,6 +9,7 @@ import type {
   Sharing,
   TimerHandle,
   connection,
+  extensions,
 } from "@picompanion/frontend-core";
 import type { AgentStreamMessage } from "@picompanion/protocol/messages";
 
@@ -24,6 +25,7 @@ import {
 } from "../features/connect/host-profile-reconnect.js";
 import {
   createPiUiSession,
+  ingestPiUiActionResponse,
   ingestPiUiAgentStreamMessage,
   type PiUiSession,
 } from "../features/extensions/registry-index";
@@ -327,23 +329,18 @@ export interface AppCore {
    * reads `piUiSession.store` through `usePiUiElements` for the
    * `liveExtension` slot's `PinnedLiveExtensionArea`.
    *
-   * **Disclosed gap, in both directions**: (1) nothing anywhere in
-   * `@picompanion/client`'s `DaemonClient` yet sends a
-   * `pi.ui.action.request` wire message — confirmed by reading
-   * `packages/client/src/daemon-client.ts` — so `piUiSession`'s
-   * `sendRequest` (below) has no live transport to forward to yet; a
-   * dispatched action will resolve only via
-   * `ExtensionActionController`'s own timeout, never a real response.
-   * That is `packages/client` work, outside this task's `apps/android`
-   * Owns grant. (2) nothing in *production* feeds a live `agent_stream`
-   * event into this store either — the same standing "no live per-agent
-   * event subscription exists on Android yet" gap `SessionTranscript`'s
-   * own doc comment (`app/h/[serverId]/session/[agentId]/index.tsx`)
-   * discloses for the transcript batcher.
+   * **Both halves of the round trip are wired.** `sendRequest`
+   * (constructed below) forwards every `pi.ui.action.request` to the live
+   * `DaemonClient.sendPiUiAction` (`@picompanion/client`), and the
+   * daemon's synchronous `pi.ui.action.response` ack is routed back into
+   * `ingestPiUiActionResponse` from the same subscription that feeds the
+   * store — so a dispatched action settles from a real acknowledgment (or
+   * its async `pi_ui_action_result`), not only from
+   * `ExtensionActionController`'s own timeout. A dispatch with no active
+   * connection still honestly settles `"timeout"`.
    *
-   * **T32S8 closed the second gap** (the first — no live outbound
-   * `pi.ui.action.request` transport in `@picompanion/client` — is still
-   * open, see (1) above): `ensureAgentStreamSubscription` below now calls
+   * **T32S8 closed the inbound `agent_stream` half**:
+   * `ensureAgentStreamSubscription` below now calls
    * `client.on("agent_stream", ...)` on whatever `DaemonClient`
    * `connection.getActiveLifecycle()?.getDaemonClient()` returns,
    * re-subscribing every time `connection` publishes a snapshot (a
@@ -874,8 +871,9 @@ export interface AppCore {
    * identical settle-in-flight-`open()` shape) — plus
    * detaching this file's own internal `connection.subscribe(...)`
    * listener (`stopWatchingConnectionForAgentStream` below) and the live
-   * daemon client's `agent_stream` subscription
-   * (`agentStreamClientUnsubscribe`), so neither keeps firing into a
+   * daemon client's `agent_stream` and `pi.ui.action.response`
+   * subscriptions (`agentStreamClientUnsubscribe` and
+   * `piUiActionResponseUnsubscribe`), so none keeps firing into a
    * shut-down core.
    *
    * Every other field on this interface (`keyValueStorage`,
@@ -1054,16 +1052,43 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     null;
   const sessionService = createDaemonSessionService(getSessionServiceClient);
 
-  // See `AppCore["piUiSession"]`'s doc comment for the one gap this
-  // constructor still leaves open (no live outbound transport yet — the
-  // inbound `agent_stream` feed is wired below). This is still
+  // See `AppCore["piUiSession"]`'s doc comment: `sendRequest` forwards to
+  // whatever `DaemonClient` `connection` currently holds, read fresh at
+  // dispatch time (same fresh-read pattern as `getSessionServiceClient`
+  // above), and the matching `pi.ui.action.response` ack subscription is
+  // attached in `ensureAgentStreamSubscription` below. This is still
   // `createPiUiSession` itself, not a hand-rolled stand-in — the store,
   // the action controller, and (via that module's `import "./renderers"`
   // side effect) every registered kind renderer are all real.
+  //
+  // The narrow shape is the one `connection.DaemonClientLike`
+  // (`packages/frontend-core/src/connection/daemon-client-lifecycle.ts`)
+  // does not declare but the real `DaemonClient` has — the same
+  // type-only cast pattern `AgentStreamCapableClient` below uses.
+  type PiUiActionCapableClient = {
+    sendPiUiAction(input: {
+      agentId: string;
+      actionId: string;
+      elementId: string;
+      payload?: Record<string, unknown>;
+      requestId?: string;
+    }): Promise<unknown>;
+  };
   const piUiSession = createPiUiSession({
-    sendRequest: () => {
-      // No-op: intentionally does nothing yet — see the disclosed gap
-      // on `AppCore["piUiSession"]` above.
+    sendRequest: (message) => {
+      const client = connection
+        .getActiveLifecycle()
+        ?.getDaemonClient() as unknown as PiUiActionCapableClient | null;
+      if (!client) return;
+      void client
+        .sendPiUiAction({
+          agentId: message.agentId,
+          actionId: message.actionId,
+          elementId: message.elementId,
+          ...(message.payload !== undefined ? { payload: message.payload } : {}),
+          requestId: message.requestId,
+        })
+        .catch(() => undefined);
     },
   });
 
@@ -1187,6 +1212,10 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
   // file already uses (see `sessionService`'s doc comment).
   type AgentStreamCapableClient = {
     on(type: "agent_stream", handler: (message: AgentStreamMessage) => void): () => void;
+    on(
+      type: "pi.ui.action.response",
+      handler: (message: { payload: extensions.PiUiActionResponsePayload }) => void,
+    ): () => void;
   };
   // T339: the other half of the same wire contract — see
   // `AppCore["setViewedAgentTimeline"]`'s doc comment. Same narrow,
@@ -1196,6 +1225,11 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
   };
   const agentStreamListeners = new Set<(message: AgentStreamMessage) => void>();
   let agentStreamClientUnsubscribe: (() => void) | null = null;
+  // The daemon's synchronous `pi.ui.action.request` ack rides its own
+  // outbound message type (`pi.ui.action.response`), not `agent_stream`,
+  // so it needs its own subscription — torn down and re-attached in
+  // lockstep with the `agent_stream` one below.
+  let piUiActionResponseUnsubscribe: (() => void) | null = null;
   // Compared by reference against whatever `getDaemonClient()` returns
   // right now — `undefined`/`null` both normalize to `null` so "no active
   // client" is one stable value, not two.
@@ -1205,15 +1239,18 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     if (client === subscribedAgentStreamClient) return;
     agentStreamClientUnsubscribe?.();
     agentStreamClientUnsubscribe = null;
+    piUiActionResponseUnsubscribe?.();
+    piUiActionResponseUnsubscribe = null;
     subscribedAgentStreamClient = client;
     if (!client) return;
-    agentStreamClientUnsubscribe = (client as unknown as AgentStreamCapableClient).on(
-      "agent_stream",
-      (message) => {
-        ingestPiUiAgentStreamMessage(piUiSession, message.payload);
-        for (const listener of agentStreamListeners) listener(message);
-      },
-    );
+    const capableClient = client as unknown as AgentStreamCapableClient;
+    agentStreamClientUnsubscribe = capableClient.on("agent_stream", (message) => {
+      ingestPiUiAgentStreamMessage(piUiSession, message.payload);
+      for (const listener of agentStreamListeners) listener(message);
+    });
+    piUiActionResponseUnsubscribe = capableClient.on("pi.ui.action.response", (message) => {
+      ingestPiUiActionResponse(piUiSession, message.payload);
+    });
     // T76: a fresh live daemon client — cold start once connected, or a
     // reconnect — is exactly the trigger `resumePendingTurnOutboxEntries`'s
     // own doc comment names. Fire-and-forget, matching every other
@@ -1386,6 +1423,8 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     stopWatchingConnectionForAgentStream();
     agentStreamClientUnsubscribe?.();
     agentStreamClientUnsubscribe = null;
+    piUiActionResponseUnsubscribe?.();
+    piUiActionResponseUnsubscribe = null;
     subscribedAgentStreamClient = null;
     // This `AppCore`'s own offline owner is being disposed right here;
     // clear the module-level "most recent owner" bookkeeping so a later

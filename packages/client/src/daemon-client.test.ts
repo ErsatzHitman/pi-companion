@@ -6861,3 +6861,132 @@ test("rewindAgent rejects with the daemon's own error sentence, marker included"
 
   await expect(promise).rejects.toThrow(marked);
 });
+
+test("sendPiUiAction sends pi.ui.action.request and resolves the daemon's ack", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "pi_ui_action_send",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const ackPromise = client.sendPiUiAction({
+    agentId: "agt_pi",
+    actionId: "collapse",
+    elementId: "todo-1",
+    payload: { rowId: "r1" },
+  });
+
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]);
+  expect(request).toMatchObject({
+    type: "pi.ui.action.request",
+    agentId: "agt_pi",
+    actionId: "collapse",
+    elementId: "todo-1",
+    payload: { rowId: "r1" },
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "pi.ui.action.response",
+      payload: {
+        requestId: request.requestId,
+        ok: true,
+        error: null,
+        answeredBy: { clientId: "clsk_unit_test" },
+      },
+    }),
+  );
+
+  await expect(ackPromise).resolves.toEqual({
+    requestId: request.requestId,
+    ok: true,
+    error: null,
+    answeredBy: { clientId: "clsk_unit_test" },
+  });
+});
+
+test("sendPiUiAction uses a caller-supplied requestId so ExtensionActionController can correlate its ack", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "pi_ui_action_explicit_request_id",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const ackPromise = client.sendPiUiAction({
+    agentId: "agt_pi",
+    actionId: "toggle",
+    elementId: "plan-1",
+    requestId: "req_controller_1",
+  });
+
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]);
+  expect(request.requestId).toBe("req_controller_1");
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "pi.ui.action.response",
+      payload: {
+        requestId: "req_controller_1",
+        ok: false,
+        error: "unknown element",
+        answeredBy: { clientId: "clsk_unit_test" },
+      },
+    }),
+  );
+
+  // An `ok: false` ack is a normal routing outcome, not an RPC-level throw —
+  // the controller settles it as `rejected` from the resolved value.
+  await expect(ackPromise).resolves.toEqual({
+    requestId: "req_controller_1",
+    ok: false,
+    error: "unknown element",
+    answeredBy: { clientId: "clsk_unit_test" },
+  });
+});
+
+test("sendPiUiAction's ack also reaches an on(\"pi.ui.action.response\") listener, the controller's ingest path", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "pi_ui_action_ack_listener",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const acks: unknown[] = [];
+  const unsubscribe = client.on("pi.ui.action.response", (message) => acks.push(message.payload));
+
+  void client
+    .sendPiUiAction({ agentId: "agt_pi", actionId: "a", elementId: "e" })
+    .catch(() => undefined);
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]);
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "pi.ui.action.response",
+      payload: { requestId: request.requestId, ok: true, error: null },
+    }),
+  );
+
+  expect(acks).toEqual([{ requestId: request.requestId, ok: true, error: null }]);
+  unsubscribe();
+});

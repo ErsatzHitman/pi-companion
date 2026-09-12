@@ -4711,6 +4711,49 @@ export class DaemonClient {
     return payload.result;
   }
 
+  /**
+   * Sends `pi.ui.action.request` and resolves with the daemon's synchronous
+   * `pi.ui.action.response` ack (`{ requestId, ok, error, answeredBy? }`),
+   * the same correlated session-request shape `writeFile` above uses.
+   *
+   * `requestId` should be the id `ExtensionActionController.dispatch` minted
+   * for this dispatch, so the controller's pending entry correlates with the
+   * ack; when omitted one is generated. `ok: true` only means the daemon
+   * routed the request to the owning Pi extension — the action's real outcome
+   * still arrives separately as an `agent_stream` `pi_ui_action_result`
+   * event. `ok: false` (unknown/ambiguous element, or the extension prompt
+   * itself failing) is final.
+   *
+   * Callers wired through `ExtensionActionController` treat this as
+   * fire-and-forget: the controller ingests the ack through its own
+   * `pi.ui.action.response` subscription, not from this promise's value
+   * (which is only for a caller that wants the ack directly).
+   */
+  async sendPiUiAction(input: {
+    agentId: string;
+    actionId: string;
+    elementId: string;
+    payload?: Record<string, unknown>;
+    requestId?: string;
+  }): Promise<{
+    requestId: string;
+    ok: boolean;
+    error: string | null;
+    answeredBy?: { clientId?: string; label?: string };
+  }> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: input.requestId,
+      message: {
+        type: "pi.ui.action.request",
+        agentId: input.agentId,
+        actionId: input.actionId,
+        elementId: input.elementId,
+        ...(input.payload !== undefined ? { payload: input.payload } : {}),
+      },
+      responseType: "pi.ui.action.response",
+    });
+  }
+
   async mkdir(cwd: string, path: string): Promise<{ path: string | null }> {
     const payload = await this.sendCorrelatedSessionRequest({
       message: { type: "fs.file.mkdir.request", cwd, path },

@@ -12,49 +12,38 @@
  * `PiUiElementStore`/`usePiUiRailElements` actually key by). Nothing here
  * touches `packages/server/.../pi/ui-bridge/decoder.ts` — that module
  * only parses the real Pi runtime's raw `/PIUI` marker text off `notify`
- * events (`providers/pi/agent.ts:2033`), a path this fake fixture never
- * exercises; it bypasses the wire entirely and emits an already-typed
- * `AgentStreamEvent` directly. So "malformed" below means malformed
+ * events (`agent.ts`'s `handleExtensionUiRequest`), a path this fake
+ * fixture never exercises; it bypasses the wire entirely and emits an
+ * already-typed `AgentStreamEvent` directly. So "malformed" below means malformed
  * relative to `@picompanion/frontend-core`'s own canonical-payload
  * normalization (`normalizePiUiElement`), the one boundary this harness
  * can actually reach — not a decoder-level rejection test.
  *
  * **Third acceptance criterion, left honestly untested — "an extension
- * action round-trips to the daemon and back":** this cannot be written as
- * a passing scenario today; the round trip does not exist yet.
- * `ExtensionRailContent`'s `sendRequest` (`apps/web/src/routes/
- * root-route.tsx:253-261`, with the gap spelled out in that component's
- * own doc comment at :209-241) never calls anything on `DaemonClient` —
- * it only logs a warning ("Pi UI action dispatch is not supported yet")
- * and returns. `packages/client/src/daemon-client.ts` has no method that
- * sends a `pi.ui.action.request` message at all (grep the file for
- * `pi.ui`/`pi_ui`: zero matches), and no generic/raw session-message
- * sender is exposed as an escape hatch either. Even with a client-side
- * sender, this harness's fake `pi` session could not service the request
- * server-side: `packages/server/src/server/session.ts`'s
- * `getPiUiStateStore` (:265-271) requires `agent.session
- * .getUiBridgeStateStore()`, a method only the real `PiAgentSession`
- * implements — `FakePiAgentSession` (`fixtures/fake-pi-agent-client.ts`)
- * has no such method, so `dispatchPiUiMessage` (`session.ts:1913-1925`)
- * would reject with `"Pi UI bridge is not active for agent <id>"` before
- * ever reaching the fake session's own turn logic. Both the client-side
- * sender and the fake provider's server-side routing are missing pieces
- * this task does not own (`root-route.tsx`'s own comment names
- * `packages/client` and points at T51). The only real, observable
+ * action round-trips to the daemon and back":** the client half now
+ * exists (`ExtensionRailContent`'s `sendRequest` forwards through
+ * `apps/web/src/features/extensions/action-transport.ts` to
+ * `DaemonClient.sendPiUiAction`, and the daemon's `pi.ui.action.response`
+ * ack reaches `ExtensionActionController.ingestActionResponse`), but this
+ * harness's fake `pi` session still cannot service the request
+ * server-side: `session.ts`'s `dispatchPiUiMessage` resolves the agent's
+ * Pi UI state through `getPiUiStateStore`, which requires
+ * `agent.session.getUiBridgeStateStore()` — a method only the real
+ * `PiAgentSession` implements. `FakePiAgentSession`
+ * (`fixtures/fake-pi-agent-client.ts`) has no such method, so the daemon
+ * would reject the dispatch with `"Pi UI bridge is not active for agent
+ * <id>"` before ever reaching the fake session's own turn logic, emitting
+ * a real `pi.ui.action.response` with `ok: false` that the controller
+ * settles as `"rejected"` — not a round trip. The only real, observable
  * behavior an E2E test could assert today is: click an action button ->
- * its state goes `"pending"` ("Working…", `element-actions.tsx:82`) ->
- * stays pending until `ExtensionActionController`'s hardcoded 60s default
- * timeout (`packages/frontend-core/src/extensions/action-controller.ts:225`)
- * -> settles `"Timed out"`. That is a failure outcome, not a round trip —
- * asserting it as this criterion's expected result would be asserting
- * failure-as-success, and asserting it honestly would need ~60 real
- * seconds against this harness's default Playwright test timeout. Rather
- * than fabricate a passing round trip or silently drop the criterion,
- * this file leaves it unwritten: fixing it requires a real
- * `pi.ui.action.request` sender in `packages/client` and real
- * `getUiBridgeStateStore()` support in the fake provider, neither of
+ * its state goes `"pending"` ("Working…") -> settles `"rejected"` with
+ * that error. That is a failure outcome, not a round trip — asserting it
+ * as this criterion's expected result would be asserting
+ * failure-as-success. Rather than fabricate a passing round trip or
+ * silently drop the criterion, this file leaves it unwritten: closing it
+ * requires real `getUiBridgeStateStore()` support in the fake provider,
  * which `apps/web/e2e/extension-bridge.spec.ts` (the one file this task
- * owns) can add.
+ * owns) cannot add.
  */
 import { expect, test } from "./fixtures/test.js";
 import { connectViaUi } from "./fixtures/connect-ui.js";

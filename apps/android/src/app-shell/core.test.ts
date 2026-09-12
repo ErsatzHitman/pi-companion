@@ -26,7 +26,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ConnectionState } from "@picompanion/client";
 import { connection as coreConnection } from "@picompanion/frontend-core";
-import type { AppLifecycle, AppLifecycleState, Clock } from "@picompanion/frontend-core";
+import type {
+  AppLifecycle,
+  AppLifecycleState,
+  Clock,
+  extensions,
+} from "@picompanion/frontend-core";
 import type { AgentStreamMessage, ServerInfoStatusPayload } from "@picompanion/protocol/messages";
 
 import { fireTranscriptStatusHaptic } from "../features/transcript/transcript-status-haptics-model.js";
@@ -225,17 +230,57 @@ class FakeDaemonClient {
   /** Records every `on("agent_stream", ...)` handler this fake was given, and how many times `on` was called (T32S8). */
   agentStreamOnCallCount = 0;
   private readonly agentStreamHandlers = new Set<(message: AgentStreamMessage) => void>();
-  on(type: "agent_stream", handler: (message: AgentStreamMessage) => void): () => void {
-    if (type !== "agent_stream") {
-      throw new Error(`unexpected on() type in test fake: ${type}`);
+  private readonly piUiActionResponseHandlers = new Set<
+    (message: { payload: extensions.PiUiActionResponsePayload }) => void
+  >();
+  on(type: "agent_stream", handler: (message: AgentStreamMessage) => void): () => void;
+  on(
+    type: "pi.ui.action.response",
+    handler: (message: { payload: extensions.PiUiActionResponsePayload }) => void,
+  ): () => void;
+  on(
+    type: "agent_stream" | "pi.ui.action.response",
+    handler:
+      | ((message: AgentStreamMessage) => void)
+      | ((message: { payload: extensions.PiUiActionResponsePayload }) => void),
+  ): () => void {
+    if (type === "agent_stream") {
+      this.agentStreamOnCallCount += 1;
+      const agentStreamHandler = handler as (message: AgentStreamMessage) => void;
+      this.agentStreamHandlers.add(agentStreamHandler);
+      return () => this.agentStreamHandlers.delete(agentStreamHandler);
     }
-    this.agentStreamOnCallCount += 1;
-    this.agentStreamHandlers.add(handler);
-    return () => this.agentStreamHandlers.delete(handler);
+    const responseHandler = handler as (message: {
+      payload: extensions.PiUiActionResponsePayload;
+    }) => void;
+    this.piUiActionResponseHandlers.add(responseHandler);
+    return () => this.piUiActionResponseHandlers.delete(responseHandler);
   }
   /** Test-only: fires a scripted `agent_stream` message to every currently-registered handler — never a real socket. */
   emitAgentStream(message: AgentStreamMessage): void {
     for (const handler of this.agentStreamHandlers) handler(message);
+  }
+  /** Test-only: fires a scripted `pi.ui.action.response` ack — never a real socket. */
+  emitPiUiActionResponse(payload: extensions.PiUiActionResponsePayload): void {
+    for (const handler of this.piUiActionResponseHandlers) handler({ payload });
+  }
+  /** Records every forwarded `sendPiUiAction` input (Pi UI action transport wiring). */
+  sendPiUiActionCalls: Array<{
+    agentId: string;
+    actionId: string;
+    elementId: string;
+    payload?: Record<string, unknown>;
+    requestId?: string;
+  }> = [];
+  async sendPiUiAction(input: {
+    agentId: string;
+    actionId: string;
+    elementId: string;
+    payload?: Record<string, unknown>;
+    requestId?: string;
+  }): Promise<{ requestId: string; ok: boolean; error: string | null }> {
+    this.sendPiUiActionCalls.push(input);
+    return { requestId: input.requestId ?? "generated", ok: true, error: null };
   }
   /** Records every `sendMessage`/`cancelAgent` call (T32S12's `createTurnService`). */
   sendMessageCalls: Array<{ agentId: string; text: string }> = [];
@@ -621,6 +666,118 @@ describe("AppCore agent_stream subscription (T32S8)", () => {
     unsubscribe();
     await firstLifecycle.dispose();
     await secondLifecycle.dispose();
+  });
+});
+
+/**
+ * The outbound half of the Pi UI action round trip: a controller dispatch
+ * must reach the live client's `sendPiUiAction` with the controller's own
+ * `requestId` (so the daemon's `pi.ui.action.response` ack correlates), and
+ * that ack — or the async `agent_stream` `pi_ui_action_result` — must settle
+ * the dispatch. Exercised against a fake `DaemonClientLike` adopted onto
+ * `AppCore.connection` (never a real socket).
+ */
+describe("AppCore Pi UI action transport", () => {
+  it("forwards a controller dispatch to the live client's sendPiUiAction, preserving the controller's requestId", async () => {
+    const core = createAppCore();
+    const fakeClient = new FakeDaemonClient();
+    const lifecycle = new coreConnection.DaemonClientLifecycle({
+      url: "ws://fixture.invalid/ws",
+      clientId: "clid_test_pi_ui_action",
+      clientType: "mobile",
+      createDaemonClient: () => fakeClient as unknown as coreConnection.DaemonClientLike,
+    });
+    await lifecycle.connect();
+    await core.connection.adoptLifecycle(lifecycle);
+
+    const settled = core.piUiSession.actionController.dispatch({
+      agentId: "agt_pi_action",
+      namespace: "todo",
+      elementId: "todo-1",
+      actionId: "collapse",
+      payload: { rowId: "r1" },
+      requestId: "req_pi_action_1",
+    });
+
+    expect(fakeClient.sendPiUiActionCalls).toEqual([
+      {
+        agentId: "agt_pi_action",
+        actionId: "collapse",
+        elementId: "todo-1",
+        payload: { rowId: "r1" },
+        requestId: "req_pi_action_1",
+      },
+    ]);
+
+    // The daemon's `ok:false` ack reaches the controller through the
+    // `pi.ui.action.response` subscription `ensureAgentStreamSubscription`
+    // attaches alongside `agent_stream`.
+    fakeClient.emitPiUiActionResponse({
+      requestId: "req_pi_action_1",
+      ok: false,
+      error: "unknown element",
+      answeredBy: { clientId: "clsk_android" },
+    });
+
+    await expect(settled).resolves.toMatchObject({
+      status: "rejected",
+      error: "unknown element",
+      source: "response",
+      requestId: "req_pi_action_1",
+      answeredBy: { clientId: "clsk_android" },
+    });
+
+    await lifecycle.dispose();
+  });
+
+  it("settles a routed action from the agent_stream pi_ui_action_result, not only the synchronous ack", async () => {
+    const core = createAppCore();
+    const fakeClient = new FakeDaemonClient();
+    const lifecycle = new coreConnection.DaemonClientLifecycle({
+      url: "ws://fixture.invalid/ws",
+      clientId: "clid_test_pi_ui_action_result",
+      clientType: "mobile",
+      createDaemonClient: () => fakeClient as unknown as coreConnection.DaemonClientLike,
+    });
+    await lifecycle.connect();
+    await core.connection.adoptLifecycle(lifecycle);
+
+    const settled = core.piUiSession.actionController.dispatch({
+      agentId: "agt_pi_action",
+      namespace: "todo",
+      elementId: "todo-2",
+      actionId: "toggle",
+      requestId: "req_pi_action_2",
+    });
+
+    // The daemon routed it (`ok: true`) — per the controller's own
+    // contract the action stays pending until the async result arrives.
+    fakeClient.emitPiUiActionResponse({
+      requestId: "req_pi_action_2",
+      ok: true,
+      error: null,
+    });
+
+    fakeClient.emitAgentStream({
+      type: "agent_stream",
+      payload: {
+        agentId: "agt_pi_action",
+        timestamp: "2026-09-03T10:00:00.000Z",
+        event: {
+          type: "pi_ui_action_result",
+          provider: "pi",
+          result: { elementId: "todo-2", actionId: "toggle", ok: true },
+        },
+      } as unknown as AgentStreamMessage["payload"],
+    });
+
+    await expect(settled).resolves.toMatchObject({
+      status: "success",
+      source: "result",
+      requestId: "req_pi_action_2",
+    });
+
+    await lifecycle.dispose();
   });
 });
 

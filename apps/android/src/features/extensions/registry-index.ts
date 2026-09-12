@@ -244,25 +244,20 @@ export interface PiUiAgentStreamMessage {
  * remains for T37 (Maestro) and T59 (real device), per this directory's
  * standing disclosure.
  *
- * **The outbound half of the round trip has the matching, already-
- * disclosed gap:** `ExtensionActionController.dispatch` (invoked by a
- * renderer's action button, through `PiUiSession.actionController`)
- * already builds a schema-valid `pi.ui.action.request`
- * (`SessionInboundMessageSchema` in `@picompanion/protocol/messages`) and
- * hands it to this session's `sendRequest` — but
- * `@picompanion/client`'s `DaemonClient`
- * (`packages/client/src/daemon-client.ts`) has no public method that
- * sends that message type; grep the file for `pi.ui.action`/`pi_ui` and
- * nothing sends one. That is a `packages/client` change, a package no
- * Phase 5 task owns — `apps/web/src/routes/root-route.tsx` already
- * disclosed the identical gap for the web rail and notes T51 tracks
- * auditing the full RPC mirror gap this is one instance of. Until it
- * lands, every dispatched action here sits `"pending"` for
- * `ExtensionActionController`'s timeout and then settles `"timeout"` —
- * `ExtensionActionController.settle()` clears its pending entry
- * unconditionally either way (`pi-ui-session.test.ts`,
- * `renderers/roster-model.test.ts`), so this feed changes nothing about
- * that contract.
+ * **The outbound half of the round trip is wired too:**
+ * `ExtensionActionController.dispatch` (invoked by a renderer's action
+ * button, through `PiUiSession.actionController`) builds a schema-valid
+ * `pi.ui.action.request` (`SessionInboundMessageSchema` in
+ * `@picompanion/protocol/messages`) and hands it to this session's
+ * `sendRequest`, which `core.ts` now forwards to `@picompanion/client`'s
+ * `DaemonClient.sendPiUiAction`. The daemon's synchronous
+ * `pi.ui.action.response` ack is routed back into
+ * `ingestPiUiActionResponse` (below) from that same
+ * `ensureAgentStreamSubscription`, so a dispatched action settles from
+ * its real acknowledgment — or its async `pi_ui_action_result`, already
+ * routed by `ingestPiUiAgentStreamMessage` above — rather than only from
+ * the controller's timeout. A dispatch with no active connection still
+ * honestly settles `"timeout"`, never a faked success.
  */
 export function ingestPiUiAgentStreamMessage(
   session: PiUiSession,
@@ -273,6 +268,22 @@ export function ingestPiUiAgentStreamMessage(
     message.agentId,
     message.event as unknown as AgentStreamEvent,
   );
+}
+
+/**
+ * Routes one `pi.ui.action.response` (the daemon's synchronous ack for a
+ * dispatched `pi.ui.action.request`) into a `PiUiSession`'s action
+ * controller. `core.ts`'s `ensureAgentStreamSubscription` subscribes to
+ * this wire type alongside `agent_stream` and calls this per message; the
+ * controller's own `ingestActionResponse` decides whether the ack matches
+ * a pending dispatch (`ok: false` settles it rejected, `ok: true` only
+ * marks it routed).
+ */
+export function ingestPiUiActionResponse(
+  session: PiUiSession,
+  payload: extensions.PiUiActionResponsePayload,
+): void {
+  session.actionController.ingestActionResponse(payload);
 }
 
 export {

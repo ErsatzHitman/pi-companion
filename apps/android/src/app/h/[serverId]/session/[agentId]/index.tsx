@@ -531,11 +531,10 @@ function SessionTranscript({
  * `usePiUiElements` (`features/extensions/use-pi-ui-elements.ts`)
  * live-subscribes this one agent's elements/revision out of that store.
  *
- * Still empty in production today — see `AppCore["piUiSession"]`'s doc
- * comment for the two disclosed gaps (no live outbound
- * `pi.ui.action.request` transport in `@picompanion/client` yet, and no
- * live `agent_stream` feed into the store yet) — but the mount itself,
- * and every element that store already holds, are real.
+ * `AppCore["piUiSession"]`'s doc comment owns both halves of the live
+ * wiring — the outbound `pi.ui.action.request` transport and the inbound
+ * `agent_stream` feed — so this slot renders every element that store
+ * currently holds; the mount and the data are both real.
  *
  * **The todo widget docks here too.** The artifact's `.ovslot` (its CSS:
  * `.ovslot { flex: none; padding: 0 12px }`) holds BOTH the pinned Pi UI
