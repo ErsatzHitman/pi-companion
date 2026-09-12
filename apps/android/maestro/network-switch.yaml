@@ -54,8 +54,9 @@ tags:
 #      own proven relay-entry-point steps verbatim (same testIds/copy,
 #      via `network-switch-contract.ts`'s import of `pairing-
 #      contract.ts`) as its own regression guard on the identical
-#      honesty: the relay entry point is reachable and renders
-#      `"unavailable"`, never a fake paired state.
+#      honesty: the relay entry point is reachable and never fakes a
+#      paired state (T392 replaced its old permanent `"unavailable"`
+#      copy with the real camera permission read plus preview).
 #
 #   3. **Network loss/recovery — the one kind this flow CAN produce for
 #      real, on any emulator, with no Maestro network-toggle command
@@ -114,8 +115,9 @@ tags:
     clearKeychain: true
 
 # --- Onboarding (mirrors ../pairing.yaml's welcome + permissions
-# steps — camera is always "unavailable" in this build, so only the
-# banner + Continue show).
+# steps; T392 made the camera read real, so the permissions banner's
+# text now depends on the device's camera permission — only the banner
+# + Continue are asserted, exactly as ../pairing.yaml does).
 - assertVisible:
     id: "connect-onboarding"
 - assertVisible:
@@ -127,9 +129,11 @@ tags:
 - tapOn:
     id: "connect-onboarding-permission-continue"
 
-# --- Relay path switch: honestly unavailable (see "WHAT ... CAN
+# --- Relay path switch: reachable and honest (see "WHAT ... CAN
 # --- ACTUALLY MEAN" item 2 above). Done first, while ConnectionShell is
-# --- still guaranteed on screen — nothing has connected yet.
+# --- still guaranteed on screen — nothing has connected yet. T392
+# --- replaced the old stub copy; the section and its always-present
+# --- paste affordance are the deterministic anchors.
 - assertVisible:
     id: "connect-form"
 - tapOn:
@@ -137,9 +141,9 @@ tags:
 - assertVisible:
     id: "connection-shell-qr-pairing"
 - assertVisible:
+    id: "connection-shell-qr-pairing-paste-input"
+- assertNotVisible:
     text: "QR pairing isn't available in this build yet. Enter your host's address manually below instead."
-- assertVisible:
-    id: "connection-shell-qr-pairing-retry-button"
 - tapOn:
     id: "connection-shell-hide-scanner-button"
 - assertVisible:

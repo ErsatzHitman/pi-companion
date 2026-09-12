@@ -145,18 +145,13 @@ describe("pairing.yaml anchors exist in source", () => {
     // P5-W18 merge gate: the second half of this used to be
     // `expect(panel).not.toMatch(/handleScannedText/)` — a negative pin
     // asserting that nothing in the rendered UI could reach the pairing
-    // entry point. T32A8 deliberately closed that gap this wave with an
-    // always-visible "Pairing link" field plus a "Pair" button, so the
-    // pin is replaced by a positive assertion of the entry point that
-    // now exists. The camera half is unchanged and still true: no camera
-    // module is installed, so `createUnavailableCameraScannerPort` is
-    // still the only port, and manual paste is the only way to drive a
-    // pairing here.
-    it("no camera module is installed, so manual paste is the only way handleScannedText is reached from QrPairingPanel's rendered UI", () => {
-      const port = readCode("../../src/features/connect/qr-scanner-port.ts");
-      expect(port).toMatch(
-        /export function createUnavailableCameraScannerPort\(\): CameraScannerPort \{/,
-      );
+    // entry point. T32A8 deliberately closed that gap with an
+    // always-visible "Pairing link" field plus a "Pair" button. T392
+    // then made the camera half real too: a decoded QR from the
+    // `expo-camera` preview reaches the *same* `handleScannedText`, so
+    // this file pins both entry points positively rather than the old
+    // "manual paste is the only way" premise.
+    it("manual paste still reaches handleScannedText from QrPairingPanel's rendered UI", () => {
       const panel = readCode("../../src/features/connect/QrPairingPanel.tsx");
       expect(panel).toMatch(
         /function handlePastePress\(\): void \{\s*void controller\.handleScannedText\(pasteValue\);/,
@@ -164,6 +159,24 @@ describe("pairing.yaml anchors exist in source", () => {
       expect(panel).toMatch(
         /<Button\s+kind="primary"\s+label="Pair"\s+onPress=\{handlePastePress\}\s+disabled=\{pairingInFlight \|\| pasteValue\.trim\(\)\.length === 0\}\s+testId=\{testId \? `\$\{testId\}-paste-input-pair-button` : undefined\}/,
       );
+    });
+
+    it("T392: a decoded QR from the real camera preview reaches the same handleScannedText entry point", () => {
+      const port = readCode("../../src/features/connect/qr-scanner-port.ts");
+      // The unavailable factory is retained for tests / explicit
+      // disabling; the real port is the panel's default.
+      expect(port).toMatch(
+        /export function createUnavailableCameraScannerPort\(\): CameraScannerPort \{/,
+      );
+      const panel = readCode("../../src/features/connect/QrPairingPanel.tsx");
+      expect(panel).toMatch(/scanner: scanner \?\? createExpoCameraScannerPort\(\)/);
+      expect(panel).toMatch(
+        /function handleScanned\(value: string\): void \{\s*void controller\.handleScannedText\(value\);/,
+      );
+      expect(panel).toMatch(/onScanned=\{handleScanned\}/);
+      const preview = readCode("../../src/features/connect/expo-camera-preview.tsx");
+      expect(preview).toMatch(/onBarcodeScanned=\{handleBarcodeScanned\}/);
+      expect(preview).toMatch(/barcodeTypes: \["qr"\]/);
     });
 
     it("the isolated e2e daemon this flow runs against is started with --no-relay, so a relay pairing has nothing to pair through here", () => {

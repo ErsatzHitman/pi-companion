@@ -19,6 +19,12 @@ export type {
 } from "./daemon-connection-store";
 export { QrPairingPanel } from "./QrPairingPanel";
 export type { QrPairingPanelProps } from "./QrPairingPanel";
+export type { QrCameraPreviewComponent, QrCameraPreviewProps } from "./expo-camera-preview";
+export { createExpoCameraScannerPort } from "./expo-camera-scanner-port";
+export type {
+  CameraScannerBindings,
+  ExpoCameraPermissionResponse,
+} from "./expo-camera-scanner-port";
 export {
   CAMERA_BLOCKED_EXPLANATION,
   CAMERA_DENIED_EXPLANATION,

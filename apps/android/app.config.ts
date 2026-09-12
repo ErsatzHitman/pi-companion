@@ -414,10 +414,34 @@ const config: ExpoConfig = {
   // icon/color/default-channel metadata and custom sounds), so adding it
   // would change nothing this app relies on. `expo-device` has no config
   // plugin and no permission at all.
+  // T392: `expo-camera` is a dependency now, and its SDK-54 config plugin
+  // is registered with honest, QR-pairing-specific permission copy.
+  // Measured, not assumed: `expo-camera`'s own bundled
+  // `android/src/main/AndroidManifest.xml` already declares
+  // `android.permission.CAMERA` (and `RECORD_AUDIO`), which Android's
+  // manifest merger admits for every installed native module even with no
+  // plugin entry, and the plugin's whole Android effect is
+  // `withPermissions(config, ["CAMERA", recordAudioAndroid && "RECORD_AUDIO"])`.
+  // `recordAudioAndroid: false` therefore changes nothing in the merged
+  // manifest — the module's own manifest still contributes RECORD_AUDIO,
+  // which this app already needs and already has for voice feedback
+  // (`expo-audio`) — but it keeps this config from *asking* for a
+  // microphone permission scanning a QR code never uses. The
+  // `cameraPermission` string is the plugin's documented permission copy;
+  // this app is Android-only (`platforms: ["android"]` above), so the
+  // plugin applies it to iOS only, which that filter makes unreachable —
+  // its honest wording is a record here, not a value this build renders.
   plugins: [
     "expo-router",
     "./plugins/with-share-intent-module",
     "./plugins/with-cleartext-traffic",
+    [
+      "expo-camera",
+      {
+        cameraPermission: "Allow Pi Companion to use the camera so you can scan a pairing QR code.",
+        recordAudioAndroid: false,
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

@@ -9,13 +9,14 @@
  * RolldownError), only by `OnboardingGate.tsx` at runtime.
  *
  * Camera get/request delegates to `qr-scanner-port.ts`'s existing
- * `CameraScannerPort` — reused, not forked. In this workspace that is
- * always `createUnavailableCameraScannerPort()` (no `expo-camera`
- * installed; see that module's docstring for the install command), so
- * this adapter can only ever report `"unavailable"` for camera checks,
- * never `"denied-permanently"` — that fifth state is exercised in
- * `permission-recovery.test.ts` only, against a scripted fake port,
- * until a real camera module lands. `CameraScannerPort` needs no cast to
+ * `CameraScannerPort` — reused, not forked. Since T392 the default is
+ * `createExpoCameraScannerPort()` (`./expo-camera-scanner-port.ts`),
+ * backed by `expo-camera`'s own permission APIs, so this adapter now
+ * genuinely reads and requests the OS camera permission and can report
+ * `"denied-permanently"` for Android's "don't ask again".
+ * `createUnavailableCameraScannerPort()` remains available for a caller
+ * that wants camera pairing explicitly disabled. `CameraScannerPort`
+ * needs no cast to
  * satisfy `PermissionPort`: since T60E (P5-W17) it reads and returns
  * `PermissionState` itself, having dropped the four-value
  * `CameraPermissionStatus` alias it used to declare (a structural subset
@@ -31,11 +32,12 @@
  */
 import { Linking } from "react-native";
 
-import { createUnavailableCameraScannerPort, type CameraScannerPort } from "./qr-scanner-port.js";
+import { createExpoCameraScannerPort } from "./expo-camera-scanner-port.js";
+import type { CameraScannerPort } from "./qr-scanner-port.js";
 import type { OnboardingPermissionsPort } from "./onboarding-permissions.js";
 
 export function createOnboardingPermissionsPort(
-  camera: CameraScannerPort = createUnavailableCameraScannerPort(),
+  camera: CameraScannerPort = createExpoCameraScannerPort(),
 ): OnboardingPermissionsPort {
   return {
     getPermissionStatus: () => camera.getPermissionStatus(),

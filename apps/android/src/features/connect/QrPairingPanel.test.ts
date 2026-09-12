@@ -17,9 +17,20 @@ function readSource(): string {
   return readFileSync(fileURLToPath(new URL("./QrPairingPanel.tsx", import.meta.url)), "utf8");
 }
 
+function readPreviewSource(): string {
+  return readFileSync(fileURLToPath(new URL("./expo-camera-preview.tsx", import.meta.url)), "utf8");
+}
+
 /** Strips comments before matching, so a doc comment naming a symbol (this file's own module docstring names `handleScannedText`, `"settings"`, `openSettings`, ...) can never itself satisfy an assertion about real code. */
 function readCode(): string {
   return readSource()
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+/** Comment-stripped preview source — `expo-camera-preview.tsx`'s own doc comment names `${testId}-preview`, so an unstripped match would pass even if the JSX were deleted. */
+function readPreviewCode(): string {
+  return readPreviewSource()
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/.*$/gm, "");
 }
@@ -93,5 +104,69 @@ describe("QrPairingPanel source", () => {
     expect(readCode()).toMatch(
       /const showRetry = snapshot\.phase === "denied" \|\| snapshot\.phase === "unavailable";/,
     );
+  });
+
+  // --- Real camera preview in the "ready" phase (T392) ----------------
+
+  it("resolves the scanner default to the real expo-camera port (T392), leaving the unavailable factory importable", () => {
+    expect(readCode()).toMatch(/scanner: scanner \?\? createExpoCameraScannerPort\(\)/);
+    expect(readCode()).toMatch(
+      /import type \{ CameraScannerPort \} from "\.\/qr-scanner-port\.js";/,
+    );
+  });
+
+  it("loads the real preview lazily, so expo-camera is not in this panel's static import graph", () => {
+    expect(readCode()).toMatch(
+      /const LazyExpoCameraPreview = lazy\(\(\) => import\("\.\/expo-camera-preview"\)\);/,
+    );
+    expect(readCode()).not.toMatch(/from "expo-camera"/);
+  });
+
+  it("declares preview as an optional injectable prop, so a production caller never has to pass one", () => {
+    expect(readCode()).toMatch(/preview\?: QrCameraPreviewComponent;/);
+    expect(readCode()).toMatch(
+      /import type \{ QrCameraPreviewComponent \} from "\.\/expo-camera-preview\.js";/,
+    );
+  });
+
+  it("the 'ready' phase renders the preview seam under the `${testId}-preview` surface, with the honest placeholder as its loading/failure fallback", () => {
+    const code = readCode();
+    expect(code).toMatch(/const previewTestId = testId \? `\$\{testId\}-preview` : undefined;/);
+    expect(code).toMatch(/const PreviewSurface = preview \?\? LazyExpoCameraPreview;/);
+    expect(code).toMatch(/\{snapshot\.phase === "ready" \? \(/);
+    expect(code).toMatch(/<CameraPreviewBoundary/);
+    expect(code).toMatch(
+      /fallback=\{<View style=\{styles\.previewPlaceholder\} testID=\{previewTestId\} \/>\}/,
+    );
+    expect(code).toMatch(
+      /<Suspense fallback=\{<View style=\{styles\.previewPlaceholder\} testID=\{previewTestId\} \/>\}>/,
+    );
+    expect(code).toMatch(/getDerivedStateFromError/);
+    expect(code).toMatch(
+      /return this\.state\.failed \? this\.props\.fallback : this\.props\.children;/,
+    );
+  });
+
+  it("forwards a decoded QR to controller.handleScannedText through handleScanned, not a second pipeline", () => {
+    expect(readCode()).toMatch(
+      /function handleScanned\(value: string\): void \{\s*void controller\.handleScannedText\(value\);\s*\}/,
+    );
+    expect(readCode()).toMatch(/onScanned=\{handleScanned\}/);
+  });
+
+  it("keeps the preview surface at or above the 48dp floor", () => {
+    expect(readCode()).toMatch(/minHeight: 48,/);
+  });
+
+  it("expo-camera-preview.tsx renders a QR-only surface under `${testId}-preview` and hands onScanned the decoded text", () => {
+    const code = readPreviewCode();
+    expect(code).toMatch(/testID=\{testId \? `\$\{testId\}-preview` : undefined\}/);
+    expect(code).toMatch(/barcodeTypes: \["qr"\]/);
+    expect(code).toMatch(
+      /function handleBarcodeScanned\(result: BarcodeScanningResult\): void \{\s*onScanned\(result\.data\);\s*\}/,
+    );
+    expect(code).toMatch(/onBarcodeScanned=\{handleBarcodeScanned\}/);
+    expect(code).toMatch(/minHeight: 48,/);
+    expect(code).toMatch(/export default ExpoCameraPreview;/);
   });
 });

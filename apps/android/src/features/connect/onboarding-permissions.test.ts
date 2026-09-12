@@ -67,7 +67,7 @@ describe('describePermissionRecovery("camera", state) — the onboarding call si
     expect(describePermissionRecovery("camera", "granted").action).toBe("dismiss");
   });
 
-  it("unavailable (no camera module installed) explains the app-level fact, distinct from a user denial", () => {
+  it("unavailable (no native camera module to ask) explains the app-level fact, distinct from a user denial", () => {
     const unavailable = describePermissionRecovery("camera", "unavailable").message;
     const denied = describePermissionRecovery("camera", "denied").message;
     expect(unavailable).not.toBe(denied);

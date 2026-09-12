@@ -7,8 +7,8 @@
  * asks the OS for camera access. Only two operations: read the current
  * permission without prompting, and prompt for it. Deliberately not a
  * "give me frames"/"give me decoded barcodes" API — decoding is a
- * native camera view's job (`QrPairingPanel.tsx`'s job once a real
- * camera library is installed), and this port's caller
+ * native camera view's job (`QrPairingPanel.tsx`'s, backed as of T392
+ * by `./expo-camera-preview.tsx`), and this port's caller
  * (`qr-scan-model.ts`) only ever receives already-decoded text through
  * its own `handleScannedText`, the same shape a paste box or any other
  * text source could feed it.
@@ -22,37 +22,31 @@
  * permission-state.mjs`'s history for the full story). T60E deleted it
  * and this port now reads/returns `PermissionState` directly — the
  * same vocabulary every other permission port in this tree uses, camera
- * included. `getPermissionStatus`/`requestPermission` can now genuinely
- * report `"denied-permanently"` (Android's "don't ask again") the
- * moment a real camera module lands; `qr-scan-model.ts`'s
+ * included. `getPermissionStatus`/`requestPermission` can genuinely
+ * report `"denied-permanently"` (Android's "don't ask again") as of
+ * T392, because `./expo-camera-scanner-port.ts` maps `expo-camera`'s
+ * `canAskAgain: false` result onto it; `qr-scan-model.ts`'s
  * `mapPermissionStatus` already handles it (see that module's own
  * comment for what it does with it).
  *
- * **No camera dependency is installed in this workspace.**
- * `apps/android/package.json` carries no `expo-camera` (or
- * `expo-barcode-scanner`) today, and this task may not run `npm
- * install`. `createUnavailableCameraScannerPort` below is therefore
- * this module's only production implementation: it always reports
- * `"unavailable"`, which `qr-scan-model.ts` renders as its own
- * `"unavailable"` phase — a distinct, honest state from a user's own
- * `"denied"` choice, so the fallback copy never claims a user "denied"
- * something they were never asked. `QrPairingPanel.tsx` never opens a
- * camera preview in this build; it only ever proves against this port
- * or a scripted fake of it.
+ * **The real camera is installed (T392).** `expo-camera@~17.0.10` — the
+ * pin this app's own SDK-54 `expo` (`54.0.37`) gives in the package's
+ * `bundledNativeModules.json` — is a dependency, and
+ * `./expo-camera-scanner-port.ts`'s `createExpoCameraScannerPort` is the
+ * production implementation behind both call sites (`QrPairingPanel.tsx`'s
+ * `scanner` default and `onboarding-permissions-port.ts`'s camera
+ * default).
  *
- * To wire a real camera once available:
- *
- *   npm install --workspace=@picompanion/android expo-camera@<version
- *   from apps/android/node_modules/expo/bundledNativeModules.json>
- *
- * — then add a second implementation of `CameraScannerPort` backed by
- * `expo-camera`'s `Camera.getCameraPermissionsAsync`/
- * `requestCameraPermissionsAsync` (mapping its `PermissionStatus`,
- * including Android's "don't ask again" result, onto `PermissionState`
- * below), and pass it as `QrPairingPanel`'s `scanner` prop in place of
- * `createUnavailableCameraScannerPort()`. Nothing in `qr-scan-model.ts`
- * or `QrPairingPanel.tsx` needs to change for that swap — the whole
- * point of this seam.
+ * `createUnavailableCameraScannerPort` below is retained, not deleted:
+ * it always reports `"unavailable"`, a distinct, honest state from a
+ * user's own `"denied"` choice, so the fallback copy never claims a
+ * user "denied" something they were never asked. Tests use it (or a
+ * scripted fake) to keep `qr-scan-model.ts`'s phases driveable without a
+ * native module, and a caller that wants camera pairing explicitly
+ * disabled still passes it. `QrPairingPanel.tsx` renders a real preview
+ * in its `"ready"` phase as of T392 (`./expo-camera-preview.tsx`),
+ * behind an injectable seam that falls back to the panel's honest
+ * placeholder when the native view cannot render.
  */
 import type { PermissionState } from "../composer/permission-recovery.js";
 
@@ -69,7 +63,7 @@ export interface CameraScannerPort {
   requestPermission(): Promise<PermissionState>;
 }
 
-/** This build's only production `CameraScannerPort` — see module docstring. */
+/** The explicit "no camera" `CameraScannerPort` — retained for tests and for a caller that disables camera pairing; `./expo-camera-scanner-port.ts`'s `createExpoCameraScannerPort` is production's real implementation (see module docstring). */
 export function createUnavailableCameraScannerPort(): CameraScannerPort {
   return {
     async getPermissionStatus() {
