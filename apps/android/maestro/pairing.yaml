@@ -33,19 +33,18 @@ tags:
 # complete a real relay pairing, on a device or otherwise, for two
 # independent reasons, and says so rather than faking one:**
 #
-#   1. No camera module is installed in this workspace
-#      (`../../src/features/connect/qr-scanner-port.ts`'s module
-#      docstring), so no QR can be *decoded* here. (P5-W18 correction:
-#      the rest of this item is now out of date. T32A8 added a
-#      manual-paste affordance to `QrPairingPanel.tsx` — an
-#      always-visible "Pairing link" `TextField`
-#      (`${testId}-paste-input`) plus a "Pair" button
-#      (`${testId}-paste-input-pair-button`), both wired to the same
-#      `controller.handleScannedText(...)` a camera decode would call. So
-#      `handleScannedText` IS now reachable from the rendered UI, and a
-#      Maestro `inputText`/`tapOn` pair CAN get a pairing offer into the
-#      app. Reason 2 below still stands on its own and is what keeps this
-#      half of the flow from completing.)
+#   1. CORRECTED (T392): the camera decode is real now —
+#      `expo-camera` is installed and `QrPairingPanel.tsx` renders a
+#      live preview in its `"ready"` phase (`expo-camera-preview.tsx`)
+#      whose decoded payload goes straight to
+#      `controller.handleScannedText`. T32A8's manual-paste affordance
+#      still exists and still reaches that same entry point — an
+#      always-visible "Pairing link" `TextField` (`${testId}-paste-input`)
+#      plus a "Pair" button (`${testId}-paste-input-pair-button`) — so
+#      this flow never depends on a camera decode, whose OS permission
+#      dialog is a system surface the flow cannot observe. Reason 2 still
+#      stands on its own and is what keeps this half of the flow from
+#      completing.
 #   2. Even if there were, this harness's own isolated daemon is started
 #      with `--no-relay` (`../e2e/harness/run-plan.ts`'s `startArgv`) —
 #      by design, so a stray relay credential can never reach a real
@@ -54,9 +53,9 @@ tags:
 #
 # What relay pairing needs before it can run for real: (a) an offer to
 # get into the app — DONE as of T32A8 (P5-W18) via the manual-paste
-# field above; a camera module plus a second `CameraScannerPort` (see
-# `qr-scanner-port.ts`'s own "To wire a real camera" note) would be the
-# nicer second route and still does not exist — and (b) a harness daemon
+# field above, and since T392 also decodable from a real camera preview
+# (`expo-camera-preview.tsx`; the OS permission dialog still needs a
+# real device run) — and (b) a harness daemon
 # variant started *with* a relay (or a scripted relay double), which is
 # `../e2e/harness/`'s call, not this file's, and is still the open
 # blocker.
@@ -65,9 +64,10 @@ tags:
 # half" -- it now runs BEFORE the direct connect, see the step comment
 # below) proves what **is** true today: the
 # relay entry point exists, is reachable from `ConnectionShell`, and
-# renders its honest `"unavailable"` fallback — never a fake "paired"
-# state. Treat this half as a regression guard on that honesty, not as
-# proof relay pairing works.
+# never fakes a "paired" state — T392 replaced its old permanent
+# `"unavailable"` copy with the real permission read plus camera
+# preview, so this half is a regression guard on the honest entry point,
+# not proof relay pairing works.
 #
 # `clearState`/`clearKeychain` make this flow independent and repeatable
 # (../README.md's "Flow independence"): every run starts from the same
@@ -80,11 +80,13 @@ tags:
     clearState: true
     clearKeychain: true
 
-# --- Onboarding: welcome, then the permissions step (camera is always
-# --- "unavailable" in this build, so the permissions step's primary
-# --- action button never renders — see OnboardingGate.tsx's
-# --- `recovery.action !== "dismiss"` gate; only the banner + Continue
-# --- show). Same anchors as ../smoke.yaml, carried one step further.
+# --- Onboarding: welcome, then the permissions step. T392 made the
+# --- camera read real, so the banner below is no longer the fixed
+# --- "unavailable" copy: its text depends on the device's current
+# --- camera permission (a fresh install has never asked, so it shows
+# --- the "undetermined" ask). The banner itself renders for every
+# --- state, which is what this flow pins; the retired copy is asserted
+# --- absent. Same anchors as ../smoke.yaml, carried one step further.
 - assertVisible:
     id: "connect-onboarding"
 - assertVisible:
@@ -94,6 +96,8 @@ tags:
 - assertVisible:
     id: "connect-onboarding"
 - assertVisible:
+    id: "connect-onboarding-permission-banner"
+- assertNotVisible:
     text: "Camera access isn't available in this build."
 - tapOn:
     id: "connect-onboarding-permission-continue"
@@ -104,10 +108,15 @@ tags:
 - assertVisible:
     text: "Not connected"
 
-# --- Relay entry point: reachable, and honest about not being wired up
-# --- yet (see the header comment above for exactly why). This is a
-# --- regression guard on that honesty, not a completed pairing.
-# --- T332: checked BEFORE the direct connect, the order
+# --- Relay entry point: reachable, and honest. T392 replaced the old
+# --- "QR pairing isn't available in this build" stub: entering this
+# --- surface now asks the OS for camera permission (a system dialog
+# --- this flow cannot observe — the same limitation
+# --- ../composer-inputs.yaml's MIC BUTTON section documents), and a
+# --- granted read shows the real preview. What is deterministic here is
+# --- the section itself, its always-present paste affordance, and the
+# --- retired stub copy's absence; the decode/preview outcome waits on a
+# --- real device run. --- T332: checked BEFORE the direct connect, the order
 # --- ../network-switch.yaml always used -- a successful connect navigates
 # --- this screen away, so nothing on it can be tapped afterwards (run
 # --- 34459631677 proved the old order could not pass).
@@ -116,9 +125,9 @@ tags:
 - assertVisible:
     id: "connection-shell-qr-pairing"
 - assertVisible:
+    id: "connection-shell-qr-pairing-paste-input"
+- assertNotVisible:
     text: "QR pairing isn't available in this build yet. Enter your host's address manually below instead."
-- assertVisible:
-    id: "connection-shell-qr-pairing-retry-button"
 - tapOn:
     id: "connection-shell-hide-scanner-button"
 - assertVisible:

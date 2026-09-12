@@ -124,8 +124,8 @@ tags:
 # completed download (blocked on a real workspace root — the gap above)
 # and T66's named RELAY refusal specifically (blocked on a real relay
 # pairing, which `pairing.yaml`'s own header already establishes is
-# impossible on this harness: no camera module, and this harness's daemon
-# is started `--no-relay` by design). Both the real download mechanics
+# impossible on this harness: this harness's daemon is started
+# `--no-relay` by design). Both the real download mechanics
 # (a real file selection, a real HTTP origin, a real chunked byte stream)
 # and T66's exact named relay refusal are instead proven directly against
 # the real, production `createFileDownloadController`/`buildFileDownloadUrl`

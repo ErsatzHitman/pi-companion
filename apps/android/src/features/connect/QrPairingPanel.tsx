@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
 
 import { Banner } from "../../ui/primitives/Banner";
@@ -11,24 +11,78 @@ import type {
   ApplyConnectionOfferAttempt,
   ApplyConnectionOfferSuccess,
 } from "./apply-connection-offer.js";
+import type { QrCameraPreviewComponent } from "./expo-camera-preview.js";
+import { createExpoCameraScannerPort } from "./expo-camera-scanner-port.js";
 import {
   createQrScanController,
   describeQrScanPhase,
   type QrScanSnapshot,
 } from "./qr-scan-model.js";
-import { createUnavailableCameraScannerPort, type CameraScannerPort } from "./qr-scanner-port.js";
+import type { CameraScannerPort } from "./qr-scanner-port.js";
+
+/**
+ * The real preview, loaded on demand (T392). `expo-camera`'s `CameraView`
+ * reaches `react-native` (and, at runtime, a native view that a given
+ * build may not have linked), so it is deliberately kept out of this
+ * module's static import graph: the import only happens when a
+ * `"ready"` phase first renders the seam.
+ */
+const LazyExpoCameraPreview = lazy(() => import("./expo-camera-preview"));
+
+interface CameraPreviewBoundaryProps {
+  fallback: ReactNode;
+  children: ReactNode;
+}
+
+interface CameraPreviewBoundaryState {
+  failed: boolean;
+}
+
+/**
+ * Turns a render-time failure of the native camera view (or of the
+ * dynamic import above) into this panel's honest placeholder instead of
+ * a crash. Deliberately local and tiny: the app's root
+ * `AppErrorBoundary` would blank the whole shell, and a camera preview
+ * that cannot mount is a per-surface, recoverable absence rather than a
+ * product error.
+ */
+class CameraPreviewBoundary extends Component<
+  CameraPreviewBoundaryProps,
+  CameraPreviewBoundaryState
+> {
+  state: CameraPreviewBoundaryState = { failed: false };
+
+  static getDerivedStateFromError(): CameraPreviewBoundaryState {
+    return { failed: true };
+  }
+
+  render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
 
 export interface QrPairingPanelProps {
   applyOffer: ApplyConnectionOfferAttempt;
   onPaired: (result: ApplyConnectionOfferSuccess) => void;
   /**
    * Injectable, RN-free camera-permission seam — test/DI seam, mirrors
-   * `daemon-connect-attempt.ts`'s `webSocketFactory`. Defaults to
-   * `createUnavailableCameraScannerPort()`: this workspace has no
-   * camera module installed (see `qr-scanner-port.ts`'s module
-   * docstring), so a production caller never passes this.
+   * `daemon-connect-attempt.ts`'s `webSocketFactory`. Defaults to the
+   * real `createExpoCameraScannerPort()` (T392); pass
+   * `createUnavailableCameraScannerPort()` to disable camera permission
+   * explicitly, or a scripted fake from a test.
    */
   scanner?: CameraScannerPort;
+  /**
+   * Injectable camera-preview seam (T392) — the component rendered while
+   * `snapshot.phase === "ready"`. Defaults to
+   * `./expo-camera-preview.tsx`'s `ExpoCameraPreview`, reached through a
+   * dynamic `import()`. A caller (or a build without the linked native
+   * camera view) can supply its own surface, and the panel renders its
+   * honest `previewPlaceholder` for the loading and render-failure cases
+   * either way. The injected component must render its surface with
+   * `${testId}-preview`.
+   */
+  preview?: QrCameraPreviewComponent;
   /**
    * Injectable seam for the `"settings"` phase's "Open settings"
    * affordance (T32A8, T60E's filed seam — see this component's module
@@ -50,18 +104,21 @@ export interface QrPairingPanelProps {
  * therefore any camera permission prompt — can fire (see that module's
  * docstring for the full rule this satisfies).
  *
- * This build has no camera library installed
- * (`qr-scanner-port.ts`'s module docstring), so `scanner` defaults to
- * `createUnavailableCameraScannerPort()` and this panel always renders
- * its `"unavailable"` fallback in production — an honest state, not a
- * simulated one: there genuinely is no camera preview to show yet.
+ * `scanner` defaults to the real `createExpoCameraScannerPort()` (T392)
+ * and `preview` to `./expo-camera-preview.tsx`'s `ExpoCameraPreview`, so
+ * a `"ready"` read now shows a live, QR-only camera preview whose
+ * decoded payload is forwarded to `controller.handleScannedText`. The
+ * preview is held behind a dynamic `import()` inside a small error
+ * boundary, and both its loading and render-failure fallbacks are the
+ * existing `previewPlaceholder` — a build whose native camera view is
+ * not linked renders that honest, empty surface rather than crashing.
  * Every phase this component can reach is proven at the model level
  * (`qr-scan-model.test.ts`) against a scripted `CameraScannerPort`;
  * this file itself is untestable under this workspace's vitest setup
  * (any module reaching `react-native` fails — see `CLAUDE.md`'s
- * "VITEST LIMITATION" note) and is therefore a thin, unproven view over
- * that tested model, exactly like `ConnectForm.tsx` is over
- * `connect-form-model.ts`.
+ * "VITEST LIMITATION" note) and is therefore a thin view over that
+ * tested model, pinned at the source level by `QrPairingPanel.test.ts`,
+ * exactly like `ConnectForm.tsx` is over `connect-form-model.ts`.
  *
  * **T32A8: the manual-paste entry point.** Found by T37E1 (P5-W16): with
  * no camera module installed, this panel used to have no way at all to
@@ -97,6 +154,7 @@ export function QrPairingPanel({
   applyOffer,
   onPaired,
   scanner,
+  preview,
   openSettings,
   testId,
 }: QrPairingPanelProps) {
@@ -106,7 +164,7 @@ export function QrPairingPanel({
   const controller = useMemo(
     () =>
       createQrScanController({
-        scanner: scanner ?? createUnavailableCameraScannerPort(),
+        scanner: scanner ?? createExpoCameraScannerPort(),
         applyOffer,
         onPaired,
       }),
@@ -131,9 +189,17 @@ export function QrPairingPanel({
   const showRetry = snapshot.phase === "denied" || snapshot.phase === "unavailable";
   const showOpenSettings = snapshot.phase === "settings";
   const pairingInFlight = snapshot.phase === "pairing";
+  const previewTestId = testId ? `${testId}-preview` : undefined;
+  const PreviewSurface = preview ?? LazyExpoCameraPreview;
 
   function handlePastePress(): void {
     void controller.handleScannedText(pasteValue);
+  }
+
+  // The camera decode's one entry point into the same tested model the
+  // paste field uses — a successful QR scan calls exactly this.
+  function handleScanned(value: string): void {
+    void controller.handleScannedText(value);
   }
 
   function handleOpenSettingsPress(): void {
@@ -154,10 +220,17 @@ export function QrPairingPanel({
           {describeQrScanPhase(snapshot.phase)}
         </Text>
         {snapshot.phase === "ready" ? (
-          <View
-            style={styles.previewPlaceholder}
-            testID={testId ? `${testId}-preview` : undefined}
-          />
+          <CameraPreviewBoundary
+            fallback={<View style={styles.previewPlaceholder} testID={previewTestId} />}
+          >
+            <Suspense fallback={<View style={styles.previewPlaceholder} testID={previewTestId} />}>
+              <PreviewSurface
+                testId={testId}
+                onScanned={handleScanned}
+                style={styles.previewPlaceholder}
+              />
+            </Suspense>
+          </CameraPreviewBoundary>
         ) : null}
         {showRetry ? (
           <Button
@@ -205,8 +278,13 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     previewPlaceholder: {
       height: 200,
+      // 48dp floor (plan.md T26C): the preview is a display surface, not
+      // a control, but keeping the floor here means it can never render
+      // smaller than a touch target even under a caller-supplied style.
+      minHeight: 48,
       borderRadius: theme.radii.card,
       backgroundColor: theme.colors.surface,
+      overflow: "hidden",
     },
   });
 }
