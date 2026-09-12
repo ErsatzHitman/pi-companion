@@ -29,3 +29,22 @@ export type {
 } from "./use-edit-from-here.js";
 export { EditFromHereSurface } from "./EditFromHereSurface.js";
 export type { EditFromHereSurfaceProps } from "./EditFromHereSurface.js";
+export {
+  addUndoneTurn,
+  buildUndoneTurn,
+  REWIND_SCOPE_OPTIONS,
+  RewindDialog,
+  rewindScopeLabel,
+  useRewindToHere,
+} from "./rewind/index.js";
+export type {
+  RewindDialogModel,
+  RewindDialogProps,
+  RewindMode,
+  RewindScopeOption,
+  RewindStatus,
+  RewindTarget,
+  RewindToHereController,
+  RewindToHereOptions,
+  UndoneTurn,
+} from "./rewind/index.js";

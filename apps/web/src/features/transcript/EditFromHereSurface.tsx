@@ -72,6 +72,14 @@ export interface EditFromHereSurfaceProps {
   streamingEntryId?: string | null;
   resolveImageSrc?: ResolveImageSrc;
   /**
+   * T395: forwarded straight to `Transcript`'s own `onRewindToHere` — the
+   * "Rewind to here" per-row affordance and its dialog are composed by
+   * the caller (see `features/transcript/rewind/`), not by this surface.
+   */
+  onRewindToHere?: (messageId: string) => void;
+  /** T395: forwarded to `Transcript`; `true` disables every row's rewind button. */
+  rewindToHereDisabled?: boolean;
+  /**
    * Called when the reader activates the confirmation banner's "Open
    * branch" action, after a fork has landed. This surface never
    * navigates itself — see this file's module doc.
@@ -94,6 +102,8 @@ export function EditFromHereSurface({
   client,
   streamingEntryId,
   resolveImageSrc,
+  onRewindToHere,
+  rewindToHereDisabled,
   onOpenSession,
   testId,
 }: EditFromHereSurfaceProps) {
@@ -124,6 +134,8 @@ export function EditFromHereSurface({
         // button rather than shipping one that can only ever fail.
         editFromHereTargets={client ? targets : undefined}
         onEditFromHere={editFromHere}
+        onRewindToHere={onRewindToHere}
+        rewindToHereDisabled={rewindToHereDisabled}
         testId={testId}
       />
       {error ? <Banner tone="danger" message={error} testId={errorTestId} /> : null}
