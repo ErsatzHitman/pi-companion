@@ -82,9 +82,12 @@ The table below is still true of `bd366dd`; this paragraph supersedes it.**
 - **Two known-contention tests**: `apps/android/src/ui/theme/fonts.test.ts` and the Maestro
   citation contract walk the filesystem and exceed their 5 s budget when several suites run at
   once; run alone they pass (2 files / 40 tests). This is CLAUDE.md's T240 signature, not a defect.
-- **Still open from this wave**: the **Android rewind surface** (a sheet plus conflict confirm) was
-  never implemented — `docs/issues-from-plan.md`'s T395 section carries the unticked box, and that
-  box is now the only part of T395 outstanding. The web half landed afterwards as `e59f324` (merged
+- **T395 is now closed on both platforms.** The Android half landed as `54b374a`: a sheet with the
+  same three scopes, the same two gates and the same explicit conflict answer, opened by a long-press
+  on a user turn (mobile has no hover), with all its logic in pure modules because `react-native`
+  cannot be rendered under the Android workspace's vitest setup. It deliberately does **not** force a
+  re-read after a success the way web does — this screen's timeline comes from the live
+  `agent_stream` subscription rather than a fetch the screen issues. The web half landed afterwards as `e59f324` (merged
   `7234d80`, ledger `dd70763`): the scope dialog, the per-row affordance, the bounded undone-turns
   record and the conflict's "restore anyway", mounted from `host-session-screen.tsx` beside the
   transcript it rewinds. Verified by `npm test --workspace=@picompanion/web` in that branch's

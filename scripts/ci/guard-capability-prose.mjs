@@ -2804,6 +2804,26 @@ export const CAPABILITIES = [
       /a screen has to (?:string[- ]match|parse) the daemon'?s (?:error )?sentence/i,
     ],
   },
+  {
+    // T395's Android half (apps/android/src/features/transcript/rewind/):
+    // the Android transcript can rewind to a checkpoint through a sheet
+    // that offers the daemon's three scopes, states its gates, and answers
+    // a conflict with an explicit "Restore anyway".
+    //
+    // `buildRewindSheetModel` is declared in exactly one shipped file
+    // (`rewind-sheet-model.ts`), and `RewindSheet`/`useRewindToHere` are
+    // each declared in exactly one more, so a plain OR-list of bare names
+    // is the right shape here — no T168 AND-group, and no `RegExp` anchor,
+    // since none of the three is a common word the way `cancel` once was.
+    name: "the Android transcript can rewind to a checkpoint (buildRewindSheetModel)",
+    methodNames: ["buildRewindSheetModel", "RewindSheet", "useRewindToHere"],
+    denyingPhrases: [
+      /Android has no way to rewind/i,
+      /rewind (?:is|remains) (?:still )?unavailable on Android/i,
+      /only the web app can (?:rewind|restore) (?:a|to a) checkpoint/i,
+      /no Android surface can (?:answer|resolve) (?:a )?(?:checkpoint )?conflict/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

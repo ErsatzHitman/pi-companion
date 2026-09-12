@@ -878,6 +878,8 @@ expo-camera QR pairing (`a756a99`) · **T393** web offline cache + `/h/:serverId
 **Not landed, and why.** The **Android rewind surface** (a sheet + conflict confirm) had no
 implementer; the web one was still in flight when the wave closed. `docs/issues-from-plan.md`'s
 T395 section carries an unticked box for exactly that, so the next agent does not have to guess.
+**Both halves have since landed** — web as `e59f324` (merged `7234d80`) and Android as `54b374a`
+(its ledger section closed in `b46575d`); see the two updates below.
 
 **Update, same day: the web half of T395 landed.** `e59f324` (merged as `7234d80`, ledger in
 `dd70763`) adds `apps/web/src/features/transcript/rewind/` — scope choice, dialog, bounded local
