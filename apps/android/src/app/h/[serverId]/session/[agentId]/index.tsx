@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View, useWindowDimensions, Pressable } from "react-native";
 
-import { timeline as coreTimeline } from "@picompanion/frontend-core";
+import { timeline as coreTimeline, rewind as coreRewind } from "@picompanion/frontend-core";
 
 import { CompactSessionShell } from "../../../../../app-shell/compact-shell";
 import {
@@ -47,6 +47,11 @@ import {
   type TranscriptStatus,
 } from "../../../../../features/transcript";
 import { buildDaemonHttpOrigin } from "../../../../../features/connect/daemon-connection-store.js";
+import {
+  RewindSheet,
+  buildRewindSheetModel,
+  useRewindToHere,
+} from "../../../../../features/transcript/rewind";
 import { deriveSessionRouteStatus } from "../../../../../app-shell/session-route-model";
 import { createContextUsageSignal } from "../../../../../features/telemetry";
 import type { AgentUsage } from "@picompanion/protocol/agent-types";
@@ -278,6 +283,30 @@ function SessionTranscript({
     [rawEntries, grouping, collapsedGroups],
   );
 
+  // T395: the Android rewind surface. The client is read the same way
+  // `SessionApprovals` above reads it (the active lifecycle's client,
+  // structurally a `RewindClientPort`); `turnRunning` is the transcript's
+  // own "a turn is in flight" signal — an optimistic user row not yet
+  // reconciled — because this component has no run-state prop of its own.
+  //
+  // Deliberately NO forced re-read after a success, unlike web's T395b. This
+  // screen's timeline does not come from a fetch this component issues: the
+  // batcher below is fed by the live `agent_stream` subscription, so a
+  // conversation rewind arrives the way every other transcript change does.
+  // A files-only rewind changes no transcript row by design. Re-asking the
+  // daemon (`setViewedAgentTimeline`) would add a third call to a function
+  // T339's contract test pins at exactly two, for a refresh nothing here can
+  // demonstrate it needs.
+  const rewindClient = (core.connection.getActiveLifecycle()?.getDaemonClient() ??
+    null) as unknown as coreRewind.RewindClientPort | null;
+  const styles = useMemo(() => createRewindStyles(), []);
+  const rewind = useRewindToHere({
+    sessionId: agentId,
+    entries,
+    client: rewindClient,
+    turnRunning: entries.some((entry) => entry.pending),
+  });
+
   useEffect(() => {
     setRawEntries(readEntries());
     setTodoEntry(readTodo());
@@ -431,7 +460,7 @@ function SessionTranscript({
             if (entry.kind === "tool-call") {
               return <TranscriptToolCallRow key={entry.id} entry={entry} testId={testId} />;
             }
-            return (
+            const messageRow = (
               <TranscriptMessageRow
                 key={entry.id}
                 entry={entry}
@@ -439,6 +468,26 @@ function SessionTranscript({
                 resolveImageUri={resolveImageUri}
                 testId={testId}
               />
+            );
+            // T395: only a user turn can be rewound to (the daemon rewinds a
+            // session tree entry, not an assistant reply). Mobile has no
+            // hover, so the affordance is a long-press on the row itself: the
+            // whole row is the target, which keeps it above plan.md §9.3's
+            // 48dp floor without adding a second control to the row.
+            if (entry.kind !== "user-message") {
+              return messageRow;
+            }
+            return (
+              <Pressable
+                key={entry.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Rewind to this turn: ${entry.text}`}
+                onLongPress={() => rewind.requestRewind(entry.id)}
+                style={styles.target}
+                testID={`${testId}-rewind-target`}
+              >
+                {messageRow}
+              </Pressable>
             );
           })();
           // Only a group's first member draws the head; a non-head member
@@ -460,6 +509,15 @@ function SessionTranscript({
             </View>
           );
         }}
+      />
+      <RewindSheet
+        model={buildRewindSheetModel(rewind.dialog)}
+        onSelectMode={rewind.selectMode}
+        onSubmit={rewind.submit}
+        onRestoreAnyway={rewind.restoreAnyway}
+        onReturnToTurn={rewind.returnToTurn}
+        onClose={rewind.close}
+        testId="session-rewind-sheet"
       />
     </>
   );
@@ -604,6 +662,21 @@ function SessionInlineExtensions({ agentId }: { agentId: string }) {
 function createInlineExtensionStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     list: { gap: theme.spacing[3] },
+  });
+}
+
+/** plan.md §9.3's touch floor, in dp — measured by `touch-targets.test.ts`. */
+const MIN_TOUCH_TARGET = 48;
+
+/**
+ * T395: the long-press target around a user turn. The row itself is the
+ * control (mobile has no hover, and a second affordance inside the row would
+ * compete with the message's own text selection), so the style only has to
+ * declare the floor `touch-targets.test.ts` audits.
+ */
+function createRewindStyles() {
+  return StyleSheet.create({
+    target: { minHeight: MIN_TOUCH_TARGET },
   });
 }
 

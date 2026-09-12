@@ -798,7 +798,10 @@ describe("SessionRoute marks the viewed agent's timeline (T339)", () => {
 describe("SessionRoute bounds the composer slot beside a drawing pinned area (T346)", () => {
   it("resolves the cap from the real window height and the real pinned-area visibility, never a guess", () => {
     const code = readCode();
-    expect(code).toMatch(/import \{ StyleSheet, View, useWindowDimensions \} from "react-native";/);
+    // Tolerant of a wider named-import list (T395 added `Pressable` for the
+    // long-press rewind target); what this pins is that the cap's window
+    // height comes from React Native's own hook in this file.
+    expect(code).toMatch(/import \{[^}]*useWindowDimensions[^}]*\} from "react-native";/);
     expect(code).toMatch(
       /import \{ resolveComposerSlotMaxHeightDp \} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/composer-slot-cap-model";/,
     );
