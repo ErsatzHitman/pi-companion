@@ -76,6 +76,25 @@ export interface TranscriptMessageRowProps {
    * silently having no button at all.
    */
   canEditFromHere?: boolean;
+  /**
+   * T395 (plan.md §4.2 "Workspace checkpoint snapshots"): renders a
+   * "Rewind to here" button on this row only when
+   * `entry.kind === "user-message"` — omitted entirely for an assistant
+   * row or when this prop itself is omitted (every existing caller,
+   * unaffected). The row supplies `entry.id` when calling it; the
+   * caller's hook resolves that row's daemon message id (see
+   * `rewind/use-rewind-to-here.ts`). Like `onEditFromHere` this is passed
+   * straight through from `transcript.tsx` (never wrapped in a fresh
+   * closure per row) so it stays comparable by reference.
+   */
+  onRewindToHere?: (messageId: string) => void;
+  /**
+   * `true` disables the rewind button (no daemon connection, or the
+   * caller otherwise cannot rewind). A row whose user message has no
+   * daemon id to target disables itself regardless — there is nothing to
+   * rewind to.
+   */
+  rewindToHereDisabled?: boolean;
   testId?: string;
 }
 
@@ -130,6 +149,8 @@ function TranscriptMessageRowImpl({
   resolveImageSrc,
   onEditFromHere,
   canEditFromHere,
+  onRewindToHere,
+  rewindToHereDisabled,
   testId,
 }: TranscriptMessageRowProps) {
   // Render-count instrumentation for the memoization guarantee above.
@@ -177,6 +198,16 @@ function TranscriptMessageRowImpl({
           Edit from here
         </Button>
       ) : null}
+      {entry.kind === "user-message" && onRewindToHere ? (
+        <Button
+          kind="secondary"
+          disabled={!(entry.messageId ?? entry.clientMessageId) || rewindToHereDisabled === true}
+          onClick={() => onRewindToHere(entry.id)}
+          data-testid={testId ? `${testId}-rewind-to-here` : undefined}
+        >
+          Rewind to here
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -220,6 +251,8 @@ function areRowPropsEqual(
     previous.resolveImageSrc === next.resolveImageSrc &&
     previous.onEditFromHere === next.onEditFromHere &&
     previous.canEditFromHere === next.canEditFromHere &&
+    previous.onRewindToHere === next.onRewindToHere &&
+    previous.rewindToHereDisabled === next.rewindToHereDisabled &&
     previous.testId === next.testId
   );
 }

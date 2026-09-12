@@ -1,0 +1,198 @@
+/* Rewind-to-here dialog (T395, plan.md §4.2 "Workspace checkpoint
+ * snapshots").
+ *
+ * Every value here is a `@picompanion/design-tokens` custom property —
+ * repository invariant: no raw colour, space, radius, or motion value.
+ * The panel reuses the `Dialog`/`Sheet` surface treatment (canvas
+ * background, overlay shadow, window radius) rather than defining a new
+ * one, and only adds the scope rows, the outcome notice, and the local
+ * undone-turns list the dialog introduces.
+ *
+ * `.pc-rewind__scope` is a label wrapping a native radio: the whole row
+ * is the pressable target, so it carries a 48px floor through
+ * `--spacing-12` (the same figure the shell header uses) rather than
+ * shrinking to the radio glyph. `Button` keeps its own established
+ * height for every action; nothing here overrides it downward. */
+
+.pc-rewind {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  width: 100%;
+  max-width: 30rem;
+  padding: var(--spacing-5);
+  background-color: var(--color-canvas);
+  box-shadow: var(--shadow-overlay);
+  border-radius: var(--radius-window);
+}
+
+.pc-rewind__title {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.pc-rewind__description {
+  margin: 0;
+  padding-bottom: var(--spacing-3);
+  border-bottom: 1px dashed var(--color-line);
+  color: var(--color-ink-2);
+  font-size: var(--font-size-base);
+}
+
+.pc-rewind__scopes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.pc-rewind__legend {
+  padding: 0;
+  margin-bottom: var(--spacing-2);
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-wide);
+  text-transform: uppercase;
+}
+
+.pc-rewind__scope {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--spacing-2);
+  align-items: center;
+  min-height: var(--spacing-12);
+  padding: var(--spacing-2);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.pc-rewind__scope:hover {
+  background-color: var(--color-hover);
+}
+
+.pc-rewind__scope:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pc-rewind__scope input[type="radio"] {
+  grid-row: 1 / span 2;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.pc-rewind__scope-label {
+  color: var(--color-ink);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+}
+
+.pc-rewind__scope-description {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+
+.pc-rewind__notice {
+  margin: 0;
+  padding: var(--spacing-3);
+  border-radius: var(--radius-card);
+  font-size: var(--font-size-base);
+}
+
+.pc-rewind__notice--conflict,
+.pc-rewind__notice--failed {
+  background-color: var(--color-red-tint);
+  color: var(--color-red);
+}
+
+.pc-rewind__notice--unsupported {
+  background-color: var(--color-orange-tint);
+  color: var(--color-orange);
+}
+
+.pc-rewind__notice--success {
+  background-color: var(--color-green-tint);
+  color: var(--color-green);
+}
+
+.pc-rewind__daemon-message {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+}
+
+.pc-rewind__note {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+}
+
+.pc-rewind__undone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding-top: var(--spacing-3);
+  border-top: 1px dashed var(--color-line);
+}
+
+.pc-rewind__undone-title {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.pc-rewind__undone-hint,
+.pc-rewind__undone-empty {
+  margin: 0;
+  color: var(--color-ink-3);
+  font-size: var(--font-size-xs);
+}
+
+.pc-rewind__undone-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin: var(--spacing-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-rewind__undone-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  border-radius: var(--radius-control);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-hairline);
+}
+
+.pc-rewind__undone-snippet {
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-rewind__undone-mode {
+  flex: none;
+  color: var(--color-ink-3);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+}
+
+.pc-rewind__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+}

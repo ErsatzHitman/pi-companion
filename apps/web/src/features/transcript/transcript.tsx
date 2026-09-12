@@ -76,6 +76,20 @@ export interface TranscriptProps {
    * memoization.
    */
   onEditFromHere?: (messageId: string) => void;
+  /**
+   * T395: called with a user message's `id` when its "Rewind to here"
+   * button is activated. Forwarded straight through to
+   * `TranscriptMessageRow` unchanged (never wrapped in a fresh closure
+   * here) so it stays comparable by reference for that row's own
+   * memoization. Omit to render no rewind affordance at all.
+   */
+  onRewindToHere?: (messageId: string) => void;
+  /**
+   * T395: `true` disables every row's rewind button (no daemon
+   * connection). A row whose user message has no daemon id disables
+   * itself regardless — see `message-row.tsx`.
+   */
+  rewindToHereDisabled?: boolean;
   testId?: string;
 }
 
@@ -223,6 +237,8 @@ function renderEntryRow(
   resolveImageSrc?: ResolveImageSrc,
   editFromHereTargets?: EditFromHereTargetIndex,
   onEditFromHere?: (messageId: string) => void,
+  onRewindToHere?: (messageId: string) => void,
+  rewindToHereDisabled?: boolean,
 ) {
   const rowTestId = `transcript-row-${entry.id}`;
   if (isThinkingEntry(entry)) {
@@ -247,6 +263,8 @@ function renderEntryRow(
       resolveImageSrc={resolveImageSrc}
       onEditFromHere={onEditFromHere}
       canEditFromHere={editFromHereTargets ? canEditFromHere(editFromHereTargets, entry.id) : false}
+      onRewindToHere={onRewindToHere}
+      rewindToHereDisabled={rewindToHereDisabled}
       testId={rowTestId}
     />
   );
@@ -376,6 +394,8 @@ export function Transcript({
   resolveImageSrc,
   editFromHereTargets,
   onEditFromHere,
+  onRewindToHere,
+  rewindToHereDisabled,
   testId,
 }: TranscriptProps) {
   const renderable = useMemo(() => entries.filter(isRenderableEntry), [entries]);
@@ -527,6 +547,8 @@ export function Transcript({
                     resolveImageSrc,
                     editFromHereTargets,
                     onEditFromHere,
+                    onRewindToHere,
+                    rewindToHereDisabled,
                   )
                 : null}
             </div>

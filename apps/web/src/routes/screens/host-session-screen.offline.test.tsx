@@ -86,6 +86,8 @@ describe("useSessionTranscriptEntries offline cache path (T393)", () => {
         connectionStatus: "offline",
         storage,
         clock,
+        // T395: no rewind happened in this case, so the effect never re-runs.
+        refreshNonce: 0,
       }),
     );
 
@@ -107,6 +109,7 @@ describe("useSessionTranscriptEntries offline cache path (T393)", () => {
         connectionStatus: "offline",
         storage,
         clock,
+        refreshNonce: 0,
       }),
     );
 

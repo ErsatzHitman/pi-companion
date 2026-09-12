@@ -19,6 +19,7 @@ import {
   useAttachmentImageResolver,
 } from "../../features/transcript/attachment-image-resolver.js";
 import { EditFromHereSurface } from "../../features/transcript/index.js";
+import { RewindDialog, useRewindToHere } from "../../features/transcript/rewind/index.js";
 import { selectLatestTodoEntry, TodoDock } from "../../features/transcript/index.js";
 import type {
   EditFromHereForkClient,
@@ -189,6 +190,14 @@ export interface SessionTranscriptOptions {
   storage: StructuredStorage;
   /** This app's real `platform.clock`, used for cache-envelope timestamps. */
   clock: Clock;
+  /**
+   * T395: bumped after a successful rewind so the whole effect re-runs and the
+   * transcript re-resumes from the daemon — a rewind mutates history
+   * server-side, and while the live timeline subscription usually pushes the
+   * change, a files-only rewind legitimately changes no timeline row, so the
+   * screen forces one authoritative re-read rather than assuming.
+   */
+  refreshNonce: number;
 }
 
 /** The transcript entries plus the cache-level freshness of the tail behind them. */
@@ -209,7 +218,7 @@ const TRANSCRIPT_INITIAL_TIMELINE = { direction: "tail", limit: 200 } as const;
 export function useSessionTranscriptEntries(
   options: SessionTranscriptOptions,
 ): SessionTranscriptResult {
-  const { client, sessionId, connectionStatus, storage, clock } = options;
+  const { client, sessionId, connectionStatus, storage, clock, refreshNonce } = options;
   const [entries, setEntries] = useState<readonly coreTimeline.TranscriptEntry[]>([]);
   const [cachedAt, setCachedAt] = useState<number | null>(null);
   // Guards a response that resolves after this effect's own cleanup already
@@ -379,7 +388,7 @@ export function useSessionTranscriptEntries(
       for (const dispose of disposers) dispose();
       coalescer.dispose();
     };
-  }, [cache, client, sessionId, connectionStatus]);
+  }, [cache, client, sessionId, connectionStatus, refreshNonce]);
 
   return { entries, cachedAt };
 }
@@ -467,12 +476,32 @@ export function HostSessionScreen() {
   );
   const editFromHereClient = useMemo(() => adaptEditFromHereForkClient(client), [client]);
 
+  // T395: bumping this re-runs the transcript effect above, which re-resumes
+  // from the daemon — a files-only rewind changes no timeline row, so the
+  // screen asks for one authoritative re-read rather than assuming.
+  const [rewindRefreshNonce, setRewindRefreshNonce] = useState(0);
+
   const { entries: transcriptEntries, cachedAt: transcriptCachedAt } = useSessionTranscriptEntries({
     client,
     sessionId: agentId,
     connectionStatus: info.status,
     storage: platform.structuredStorage,
     clock: platform.clock,
+    refreshNonce: rewindRefreshNonce,
+  });
+
+  // T395: the rewind surface's own state and local undone-turns record. The
+  // transcript above is re-resumed after a success through `refreshNonce`,
+  // because a rewind changes history server-side.
+  const rewindController = useRewindToHere({
+    sessionId: agentId,
+    entries: transcriptEntries,
+    client,
+    // The transcript's only "a turn is in flight" signal available here: an
+    // optimistic user row not yet reconciled. The dialog explains the gate
+    // rather than sending a request the daemon refuses.
+    turnRunning: transcriptEntries.some((entry) => entry.pending),
+    onRewound: () => setRewindRefreshNonce((current) => current + 1),
   });
 
   // T393: honest offline banner. `OfflineTranscriptBanner` returns nothing
@@ -540,8 +569,19 @@ export function HostSessionScreen() {
         clock={platform.clock}
         client={editFromHereClient}
         resolveImageSrc={resolveImageSrc}
+        onRewindToHere={rewindController.requestRewind}
+        rewindToHereDisabled={!rewindController.enabled}
         onOpenSession={openForkedSession}
         testId="host-session-transcript"
+      />
+      <RewindDialog
+        {...rewindController.dialog}
+        onSelectMode={rewindController.selectMode}
+        onClose={rewindController.close}
+        onSubmit={rewindController.submit}
+        onRestoreAnyway={rewindController.restoreAnyway}
+        onReturnToTurn={rewindController.returnToTurn}
+        testId="session-rewind-dialog"
       />
       <ApprovalsContainer sessionId={agentId} client={client ?? undefined} />
       {latestTodoEntry ? <TodoDock entry={latestTodoEntry} testId="session-todo-dock" /> : null}
