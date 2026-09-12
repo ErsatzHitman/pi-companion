@@ -83,8 +83,12 @@ The table below is still true of `bd366dd`; this paragraph supersedes it.**
   citation contract walk the filesystem and exceed their 5 s budget when several suites run at
   once; run alone they pass (2 files / 40 tests). This is CLAUDE.md's T240 signature, not a defect.
 - **Still open from this wave**: the **Android rewind surface** (a sheet plus conflict confirm) was
-  never implemented — `docs/issues-from-plan.md`'s T395 section carries the unticked box, and the
-  web half of that surface is on `wave3/rewind-ui` (its own worktree, not yet merged).
+  never implemented — `docs/issues-from-plan.md`'s T395 section carries the unticked box, and that
+  box is now the only part of T395 outstanding. The web half landed afterwards as `e59f324` (merged
+  `7234d80`, ledger `dd70763`): the scope dialog, the per-row affordance, the bounded undone-turns
+  record and the conflict's "restore anyway", mounted from `host-session-screen.tsx` beside the
+  transcript it rewinds. Verified by `npm test --workspace=@picompanion/web` in that branch's
+  worktree (182 files / 1688 tests) and by a web typecheck on the merged tree (0 errors).
 - **In flight at the time of writing**: the CI run for `2cda7b7` and the Maestro dispatch whose
   Android tree this wave changed. Read both before trusting anything above — the previous wave's
   lesson (T93) is that a local green is only half the fact.
