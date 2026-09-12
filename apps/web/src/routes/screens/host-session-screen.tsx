@@ -281,7 +281,6 @@ export function useSessionTranscriptEntries(
       setEntries(projector.project(state));
       scheduleWrite(state);
     });
-    });
     disposers.push(unsubscribeState);
 
     void (async () => {
