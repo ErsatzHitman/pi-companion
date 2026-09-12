@@ -7,6 +7,12 @@ import { composer as coreComposer } from "@picompanion/frontend-core";
 
 import { Composer } from "./Composer.js";
 import type { AgentModelOption } from "./agent-turn-client.js";
+import type {
+  PiUiComposerActionState,
+  PiUiComposerActionTarget,
+  PiUiComposerDraftSource,
+  PiUiComposerProposal,
+} from "./pi-ui-composer-draft.js";
 import {
   FakeAgentTurnClient,
   FakeClock,
@@ -1570,4 +1576,101 @@ describe("Composer @file/@skill references and per-session drafts (T389)", () =>
 
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
+});
+
+/**
+ * Pi UI Bridge `composer`-kind proposals (plan.md §11.3 "composer update
+ * with undo"). The proposal card lives in `features/extensions`, so this
+ * suite proves only the composer half: a settled accept/undo delivered
+ * through `piUiComposerDrafts` reaches the same textarea the user types in.
+ */
+describe("Composer — Pi UI composer proposals", () => {
+  interface FakeProposal {
+    text: string;
+    mode?: "replace" | "prefill" | "append";
+    previousText?: string;
+  }
+
+  function fakeDraftSource(proposal: FakeProposal): PiUiComposerDraftSource & {
+    settle: (actionId: string) => void;
+  } {
+    const listeners = new Set<
+      (target: PiUiComposerActionTarget, state: PiUiComposerActionState) => void
+    >();
+    return {
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      resolveProposal(): PiUiComposerProposal {
+        return {
+          namespace: "composer",
+          elementId: "composer",
+          payload: {
+            kind: "composer",
+            text: proposal.text,
+            ...(proposal.mode === undefined ? {} : { mode: proposal.mode }),
+            ...(proposal.previousText === undefined ? {} : { previousText: proposal.previousText }),
+          },
+        };
+      },
+      settle(actionId: string): void {
+        const target: PiUiComposerActionTarget = {
+          agentId: "session-1",
+          namespace: "composer",
+          elementId: "composer",
+          actionId,
+        };
+        const state: PiUiComposerActionState = {
+          target,
+          requestId: "req-1",
+          status: "success",
+          staleRevision: false,
+          source: "result",
+          settledAt: 1,
+        };
+        for (const listener of listeners) listener(target, state);
+      },
+    };
+  }
+
+  it("accept fills the live draft and undo restores what it replaced", () => {
+    const source = fakeDraftSource({
+      text: "Synthetic rewritten prompt",
+      mode: "prefill",
+      previousText: "synthetic original draft",
+    });
+    render(<Composer {...baseProps()} piUiComposerDrafts={source} testId="composer" />);
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+
+    act(() => source.settle("accept"));
+    expect(input.value).toBe("Synthetic rewritten prompt");
+
+    act(() => source.settle("undo"));
+    expect(input.value).toBe("synthetic original draft");
+  });
+
+  it("a decline leaves the draft exactly as typed", async () => {
+    const user = userEvent.setup();
+    const source = fakeDraftSource({ text: "Synthetic rewritten prompt" });
+    render(<Composer {...baseProps()} piUiComposerDrafts={source} testId="composer" />);
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.type(input, "typed");
+
+    act(() => source.settle("decline"));
+
+    expect(input.value).toBe("typed");
+  });
+
+  it("a blank proposal is a no-op", async () => {
+    const user = userEvent.setup();
+    const source = fakeDraftSource({ text: "   " });
+    render(<Composer {...baseProps()} piUiComposerDrafts={source} testId="composer" />);
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.type(input, "typed");
+
+    act(() => source.settle("accept"));
+
+    expect(input.value).toBe("typed");
+  });
 });

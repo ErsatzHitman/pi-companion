@@ -11,6 +11,24 @@ export { ComposerContainer } from "./ComposerContainer.js";
 export type { ComposerContainerProps } from "./ComposerContainer.js";
 export { useComposer } from "./use-composer.js";
 export type { ComposerState, UseComposerOptions } from "./use-composer.js";
+export {
+  PI_UI_COMPOSER_ACCEPT_ACTION_ID,
+  PI_UI_COMPOSER_UNDO_ACTION_ID,
+  appendToComposerDraft,
+  applyComposerProposal,
+  createPiUiComposerDraftSource,
+  resolvePiUiComposerSettlement,
+} from "./pi-ui-composer-draft.js";
+export type {
+  PiUiComposerActionState,
+  PiUiComposerActionTarget,
+  PiUiComposerDraftSession,
+  PiUiComposerDraftSource,
+  PiUiComposerProposal,
+  PiUiComposerSettlement,
+} from "./pi-ui-composer-draft.js";
+export { useComposerPiUiDraft } from "./use-composer-pi-ui-draft.js";
+export type { UseComposerPiUiDraftOptions } from "./use-composer-pi-ui-draft.js";
 export type {
   AgentAvailableModels,
   AgentModelOption,

@@ -283,3 +283,21 @@ export type { SlashCommandPickerProps } from "./SlashCommandPicker";
 // --- T293: getEditorText / pasteToEditor composer read --------------------
 export { wireEditorTextResponder } from "./editor-text-model";
 export type { DaemonEditorTextRequestMessage, DaemonEditorTextSource } from "./editor-text-model";
+
+// --- Pi UI Bridge `composer`-kind proposals ---------------------------------
+export {
+  PI_UI_COMPOSER_ACCEPT_ACTION_ID,
+  PI_UI_COMPOSER_UNDO_ACTION_ID,
+  appendToComposerDraft,
+  applyComposerProposal,
+  applyPiUiComposerSettlement,
+  createPiUiComposerDraftSource,
+} from "./pi-ui-composer-draft-model";
+export type {
+  PiUiComposerActionState,
+  PiUiComposerActionTarget,
+  PiUiComposerDraftSession,
+  PiUiComposerDraftSource,
+  PiUiComposerProposal,
+  PiUiComposerSettlement,
+} from "./pi-ui-composer-draft-model";

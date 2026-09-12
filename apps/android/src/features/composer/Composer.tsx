@@ -61,6 +61,10 @@ import { resolveComposerMinHeight } from "./composer-min-height-model";
 import { ComposerIconAction } from "./composer-icon-action";
 import { type DaemonEditorTextSource, wireEditorTextResponder } from "./editor-text-model";
 import { createInMemoryStructuredStorage, createSystemClock } from "./in-memory-outbox-runtime";
+import {
+  applyPiUiComposerSettlement,
+  type PiUiComposerDraftSource,
+} from "./pi-ui-composer-draft-model";
 import { runMicPress } from "./mic-press-model";
 import {
   INITIAL_MODEL_THINKING_STATE,
@@ -486,6 +490,22 @@ export interface ComposerProps {
    */
   editorTextClient?: DaemonEditorTextSource;
   /**
+   * Pi UI Bridge `composer`-kind proposals (plan.md §11.3 "composer update
+   * with undo"): where a settled `accept`/`undo` from the proposal card
+   * reaches this composer's draft. The session mount builds it over the
+   * process-wide `AppCore.piUiSession.actionController` (whose
+   * `subscribe` already reports every settlement) and its element store
+   * (whose composer elements carry the payload) — the same way it already
+   * passes `queueModeClient`/`turnStatusClient`/`transcribeClient`. An
+   * accepted proposal replaces the draft (or appends, per its `mode`); a
+   * settled `undo` restores what it replaced; a blank proposal and any
+   * other action are no-ops. See `pi-ui-composer-draft-model.ts` for the
+   * full rule set. Optional, same "no client yet" seam as every sibling
+   * prop: omitted, no subscription is installed and the draft changes only
+   * by typing.
+   */
+  piUiComposerDrafts?: PiUiComposerDraftSource;
+  /**
    * T346: reports `resolveComposerMinHeight`'s measured floor — the
    * height of everything in this composer that never scrolls — every
    * time it changes, so the shell's composer SLOT can carry the same
@@ -681,6 +701,7 @@ export function Composer({
   turnStatusClient,
   slashCommandsClient,
   editorTextClient,
+  piUiComposerDrafts,
   onMinHeightChange,
   placeholder,
   testId,
@@ -871,6 +892,33 @@ export function Composer({
       getDraftText: () => draftRef.current,
     });
   }, [editorTextClient, resolvedSessionId]);
+
+  // --- Pi UI Bridge `composer`-kind proposals -----------------------------
+  // A settled `accept`/`undo` from the proposal card writes through the
+  // same `state.draft` every keystroke uses — one draft, one write site,
+  // no second copy of the composer's text. `draftRef` above is read fresh
+  // and advanced synchronously here, so two settlements in one tick
+  // compose rather than reading a one-write-stale draft. The pure decision
+  // lives in `pi-ui-composer-draft-model.ts`.
+  const piUiUndoRef = useRef<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    if (!piUiComposerDrafts) {
+      return;
+    }
+    return piUiComposerDrafts.subscribe((target, actionState) => {
+      const settlement = applyPiUiComposerSettlement(
+        draftRef.current,
+        piUiUndoRef.current,
+        target,
+        actionState,
+        piUiComposerDrafts.resolveProposal(target),
+      );
+      if (!settlement) return;
+      draftRef.current = settlement.draft;
+      piUiUndoRef.current = settlement.previousByElement;
+      setState((current) => ({ ...current, draft: settlement.draft }));
+    });
+  }, [piUiComposerDrafts]);
 
   const handleOpenSlashCommands = useCallback(() => {
     slashCommandsController.open();

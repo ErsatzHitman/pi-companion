@@ -8,8 +8,10 @@ import type {
   AgentTurnClient,
   PromptStreamingBehavior,
 } from "./agent-turn-client.js";
+import type { PiUiComposerDraftSource } from "./pi-ui-composer-draft.js";
 import type { UseAttachmentsState } from "./use-attachments.js";
 import { useAttachments } from "./use-attachments.js";
+import { useComposerPiUiDraft } from "./use-composer-pi-ui-draft.js";
 
 const EMPTY_QUEUE_UPDATE: AgentQueueUpdate = { steering: [], followUp: [] };
 
@@ -85,6 +87,16 @@ const EMPTY_QUEUE_UPDATE: AgentQueueUpdate = { steering: [], followUp: [] };
  * ready — since an attachment-only message is a real use case the wire
  * protocol supports (`SendAgentMessageSchema`'s `text` accepts an empty
  * string).
+ *
+ * Pi UI Bridge `composer` proposals (plan.md §11.3 "composer update with
+ * undo"): `piUiComposerDrafts` is the optional seam through which an
+ * accepted `composer`-kind element's suggested text reaches this draft.
+ * The subscription itself is `useComposerPiUiDraft`
+ * (`use-composer-pi-ui-draft.ts`); the source is built by whichever route
+ * mounts both the composer and the Pi UI rail, since only a route may
+ * compose two sibling features. Omitted — the honest default for a
+ * standalone composer or a test harness — nothing subscribes and the
+ * draft changes only by typing, exactly as before.
  */
 export interface UseComposerOptions {
   /** Conversation target this composer submits into (session or agent id). */
@@ -114,6 +126,15 @@ export interface UseComposerOptions {
    * §12.4) rather than one invented for this feature.
    */
   client?: AgentTurnClient;
+  /**
+   * Pi UI Bridge `composer`-kind proposals (plan.md §11.3). When wired,
+   * a settled `accept` writes the proposal's text into `draftText` through
+   * the same setter the input uses, and a settled `undo` restores what it
+   * replaced; a blank proposal, a declined action, and a non-`composer`
+   * element are all no-ops. See `UseComposerOptions`'s doc comment and
+   * `pi-ui-composer-draft.ts` for the full rule set.
+   */
+  piUiComposerDrafts?: PiUiComposerDraftSource;
 }
 
 export interface ComposerState {
@@ -183,6 +204,7 @@ export function useComposer(options: UseComposerOptions): ComposerState {
     generateClientMessageId,
     client,
     filePicker,
+    piUiComposerDrafts,
   } = options;
 
   const [draftText, setDraftTextState] = useState("");
@@ -237,6 +259,16 @@ export function useComposer(options: UseComposerOptions): ComposerState {
     },
     [draftController],
   );
+
+  // A settled `composer`-kind accept/undo from the Pi UI rail writes here,
+  // through the same `setDraftText` above — one draft, one setter, no
+  // second copy of the composer's text (plan.md §11.3's "composer update
+  // with undo").
+  useComposerPiUiDraft({
+    source: piUiComposerDrafts,
+    draftText,
+    setDraftText,
+  });
 
   // Live queue-depth subscription (T28B3): resets to empty and
   // re-subscribes whenever the agent or client identity changes, and

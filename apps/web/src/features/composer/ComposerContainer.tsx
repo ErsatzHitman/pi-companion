@@ -5,6 +5,8 @@ import type { DaemonEditorTextSource } from "./daemon-editor-text-client.js";
 import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
+import type { PiUiComposerDraftSource } from "./pi-ui-composer-draft.js";
+
 export interface ComposerContainerProps {
   /** Conversation target this composer submits into (session or agent id). */
   sessionId: string;
@@ -45,6 +47,15 @@ export interface ComposerContainerProps {
    * no connection; the `@` list then offers only skills.
    */
   fileReferenceSource?: coreComposer.ReferenceFileSource;
+  /**
+   * Pi UI Bridge `composer`-kind proposals (plan.md §11.3 "composer update
+   * with undo"). Built by the route-chrome that mounts both this composer
+   * and the Pi UI rail — over the same `ExtensionActionController` the
+   * rail already dispatches through — and passed down the same way
+   * `client`/`editorTextClient` are. Omitted, the composer ignores
+   * proposal actions entirely and the draft changes only by typing.
+   */
+  piUiComposerDrafts?: PiUiComposerDraftSource;
 }
 
 /**
@@ -67,6 +78,7 @@ export function ComposerContainer({
   editorTextClient,
   contextTelemetry,
   fileReferenceSource,
+  piUiComposerDrafts,
 }: ComposerContainerProps) {
   const { platform } = useCore();
   return (
@@ -80,6 +92,7 @@ export function ComposerContainer({
       editorTextClient={editorTextClient}
       contextTelemetry={contextTelemetry}
       fileReferenceSource={fileReferenceSource}
+      piUiComposerDrafts={piUiComposerDrafts}
     />
   );
 }
