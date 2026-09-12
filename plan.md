@@ -367,6 +367,43 @@ Keep `pi-session-watcher.ts` and `pi-live-tail.ts`, but add tests around duplica
 
 The server source is Pi-only, but `packages/server/package.json` still lists several dependencies used by deleted providers. Remove them only after `npm run knip`, server build, and targeted tests prove they are unused.
 
+#### Workspace checkpoint snapshots
+
+A `mode: "files"` or `"both"` rewind is only as good as the snapshot under it, so the daemon keeps
+them itself. The rules, decided here and implemented in `packages/server/src/server/agent/checkpoints/`:
+
+- **Snapshots live outside the workspace.** They sit under the daemon's own home
+  (`$PASEO_HOME/checkpoints`), keyed by a digest of the canonical workspace root. Each discovered
+  work tree gets a bare shadow repository whose `objects/info/alternates` points at the source
+  object database, so objects the daemon writes are read back through Git without adding a ref,
+  an object, an index entry or a HEAD move to the user's repository. A snapshot must never create
+  a `.git` directory inside the user's tree and must never move its HEAD or touch its index.
+- **Capture happens at turn boundaries**, for the agent that owns the workspace: a `before-turn`
+  snapshot and an `after-turn` snapshot. The after-turn capture is what a later rewind awaits, so
+  the baseline it compares against is current rather than stale by one turn.
+- **A restore is a plan, not a checkout.** It is computed as affected / delete / restore paths in
+  each repository, then applied repository by repository.
+- **A conflict refuses unless `force` is set.** The live work tree is compared with the latest
+  snapshot: a difference the checkpoint system did not itself take means something changed
+  outside it, and that is a `CheckpointConflictError` naming the affected paths rather than a
+  silent overwrite. `force: true` — an optional field on `agent.rewind.request`, default false —
+  is the caller saying it knows. There is no new message type and no version-literal change.
+- **A failed restore rolls back.** Applied repositories are rolled back in reverse order when one
+  fails midway, so a partly-applied plan never leaves the workspace in a third state.
+- **Exclusions are content, not prose.** `node_modules`, `.git` directories, `.gitignore`d paths,
+  binaries and untracked files above a 2 MiB cap are excluded, and those rules are pinned by
+  tests rather than documented alone.
+- **The capability flags tell the truth.** `supportsRewindFiles` and `supportsRewindBoth` are true
+  only where a snapshot can actually be taken — a git CLI present and the workspace snapshottable.
+  Elsewhere they stay false and a files rewind fails with an honest "unsupported here" error
+  instead of crashing or silently doing nothing.
+- **Conversation rewind is unchanged.** `revertConversation` still navigates the Pi session tree;
+  this section adds the files leg beside it, it does not replace it.
+
+Adapted from Supernova (MIT, Copyright (c) 2026 Mattia Cerutti) by reimplementation in plain
+Node — behaviour only, no file copied; `docs/T383-provenance.md` names every source file and
+symbol, and `THIRD_PARTY_NOTICES.md` §5 carries the licence.
+
 ### 4.3 Keep the web-serving contract, change its artifact
 
 The daemon’s web middleware is useful and remains. It already provides SPA fallback, compression negotiation, caching, and `window.__PASEO_INITIAL_DAEMON_CONNECTION__` injection.

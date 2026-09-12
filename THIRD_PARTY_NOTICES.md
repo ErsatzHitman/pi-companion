@@ -412,3 +412,52 @@ repository's AGPL-3.0-or-later licence.
   of any workspace here (no `package.json` declares them) — only their
   compiled font _files_ were vendored, one time, as static assets. §3
   already records their provenance correctly.
+
+## 5. Supernova (`D:\supernova`) — MIT (T383)
+
+**Supernova** is an independent third-party project (not Paseo), read as a
+behavioural reference for the daemon's workspace checkpoint snapshots:
+
+- Source: the local checkout `D:\supernova`, MIT, Copyright (c) 2026 Mattia
+  Cerutti.
+- Commit read: `5e6b861d152e41d4fd715abe1dba92421d45c753` (2026-09-11).
+- What was taken: behaviour only, **reimplemented, not ported** — no file was
+  copied. `packages/server/src/server/agent/checkpoints/` restates the snapshot
+  manifest, shadow-repository, restore-plan and rollback semantics in plain
+  Node; Supernova's own implementation is entangled with Effect RPC, Bun and an
+  Electron shell this repository does not take.
+- File-level record: `docs/T383-provenance.md` names every source file and the
+  symbols that carried each behaviour.
+
+MIT is compatible with this project's AGPL-3.0-or-later, so adaptation with
+attribution is permitted. Because nothing was copied verbatim, no per-file
+attribution header is required; the notice below is retained because this
+section records the licence the work was read under.
+
+```
+MIT License
+
+Copyright (c) 2026 Mattia Cerutti
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+**Not derived from Paseo.** Checked before adapting: none of the Supernova files
+`docs/T383-provenance.md` names is itself derived from Paseo's `packages/app`
+tree, so plan §5's exclusion boundary is untouched by this adaptation.
