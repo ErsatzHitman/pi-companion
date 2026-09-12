@@ -33,6 +33,7 @@ import {
   TranscriptTodoRow,
   TranscriptToolCallRow,
   TranscriptWindowList,
+  TranscriptWorkGroupHead,
   createSessionActivitySignal,
   createTranscriptMessageBatcher,
   fireTranscriptStatusHaptic,
@@ -255,12 +256,35 @@ function SessionTranscript({
     const state = batcher.getState();
     return describeTimelineStaleness({ stale: state.stale, gap: state.gap });
   };
-  const [entries, setEntries] = useState<SessionTranscriptEntry[]>(() => readEntries());
+  const [rawEntries, setRawEntries] = useState<SessionTranscriptEntry[]>(() => readEntries());
   const [todoEntry, setTodoEntry] = useState<TodoTranscriptEntry | null>(() => readTodo());
   const [staleness, setStaleness] = useState<StalenessAnnouncement | null>(() => readStaleness());
 
+  // T388 work grouping. The grouping is a pure projection of the full entry
+  // list; `collapsedGroups` holds only the reader's explicit overrides (the
+  // model's own `defaultCollapsed` covers the rest), and `entries` — the list
+  // every consumer below sees — drops a collapsed group's non-head members so
+  // the window and the FlatList never count rows that are not on screen.
+  const grouping = useMemo(() => coreTimeline.buildTranscriptWorkGroups(rawEntries), [rawEntries]);
+  const [collapsedGroups, setCollapsedGroups] = useState<coreTimeline.WorkGroupCollapseState>(
+    coreTimeline.createWorkGroupCollapseState,
+  );
+  const toggleWorkGroup = useCallback(
+    (groupId: string) => {
+      setCollapsedGroups((current) => {
+        const group = grouping.groups.find((candidate) => candidate.id === groupId);
+        return group ? coreTimeline.toggleWorkGroupCollapsed(current, group) : current;
+      });
+    },
+    [grouping],
+  );
+  const entries = useMemo(
+    () => coreTimeline.visibleTranscriptEntries(rawEntries, grouping, collapsedGroups),
+    [rawEntries, grouping, collapsedGroups],
+  );
+
   useEffect(() => {
-    setEntries(readEntries());
+    setRawEntries(readEntries());
     setTodoEntry(readTodo());
     setStaleness(readStaleness());
     // `batcher.subscribe`'s own argument is filtered to just
@@ -269,7 +293,7 @@ function SessionTranscript({
     // the staleness announcement) from `batcher.getState()` fresh on
     // every applied batch instead.
     const unsubscribeBatcher = batcher.subscribe(() => {
-      setEntries(readEntries());
+      setRawEntries(readEntries());
       setTodoEntry(readTodo());
       setStaleness(readStaleness());
     });
@@ -401,22 +425,44 @@ function SessionTranscript({
         testId="session-transcript"
         footer={<SessionInlineExtensions agentId={agentId} />}
         renderRow={(entry, testId) => {
-          if (entry.kind === "thinking") {
+          const entryKey = coreTimeline.transcriptEntryListKey(entry);
+          const group = grouping.groupByMemberKey.get(entryKey) ?? null;
+          const row = (() => {
+            if (entry.kind === "thinking") {
+              return (
+                <TranscriptThinkingRow key={entry.id} entry={entry} live={false} testId={testId} />
+              );
+            }
+            if (entry.kind === "tool-call") {
+              return <TranscriptToolCallRow key={entry.id} entry={entry} testId={testId} />;
+            }
             return (
-              <TranscriptThinkingRow key={entry.id} entry={entry} live={false} testId={testId} />
+              <TranscriptMessageRow
+                key={entry.id}
+                entry={entry}
+                streaming={false}
+                resolveImageUri={resolveImageUri}
+                testId={testId}
+              />
             );
+          })();
+          // Only a group's first member draws the head; a non-head member
+          // that reaches here belongs to an expanded group and renders as a
+          // plain row, exactly as before T388.
+          if (group === null || group.memberKeys[0] !== entryKey) {
+            return row;
           }
-          if (entry.kind === "tool-call") {
-            return <TranscriptToolCallRow key={entry.id} entry={entry} testId={testId} />;
-          }
+          const collapsed = coreTimeline.isWorkGroupCollapsed(collapsedGroups, group);
           return (
-            <TranscriptMessageRow
-              key={entry.id}
-              entry={entry}
-              streaming={false}
-              resolveImageUri={resolveImageUri}
-              testId={testId}
-            />
+            <View>
+              <TranscriptWorkGroupHead
+                group={group}
+                collapsed={collapsed}
+                onToggle={toggleWorkGroup}
+                testId={`${testId}-work-group-${group.id}`}
+              />
+              {collapsed ? null : row}
+            </View>
           );
         }}
       />
