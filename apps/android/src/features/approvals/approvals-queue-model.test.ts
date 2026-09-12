@@ -8,7 +8,9 @@ import {
   isDangerousRequest,
   resolveApprovalPanel,
   resolveConfirmApprovalPanel,
+  resolveQuestionApprovalPanel,
 } from "./approvals-queue-model.js";
+import { buildQuestionSubmitResponse, initialQuestionValues } from "./approvals-question-model.js";
 
 /**
  * T33B5 acceptance criterion 1 ("a permission request can be approved
@@ -85,6 +87,71 @@ function selectDialogRequest(id: string): permissions.AgentPermissionRequest {
       ],
     },
   };
+}
+
+/** A plain `input` extension dialog (`Pi input` + one free-text question), the shape `vision-proxy`/`pi-goal` send. */
+function inputDialogRequest(id: string): permissions.AgentPermissionRequest {
+  return {
+    id,
+    provider: "pi",
+    name: "Pi input",
+    kind: "question",
+    title: "Which file?",
+    metadata: { extensionUiMethod: "input" },
+    input: {
+      questions: [
+        {
+          question: "Which file?",
+          header: "response",
+          options: [],
+          multiSelect: false,
+          placeholder: "src/x.ts",
+        },
+      ],
+    },
+  };
+}
+
+/** An `editor` extension dialog (multi-line field), the shape `pi-goal`'s draft wizard sends. */
+function editorDialogRequest(id: string): permissions.AgentPermissionRequest {
+  return {
+    id,
+    provider: "pi",
+    name: "Pi editor",
+    kind: "question",
+    title: "Draft the goal",
+    metadata: { extensionUiMethod: "editor" },
+    input: {
+      questions: [
+        { question: "Draft the goal", header: "response", options: [], multiSelect: false },
+      ],
+    },
+  };
+}
+
+/**
+ * A generic (`kind: "question"`, no recognized `extensionUiMethod`)
+ * request that still carries a real question — the fallback
+ * `presentation: "question"` renders.
+ */
+function genericQuestionRequest(id: string): permissions.AgentPermissionRequest {
+  return {
+    id,
+    provider: "pi",
+    name: "Scripted question",
+    kind: "question",
+    title: "Proceed with the run?",
+    input: {
+      questions: [
+        { question: "Proceed with the run?", header: "response", options: [], multiSelect: false },
+      ],
+    },
+  };
+}
+
+/** A `question`-kind request that asks nothing at all — the one shape that still gets the Dismiss-only fallback. */
+function questionslessQuestionRequest(id: string): permissions.AgentPermissionRequest {
+  return { id, provider: "pi", name: "Mystery question", kind: "question", title: "Mystery" };
 }
 
 /** The exact shape the daemon's Pi provider builds for a `confirm` `extension_ui_request` (`agent.ts`: one question, `Yes`/`No`). */
@@ -245,10 +312,62 @@ describe("resolveApprovalPanel", () => {
     });
   });
 
-  it("reports a non-tool-actions presentation (e.g. a select dialog) as unsupported, but still closeable with a deny/cancel response", () => {
+  it("resolves a select dialog into a real question panel carrying the daemon's own question and deny path", () => {
     const controller = makeController();
     const entry = controller.ingestRequest("agt_1", selectDialogRequest("perm_select"));
     expect(entry.view.presentation).toBe("select");
+    const panel = resolveApprovalPanel(entry.view);
+    if (panel.kind !== "question") throw new Error("expected a question panel");
+    expect(panel.presentation).toBe("select");
+    expect(panel.toolLabel).toBe("Pick a branch");
+    expect(panel.questions).toEqual(entry.view.questions);
+    expect(panel.dismissLabel).toBe("Cancel");
+    expect(panel.denyResponse).toEqual({ behavior: "deny" });
+    expect(panel.closeResponse).toEqual(panel.denyResponse);
+  });
+
+  it("resolves input, editor and generic question presentations into question panels too — no presentation kind is left unrenderable", () => {
+    const controller = makeController();
+    const requests = [
+      inputDialogRequest("perm_input"),
+      editorDialogRequest("perm_editor"),
+      genericQuestionRequest("perm_generic"),
+    ];
+    const expected = ["input", "editor", "question"];
+    for (const [index, request] of requests.entries()) {
+      const entry = controller.ingestRequest("agt_1", request);
+      expect(entry.view.presentation).toBe(expected[index]);
+      const panel = resolveApprovalPanel(entry.view);
+      if (panel.kind !== "question") throw new Error("expected a question panel");
+      expect(panel.questions).toEqual(entry.view.questions);
+    }
+  });
+
+  it("honours the daemon's own dismissLabel (the input method's optional placeholder relabels it Skip), not a fixed label", () => {
+    const controller = makeController();
+    const request = inputDialogRequest("perm_skip");
+    request.input = {
+      questions: [
+        {
+          question: "Optional note?",
+          header: "response",
+          options: [],
+          multiSelect: false,
+          allowEmpty: true,
+          dismissLabel: "Skip",
+        },
+      ],
+    };
+    const entry = controller.ingestRequest("agt_1", request);
+    const panel = resolveQuestionApprovalPanel(entry.view);
+    expect(panel.dismissLabel).toBe("Skip");
+  });
+
+  it("keeps the Dismiss-only fallback for a question-kind request that asks nothing at all, still closeable with a deny/cancel response", () => {
+    const controller = makeController();
+    const entry = controller.ingestRequest("agt_1", questionslessQuestionRequest("perm_empty"));
+    expect(entry.view.presentation).toBe("question");
+    expect(entry.view.questions).toEqual([]);
     const panel = resolveApprovalPanel(entry.view);
     expect(panel.kind).toBe("unsupported");
     expect(panel.closeResponse.behavior).toBe("deny");
@@ -357,5 +476,55 @@ describe("the full state machine: requested -> pending decision -> approved / de
     controller.applyResolution("agt_1", "perm_only", { behavior: "deny", interrupt: true });
 
     expect(getApprovalsQueueSnapshot(controller)).toEqual({ current: null, waitingCount: 0 });
+  });
+
+  it("answered (question): a select panel's Submit resolves the request with the choice keyed by the question's own header, and the queue advances", () => {
+    const controller = makeController();
+    controller.ingestRequest("agt_1", selectDialogRequest("perm_select"));
+    controller.ingestRequest("agt_1", toolRequest("perm_next"));
+
+    const before = getApprovalsQueueSnapshot(controller);
+    if (!before.current) throw new Error("expected a current request");
+    const panel = resolveApprovalPanel(before.current);
+    if (panel.kind !== "question") throw new Error("expected a question panel");
+
+    const response = buildQuestionSubmitResponse(panel.questions, {
+      ...initialQuestionValues(panel.questions),
+      branch: "main",
+    });
+    expect(response).toEqual({
+      behavior: "allow",
+      updatedInput: { answers: { branch: "main" } },
+    });
+
+    const wireMessage = controller.answer(before.current.requestId, response);
+    expect(wireMessage).toMatchObject({
+      type: "agent_permission_response",
+      agentId: "agt_1",
+      requestId: "perm_select",
+      response: { behavior: "allow" },
+    });
+    expect(controller.get("perm_select")?.status).toBe("answered");
+    expect(controller.get("perm_select")?.localResponse).toEqual(response);
+
+    const after = getApprovalsQueueSnapshot(controller);
+    expect(after.current?.requestId).toBe("perm_next");
+    expect(after.waitingCount).toBe(0);
+  });
+
+  it("denied (question): a question panel's dismiss response resolves the request as denied and the queue advances", () => {
+    const controller = makeController();
+    controller.ingestRequest("agt_1", genericQuestionRequest("perm_generic"));
+    controller.ingestRequest("agt_1", toolRequest("perm_next"));
+
+    const before = getApprovalsQueueSnapshot(controller);
+    if (!before.current) throw new Error("expected a current request");
+    const panel = resolveApprovalPanel(before.current);
+    if (panel.kind !== "question") throw new Error("expected a question panel");
+
+    controller.answer(before.current.requestId, panel.denyResponse);
+    expect(controller.get("perm_generic")?.status).toBe("answered");
+    expect(controller.get("perm_generic")?.localResponse?.behavior).toBe("deny");
+    expect(getApprovalsQueueSnapshot(controller).current?.requestId).toBe("perm_next");
   });
 });

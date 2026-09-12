@@ -39,19 +39,34 @@
  * option (`buildQuestionAnswerResponse`; the provider translates it back
  * to `{confirmed: true}` by matching the answer text, `agent.ts`'s
  * `buildExtensionUiResponse`), Deny/close sends the deny response the
- * provider turns into `{cancelled: true}`. The remaining kinds
- * (`select`/`input`/`editor`/generic `question`) still have no
- * `Select`/`TextArea`/`TextField`-composing recipe the way
- * `PermissionDialog.tsx`'s `QuestionPanel` does on web, so
- * `resolveApprovalPanel` reports those as `"unsupported"`: still
- * answerable (a single Dismiss sends a deny/cancel response, so the
- * daemon is never left blocked — plan.md §11.2 "these block the
- * extension and require a response or timeout"), but not a real
- * decision surface. Building that is a gap for a future task.
+ * provider turns into `{cancelled: true}`.
+ *
+ * The remaining kinds — `select` (single and `multiSelect`), `input`,
+ * `editor`, and the generic `question` fallback — are real decision
+ * surfaces too, rendered by `ApprovalsQuestionForm.tsx` over
+ * `approvals-question-model.ts`'s answer state machine, with the same
+ * Submit/Cancel semantics as `PermissionDialog.tsx`'s `QuestionPanel`.
+ * (CORRECTED: this said those kinds "still have no `Select`/`TextArea`/
+ * `TextField`-composing recipe" and were all reported as
+ * `"unsupported"`. Every one of them is built by the daemon with exactly
+ * one question — the combined `ask_user` dialog with two — so none needs
+ * the Dismiss-only fallback any more.) A `"question"`-kind request that
+ * arrives with no `input.questions` at all — nothing to answer, and not a
+ * shape the ported Pi provider builds (`mapExtensionUiRequestToPermission`
+ * returns no request at all for an unrecognized method) — still reports
+ * `"unsupported"`: a single Dismiss sends a deny/cancel response, so the
+ * daemon is never left blocked (plan.md §11.2 "these block the extension
+ * and require a response or timeout"), but no decision can be read from a
+ * request that asks nothing.
  */
 
 import { permissions } from "@picompanion/frontend-core";
 import { buildToolCallDisplayModel } from "@picompanion/protocol/tool-call-display";
+
+import {
+  explainQuestionPanelDetail,
+  questionPanelDismissLabel,
+} from "./approvals-question-model.js";
 
 /**
  * Local aliases for the two response builders this module dispatches
@@ -166,6 +181,33 @@ export interface ActionsRowApprovalPanel {
   readonly closeResponse: permissions.AgentPermissionResponse;
 }
 
+/**
+ * A Tier-1 extension dialog (`select`/`input`/`editor`/generic
+ * `question`) as a real answer form — see `resolveQuestionApprovalPanel`.
+ * The draft answers themselves are view state (`ApprovalsQuestionForm.tsx`
+ * over `approvals-question-model.ts`); this panel carries only what the
+ * classification decides: the questions to ask, the daemon's own dismiss
+ * wording, and the deny/close response.
+ */
+export interface QuestionApprovalPanel {
+  readonly kind: "question";
+  readonly toolLabel: string;
+  readonly detail: string;
+  readonly presentation: permissions.PermissionDialogPresentation;
+  readonly questions: readonly permissions.PermissionDialogQuestion[];
+  readonly dismissLabel: string;
+  readonly denyResponse: permissions.AgentPermissionResponse;
+  /** The response a scrim tap/back gesture sends — always the deny/cancel side, never a silent close. */
+  readonly closeResponse: permissions.AgentPermissionResponse;
+}
+
+/**
+ * The Dismiss-only fallback. Reachable only for a `"question"`-kind
+ * request that carries no questions at all — see this module's doc
+ * comment. Kept in the union (rather than removed) because that shape is
+ * still answerable — a deny/cancel response unblocks the daemon without
+ * pretending a decision was read from an empty request.
+ */
 export interface UnsupportedApprovalPanel {
   readonly kind: "unsupported";
   readonly toolLabel: string;
@@ -176,6 +218,7 @@ export interface UnsupportedApprovalPanel {
 export type ApprovalPanel =
   | BinaryApprovalPanel
   | ActionsRowApprovalPanel
+  | QuestionApprovalPanel
   | UnsupportedApprovalPanel;
 
 /**
@@ -183,8 +226,11 @@ export type ApprovalPanel =
  * criterion 1: "a permission request can be approved and denied in
  * app"). Mirrors `PermissionDialog.tsx`'s `ToolActionsPanel` branching
  * (zero actions / a binary pair / an N-action fallback) for the
- * `"tool-actions"` presentation, and reports every other presentation
- * as `"unsupported"` per this module's doc comment.
+ * `"tool-actions"` presentation, `resolveConfirmApprovalPanel` for
+ * `"confirm"`, and `resolveQuestionApprovalPanel` for every other
+ * presentation — with the Dismiss-only `"unsupported"` panel kept for a
+ * `"question"`-kind request carrying no questions at all, per this
+ * module's doc comment.
  */
 export function resolveApprovalPanel(view: permissions.PermissionDialogViewModel): ApprovalPanel {
   const toolLabel = view.title ?? view.name;
@@ -194,12 +240,15 @@ export function resolveApprovalPanel(view: permissions.PermissionDialogViewModel
   }
 
   if (view.presentation !== "tool-actions") {
-    return {
-      kind: "unsupported",
-      toolLabel,
-      presentation: view.presentation,
-      closeResponse: buildDenyResponse(),
-    };
+    if (view.questions.length === 0) {
+      return {
+        kind: "unsupported",
+        toolLabel,
+        presentation: view.presentation,
+        closeResponse: buildDenyResponse(),
+      };
+    }
+    return resolveQuestionApprovalPanel(view);
   }
 
   const detail = toolCallSummary(view);
@@ -240,6 +289,33 @@ export function resolveApprovalPanel(view: permissions.PermissionDialogViewModel
     dangerous: isDangerousRequest(view.actions),
     actions: ordered.map((action) => ({ action, response: buildActionResponse(action) })),
     closeResponse: denyAction ? buildActionResponse(denyAction) : buildDenyResponse(),
+  };
+}
+
+/**
+ * A non-`"tool-actions"`, non-`"confirm"` presentation as a real answer
+ * form — `select` (single and `multiSelect`), `input`, `editor`, and the
+ * generic `question` fallback. The daemon builds every one of these with
+ * exactly one question (the combined `ask_user` dialog with two), so this
+ * is a direct projection: the questions pass through in wire order, the
+ * dismiss wording is the daemon's own `dismissLabel` (default "Cancel"),
+ * and both dismiss and close send the same plain deny response
+ * `PermissionDialog.tsx`'s Cancel button sends. The draft answers and the
+ * Submit gate live in `approvals-question-model.ts`.
+ */
+export function resolveQuestionApprovalPanel(
+  view: permissions.PermissionDialogViewModel,
+): QuestionApprovalPanel {
+  const denyResponse = buildDenyResponse();
+  return {
+    kind: "question",
+    toolLabel: view.title ?? view.name,
+    detail: explainQuestionPanelDetail(view),
+    presentation: view.presentation,
+    questions: view.questions,
+    dismissLabel: questionPanelDismissLabel(view),
+    denyResponse,
+    closeResponse: denyResponse,
   };
 }
 

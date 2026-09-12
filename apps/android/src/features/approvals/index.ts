@@ -6,6 +6,8 @@ export { ApprovalsContainer } from "./ApprovalsContainer";
 export type { ApprovalsContainerProps } from "./ApprovalsContainer";
 export { ApprovalsHost } from "./ApprovalsHost";
 export type { ApprovalsHostProps } from "./ApprovalsHost";
+export { ApprovalsQuestionForm } from "./ApprovalsQuestionForm";
+export type { ApprovalsQuestionFormProps } from "./ApprovalsQuestionForm";
 export {
   EMPTY_APPROVALS_QUEUE_SNAPSHOT,
   fireApprovalDecisionHaptic,
@@ -17,6 +19,8 @@ export {
   getApprovalsQueueSnapshot,
   isDangerousRequest,
   resolveApprovalPanel,
+  resolveConfirmApprovalPanel,
+  resolveQuestionApprovalPanel,
   toolCallSummary,
 } from "./approvals-queue-model";
 export type {
@@ -24,8 +28,25 @@ export type {
   ApprovalPanel,
   ApprovalsQueueSnapshot,
   BinaryApprovalPanel,
+  QuestionApprovalPanel,
   UnsupportedApprovalPanel,
 } from "./approvals-queue-model";
+export {
+  buildQuestionAnswers,
+  buildQuestionSubmitResponse,
+  canSubmitQuestionAnswers,
+  describeQuestionOptionLabel,
+  explainQuestionPanelDetail,
+  explainQuestionSubmitBlock,
+  hasQuestionValue,
+  initialQuestionValues,
+  isQuestionAnswered,
+  questionOptionGlyph,
+  questionPanelDismissLabel,
+  toggleMultiSelectQuestionValue,
+  unansweredQuestionHeaders,
+} from "./approvals-question-model";
+export type { ApprovalQuestionValue, ApprovalQuestionValues } from "./approvals-question-model";
 export { sendPermissionAnswer, wirePermissionsController } from "./daemon-permissions-client";
 export type {
   DaemonPermissionRequestMessage,

@@ -6,6 +6,7 @@ import type { permissions } from "@picompanion/frontend-core";
 import { Banner, Button, Sheet } from "../../ui/primitives";
 import { ApprovalForm } from "../../ui/recipes";
 import { useTheme } from "../../ui/theme/theme-context";
+import { ApprovalsQuestionForm } from "./ApprovalsQuestionForm";
 import { describeWaitingCount, resolveApprovalPanel } from "./approvals-queue-model";
 
 export interface ApprovalsHostProps {
@@ -33,13 +34,16 @@ export interface ApprovalsHostProps {
  * — never a detached `Modal`, plan.md §9.3) with the existing
  * `ApprovalForm` recipe (composed as-is, never forked) for the common
  * two-button case, falling back to a plain button row for a request
- * `ApprovalForm`'s fixed pair cannot represent, and to a single Dismiss
- * for a presentation this Android surface does not yet render as a real
- * decision (see `approvals-queue-model.ts`'s doc comment for exactly
- * which — Tier-1 `select`/`input`/`editor`/`question` extension dialogs;
- * CORRECTED at T341: `confirm` was in that list, and now renders through
- * the same `ApprovalForm` as a tool request, since it is a binary
- * decision by definition).
+ * `ApprovalForm`'s fixed pair cannot represent, to
+ * `ApprovalsQuestionForm` for a Tier-1 `select`/`input`/`editor`/generic
+ * `question` extension dialog, and to a single Dismiss for a
+ * `"question"`-kind request that carries no questions at all (see
+ * `approvals-queue-model.ts`'s doc comment for that degenerate fallback).
+ * (CORRECTED: this listed `select`/`input`/`editor`/`question` as
+ * presentations "this Android surface does not yet render as a real
+ * decision"; they now render through `ApprovalsQuestionForm`, and T341
+ * had already moved `confirm` onto the same `ApprovalForm` a tool
+ * request uses, since it is a binary decision by definition.)
  *
  * `Sheet`'s own `onClose` (scrim tap, Android back gesture) always sends
  * `panel.closeResponse` — the deny/cancel side — rather than leaving the
@@ -98,6 +102,14 @@ export function ApprovalsHost({
             onApprove={() => onAnswer(panel.approveResponse)}
             onDeny={() => onAnswer(panel.denyResponse)}
             testId={`${sheetTestId}-form`}
+          />
+        ) : null}
+        {panel?.kind === "question" ? (
+          <ApprovalsQuestionForm
+            key={current?.requestId}
+            panel={panel}
+            onAnswer={onAnswer}
+            testId={`${sheetTestId}-question`}
           />
         ) : null}
         {panel?.kind === "actions-row" ? (
