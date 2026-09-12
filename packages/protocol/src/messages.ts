@@ -1801,6 +1801,7 @@ export const AgentDetachResponseMessageSchema = z.object({
 });
 
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
+export type AgentRewindMode = z.infer<typeof AgentRewindModeSchema>;
 
 export const AgentRewindRequestMessageSchema = z.object({
   type: z.literal("agent.rewind.request"),
