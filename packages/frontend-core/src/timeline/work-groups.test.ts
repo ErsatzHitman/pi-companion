@@ -14,6 +14,7 @@ import {
   isWorkGroupCollapsed,
   isWorkGroupMemberKind,
   toggleWorkGroupCollapsed,
+  visibleTranscriptEntries,
 } from "./work-groups.js";
 
 let nextId = 0;
@@ -263,5 +264,43 @@ describe("buildTranscriptWorkGroups: default collapse state", () => {
     const expandedAgain = toggleWorkGroupCollapsed(collapsed, group);
     expect(isWorkGroupCollapsed(expandedAgain, group)).toBe(false);
     expect(expandedAgain).not.toBe(collapsed);
+  });
+});
+
+describe("visibleTranscriptEntries", () => {
+  it("keeps a collapsed group's head and drops its other members", () => {
+    const entries = [
+      userMessage("client:q"),
+      thinking("seq:1"),
+      toolCall("tool:c1"),
+      thinking("seq:3"),
+      assistantMessage("assistant:m1:5"),
+    ];
+    const grouping = buildTranscriptWorkGroups(entries);
+    // A three-member group starts collapsed (`defaultCollapsed`), so the
+    // empty override state already resolves to collapsed.
+    expect(grouping.groups[0]?.defaultCollapsed).toBe(true);
+
+    const visible = visibleTranscriptEntries(entries, grouping, createWorkGroupCollapseState());
+    expect(visible.map((entry) => entry.key)).toEqual(["client:q", "seq:1", "assistant:m1:5"]);
+  });
+
+  it("returns the input array unchanged (same reference) when nothing is hidden", () => {
+    const entries = [thinking("seq:1"), toolCall("tool:c1")];
+    const grouping = buildTranscriptWorkGroups(entries);
+    const visible = visibleTranscriptEntries(entries, grouping, createWorkGroupCollapseState());
+    expect(visible).toBe(entries);
+  });
+
+  it("keeps every member of an explicitly expanded group whose default is collapsed", () => {
+    const entries = [thinking("seq:1"), toolCall("tool:c1"), thinking("seq:3")];
+    const grouping = buildTranscriptWorkGroups(entries);
+    expect(grouping.groups[0]?.defaultCollapsed).toBe(true);
+
+    const expanded = toggleWorkGroupCollapsed(
+      createWorkGroupCollapseState(),
+      grouping.groups[0] as NonNullable<(typeof grouping.groups)[0]>,
+    );
+    expect(visibleTranscriptEntries(entries, grouping, expanded)).toBe(entries);
   });
 });

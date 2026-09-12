@@ -91,6 +91,11 @@ export type {
 
 export { TranscriptThinkingRow, filterThinkingEntries, isThinkingEntry } from "./thinking-row";
 export type { ThinkingTranscriptEntry, TranscriptThinkingRowProps } from "./thinking-row";
+
+// T388: the work-group disclosure head. Grouping itself is pure frontend-core
+// (`timeline.buildTranscriptWorkGroups`, `timeline.visibleTranscriptEntries`).
+export { TranscriptWorkGroupHead } from "./work-group-row";
+export type { TranscriptWorkGroupHeadProps } from "./work-group-row";
 export {
   MAX_BODY_CHARS,
   MAX_SUMMARY_CHARS,

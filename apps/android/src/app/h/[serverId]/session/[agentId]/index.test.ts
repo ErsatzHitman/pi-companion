@@ -716,6 +716,27 @@ describe("SessionRoute source", () => {
     // `testId="session-transcript"` - byte-identical to the old literal).
     expect(code).not.toMatch(/`session-transcript-row-\$\{entry\.id\}`/);
   });
+
+  it("T388: derives work groups from the full entry list and renders a head above a run's first member, dropping a collapsed group's other members from the list", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /const \[rawEntries, setRawEntries\] = useState<SessionTranscriptEntry\[\]>/,
+    );
+    expect(code).toMatch(/coreTimeline\.buildTranscriptWorkGroups\(rawEntries\)/);
+    expect(code).toMatch(
+      /coreTimeline\.visibleTranscriptEntries\(rawEntries, grouping, collapsedGroups\)/,
+    );
+    expect(code).toMatch(
+      /const \[collapsedGroups, setCollapsedGroups\] = useState<coreTimeline\.WorkGroupCollapseState>/,
+    );
+    expect(code).toMatch(/coreTimeline\.toggleWorkGroupCollapsed\(current, group\)/);
+    expect(code).toMatch(/coreTimeline\.isWorkGroupCollapsed\(collapsedGroups, group\)/);
+    // The head is drawn for the run's first member only; every other member
+    // is either dropped by `visibleTranscriptEntries` or rendered as the plain
+    // row it was before this task.
+    expect(code).toMatch(/group\.memberKeys\[0\] !== entryKey/);
+    expect(code).toMatch(/<TranscriptWorkGroupHead\b/);
+  });
 });
 
 // --- T32S12 (P5-W18): the second live Pi UI mount point, T37E5's finding ---

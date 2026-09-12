@@ -178,10 +178,16 @@ function useSessionTranscriptEntries(
       frameClock,
       coreTimeline.createEmptyTimelineState(),
     );
+    // T388: project incrementally. A streaming append re-derives only the
+    // appended row (and any row the same ingest mutated) instead of every
+    // entry in the session; the settled entries keep their exact object
+    // identity, which is what lets each memoized row component skip its own
+    // re-render. Output is identical to `buildTranscriptView(state).entries`.
+    const projector = new coreTimeline.TranscriptEntryProjector();
 
     const unsubscribeState = coalescer.subscribe((state) => {
       if (generationRef.current !== generation) return;
-      setEntries(coreTimeline.buildTranscriptView(state).entries);
+      setEntries(projector.project(state));
     });
 
     const unsubscribeStream = client.on("agent_stream", (message) => {

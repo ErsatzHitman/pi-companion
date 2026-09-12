@@ -87,8 +87,15 @@ export interface TranscriptEntryBase {
    * when the item carries none. Unlike `id`, it survives a projected-window
    * replay that renumbers a row's sequence, and it is unchanged across
    * optimistic-row reconciliation. Always unique within one entry list.
-   * Renderers must key on this, never on `id` or an array index. */
-  readonly key: string;
+   * Renderers must key on this, never on `id` or an array index.
+   *
+   * Optional on the TYPE (not on the value) so a hand-built fixture — every
+   * pre-existing `apps/web` transcript test builds entries as literals — does
+   * not have to invent one: `transcriptEntryListKey` already falls back to
+   * `id` for exactly that case, which is why the grouping and virtualization
+   * code reads it through that helper rather than touching this field
+   * directly. Every entry a real flow produces carries one. */
+  readonly key?: string;
   readonly epoch: string;
   readonly seqStart: number;
   readonly seqEnd: number;

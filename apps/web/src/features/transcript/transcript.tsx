@@ -1,11 +1,11 @@
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   measureElement as measureElementDefault,
   observeElementRect,
   useVirtualizer,
 } from "@tanstack/react-virtual";
 import type { Virtualizer } from "@tanstack/react-virtual";
-import type { timeline } from "@picompanion/frontend-core";
+import { timeline } from "@picompanion/frontend-core";
 
 import { EmptyState } from "../../ui/primitives/index.js";
 import { isCompactionEntry, TranscriptCompactionRow } from "./compaction-row.js";
@@ -15,6 +15,7 @@ import { isCoreMessageEntry, TranscriptMessageRow } from "./message-row.js";
 import type { ResolveImageSrc } from "./message-attachments.js";
 import { isThinkingEntry, TranscriptThinkingRow } from "./thinking-row.js";
 import { isToolCallEntry, TranscriptToolCallRow } from "./tool-call-row.js";
+import { TranscriptWorkGroupHead } from "./work-group-row.js";
 import "./transcript.css";
 
 type RenderableEntry = Extract<
@@ -251,6 +252,18 @@ function renderEntryRow(
   );
 }
 
+/** One row of the virtualized list: an entry plus the work-group context it
+ * renders in. Computed once per render pass in `Transcript` (never inside the
+ * per-item `map`) so every item shares one lookup. */
+interface TranscriptListItem {
+  readonly entry: RenderableEntry;
+  readonly group: timeline.TranscriptWorkGroup | null;
+  /** `true` for a group's first member — the row that draws the head. */
+  readonly isGroupHead: boolean;
+  /** Resolved collapse state; only meaningful when `group !== null`. */
+  readonly groupCollapsed: boolean;
+}
+
 /**
  * Transcript feature (T28A2/T28A3/T28A4/T28A6/T28A7, plan.md §8.3
  * "center: transcript and composer"): renders the
@@ -300,6 +313,18 @@ function renderEntryRow(
  * detected in a tool's own text/result field) remain T28A5's separate
  * "images, attachments, and diffs" surface for tool calls, composed here
  * unchanged through `TranscriptToolCallRow`.
+ *
+ * **Work grouping (T388).** Consecutive `thinking`/`tool-call` rows are one
+ * unit of work (`buildTranscriptWorkGroups`, `@picompanion/frontend-core`),
+ * rendered with a disclosure head (`work-group-row.tsx`) that carries a
+ * derived summary and a collapse state. A group's first member draws the head
+ * in its own virtual row and the remaining members stay individually
+ * virtualized, so an expanded group keeps the exact `data-index` structure
+ * (and measured heights) it had before this task; only a *collapsed* group
+ * changes the item count, by dropping its non-head members from the list
+ * entirely. Collapse state lives here, keyed by the group's stable id: the
+ * core model is pure and reports a `defaultCollapsed` per group, and this
+ * component holds only the reader's overrides.
  *
  * **Virtualization (T28A6, plan.md §14.5 "transcript: 10,000 timeline
  * items without rendering more than a bounded window").** Rows are laid
@@ -354,6 +379,52 @@ export function Transcript({
   testId,
 }: TranscriptProps) {
   const renderable = useMemo(() => entries.filter(isRenderableEntry), [entries]);
+  /** T388: consecutive thinking/tool-call rows are one unit of work. The
+   * grouping is a pure projection of `renderable` (never of the raw
+   * `entries`, so a skipped kind can never be counted as a member and can
+   * never be hidden by a group). */
+  const grouping = useMemo(() => timeline.buildTranscriptWorkGroups(renderable), [renderable]);
+  /** The reader's explicit collapse choices. The model stays pure: the
+   * derived default (`defaultCollapsed`, three or more members) lives on the
+   * group, and this map holds only overrides. */
+  const [collapseState, setCollapseState] = useState<timeline.WorkGroupCollapseState>(
+    timeline.createWorkGroupCollapseState,
+  );
+  const toggleGroup = useCallback(
+    (groupId: string) => {
+      setCollapseState((current) => {
+        const group = grouping.groups.find((candidate) => candidate.id === groupId);
+        return group ? timeline.toggleWorkGroupCollapsed(current, group) : current;
+      });
+    },
+    [grouping],
+  );
+
+  /** The virtualizer's item list. A collapsed group contributes exactly one
+   * item — its head — and its other members are dropped from the list (never
+   * merely hidden), so a collapsed run costs one measured row, not N zero-
+   * height ones. An expanded group contributes its members as individual
+   * items, unchanged from before this task; only the head carries the
+   * disclosure. */
+  const items = useMemo<TranscriptListItem[]>(() => {
+    const next: TranscriptListItem[] = [];
+    for (const entry of renderable) {
+      const key = timeline.transcriptEntryListKey(entry);
+      const group = grouping.groupByMemberKey.get(key) ?? null;
+      if (group === null) {
+        next.push({ entry, group: null, isGroupHead: false, groupCollapsed: false });
+        continue;
+      }
+      const isGroupHead = group.memberKeys[0] === key;
+      const groupCollapsed = timeline.isWorkGroupCollapsed(collapseState, group);
+      if (!isGroupHead && groupCollapsed) {
+        continue;
+      }
+      next.push({ entry, group, isGroupHead, groupCollapsed });
+    }
+    return next;
+  }, [renderable, grouping, collapseState]);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   /** Becomes `true` after the first successful tail-anchor, so an
    * as-yet-unmounted transcript always opens at its most recent message
@@ -362,14 +433,17 @@ export function Transcript({
   const hasAnchoredTailRef = useRef(false);
 
   const overscan =
-    renderable.length <= FULL_RENDER_THRESHOLD ? Math.max(renderable.length, 1) : BOUNDED_OVERSCAN;
+    items.length <= FULL_RENDER_THRESHOLD ? Math.max(items.length, 1) : BOUNDED_OVERSCAN;
 
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: renderable.length,
+    count: items.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => ESTIMATED_ROW_HEIGHT_PX,
     overscan,
-    getItemKey: (index) => renderable[index]?.id ?? `transcript-index-${index}`,
+    getItemKey: (index) => {
+      const entry = items[index]?.entry;
+      return entry ? timeline.transcriptEntryListKey(entry) : `transcript-index-${index}`;
+    },
     scrollToFn: instantScrollTo,
     observeElementRect: observeElementRectWithFallback,
     measureElement: measureRowElement,
@@ -382,8 +456,8 @@ export function Transcript({
     useFlushSync: false,
   });
 
-  const lastIndex = renderable.length - 1;
-  const tailEntry = lastIndex >= 0 ? renderable[lastIndex] : null;
+  const lastIndex = items.length - 1;
+  const tailEntry = lastIndex >= 0 ? items[lastIndex]?.entry : null;
 
   useLayoutEffect(() => {
     if (lastIndex < 0) {
@@ -425,10 +499,11 @@ export function Transcript({
     >
       <div className="pc-transcript__sizer" style={{ height: rowVirtualizer.getTotalSize() }}>
         {virtualItems.map((virtualRow) => {
-          const entry = renderable[virtualRow.index];
-          if (!entry) {
+          const item = items[virtualRow.index];
+          if (!item) {
             return null;
           }
+          const rendersBody = item.group === null || !item.isGroupHead || !item.groupCollapsed;
           return (
             <div
               key={virtualRow.key}
@@ -437,13 +512,23 @@ export function Transcript({
               className="pc-transcript__row"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-              {renderEntryRow(
-                entry,
-                streamingEntryId,
-                resolveImageSrc,
-                editFromHereTargets,
-                onEditFromHere,
-              )}
+              {item.group !== null && item.isGroupHead ? (
+                <TranscriptWorkGroupHead
+                  group={item.group}
+                  collapsed={item.groupCollapsed}
+                  onToggle={toggleGroup}
+                  testId={`transcript-work-group-${item.group.id}`}
+                />
+              ) : null}
+              {rendersBody
+                ? renderEntryRow(
+                    item.entry,
+                    streamingEntryId,
+                    resolveImageSrc,
+                    editFromHereTargets,
+                    onEditFromHere,
+                  )
+                : null}
             </div>
           );
         })}

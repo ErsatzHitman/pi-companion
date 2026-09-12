@@ -99,6 +99,9 @@ export {
   isWorkGroupCollapsed,
   isWorkGroupMemberKind,
   toggleWorkGroupCollapsed,
+  visibleTranscriptEntries,
+  formatWorkGroupMeta,
+  workGroupAccessibilityLabel,
   EMPTY_WORK_GROUPING,
   WORK_GROUP_MEMBER_KINDS,
 } from "./work-groups.js";

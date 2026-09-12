@@ -297,6 +297,66 @@ export function isWorkGroupCollapsed(
   return state.get(group.id) ?? group.defaultCollapsed;
 }
 
+/** The one-line status suffix every platform renders beside a group's label:
+ * `"4 steps"`, `"4 steps · 1 failed"`, or `"4 steps · running"`. A failure
+ * is reported ahead of `running` because it is the more important fact, and
+ * the two are mutually exclusive by construction (`hasFailure` groups are
+ * shown with the danger tone instead of the neutral one). */
+export function formatWorkGroupMeta(
+  group: Pick<TranscriptWorkGroup, "summary" | "isRunning">,
+): string {
+  const parts = [`${group.summary.stepCount} steps`];
+  if (group.summary.failedCount > 0) {
+    parts.push(`${group.summary.failedCount} failed`);
+  } else if (group.isRunning) {
+    parts.push("running");
+  }
+  return parts.join(" · ");
+}
+
+/** The full accessible name for a group's disclosure control: the label, the
+ * status suffix, and the one-line detail a sighted reader sees under them.
+ * Shared so the two platforms announce the same thing. */
+export function workGroupAccessibilityLabel(group: TranscriptWorkGroup): string {
+  // Deliberately NOT the summary's `detail`: that is the first member's own
+  // first line, and every member row already carries it as its own accessible
+  // name. Repeating it here makes `getByRole("button", { name: /…/ })` match
+  // two elements for one visible row — the pre-existing transcript tests
+  // query exactly that way, and they are right to: one row, one name.
+  return `${group.summary.label}, ${formatWorkGroupMeta(group)}`;
+}
+
+/**
+ * The entries a renderer should actually list: `entries` minus every member of
+ * a currently-collapsed group that is not that group's head. The head always
+ * survives, so a collapsed group still renders exactly one row.
+ *
+ * Pure, and returns the **same array reference** when nothing is hidden (the
+ * common case), so a caller can use reference equality as a cheap "did the
+ * visible list change" check.
+ */
+export function visibleTranscriptEntries<T extends { readonly id: string; readonly key?: string }>(
+  entries: readonly T[],
+  grouping: TranscriptWorkGrouping,
+  state: WorkGroupCollapseState,
+): readonly T[] {
+  if (grouping.groups.length === 0) {
+    return entries;
+  }
+  let hiddenAny = false;
+  const visible: T[] = [];
+  for (const entry of entries) {
+    const key = transcriptEntryListKey(entry);
+    const group = grouping.groupByMemberKey.get(key);
+    if (group !== undefined && group.memberKeys[0] !== key && isWorkGroupCollapsed(state, group)) {
+      hiddenAny = true;
+      continue;
+    }
+    visible.push(entry);
+  }
+  return hiddenAny ? visible : entries;
+}
+
 /** Returns a new override map with `group`'s collapsed state flipped from
  * whatever `isWorkGroupCollapsed` currently resolves to. Never mutates
  * `state`, so it is safe to use as a React state updater. */
