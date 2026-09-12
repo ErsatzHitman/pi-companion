@@ -19953,7 +19953,9 @@ than on a hand-built object.
 - [x] Every outcome is a typed result a screen can render, with the marker stripped
 - [x] The web surface: a rewind affordance on the message row, the scope dialog, and a conflict
       that offers "restore anyway" rather than a dead end (`e59f324`, merged `7234d80`)
-- [ ] The Android surface — still a follow-up, and the only part of this task not done
+- [x] The Android surface: a sheet with the same three scopes, the same two gates and the
+      same explicit conflict answer, opened by a long-press on a user turn (`54b374a`)
+- [x] Both apps can rewind, and both say plainly that their undone-turns list is local
 
 **What shipped (web half, `e59f324` merged as `7234d80`).**
 `apps/web/src/features/transcript/rewind/` holds the whole surface: `rewind-scopes.ts` (the two
@@ -19974,3 +19976,30 @@ change would hang on the one case the feature exists for.
 **Evidence.** `npm test --workspace=@picompanion/web` in the branch worktree → 182 files / 1688
 tests pass; web typecheck exit 0 on the merged tree; the targeted rewind and host-session files pass
 alone; `oxfmt --check .` clean.
+
+**What shipped (Android half, `54b374a`).** `apps/android/src/features/transcript/rewind/` carries the
+same split the rest of this app uses, because `react-native` cannot be rendered under the Android
+workspace's plain `vitest` setup: all decisions live in pure modules —
+`rewind-scopes.ts` (the daemon's three modes with the sentence each carries), `undone-turns.ts` (the
+bounded local record, keeping the turn a rewind KEPT because the removed ids no longer resolve),
+`rewind-sheet-model.ts` (every label, both gates, and the action pair a conflict swaps in) — and
+`use-rewind-to-here.ts` plus `RewindSheet.tsx` stay thin enough to pin by source contract, the
+pattern `use-agent-cwd.test.ts` established. The sheet draws through the shared `Sheet` primitive;
+its scope and undone rows are full-width 48dp `Pressable`s.
+
+Two Android-specific decisions, both recorded in the code rather than left implicit. The affordance
+is a **long-press on a user turn's row** (mobile has no hover, and the whole row as the target keeps
+it above the 48dp floor without adding a second control inside the message). And there is
+**deliberately no forced re-read after a success**, unlike web: this screen's timeline is fed by the
+live `agent_stream` subscription rather than a fetch the screen issues, so a conversation rewind
+arrives the way every other transcript change does, while a files-only rewind changes no row by
+design. Re-asking the daemon through `setViewedAgentTimeline` was written, measured against T339's
+contract test (which pins that call at exactly two sites) and removed — an extra refresh nothing here
+could demonstrate a need for is worse than the gap it guesses at.
+
+**Evidence.** `npm test --workspace=@picompanion/android` → 269 files / 3710 tests pass (up from
+3661: the new modules' tests, plus the 48dp audit and the route contracts this mount interacts with);
+`npm run typecheck --workspace=@picompanion/android` exit 0; targeted rewind + route + touch-target
+run 49 files / 555 tests pass; `oxfmt --check` clean on every changed file. The mount also forced a
+real repair: this workspace's `node_modules` predated the wave's Expo additions, so
+`expo-camera`/`expo-notifications` only type-checked after `npm install` refreshed the tree.
