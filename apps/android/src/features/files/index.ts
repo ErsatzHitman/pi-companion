@@ -16,6 +16,7 @@ export {
   FILE_DOWNLOAD_NO_RELAY_ORIGIN,
   FILE_DOWNLOAD_TOKEN_TIMEOUT,
   FILE_DOWNLOAD_TRANSFER_FAILED,
+  FILE_OPS_NOT_CONNECTED,
   FILE_READ_NOT_CONNECTED,
   FILE_READ_TIMEOUT,
   FILE_UPLOAD_CANCELLED,
@@ -109,6 +110,16 @@ export type {
   FileEditMode,
   FileEditState,
 } from "./file-edit-model";
+
+export { createFileOpsController } from "./file-ops-model";
+export type {
+  FileOpsController,
+  FileOpsControllerOptions,
+  FileOpsOperation,
+  FileOpsState,
+  FileOpsStatus,
+  PendingFileDelete,
+} from "./file-ops-model";
 
 export {
   createFileViewController,

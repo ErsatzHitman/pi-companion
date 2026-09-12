@@ -1014,6 +1014,17 @@ export function buildFileDownloadUrl(origin: string, token: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Sentinel error message `createFileOpsController` (`file-ops-model.ts`)
+ * rejects with when the injected `FileBrowserClient` has no `mkdir`/
+ * `createFile`/`renameEntry`/`deleteEntry` at all — a pre-ops test double
+ * or a real client not yet wired to a daemon. Mirrors web's
+ * `FILE_OPS_NOT_CONNECTED` (`apps/web/src/features/files/
+ * file-ops-client.ts`), so `explainFileOpsError` can give it a dedicated
+ * explanation instead of falling through to the generic message.
+ */
+export const FILE_OPS_NOT_CONNECTED = "FILE_OPS_NOT_CONNECTED";
+
+/**
  * Maps a raw daemon `mkdir`/`createFile`/`renameEntry`/`deleteEntry`
  * rejection (an `Error.message`) to a title and description a user can
  * act on. Covers the shared `fs` errors and workspace guards
@@ -1022,11 +1033,18 @@ export function buildFileDownloadUrl(origin: string, token: string): string {
  * root guards, "Destination already exists", "Directory is not
  * empty", and "Requested path does not exist". Matches web's
  * `explainFileOpsError` (`apps/web/src/features/files/
- * file-ops-client.ts`) vocabulary.
+ * file-ops-client.ts`) vocabulary, including the not-connected
+ * sentinel above.
  */
 export function explainFileOpsError(rawMessage: string): FileBrowserErrorExplanation {
   const message = rawMessage.trim();
 
+  if (message === FILE_OPS_NOT_CONNECTED) {
+    return {
+      title: "Not connected",
+      description: "Connect to a daemon to change files in this session.",
+    };
+  }
   if (/^(eacces|eperm)\b/i.test(message) || /permission denied/i.test(message)) {
     return {
       title: "Permission denied",

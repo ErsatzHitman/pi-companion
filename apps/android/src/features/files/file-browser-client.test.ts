@@ -7,6 +7,7 @@ import {
   FILE_DOWNLOAD_NO_RELAY_ORIGIN,
   FILE_DOWNLOAD_TOKEN_TIMEOUT,
   FILE_DOWNLOAD_TRANSFER_FAILED,
+  FILE_OPS_NOT_CONNECTED,
   FILE_READ_NOT_CONNECTED,
   FILE_READ_TIMEOUT,
   FILE_UPLOAD_TIMEOUT,
@@ -419,6 +420,12 @@ describe("explainFileOpsError", () => {
     const explanation = explainFileOpsError("something unexpected happened");
     expect(explanation.title).toBe("Couldn't change this file");
     expect(explanation.description).toBe("something unexpected happened");
+  });
+
+  it("explains the not-connected sentinel distinctly", () => {
+    const explanation = explainFileOpsError(FILE_OPS_NOT_CONNECTED);
+    expect(explanation.title).toBe("Not connected");
+    expect(explanation.description).toMatch(/connect to a daemon/i);
   });
 
   it("matches web's explainFileOpsError vocabulary", () => {

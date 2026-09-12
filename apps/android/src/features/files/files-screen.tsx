@@ -80,11 +80,14 @@ import {
   Banner,
   Button,
   CodeBlock,
+  Dialog,
   EmptyState,
   ErrorState,
   LoadingState,
   Section,
   TextArea,
+  TextField,
+  Toggle,
 } from "../../ui/primitives";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
@@ -94,6 +97,11 @@ import {
   type FileEditController,
   type FileEditState,
 } from "./file-edit-model";
+import {
+  createFileOpsController,
+  type FileOpsController,
+  type FileOpsState,
+} from "./file-ops-model";
 import {
   createFileDownloadController,
   type DownloadFetch,
@@ -320,6 +328,37 @@ export function FilesScreen({
     return downloadController.subscribe(setDownloadState);
   }, [downloadController]);
 
+  // Ops (T35A5): create a folder/file, rename, and delete within the
+  // browsed workspace. Built once per (client, workspaceRoot) pair, like
+  // the browser controller itself; `onChanged` re-lists the current path
+  // so the daemon's new listing is read back rather than optimistically
+  // invented (a failed op never calls it — see `file-ops-model.ts`).
+  // Omitted entirely (not disabled) when either is missing.
+  const opsController = useMemo(() => {
+    if (!client || workspaceRoot === undefined) return null;
+    return createFileOpsController({
+      client,
+      workspaceRoot,
+      onChanged: () => controllerRef.current?.retry(),
+    });
+    // Deliberately built once per (client, workspaceRoot) pair — the
+    // reload callback reads the current listing controller through
+    // `controllerRef`, so a fresh `controller` identity is not needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, workspaceRoot]);
+
+  const [opsState, setOpsState] = useState<FileOpsState | null>(
+    () => opsController?.getState() ?? null,
+  );
+  useEffect(() => {
+    if (!opsController) {
+      setOpsState(null);
+      return;
+    }
+    setOpsState(opsController.getState());
+    return opsController.subscribe(setOpsState);
+  }, [opsController]);
+
   // P5-W22 merge gate: whether this build's `Sharing` can ACTUALLY take
   // a file, asked of the adapter itself rather than inferred from the
   // prop merely being present. `canSave` used to be `Boolean(sharing)`,
@@ -390,6 +429,14 @@ export function FilesScreen({
           state={uploadState}
           theme={theme}
           testId={`${testId}-upload`}
+        />
+      ) : null}
+      {opsController ? (
+        <FileOpsPanel
+          controller={opsController}
+          state={opsState}
+          theme={theme}
+          testId={`${testId}-ops`}
         />
       ) : null}
       {!client || workspaceRoot === undefined ? (
@@ -591,6 +638,178 @@ function UploadPanel({
           />
         )}
       </View>
+    </View>
+  );
+}
+
+/**
+ * The `/files` screen's workspace mutation affordances (T35A5): create a
+ * folder, create a file, rename/move, and delete. Composed entirely from
+ * the shared `ui/primitives` (`TextField`/`Toggle`/`Button`/`Banner`/
+ * `Dialog`) and this file's existing `transferPanel`/`editActions`
+ * styles, the same language `UploadPanel`/`DownloadPanel` already use.
+ *
+ * Every path is workspace-relative — the screen never touches a laptop
+ * path, the daemon does. Delete is deliberately two-step: the danger
+ * button only calls `controller.armDelete`, which issues no request; the
+ * shared `Dialog` is shown for exactly as long as the controller reports
+ * a `pendingDelete`, and only its own confirm calls
+ * `controller.confirmDelete` (the single path that ever sends
+ * `deleteEntry`, with the armed `recursive` flag). A stray press can
+ * therefore never remove anything.
+ */
+function FileOpsPanel({
+  controller,
+  state,
+  theme,
+  testId,
+}: {
+  controller: FileOpsController;
+  state: FileOpsState | null;
+  theme: NativeTheme;
+  testId: string;
+}) {
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const running = state?.status === "running";
+
+  const [mkdirPath, setMkdirPath] = useState("");
+  const [filePath, setFilePath] = useState("");
+  const [fileContent, setFileContent] = useState("");
+  const [renameFrom, setRenameFrom] = useState("");
+  const [renameTo, setRenameTo] = useState("");
+  const [deletePath, setDeletePath] = useState("");
+  const [deleteRecursive, setDeleteRecursive] = useState(false);
+
+  return (
+    <View style={styles.transferPanel} testID={testId}>
+      <Text style={styles.transferTitle}>Change files</Text>
+
+      <TextField
+        label="New folder path"
+        placeholder="src/components"
+        value={mkdirPath}
+        onChangeText={setMkdirPath}
+        editable={!running}
+        testId={`${testId}-mkdir-path`}
+      />
+      <View style={styles.editActions}>
+        <Button
+          kind="secondary"
+          label="Create folder"
+          onPress={() => controller.mkdir(mkdirPath)}
+          disabled={running}
+          testId={`${testId}-mkdir-submit`}
+        />
+      </View>
+
+      <TextField
+        label="New file path"
+        placeholder="src/notes.md"
+        value={filePath}
+        onChangeText={setFilePath}
+        editable={!running}
+        testId={`${testId}-create-file-path`}
+      />
+      <TextField
+        label="Initial content (optional)"
+        value={fileContent}
+        onChangeText={setFileContent}
+        editable={!running}
+        testId={`${testId}-create-file-content`}
+      />
+      <View style={styles.editActions}>
+        <Button
+          kind="secondary"
+          label="Create file"
+          onPress={() => controller.createFile(filePath, fileContent)}
+          disabled={running}
+          testId={`${testId}-create-file-submit`}
+        />
+      </View>
+
+      <TextField
+        label="Rename from"
+        placeholder="src/old.ts"
+        value={renameFrom}
+        onChangeText={setRenameFrom}
+        editable={!running}
+        testId={`${testId}-rename-from`}
+      />
+      <TextField
+        label="Rename to"
+        placeholder="src/new.ts"
+        value={renameTo}
+        onChangeText={setRenameTo}
+        editable={!running}
+        testId={`${testId}-rename-to`}
+      />
+      <View style={styles.editActions}>
+        <Button
+          kind="secondary"
+          label="Rename"
+          onPress={() => controller.rename(renameFrom, renameTo)}
+          disabled={running}
+          testId={`${testId}-rename-submit`}
+        />
+      </View>
+
+      <TextField
+        label="Delete path"
+        placeholder="src/notes.md"
+        value={deletePath}
+        onChangeText={setDeletePath}
+        editable={!running}
+        testId={`${testId}-delete-path`}
+      />
+      <Toggle
+        label="Delete folders and their contents"
+        checked={deleteRecursive}
+        onCheckedChange={setDeleteRecursive}
+        disabled={running}
+        testId={`${testId}-delete-recursive`}
+      />
+      <View style={styles.editActions}>
+        <Button
+          kind="danger"
+          label="Delete"
+          onPress={() => controller.armDelete(deletePath, deleteRecursive)}
+          disabled={running}
+          testId={`${testId}-delete-submit`}
+        />
+      </View>
+
+      <Text style={styles.transferMeta}>
+        Paths are relative to this session&rsquo;s workspace folder.
+      </Text>
+
+      {state?.status === "success" && state.message ? (
+        <Banner
+          tone="success"
+          message={state.message}
+          actionLabel="Dismiss"
+          onAction={controller.reset}
+          testId={`${testId}-success`}
+        />
+      ) : null}
+      {state?.status === "error" && state.error ? (
+        <Banner
+          tone="danger"
+          message={`${state.error.title} — ${state.error.description}`}
+          testId={`${testId}-error`}
+        />
+      ) : null}
+
+      <Dialog
+        open={Boolean(state?.pendingDelete)}
+        title="Delete this entry?"
+        description={`This removes ${state?.pendingDelete?.path || "the selected path"} from the workspace. It cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        dangerous
+        onConfirm={controller.confirmDelete}
+        onClose={controller.cancelDelete}
+        testId={`${testId}-delete-dialog`}
+      />
     </View>
   );
 }
