@@ -373,6 +373,91 @@ describe("PiUiStateStore action routing (composite identity)", () => {
     expect(store.compositeIdFor(resolution.target)).toBe("subagents:fleet#r1");
   });
 
+  it("resolves a nested panel>section>row action across one hop per segment", () => {
+    const { store } = makeStore();
+    store.applySet(
+      AGENT,
+      element({
+        id: "board",
+        ns: "ext",
+        kind: "panel",
+        placement: "pinned",
+        sections: [
+          {
+            id: "team",
+            kind: "roster",
+            actions: [{ id: "refresh-team", label: "Refresh" }],
+            payload: {
+              kind: "roster",
+              rows: [{ id: "r1", label: "one", actions: [{ id: "stop", label: "Stop" }] }],
+            },
+          },
+        ],
+        actions: [{ id: "refresh-all", label: "Refresh all" }],
+      }),
+    );
+
+    const nested = store.resolveActionTarget(AGENT, {
+      elementId: "ext:board#team#r1",
+      actionId: "stop",
+    });
+    expect(nested.ok).toBe(true);
+    if (!nested.ok) return;
+    expect(nested.target.rowId).toBe("team#r1");
+    expect(nested.target.actionKey).toBe("ext:board#team#r1:stop");
+
+    // Every level's own actions stay addressable: the section's via one
+    // hop, the panel's with no hop at all.
+    expect(
+      store.resolveActionTarget(AGENT, {
+        elementId: "ext:board#team",
+        actionId: "refresh-team",
+      }).ok,
+    ).toBe(true);
+    expect(
+      store.resolveActionTarget(AGENT, {
+        elementId: "ext:board",
+        actionId: "refresh-all",
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("rejects an unknown nested segment without resolving a prefix of it", () => {
+    const { store } = makeStore();
+    store.applySet(
+      AGENT,
+      element({
+        id: "board",
+        ns: "ext",
+        kind: "panel",
+        placement: "pinned",
+        sections: [
+          {
+            id: "team",
+            kind: "roster",
+            payload: {
+              kind: "roster",
+              rows: [{ id: "r1", label: "one", actions: [{ id: "stop", label: "Stop" }] }],
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(
+      store.resolveActionTarget(AGENT, {
+        elementId: "ext:board#team#nope",
+        actionId: "stop",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      store.resolveActionTarget(AGENT, {
+        elementId: "ext:board#nope#r1",
+        actionId: "stop",
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
   it("rejects an unknown row, unknown action, and unknown element", () => {
     const { store } = makeStore();
     store.applySet(AGENT, roster());

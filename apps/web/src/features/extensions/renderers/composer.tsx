@@ -7,11 +7,12 @@
  * it would replace — plus the element's own accept/undo actions through the
  * shared action row. Actually applying the accepted text to the live
  * message-composer input, and the "composer update with undo" round trip
- * that implies, is not this renderer's concern: `apps/web/src/features/
- * composer/` has no Pi UI Bridge hook yet, and wiring one is out of this
- * task's scope (T29A3 owns `renderers/` only). The element's `accept`/
- * `undo` actions still dispatch normally through `dispatchAction` — a later
- * task can subscribe to their settlement to update the real composer.
+ * that implies, is not this renderer's concern: the route-chrome
+ * subscribes to these actions' settlement through
+ * `features/composer`'s `createPiUiComposerDraftSource` (wired in
+ * `routes/screens/host-session-screen.tsx`) and fills/restores the live
+ * draft there. The element's `accept`/`undo` actions still dispatch
+ * normally through `dispatchAction`.
  */
 import type { PiUiComposerPayload } from "@picompanion/protocol/pi-ui-bridge/schema";
 

@@ -484,7 +484,7 @@ describe("SessionRoute source", () => {
     // the same reasoning `handleSubmit`/`turnRunning`'s cases above use.
     const code = readCode();
     expect(code).toMatch(
-      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+modelThinkingClient=\{modelThinkingClient\}\s+sessionControlsClient=\{sessionControlsClient\}\s+usage=\{usage\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+onMinHeightChange=\{setComposerContentMinHeight\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s*\/>/,
+      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+modelThinkingClient=\{modelThinkingClient\}\s+sessionControlsClient=\{sessionControlsClient\}\s+usage=\{usage\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+onMinHeightChange=\{setComposerContentMinHeight\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s+piUiComposerDrafts=\{piUiComposerDrafts\}\s*\/>/,
     );
   });
 
@@ -492,7 +492,7 @@ describe("SessionRoute source", () => {
     const transcriptOutboxExpr = readComponentCode("SessionTranscript").match(
       /<RecoveredTurnBanner\s+turns=\{recoveredTurns\}\s+outbox=\{([^}]+)\}\s*\/>/,
     )?.[1];
-    const composerOutboxExpr = readCode().match(/<Composer\b[\s\S]*?outbox=\{([^}]+)\}\s*\/>/)?.[1];
+    const composerOutboxExpr = readCode().match(/<Composer\b[\s\S]*?outbox=\{([^}]+)\}/)?.[1];
     expect(transcriptOutboxExpr).toBe("core.turnOutbox.getOutbox() ?? undefined");
     expect(composerOutboxExpr).toBe("core.turnOutbox.getOutbox() ?? undefined");
   });
@@ -678,8 +678,22 @@ describe("SessionRoute source", () => {
     expect(code).toMatch(/createExpoAttachmentSourcePort/);
     expect(code).toMatch(/createExpoCameraCapturePort/);
     expect(code).toMatch(
-      /import \{\s*Composer,\s*createExpoAttachmentSourcePort,\s*createExpoCameraCapturePort,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/composer";/,
+      /import \{\s*Composer,\s*createExpoAttachmentSourcePort,\s*createExpoCameraCapturePort,\s*createPiUiComposerDraftSource,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/composer";/,
     );
+  });
+
+  it("wires Pi UI composer-kind accept/undo into the live draft through the session's own action controller and store", () => {
+    const code = readCode();
+    // Memoized (not inline) so the Composer's subscription effect does
+    // not churn on every render; bound methods, since both read `this`.
+    expect(code).toMatch(
+      /const piUiComposerDrafts = useMemo\(\s*\(\) =>\s*createPiUiComposerDraftSource\(\{/,
+    );
+    expect(code).toMatch(/agentId: agentId \?\? ""/);
+    expect(code).toMatch(
+      /core\.piUiSession\.actionController\.subscribe\.bind\(\s*core\.piUiSession\.actionController,?\s*\)/,
+    );
+    expect(code).toMatch(/core\.piUiSession\.store\.getElement\.bind\(core\.piUiSession\.store\)/);
   });
 
   it("T290: derives attachmentSource/cameraCapture with useMemo, calling each real constructor with no arguments and an empty dependency array", () => {

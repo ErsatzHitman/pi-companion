@@ -10,6 +10,7 @@ import { useDaemonClientContext } from "../../app/daemon-client-context.js";
 import { ApprovalsContainer } from "../../features/approvals/index.js";
 import { ComposerContainer } from "../../features/composer/index.js";
 import { createDaemonAgentTurnClient } from "../../features/composer/index.js";
+import { createPiUiComposerDraftSource } from "../../features/composer/index.js";
 import { createReferenceFileSource } from "../../features/composer/index.js";
 import { useSessionContextTelemetry } from "../../features/composer/index.js";
 import { usePiUiSession } from "../../features/extensions/pi-ui-session-context.js";
@@ -480,6 +481,23 @@ export function HostSessionScreen() {
   // the session rather than one per destination.
   const piUiSession = usePiUiSession();
 
+  // The composer-kind accept path: the live session's own
+  // actionController/store narrowed to the draft source the composer
+  // subscribes to, so accepting a proposal fills the live draft (and
+  // undo restores it). Bound methods — both read `this` — memoized on
+  // the session value, which is stable per agent.
+  const piUiComposerDrafts = useMemo(
+    () =>
+      piUiSession
+        ? createPiUiComposerDraftSource({
+            agentId: piUiSession.agentId,
+            subscribe: piUiSession.actionController.subscribe.bind(piUiSession.actionController),
+            getElement: piUiSession.store.getElement.bind(piUiSession.store),
+          })
+        : undefined,
+    [piUiSession],
+  );
+
   const sessionResumeClient = useMemo(
     () => (client ? createDaemonSessionResumeClient(client) : undefined),
     [client],
@@ -652,6 +670,9 @@ export function HostSessionScreen() {
         contextTelemetry={contextTelemetry}
         // T389: `@file` candidates from the connected daemon.
         fileReferenceSource={fileReferenceSource}
+        // Pi UI `composer`-kind accept/undo fills and restores the live
+        // draft through the session's own action controller and store.
+        piUiComposerDrafts={piUiComposerDrafts}
       />
     </>
   );

@@ -13,6 +13,7 @@ import {
   Composer,
   createExpoAttachmentSourcePort,
   createExpoCameraCapturePort,
+  createPiUiComposerDraftSource,
 } from "../../../../../features/composer";
 import { useConnectionStatus } from "../../../../../features/connect";
 import {
@@ -1230,6 +1231,23 @@ export default function SessionRoute() {
     [router, serverId, agentId],
   );
   const cwd = useAgentCwd(resolveAgentSnapshotClient(core.connection), agentId ?? "");
+  // Pi UI `composer`-kind accept/undo fills and restores the live draft
+  // through the session's own action controller and store. Bound methods
+  // (both read `this`); memoized so the Composer's subscription effect
+  // does not churn on every render.
+  const piUiComposerDrafts = useMemo(
+    () =>
+      createPiUiComposerDraftSource({
+        agentId: agentId ?? "",
+        subscribe: core.piUiSession.actionController.subscribe.bind(
+          core.piUiSession.actionController,
+        ),
+        getElement: core.piUiSession.store.getElement.bind(core.piUiSession.store),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- core is the
+    // process-lifetime singleton; agentId is the route param.
+    [agentId],
+  );
 
   // T353: the two things the composer's context ring and its menu need.
   // `modelThinkingClient` closes a gap rather than adding a feature —
@@ -1300,6 +1318,7 @@ export default function SessionRoute() {
             cameraCapture={cameraCapture}
             onMinHeightChange={setComposerContentMinHeight}
             outbox={core.turnOutbox.getOutbox() ?? undefined}
+            piUiComposerDrafts={piUiComposerDrafts}
           />
         }
       />

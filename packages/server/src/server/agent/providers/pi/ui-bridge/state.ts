@@ -15,6 +15,7 @@ import {
   formatActionKey,
   formatCompositeElementId,
   parseCompositeElementId,
+  PIUI_ROW_SEPARATOR,
   type PiUiActionTarget,
 } from "./identity.js";
 
@@ -157,17 +158,22 @@ function actionIdsOf(value: unknown): string[] {
     .filter((id): id is string => id !== null);
 }
 
-/** Finds a roster row or panel section by id inside an element's payload. */
-function findChild(element: PiUiElement, childId: string): Rec | null {
-  const payload = (element as unknown as Rec).payload;
+/**
+ * Finds a roster row or panel section by id one level below `node` — an
+ * element, a panel section, or any nested payload carrier. Containers are
+ * read off the node itself (`rows`/`sections`) and off its `payload`, so
+ * the same search descends element -> section -> row without caring which
+ * level it is called on.
+ */
+function findChild(node: Rec, childId: string): Rec | null {
   const containers: unknown[] = [];
+  if (Array.isArray(node.rows)) containers.push(...node.rows);
+  if (Array.isArray(node.sections)) containers.push(...node.sections);
+  const payload = node.payload;
   if (isRecord(payload)) {
     if (Array.isArray(payload.rows)) containers.push(...payload.rows);
     if (Array.isArray(payload.sections)) containers.push(...payload.sections);
   }
-  const legacy = element as unknown as Rec;
-  if (Array.isArray(legacy.rows)) containers.push(...legacy.rows);
-  if (Array.isArray(legacy.sections)) containers.push(...legacy.sections);
   for (const child of containers) {
     if (isRecord(child) && child.id === childId) return child;
   }
@@ -774,11 +780,25 @@ export class PiUiStateStore {
 
     let scopeActions = actionIdsOf(element);
     if (parsed.rowId !== undefined) {
-      const child = findChild(element, parsed.rowId);
-      if (!child) {
+      // Multi-hop row paths (`panel#section#row`): clients that scope a
+      // nested child compose the full chain, so descend one level per
+      // `#`-separated segment, accumulating each level's actions. A
+      // single-hop id (`fleet#r1`) takes the loop exactly once, which is
+      // the previous behaviour unchanged.
+      let node: Rec = element as unknown as Rec;
+      let failed = false;
+      for (const segment of parsed.rowId.split(PIUI_ROW_SEPARATOR)) {
+        const child = findChild(node, segment);
+        if (!child) {
+          failed = true;
+          break;
+        }
+        scopeActions = [...actionIdsOf(child), ...scopeActions];
+        node = child;
+      }
+      if (failed) {
         return { ok: false, error: `Unknown row "${parsed.rowId}" on ${elementKey(element)}` };
       }
-      scopeActions = [...actionIdsOf(child), ...scopeActions];
     }
     if (scopeActions.length > 0 && !scopeActions.includes(input.actionId)) {
       return {

@@ -8,10 +8,12 @@
  * This renders the proposal — mode, proposed text, and (when supplied)
  * what it would replace — plus the element's own accept/undo actions
  * through the shared action row. Actually applying the accepted text to
- * the live message-composer input is not this renderer's concern (out of
- * this task's `renderers/` scope, same as the web renderer's note): the
- * element's `accept`/`undo` actions still dispatch normally through
- * `dispatchAction`, and a later task can subscribe to their settlement.
+ * the live message-composer input is not this renderer's concern: the
+ * session route subscribes to these actions' settlement through
+ * `features/composer`'s `createPiUiComposerDraftSource` (wired in
+ * `app/h/[serverId]/session/[agentId]/index.tsx`) and fills/restores the
+ * live draft there. The element's `accept`/`undo` actions still dispatch
+ * normally through `dispatchAction`.
  *
  * Kept free of any React Native import so it is unit testable in this
  * workspace (see `status-model.ts`'s note and `../registry.test.ts`).
