@@ -5,10 +5,13 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  readFileSync,
   readSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import pino from "pino";
@@ -23,6 +26,8 @@ import {
   type AgentStreamEvent,
 } from "../../agent-sdk-types.js";
 import { PiRpcAgentClient, PiRpcAgentSession, transformPiModels } from "./agent.js";
+import { WorkspaceCheckpointStore } from "../../checkpoints/index.js";
+import { invokeRewindCapability } from "../../rewind/rewind.js";
 import type { PiAgentMessage } from "./rpc-types.js";
 import { FakePi } from "./test-utils/fake-pi.js";
 
@@ -2263,6 +2268,80 @@ describe("PiRpcAgentClient", () => {
       supportsRewindBoth: false,
     });
     expect(pi.latestSession().treeNavigationRequests).toEqual(["entry-1"]);
+  });
+
+  test("advertises file rewind only for a workspace the checkpoint store can snapshot", async () => {
+    const { session } = await createSession();
+
+    expect(rewindCapabilities(session.capabilities)).toEqual({
+      supportsRewindConversation: true,
+      supportsRewindFiles: false,
+      supportsRewindBoth: false,
+    });
+    await expect(
+      invokeRewindCapability(session, { messageId: "entry-1", mode: "files" }),
+    ).rejects.toThrow("Provider does not support rewinding files");
+
+    await session.close();
+  });
+
+  test("snapshots a turn boundary and rewinds workspace files", async () => {
+    const repoRoot = realpathSync(mkdtempSync(path.join(tmpdir(), "paseo-pi-checkpoint-repo-")));
+    const storageRoot = realpathSync(
+      mkdtempSync(path.join(tmpdir(), "paseo-pi-checkpoint-store-")),
+    );
+    onTestFinished(() => {
+      rmSync(repoRoot, { force: true, recursive: true });
+      rmSync(storageRoot, { force: true, recursive: true });
+    });
+    writeFileSync(path.join(repoRoot, "a.txt"), "A\n");
+    const git = (args: string[]) =>
+      execFileSync("git", ["-c", "commit.gpgsign=false", ...args], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    git(["init"]);
+    git(["config", "user.email", "test@example.com"]);
+    git(["config", "user.name", "Checkpoint Test"]);
+    git(["config", "core.autocrlf", "false"]);
+    git(["add", "-A"]);
+    git(["commit", "-m", "init"]);
+    const headBefore = git(["rev-parse", "HEAD"]).trim();
+
+    const store = new WorkspaceCheckpointStore({ storageRoot });
+    const captureSpy = vi.spyOn(store, "capture");
+    const pi = new FakePi();
+    const client = new PiRpcAgentClient({
+      checkpoints: store,
+      logger: pino({ level: "silent" }),
+      runtime: pi,
+    });
+    const session = (await client.createSession(
+      createConfig({ cwd: repoRoot }),
+    )) as PiRpcAgentSession;
+    const events = new SessionEvents(session);
+    const fakeSession = pi.latestSession();
+
+    expect(rewindCapabilities(session.capabilities)).toEqual({
+      supportsRewindConversation: true,
+      supportsRewindFiles: true,
+      supportsRewindBoth: true,
+    });
+
+    await session.startTurn("hello");
+    // The turn edits the file; the before-turn snapshot still holds the original.
+    writeFileSync(path.join(repoRoot, "a.txt"), "B\n");
+    fakeSession.finishSubmittedUserMessage({ id: "entry-user-1", parentId: null, text: "hello" });
+    fakeSession.finishTurn({ role: "assistant", content: [] });
+    await events.nextTurnCompletion();
+    await vi.waitFor(() => expect(captureSpy).toHaveBeenCalledTimes(2), { timeout: 15_000 });
+
+    await session.revertFiles?.({ messageId: "entry-user-1" });
+
+    expect(readFileSync(path.join(repoRoot, "a.txt"), "utf8")).toBe("A\n");
+    expect(git(["rev-parse", "HEAD"]).trim()).toBe(headBefore);
+    await session.close();
   });
 
   test("injects MCP servers without replacing the Pi global MCP config", async () => {

@@ -833,8 +833,13 @@ export interface AgentSession {
    */
   getAutoCompaction?(): Promise<boolean | null>;
   revertConversation?(input: { messageId: string }): Promise<void>;
-  revertFiles?(input: { messageId: string }): Promise<void>;
-  revertBoth?(input: { messageId: string }): Promise<void>;
+  /**
+   * Restores the workspace files for a turn. `force` discards a change made
+   * outside the checkpoint system; without it such a change refuses the
+   * restore with a conflict error.
+   */
+  revertFiles?(input: { messageId: string; force?: boolean }): Promise<void>;
+  revertBoth?(input: { messageId: string; force?: boolean }): Promise<void>;
   /**
    * Out-of-band prompt handler. When non-null, the manager runs the returned
    * handler instead of allocating a turn. The handler emits stream events

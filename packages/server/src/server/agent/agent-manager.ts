@@ -2612,7 +2612,12 @@ export class AgentManager {
     await this.hydrateTimelineFromLegacyProviderHistory(agent, options);
   }
 
-  async rewind(agentId: string, messageId: string, mode: RewindMode): Promise<void> {
+  async rewind(
+    agentId: string,
+    messageId: string,
+    mode: RewindMode,
+    options?: { force?: boolean },
+  ): Promise<void> {
     const agent = this.requireSessionAgent(agentId);
     const submittedRow = this.timelineStore
       .getRows(agentId)
@@ -2634,10 +2639,14 @@ export class AgentManager {
     const lock = this.runs.createPendingRun(agentId);
     try {
       this.logger.info(
-        { agentId, provider: agent.provider, messageId, mode },
+        { agentId, provider: agent.provider, messageId, mode, force: options?.force === true },
         "agent.rewind.start",
       );
-      await invokeRewindCapability(agent.session, { messageId: providerMessageId, mode });
+      await invokeRewindCapability(agent.session, {
+        messageId: providerMessageId,
+        mode,
+        force: options?.force === true,
+      });
       if (mode !== "files") {
         await this.hydrateTimelineFromProvider(agentId, { force: true, broadcast: true });
       }

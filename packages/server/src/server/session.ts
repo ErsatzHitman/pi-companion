@@ -4029,7 +4029,9 @@ export class Session {
     msg: Extract<SessionInboundMessage, { type: "agent.rewind.request" }>,
   ): Promise<void> {
     try {
-      await this.agentManager.rewind(msg.agentId, msg.messageId, msg.mode);
+      await this.agentManager.rewind(msg.agentId, msg.messageId, msg.mode, {
+        force: msg.force === true,
+      });
       this.emit({
         type: "agent.rewind.response",
         payload: {
