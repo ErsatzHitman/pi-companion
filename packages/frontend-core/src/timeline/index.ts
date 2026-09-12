@@ -40,6 +40,21 @@
  * so `apps/web` and `apps/android` render the same clock rather than each
  * inventing one.
  *
+ * T388 ("timeline upgrade") adds three pure modules on top of all of the
+ * above, with zero wire change:
+ *
+ * - `./row-key.ts`: `deriveTimelineRowKey`/`stableRowKey`, the stable
+ *   renderer-facing list identity for a row (`TranscriptEntry.key` carries
+ *   it), derived from the item's own durable id where one exists so it
+ *   survives pagination, coalescing, reconnect and gap recovery rather than
+ *   being an array index or a raw sequence number.
+ * - `./work-groups.ts`: `buildTranscriptWorkGroups` plus the pure collapse
+ *   operations, turning a consecutive thinking/tool-call run into one
+ *   collapsible unit with a derived head/summary.
+ * - `./transcript-projection.ts`: `TranscriptEntryProjector`, a memoizing
+ *   projection that bounds the entries re-derived per streaming event
+ *   instead of rebuilding the whole list on every delta.
+ *
  * Repository invariant: this module must never import React, React
  * Native, Expo, DOM types, or browser globals.
  */
@@ -62,6 +77,7 @@ export {
   buildTranscriptEntries,
   buildTranscriptEntry,
   buildTranscriptView,
+  transcriptEntryListKey,
 } from "./transcript-view.js";
 export type {
   TranscriptEntry,
@@ -70,6 +86,30 @@ export type {
   TranscriptView,
   TranscriptViewOptions,
 } from "./transcript-view.js";
+export { deriveTimelineRowKey, stableRowKey } from "./row-key.js";
+export type { TimelineRowKey, TimelineRowKeyInput, TimelineRowKeySource } from "./row-key.js";
+export { TranscriptEntryProjector } from "./transcript-projection.js";
+export type {
+  TranscriptEntryProjectorOptions,
+  TranscriptProjectionStats,
+} from "./transcript-projection.js";
+export {
+  buildTranscriptWorkGroups,
+  createWorkGroupCollapseState,
+  isWorkGroupCollapsed,
+  isWorkGroupMemberKind,
+  toggleWorkGroupCollapsed,
+  EMPTY_WORK_GROUPING,
+  WORK_GROUP_MEMBER_KINDS,
+} from "./work-groups.js";
+export type {
+  BuildWorkGroupsOptions,
+  TranscriptWorkGroup,
+  TranscriptWorkGrouping,
+  WorkGroupCollapseState,
+  WorkGroupMemberKind,
+  WorkGroupSummary,
+} from "./work-groups.js";
 export { RunGenerationTracker, fenceAsyncResponse } from "./run-generation.js";
 export type { RunGeneration, RunGenerationSnapshot } from "./run-generation.js";
 export { TimelineCoalescer } from "./coalescer.js";

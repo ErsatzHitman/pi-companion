@@ -72,12 +72,23 @@ import type { PiUiState } from "@picompanion/protocol/pi-ui-bridge/schema";
 import { buildToolCallViewModel } from "../tools/view-model.js";
 import type { ToolCallBuildOptions, ToolCallViewModel } from "../tools/types.js";
 import { getVisibleTimelineRows } from "./reducer.js";
+import { deriveTimelineRowKey } from "./row-key.js";
 import type { TimelineGap, TimelineRow, TimelineState } from "./types.js";
 
 export interface TranscriptEntryBase {
-  /** Same identity as the source `TimelineRow.id` — stable across rebuilds
-   * and safe to use as a list/render key. */
+  /** Same identity as the source `TimelineRow.id` — the *reducer's* dedupe
+   * identity (`(epoch, seqStart)` for confirmed rows). Kept for traceability
+   * and for callers that need to correlate an entry back to its row; **not**
+   * the field to key a rendered list by (see `key`). */
   readonly id: string;
+  /** The stable, renderer-facing list key for this entry (T388). Derived by
+   * `deriveTimelineRowKey` from the row's own durable identity — `callId`,
+   * `clientMessageId`, `messageId` — falling back to `(epoch, seqStart)` only
+   * when the item carries none. Unlike `id`, it survives a projected-window
+   * replay that renumbers a row's sequence, and it is unchanged across
+   * optimistic-row reconciliation. Always unique within one entry list.
+   * Renderers must key on this, never on `id` or an array index. */
+  readonly key: string;
   readonly epoch: string;
   readonly seqStart: number;
   readonly seqEnd: number;
@@ -190,9 +201,25 @@ export interface TranscriptViewOptions {
   readonly cwd?: string;
 }
 
+/**
+ * The stable list key for a transcript entry (T388). Returns the entry's own
+ * `key` when it was built by `buildTranscriptEntry`, falling back to `id`
+ * only for a hand-built entry that predates/omits the field (test fixtures
+ * do; every real entry has one). Renderers must key on this, never on `id`
+ * or an array index — see `./row-key.ts` for what instability each of those
+ * has.
+ */
+export function transcriptEntryListKey(entry: {
+  readonly key?: string;
+  readonly id: string;
+}): string {
+  return entry.key ?? entry.id;
+}
+
 function baseFields(row: TimelineRow, stale: boolean): TranscriptEntryBase {
   return {
     id: row.id,
+    key: deriveTimelineRowKey(row).key,
     epoch: row.epoch,
     seqStart: row.seqStart,
     seqEnd: row.seqEnd,
