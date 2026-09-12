@@ -19428,14 +19428,16 @@ reason: this task ships no capability. It adds two HTML documents and a README.
 
 `labels: phase-9, area: daemon` · `depends-on: T381` · `wave: P9-V`
 
-**Filed, not done.** The wire already speaks files-rewind — `AgentRewindModeSchema` in
+**DONE — shipped on `main` as `f346313` + `1cd680e` (branch `wave3/rewind`), merged in merge commit
+`329576a`, with the notices row and `plan.md` §4.2 decision record added in `06bd2c4`.** When this
+section was written the wire already spoke files-rewind — `AgentRewindModeSchema` in
 `packages/protocol/src/messages.ts` carries `"conversation" | "files" | "both"`, and
 `DaemonClient.rewindAgent` (`packages/client/src/daemon-client.ts`) already sends the mode —
-but the daemon cannot do the files leg: `supportsRewindFiles` and `supportsRewindBoth` in
-`packages/server/src/server/agent/providers/pi/agent.ts` are both `false`, and nothing under
-`packages/server/src` snapshots a workspace. So every `mode: "files"` / `"both"` rewind fails
-today, and the session-tree / recovered-turn work the owner just approved (project `memory.md`,
-"Supernova adoptions") has no undo machinery underneath it. This task builds that leg, adapted
+but the daemon could not do the files leg: `supportsRewindFiles` and `supportsRewindBoth` in
+`packages/server/src/server/agent/providers/pi/agent.ts` were both `false`, and nothing under
+`packages/server/src` snapshotted a workspace. So every `mode: "files"` / `"both"` rewind failed,
+and the session-tree / recovered-turn work the owner approved (project `memory.md`,
+"Supernova adoptions") had no undo machinery underneath it. That leg now exists, adapted
 from Supernova's checkpoint implementation — reimplemented in plain Node, not ported, because
 Supernova's version is entangled with Effect RPC, Bun, and an Electron shell this repository
 will never take (see the "do NOT adopt" list in the fleet's integration map, confirmed against
@@ -19488,14 +19490,37 @@ decision record restating the snapshot/restore semantics (per the T253 rule, the
 cites `plan.md`, never the frozen reference docs and never `D:/supernova` directly — cite
 Supernova source files by symbol name, never by line number, per the T269 rule).
 
-- [ ] A turn boundary leaves a restorable snapshot outside the workspace; the workspace HEAD never moves
-- [ ] Restoring an unchanged-since-snapshot workspace reproduces the snapshot byte-for-byte, proven by a test
-- [ ] Restoring after an outside change refuses with a conflict error unless `force: true`, proven by a test
-- [ ] A restore that fails midway rolls back to the pre-restore worktree, proven by a test
-- [ ] `supportsRewindFiles`/`supportsRewindBoth` are true only where snapshots work, false with an honest error elsewhere
-- [ ] `docs/T383-provenance.md` + `THIRD_PARTY_NOTICES.md` row + per-file headers name the Supernova source paths and commit
-- [ ] `plan.md` §4.2 carries the decision record and the shipped code cites it
+- [x] A turn boundary leaves a restorable snapshot outside the workspace; the workspace HEAD never moves
+- [x] Restoring an unchanged-since-snapshot workspace reproduces the snapshot byte-for-byte, proven by a test
+- [x] Restoring after an outside change refuses with a conflict error unless `force: true`, proven by a test
+- [x] A restore that fails midway rolls back to the pre-restore worktree, proven by a test
+- [x] `supportsRewindFiles`/`supportsRewindBoth` are true only where snapshots work, false with an honest error elsewhere
+- [x] `docs/T383-provenance.md` + `THIRD_PARTY_NOTICES.md` row + per-file headers name the Supernova source paths and commit
+- [x] `plan.md` §4.2 carries the decision record and the shipped code cites it
 - [ ] `npm run test:unit --workspace=@picompanion/server` 3× green locally, typecheck + oxlint + oxfmt clean, push with a Maestro dispatch read
+
+**Evidence, measured.** `npx vitest run packages/server/src/server/agent/checkpoints
+packages/server/src/server/agent/rewind --bail=1` → 2 files, 11 tests passed;
+`npx vitest run packages/server/src/server/agent/providers/pi/agent.test.ts --bail=1` → 79 passed;
+`npm run typecheck --workspace=@picompanion/server` exit 0;
+`node scripts/ci/run-guard-capability-prose.mjs` exit 0 (65 groups) and
+`node scripts/ci/run-guard-format-check-per-commit.mjs bd366dd..HEAD` OK (4 commits scanned) on the
+merged tip. `checkpoint-store.test.ts` was added to `test:unit:serial` rather than the parallel lane,
+for the T240 reason that lane exists: it spawns real `git` subprocesses and real temporary
+directories per test. The last box stays open until this wave's own full-server run and CI read at
+the wave tip (T93: a lane result is only reportable once it has been run on committed content).
+
+**What the shipped code does, in one paragraph.** Snapshots live under `$PASEO_HOME/checkpoints`,
+keyed by a digest of the canonical workspace root; each discovered work tree gets a bare shadow
+repository whose `objects/info/alternates` points at the source object database, and every git
+call is given `--git-dir=<shadow> --work-tree=<workspace>` with a private `GIT_INDEX_FILE`, so no
+ref, object, index entry or HEAD move ever reaches the user's repository. A `before-turn` and an
+`after-turn` capture bracket each turn; the after-turn one is awaited by a rewind so the baseline
+it compares against is current. A restore is computed as affected / delete / restore paths per
+repository, applied in order, and rolled back in reverse when a later one fails. A difference
+between the live work tree and the latest snapshot means something changed outside the checkpoint
+system, which is a `CheckpointConflictError` naming the paths unless the caller sends the new
+optional `force: true` on `agent.rewind.request`.
 
 #### T384 — Sessions and Live drew a different bar, pill, row and card geometry than the reference, and Live showed no elapsed
 
