@@ -364,7 +364,7 @@ export function useSessionTranscriptEntries(
         );
         await confirmTimelineCatchUp(cache, sessionId, caughtUp)
           .then((confirmed) => {
-            if (isCurrent()) setCachedAt(confirmed.cachedAt);
+            if (isCurrent() && confirmed !== null) setCachedAt(confirmed.cachedAt);
           })
           .catch(() => {});
       } catch {

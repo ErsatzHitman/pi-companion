@@ -10,6 +10,23 @@
  */
 import type { Clock, StructuredStorage, TimerHandle } from "@picompanion/frontend-core";
 
+/**
+ * A handle the real `Clock` type brands opaquely (`TimerHandle` is a
+ * unique-symbol brand, so nothing outside this file can mint one). The
+ * double keeps its own numeric id inside and hands the brand back out.
+ */
+interface ManualTimerHandle extends TimerHandle {
+  readonly id: number;
+}
+
+function handleFor(id: number): TimerHandle {
+  return { id } as unknown as ManualTimerHandle;
+}
+
+function idOf(handle: TimerHandle): number {
+  return (handle as unknown as ManualTimerHandle).id;
+}
+
 /** An in-memory `StructuredStorage`, keyed `collection/id`. */
 export class InMemoryStructuredStorage implements StructuredStorage {
   private readonly records = new Map<string, unknown>();
@@ -74,11 +91,11 @@ export class ManualClock implements Clock {
   setTimeout(callback: () => void, delayMs: number): TimerHandle {
     const handle = this.nextHandle++;
     this.timers.set(handle, { callback, dueAt: this.current + Math.max(0, delayMs) });
-    return handle;
+    return handleFor(handle);
   }
 
   clearTimeout(handle: TimerHandle): void {
-    this.timers.delete(handle as number);
+    this.timers.delete(idOf(handle));
   }
 
   setInterval(callback: () => void, intervalMs: number): TimerHandle {
@@ -88,11 +105,11 @@ export class ManualClock implements Clock {
       dueAt: this.current + Math.max(1, intervalMs),
       repeatMs: Math.max(1, intervalMs),
     });
-    return handle;
+    return handleFor(handle);
   }
 
   clearInterval(handle: TimerHandle): void {
-    this.timers.delete(handle as number);
+    this.timers.delete(idOf(handle));
   }
 
   /** Moves "now" forward without running anything. */
