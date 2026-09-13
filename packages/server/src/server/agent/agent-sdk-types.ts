@@ -834,6 +834,21 @@ export interface AgentSession {
   getAutoCompaction?(): Promise<boolean | null>;
   revertConversation?(input: { messageId: string }): Promise<void>;
   /**
+   * Forks the provider conversation at `messageId` via Pi's mirrored
+   * `fork` RPC command (`{ type: "fork"; entryId }`, see
+   * `providers/pi/rpc-types.ts`). Conversation-only: branches the
+   * transcript without restoring workspace files, unlike `revertFiles`.
+   * Only the Pi provider implements this; other providers leave it
+   * undefined and the manager falls back to a timeline-seeded clone.
+   */
+  fork?(entryId: string): Promise<unknown>;
+  /**
+   * Renames the provider session via Pi's mirrored `set_session_name` RPC
+   * command. Only the Pi provider implements this; other providers leave
+   * it undefined.
+   */
+  setSessionName?(name: string): Promise<void>;
+  /**
    * Restores the workspace files for a turn. `force` discards a change made
    * outside the checkpoint system; without it such a change refuses the
    * restore with a conflict error.

@@ -135,6 +135,9 @@ export class FakePiSession implements PiRuntimeSession {
   setModelResult: PiModel | null = null;
   models: PiModel[] = [];
   messages: PiAgentMessage[] = [];
+  forkResponse: { text?: string; cancelled?: boolean } = { text: "", cancelled: false };
+  forkError: Error | null = null;
+  readonly forkRequests: string[] = [];
   stats: PiSessionStats = {
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     cost: 0,
@@ -389,6 +392,14 @@ export class FakePiSession implements PiRuntimeSession {
           throw this.setSessionNameError;
         }
         return {};
+      case "fork": {
+        const entryId = typeof command.entryId === "string" ? command.entryId : "";
+        this.forkRequests.push(entryId);
+        if (this.forkError) {
+          throw this.forkError;
+        }
+        return this.forkResponse;
+      }
       case "set_steering_mode": {
         const mode = command.mode as PiQueueMode;
         this.queueModeRequests.push({ type: "set_steering_mode", mode });
