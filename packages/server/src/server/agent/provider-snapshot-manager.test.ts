@@ -459,7 +459,7 @@ describe("ProviderSnapshotManager public surface", () => {
       { provider: "pi", id: "gpt-5.4-mini", label: "GPT 5.4 Mini" },
     ];
     const catalogModes: AgentMode[] = [{ id: "agent", label: "Agent" }];
-    const fetchCatalog = vi.fn(async () => ({
+    const fetchCatalog = vi.fn(async (_options: FetchCatalogOptions) => ({
       models: catalogModels,
       modes: catalogModes,
     }));
@@ -696,7 +696,7 @@ describe("ProviderSnapshotManager public surface", () => {
           async fetchCatalog() {
             return { models: [] as AgentModelDefinition[], modes: childModes };
           },
-          async resolveCreateConfig(input) {
+          resolveCreateConfig(input) {
             resolverInputs.push(input);
             return {
               modeId: input.parent?.isUnattended ? "child-unattended" : undefined,
@@ -768,7 +768,7 @@ describe("ProviderSnapshotManager public surface", () => {
           async fetchCatalog() {
             return { models: [] as AgentModelDefinition[], modes };
           },
-          async resolveCreateConfig(input) {
+          resolveCreateConfig(input) {
             resolverInputs.push(input);
             return {
               modeId: input.unattended ? "worker" : undefined,
@@ -953,7 +953,7 @@ describe("ProviderSnapshotManager lifecycle", () => {
 
 describe("ProviderSnapshotManager cwd routing", () => {
   test("settings refresh passes the semantic global scope to providers", async () => {
-    const fetchCatalog = vi.fn(async () => ({
+    const fetchCatalog = vi.fn(async (_options: FetchCatalogOptions) => ({
       models: [] as AgentModelDefinition[],
       modes: [] as AgentMode[],
     }));
@@ -976,7 +976,7 @@ describe("ProviderSnapshotManager cwd routing", () => {
   });
 
   test("global snapshot does not satisfy an explicit home workspace read", async () => {
-    const fetchCatalog = vi.fn(async () => ({
+    const fetchCatalog = vi.fn(async (_options: FetchCatalogOptions) => ({
       models: [] as AgentModelDefinition[],
       modes: [] as AgentMode[],
     }));
