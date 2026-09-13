@@ -169,6 +169,30 @@ export interface FileBrowserClient {
   requestDownloadToken?(cwd: string, path: string): Promise<FileDownloadTokenResult>;
 
   /**
+   * Relay-path chunk-loop download (the `file_download_bytes` protocol
+   * pair, served fetch-and-forward inside the existing E2EE channel so a
+   * relay-paired caller gets bytes no direct HTTP endpoint could serve).
+   * `createFileDownloadController` (`file-download-model.ts`) calls this
+   * instead of the token+HTTP round trip above whenever the session is
+   * relay-paired and this method is present.
+   *
+   * Optional for the same reason every other transfer member on this
+   * interface is: a client object without it (an adapter written before
+   * the pair existed, or a daemon too old to serve it) keeps the
+   * `FILE_DOWNLOAD_NO_RELAY_ORIGIN` refusal — see that sentinel's doc —
+   * instead of reaching a wire request the daemon would reject.
+   *
+   * Shaped to match `DaemonClient.downloadFileBytes(options)`
+   * (`packages/client/src/daemon-client.ts`) — same option names, same
+   * result fields — so a real `DaemonClient` satisfies this member
+   * structurally with no adapter. Only `cwd`+`path` are passed: the
+   * daemon's chunk handler is workspace-`cwd`-scoped (`agentId` is
+   * accepted on its wire but never used as a scope there), so this
+   * addresses browsed-workspace files, never agentId-scoped attachments.
+   */
+  downloadFileBytes?(options: RelayFileDownloadOptions): Promise<RelayDownloadedFileBytes>;
+
+  /**
    * Creates a directory (and any missing parents) inside `cwd`
    * (the `fs.file.mkdir.request`/`fs.file.mkdir.response` wire
    * message — see `packages/protocol/src/messages.ts`'s
@@ -873,18 +897,95 @@ export const FILE_DOWNLOAD_NO_ORIGIN = "FILE_DOWNLOAD_NO_ORIGIN";
  * existing encrypted relay transport"). `daemon-connection-store.ts`'s
  * `daemonAddress` is `null` on the relay path *by design*, not by
  * omission — a relay tunnel proxies only the encrypted WebSocket, so
- * there is no daemon-reachable HTTP origin to derive one from, and
- * bridging one would mean building an HTTP-over-relay proxy in
- * `packages/relay` (off-limits this wave; see this task's report for
- * the filed seam naming the task that should own it). Distinguishing
- * this from the generic `FILE_DOWNLOAD_NO_ORIGIN` matters because the
- * two read very differently to a user: the generic one says "not
- * available *yet*" (an app-wiring gap that resolves once fixed); this
- * one is permanent for as long as the session stays relay-paired, and
- * `explainFileDownloadError` below says so rather than implying the
+ * there is no daemon-reachable HTTP origin to derive one from.
+ *
+ * Since the `file_download_bytes` pair landed, a relay-paired session
+ * whose client exposes the chunk-loop download (`supportsRelayFileDownload`)
+ * never reaches this sentinel — `file-download-model.ts` fetches the bytes
+ * inside the E2EE channel instead. This sentinel is kept for the old-daemon
+ * (or old-adapter) case that genuinely cannot: no chunk-loop method on the
+ * client means no in-channel path exists, and the token+HTTP path has no
+ * origin to fetch from. `explainFileDownloadError` below keeps its
+ * permanent-limitation wording for exactly that case, never implying the
  * user should simply wait or retry.
  */
 export const FILE_DOWNLOAD_NO_RELAY_ORIGIN = "FILE_DOWNLOAD_NO_RELAY_ORIGIN";
+
+/**
+ * The `cwd`+`path` subset of `DaemonClient`'s `DownloadFileBytesOptions`
+ * (`packages/client/src/daemon-client.ts`) this feature actually passes —
+ * see `FileBrowserClient.downloadFileBytes`'s doc for why only these two.
+ */
+export interface RelayFileDownloadOptions {
+  readonly cwd: string;
+  readonly path: string;
+}
+
+/**
+ * Matches `DaemonClient`'s `DownloadedFileBytes`
+ * (`packages/client/src/daemon-client.ts`) field for field, so that
+ * method's resolved value is assignable here with no conversion.
+ */
+export interface RelayDownloadedFileBytes {
+  readonly bytes: Uint8Array;
+  readonly size?: number;
+  readonly mimeType?: string;
+  readonly fileName?: string;
+}
+
+/**
+ * Capability probe for the relay download path: whether `client` carries
+ * the chunk-loop download at all. This is a method-presence probe,
+ * deliberately — the protocol advertises no server-features flag for the
+ * `file_download_bytes` pair, so there is nothing else for an app to
+ * read. A new client against an old daemon still rejects the unknown
+ * wire type as an ordinary, explainable download error; only a client
+ * object without the method at all keeps the `FILE_DOWNLOAD_NO_RELAY_ORIGIN`
+ * refusal.
+ */
+export function supportsRelayFileDownload(client: FileBrowserClient): boolean {
+  return typeof client.downloadFileBytes === "function";
+}
+
+/**
+ * The narrowest slice of a live `DaemonClient` the relay download path
+ * needs — just the chunk-loop method, read fresh per call. A real
+ * `DaemonClient` satisfies this as-is (see `FileBrowserClient.
+ * downloadFileBytes`'s doc for the structural match).
+ */
+export interface RelayFileDownloadSource {
+  downloadFileBytes?(options: RelayFileDownloadOptions): Promise<RelayDownloadedFileBytes>;
+}
+
+/**
+ * Returns `base` unchanged (same reference) when it already exposes the
+ * chunk-loop download, otherwise a shallow wrapper that forwards
+ * `downloadFileBytes` to whatever `resolveLiveClient()` returns at call
+ * time — the same "read the live connection fresh, never memoize across
+ * a reconnect" shape `app-shell/session-route-daemon-clients.ts`'s
+ * resolvers establish, for a route that only holds the app-shell adapter
+ * (which predates the pair and forwards no transfer member). Rejects
+ * with `FILE_DOWNLOAD_NOT_CONNECTED` when no live client carries the
+ * method, matching every other forwarder's no-client shape.
+ */
+export function withRelayFileDownload(
+  base: FileBrowserClient,
+  resolveLiveClient: () => RelayFileDownloadSource | null | undefined,
+): FileBrowserClient {
+  if (supportsRelayFileDownload(base)) {
+    return base;
+  }
+  return {
+    ...base,
+    downloadFileBytes: (options) => {
+      const live = resolveLiveClient();
+      if (!live || typeof live.downloadFileBytes !== "function") {
+        return Promise.reject(new Error(FILE_DOWNLOAD_NOT_CONNECTED));
+      }
+      return live.downloadFileBytes(options);
+    },
+  };
+}
 
 /**
  * Upper bound this view refuses to fetch past, checked against the

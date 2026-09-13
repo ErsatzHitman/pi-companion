@@ -136,6 +136,18 @@ tags:
 # device, but never a reimplementation either. See that file's own doc
 # comment for exactly what those tests prove and how.
 #
+# RELAY PATH (this flow stays direct-only by harness necessity, not by
+# product limitation): since the `file_download_bytes` pair landed,
+# relay-paired sessions whose client exposes the chunk-loop download no
+# longer refuse at all — `createFileDownloadController` fetches the bytes
+# inside the E2EE channel (`downloadFileBytes`) instead of raising
+# `FILE_DOWNLOAD_NO_RELAY_ORIGIN`, which survives only for old daemons
+# genuinely lacking the capability. That relay success path is proven in
+# `../e2e/flows/file-download.contract.test.ts` alongside the refusal,
+# never here: no step in this file can pair a relay connection on this
+# harness, so every device-observable step below remains the direct
+# pairing this harness can actually build.
+#
 # ---------------------------------------------------------------------
 # Independence and sharding (../README.md's "Flow independence")
 # ---------------------------------------------------------------------

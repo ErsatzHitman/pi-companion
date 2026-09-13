@@ -471,3 +471,268 @@ describe("createFileDownloadController — recoverable failures", () => {
     expect(state.file?.bytes).toEqual(new Uint8Array([9, 9, 9, 9]));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Relay path: token issued, no HTTP origin, chunk-loop-capable client —
+// the bytes ride the E2EE channel instead of fetchImpl's HTTP GET.
+// ---------------------------------------------------------------------------
+
+describe("createFileDownloadController — relay chunk-loop path", () => {
+  /** A token client whose chunk loop the test settles by hand. */
+  function createRelayCapableTokenClient() {
+    const controllable = createControllableTokenClient();
+    const chunkCalls: Array<{ cwd: string; path: string }> = [];
+    let resolveChunk!: (result: {
+      bytes: Uint8Array;
+      size?: number;
+      mimeType?: string;
+      fileName?: string;
+    }) => void;
+    let rejectChunk!: (error: Error) => void;
+    const client: FileBrowserClient = {
+      ...controllable.client,
+      downloadFileBytes(options) {
+        chunkCalls.push({ cwd: options.cwd, path: options.path });
+        return new Promise((res, rej) => {
+          resolveChunk = res;
+          rejectChunk = rej;
+        });
+      },
+    };
+    return {
+      ...controllable,
+      client,
+      chunkCalls,
+      resolveChunk: (r: {
+        bytes: Uint8Array;
+        size?: number;
+        mimeType?: string;
+        fileName?: string;
+      }) => resolveChunk(r),
+      rejectChunk: (e: Error) => rejectChunk(e),
+    };
+  }
+
+  function relayController(
+    client: FileBrowserClient,
+    fetchImpl?: DownloadFetch,
+  ): { controller: ReturnType<typeof createFileDownloadController>; fetchCalls: () => number } {
+    let fetchCalls = 0;
+    const controller = createFileDownloadController({
+      client,
+      downloadOrigin: null,
+      connectionPath: "relay",
+      fetchImpl:
+        fetchImpl ??
+        (async () => {
+          fetchCalls += 1;
+          throw new Error("must never be called — the relay path never issues an HTTP GET");
+        }),
+    });
+    return { controller, fetchCalls: () => fetchCalls };
+  }
+
+  it("an issued token with no origin takes the chunk loop: bytes round-trip, fetch never called, progress indeterminate until success", async () => {
+    const {
+      client,
+      calls,
+      resolve: resolveToken,
+      chunkCalls,
+      resolveChunk,
+    } = createRelayCapableTokenClient();
+    const { controller, fetchCalls } = relayController(client);
+
+    controller.download("/ws", "notes.txt", "notes.txt");
+    await flush();
+    expect(calls).toEqual([{ cwd: "/ws", path: "notes.txt" }]); // the token request is kept: business-level failures still explain themselves first
+    expect(controller.getState().status).toBe("requesting-token");
+
+    const original = new Uint8Array([1, 2, 3, 4, 5, 6]);
+    resolveToken(fixedToken({ token: "tok-relay", fileName: "tok-name.txt", size: 6 }));
+    await flush();
+    await flush();
+    expect(chunkCalls).toEqual([{ cwd: "/ws", path: "notes.txt" }]);
+    expect(controller.getState().status).toBe("downloading");
+    expect(controller.getState().progress).toBeNull(); // indeterminate: the chunk loop reports no per-chunk progress
+
+    resolveChunk({ bytes: original, size: original.length });
+    await flush();
+    await flush();
+
+    const state = controller.getState();
+    expect(state.status).toBe("success");
+    expect(state.progress).toBe(1);
+    expect(state.file?.bytes).toEqual(original); // byte-for-byte round trip
+    expect(state.file?.size).toBe(6);
+    expect(fetchCalls()).toBe(0);
+  });
+
+  it("the chunk loop's own attribution wins over the token's, falling back to the suggested name and a generic MIME type", async () => {
+    const { client, resolve: resolveToken, resolveChunk } = createRelayCapableTokenClient();
+    const { controller } = relayController(client);
+
+    controller.download("/ws", "notes.txt", "suggested.txt");
+    await flush();
+    resolveToken(fixedToken({ token: "tok-relay", fileName: null, mimeType: null }));
+    await flush();
+    await flush();
+    resolveChunk({ bytes: new Uint8Array([7]) });
+    await flush();
+    await flush();
+
+    const state = controller.getState();
+    expect(state.status).toBe("success");
+    expect(state.file?.fileName).toBe("suggested.txt");
+    expect(state.file?.mimeType).toBe("application/octet-stream");
+  });
+
+  it("a chunk-loop rejection is a recoverable error carrying the daemon's message, never a file", async () => {
+    const { client, resolve: resolveToken, rejectChunk } = createRelayCapableTokenClient();
+    const { controller, fetchCalls } = relayController(client);
+
+    controller.download("/ws", "notes.txt", "notes.txt");
+    await flush();
+    resolveToken(fixedToken({ token: "tok-relay" }));
+    await flush();
+    await flush();
+    rejectChunk(new Error("ENOENT: no such file or directory"));
+    await flush();
+    await flush();
+
+    const state = controller.getState();
+    expect(state.status).toBe("error");
+    expect(state.error?.description).toBe("ENOENT: no such file or directory");
+    expect(state.file).toBeNull();
+    expect(fetchCalls()).toBe(0);
+  });
+
+  it("a business-level token failure still explains itself first — the chunk loop is never reached", async () => {
+    const { client, resolve: resolveToken, chunkCalls } = createRelayCapableTokenClient();
+    const { controller, fetchCalls } = relayController(client);
+
+    controller.download("/ws", "gone.txt", "gone.txt");
+    await flush();
+    resolveToken(
+      fixedToken({ token: null, size: null, error: "ENOENT: no such file or directory" }),
+    );
+    await flush();
+    await flush();
+
+    expect(controller.getState().status).toBe("error");
+    expect(controller.getState().error?.title).toBe("This file no longer exists");
+    expect(chunkCalls).toEqual([]);
+    expect(fetchCalls()).toBe(0);
+  });
+
+  it("an oversized relay assembly lands in refused with the shared copy, never as a file", async () => {
+    const { client, resolve: resolveToken, resolveChunk } = createRelayCapableTokenClient();
+    const { controller, fetchCalls } = relayController(client);
+
+    controller.download("/ws", "huge.bin", "huge.bin");
+    await flush();
+    resolveToken(fixedToken({ token: "tok-relay", size: 8 }));
+    await flush();
+    await flush();
+    // The token's own size was small; the assembled bytes are what the bound judges.
+    resolveChunk({ bytes: new Uint8Array(8), size: MAX_DOWNLOAD_BYTES + 1 });
+    await flush();
+    await flush();
+
+    const state = controller.getState();
+    expect(state.status).toBe("refused");
+    expect(state.refusal?.title).toBe("This file is too large to download");
+    expect(state.file).toBeNull();
+    expect(fetchCalls()).toBe(0);
+  });
+
+  it("cancel() while the chunk loop is in flight discards the late bytes — never presented as complete", async () => {
+    const { client, resolve: resolveToken, resolveChunk } = createRelayCapableTokenClient();
+    const { controller } = relayController(client);
+
+    controller.download("/ws", "notes.txt", "notes.txt");
+    await flush();
+    resolveToken(fixedToken({ token: "tok-relay" }));
+    await flush();
+    await flush();
+    expect(controller.getState().status).toBe("downloading");
+
+    controller.cancel();
+    expect(controller.getState().status).toBe("cancelled");
+
+    resolveChunk({ bytes: new Uint8Array([1, 2, 3]) });
+    await flush();
+    await flush();
+
+    const state = controller.getState();
+    expect(state.status).toBe("cancelled");
+    expect(state.file).toBeNull();
+  });
+
+  it("retry after a relay failure re-runs the whole round trip — a fresh token and a fresh chunk loop", async () => {
+    const {
+      client,
+      calls,
+      resolve: resolveToken,
+      chunkCalls,
+      resolveChunk,
+      rejectChunk,
+    } = createRelayCapableTokenClient();
+    const { controller } = relayController(client);
+
+    controller.download("/ws", "notes.txt", "notes.txt");
+    await flush();
+    resolveToken(fixedToken({ token: "tok-1" }));
+    await flush();
+    await flush();
+    rejectChunk(new Error("socket hang up"));
+    await flush();
+    await flush();
+    expect(controller.getState().status).toBe("error");
+
+    controller.retry();
+    await flush();
+    expect(calls).toHaveLength(2);
+    resolveToken(fixedToken({ token: "tok-2" }));
+    await flush();
+    await flush();
+    expect(chunkCalls).toHaveLength(2);
+    resolveChunk({ bytes: new Uint8Array([9]) });
+    await flush();
+    await flush();
+
+    const state = controller.getState();
+    expect(state.status).toBe("success");
+    expect(state.file?.bytes).toEqual(new Uint8Array([9]));
+  });
+
+  it("a direct origin still takes the token+HTTP round trip even when the client also exposes the chunk loop", async () => {
+    const { client, resolve: resolveToken, chunkCalls } = createRelayCapableTokenClient();
+    const manual = createManualReader();
+    let fetchCalls = 0;
+    const controller = createFileDownloadController({
+      client,
+      downloadOrigin: ORIGIN,
+      connectionPath: "relay",
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        return okResponse(manual.reader);
+      },
+    });
+
+    controller.download("/ws", "a.txt", "a.txt");
+    await flush();
+    resolveToken(fixedToken({ size: 4 }));
+    await flush();
+    await flush();
+    expect(chunkCalls).toEqual([]);
+    manual.resolveNext({ done: false, value: new Uint8Array([1, 2, 3, 4]) });
+    await flush();
+    await flush();
+    manual.resolveNext({ done: true });
+    await flush();
+    await flush();
+
+    expect(controller.getState().status).toBe("success");
+    expect(fetchCalls).toBe(1);
+  });
+});

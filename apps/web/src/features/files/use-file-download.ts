@@ -17,6 +17,16 @@
  * across a failure, so `retry()` re-requests a token and re-fetches
  * without the caller re-choosing which file to download.
  *
+ * Relay path: when `downloadOrigin` is `null` (a relay pairing has no
+ * direct HTTP endpoint) but the client exposes the chunk-loop download
+ * (`supportsRelayFileDownload` — `file-download-client.ts`), the bytes
+ * are fetched inside the existing E2EE channel via
+ * `client.downloadFileBytes({ cwd, path })` instead of the token+HTTP
+ * round trip — no token is requested, `fetchImpl` is never called, and
+ * progress is indeterminate (`null`) until the single promise settles,
+ * because the chunk loop reports no per-chunk progress to its caller.
+ * The direct-origin path below is byte-for-byte unchanged.
+ *
  * T41A3 (cancellation): every in-flight download is tracked by a `Run`
  * object carrying an `AbortController` and a `cancelled` flag. `cancel()`
  * flips `cancelled`, aborts the controller (so the abort signal reaches
@@ -40,6 +50,7 @@ import {
   explainFileDownloadError,
   explainFileDownloadTokenResult,
   FILE_DOWNLOAD_NO_ORIGIN,
+  supportsRelayFileDownload,
   type FileDownloadErrorExplanation,
 } from "./file-download-client.js";
 import { authorizeWorkspacePath, PathAuthorizationError } from "./path-authorization.js";
@@ -86,7 +97,10 @@ export interface UseFileDownloadOptions {
   /**
    * The daemon's HTTP origin (e.g. `"http://127.0.0.1:6768"`), or `null`
    * with no direct HTTP endpoint — a relay connection, or no connection
-   * yet (see `FILE_DOWNLOAD_NO_ORIGIN`'s doc comment).
+   * yet (see `FILE_DOWNLOAD_NO_ORIGIN`'s doc comment). On a relay
+   * pairing this stays `null` *and the download still works* when the
+   * client exposes the chunk-loop download: `run` below takes the relay
+   * path instead of raising `FILE_DOWNLOAD_NO_ORIGIN`.
    * `routes/screens/host-session-files-screen.tsx` resolves it through
    * `resolveDirectHttpOrigin`; `FileBrowserScreen` still defaults it to
    * `null` for callers/tests that inject fake clients.
@@ -190,6 +204,34 @@ export function useFileDownload(options: UseFileDownloadOptions): FileDownloadCo
       } catch (error) {
         const raw = error instanceof PathAuthorizationError ? error.message : String(error);
         setState((prev) => ({ ...prev, status: "error", error: explainFileDownloadError(raw) }));
+        return;
+      }
+
+      // Relay path (see the module doc): no direct origin, but the
+      // client can fetch the bytes inside the E2EE channel itself. No
+      // token is requested and `fetchImpl` is never called — a client
+      // without the chunk-loop method falls through to the token flow
+      // below, which raises `FILE_DOWNLOAD_NO_ORIGIN` exactly as before.
+      if (!downloadOrigin && supportsRelayFileDownload(client)) {
+        setState({ status: "downloading", path, fileName, progress: null, error: null });
+        client.downloadFileBytes!({ cwd, path: authorizedPath }).then(
+          (relayResult) => {
+            if (thisRun.cancelled) return; // cancelled while the chunk loop was in flight — saveBlob below is never reached
+            const resolvedFileName = relayResult.fileName ?? fileName;
+            const resolvedMimeType = relayResult.mimeType ?? "application/octet-stream";
+            saveBlob(relayResult.bytes, resolvedFileName, resolvedMimeType);
+            setState((prev) => ({ ...prev, status: "success", progress: 1 }));
+          },
+          (error: unknown) => {
+            if (thisRun.cancelled) return;
+            const raw = error instanceof Error ? error.message : String(error);
+            setState((prev) => ({
+              ...prev,
+              status: "error",
+              error: explainFileDownloadError(raw),
+            }));
+          },
+        );
         return;
       }
 
