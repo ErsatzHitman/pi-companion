@@ -114,16 +114,24 @@
  * correction above gives — no fake in this workspace can honestly simulate
  * a real daemon's `hello` rejection.
  *
- * **What T300 did not build, disclosed rather than omitted: un-revoking has
- * no wire message or UI control.** `RevokedDeviceStore.unrevoke(clientId)`
- * exists and is tested directly, so the on-disk schema is never a dead end,
- * but nothing calls it — that needs a new `trusted_device.unrevoke`
- * wire-message pair (a protocol addition T300's `Owns` grant did not cover)
- * and a place in the UI to list *revoked* devices and act on one, which
- * does not exist (`DevicesScreen.tsx` only ever lists currently-trusted
- * devices). If the owner revokes a device by mistake today, there is no
- * in-app path back — filed for whoever next touches `trusted_device`
- * messages or `DevicesScreen.tsx`.
+ * CORRECTED (device-unrevoke): this section used to file un-revoking as
+ * "no wire message or UI control" with "no in-app path back" — that was
+ * the true state at T300, when `RevokedDeviceStore.unrevoke(clientId)`
+ * existed (and was tested directly, so the on-disk schema was never a
+ * dead end) but nothing called it. Both halves have now landed: the wire
+ * pair is `trusted_device.unrevoke.request` /
+ * `trusted_device.unrevoke.response` (`packages/protocol`'s
+ * `TrustedDeviceUnrevokeRequestSchema` /
+ * `TrustedDeviceUnrevokeResponseSchema`), served by
+ * `packages/server/src/server/websocket-server.ts`'s
+ * `handleTrustedDeviceUnrevokeRequest`, and the UI half is this feature's
+ * own `unrevoke-device-model.ts` plus `DevicesScreen.tsx`'s "Recently
+ * revoked" section. The one residual that section still discloses: there
+ * is no list-revoked wire message, so it only remembers devices revoked
+ * in-session. If the owner revokes a device by mistake today, that section
+ * is the in-app path back; the remaining follow-up — a list-revoked wire
+ * message so the section survives an app restart — is filed for whoever
+ * next touches `trusted_device` messages or `DevicesScreen.tsx`.
  */
 import type { TrustedDeviceRowSummary, TrustedDevicesClient } from "./trusted-devices-model.js";
 

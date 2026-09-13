@@ -2219,6 +2219,70 @@ export class VoiceAssistantWebSocketServer {
     );
   }
 
+  /**
+   * Removes `clientId` from the persisted revocation denylist so its next
+   * `hello` is admitted again (device un-revoke — the undo half of
+   * `handleTrustedDeviceRevokeRequest`).
+   *
+   * Unlike revoke, this needs no live `externalSessionsByKey` entry: a
+   * revoked device's sockets were already closed and cleaned up at revoke
+   * time, so requiring one here would make every genuine un-revoke fail
+   * with "Device not found". Removing the denylist entry is the whole
+   * operation, and it is idempotent — un-revoking a `clientId` that was
+   * never revoked succeeds without changing anything (the same silent
+   * no-op shape `unregister_push_token` uses), so callers cannot probe
+   * denylist membership by watching for failures. There is no
+   * "cannot un-revoke current device" rule either: lifting a denylist
+   * entry disconnects nobody, so self-un-revoke is harmless.
+   *
+   * Never throws: every failure — including a storage failure from the
+   * store itself — is reported as a `success: false` envelope, mirroring
+   * the revoke handler's contract.
+   */
+  private handleTrustedDeviceUnrevokeRequest(
+    ws: WebSocketLike,
+    _activeConnection: TrustedSessionConnection,
+    requestId: string,
+    targetClientId: string,
+  ): void {
+    const trimmed = targetClientId.trim();
+    if (!trimmed) {
+      this.sendToClient(
+        ws,
+        wrapSessionMessage({
+          type: "trusted_device.unrevoke.response",
+          payload: {
+            requestId,
+            clientId: targetClientId,
+            success: false,
+            error: "Invalid clientId",
+          },
+        }),
+      );
+      return;
+    }
+    try {
+      this.revokedDeviceStore.unrevoke(trimmed);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.sendToClient(
+        ws,
+        wrapSessionMessage({
+          type: "trusted_device.unrevoke.response",
+          payload: { requestId, clientId: trimmed, success: false, error: message },
+        }),
+      );
+      return;
+    }
+    this.sendToClient(
+      ws,
+      wrapSessionMessage({
+        type: "trusted_device.unrevoke.response",
+        payload: { requestId, clientId: trimmed, success: true, error: null },
+      }),
+    );
+  }
+
   private async dispatchSessionMessage(
     ws: WebSocketLike,
     activeConnection: SessionConnection,
@@ -2234,6 +2298,15 @@ export class VoiceAssistantWebSocketServer {
       }
       if (message.message.type === "trusted_device.revoke.request") {
         await this.handleTrustedDeviceRevokeRequest(
+          ws,
+          activeConnection,
+          message.message.requestId,
+          message.message.clientId,
+        );
+        return;
+      }
+      if (message.message.type === "trusted_device.unrevoke.request") {
+        this.handleTrustedDeviceUnrevokeRequest(
           ws,
           activeConnection,
           message.message.requestId,

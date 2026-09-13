@@ -53,13 +53,24 @@
  * in the same commit to say so, rather than left claiming a reconnect
  * "doesn't block that."
  *
- * **One disclosed gap this screen still cannot close** — un-revoking a
- * device has no wire message or UI control. T300's `RevokedDeviceStore`
- * supports removal at the storage layer (tested directly there), but
- * nothing in this app calls it. See `revoke-device-model.ts`'s header for
- * why: it needs a protocol addition and a "list of revoked devices"
- * surface, neither of which exists today, both outside T300's `Owns`
- * grant.
+ * CORRECTED (device-unrevoke): this screen used to disclose un-revoking as
+ * a gap with "no wire message or UI control" — the true state at T300,
+ * when `RevokedDeviceStore` supported removal at the storage layer
+ * (tested directly there) but nothing in this app called it. That gap has
+ * now landed end to end. The wire half is
+ * `trusted_device.unrevoke.request` /
+ * `trusted_device.unrevoke.response` (see `unrevoke-device-model.ts`'s
+ * header), and the UI half is this screen's own "Recently revoked"
+ * section below — a revoke success remembers the `clientId`, and each
+ * remembered row offers Un-revoke (gated by `canUnrevoke`, mirroring
+ * `canRevoke`) which lifts the daemon denylist entry so the device's next
+ * `hello` is admitted and its re-register reconnects it. The revoke
+ * confirmation dialog no longer claims undo is impossible when the client
+ * supports it. One residual stays disclosed: there is still no
+ * list-revoked wire message, so "Recently revoked" only remembers
+ * devices revoked in-session and starts empty on every launch — and a
+ * revoked device's push notifications stop at revoke time (see the T299
+ * correction above), not at un-revoke time.
  *
  * **A second risk T300 makes sharper, disclosed rather than papered over
  * by the dialog copy above:** `app-shell/core.ts`'s `ANDROID_DAEMON_CLIENT_ID`
@@ -129,6 +140,15 @@ import {
   requestRevokeDevice,
   type RevokeDeviceState,
 } from "./revoke-device-model.js";
+import {
+  IDLE_UNREVOKE_DEVICE_STATE,
+  beginUnrevokeDevice,
+  completeUnrevokeDevice,
+  failUnrevokeDevice,
+  performUnrevokeDevice,
+  rememberRevokedDevice,
+  type UnrevokeDeviceState,
+} from "./unrevoke-device-model.js";
 import {
   sortTrustedDevices,
   summarizeTrustedDevice,
@@ -203,6 +223,46 @@ function DeviceRow({
   );
 }
 
+function RevokedDeviceRow({
+  clientId,
+  onRequestUnrevoke,
+  unrevoking,
+  testId,
+}: {
+  clientId: string;
+  /** Omitted (never a disabled button) whenever the client doesn't support un-revocation — see `canUnrevoke` in `DevicesScreen` below. */
+  onRequestUnrevoke?: () => void;
+  unrevoking: boolean;
+  testId?: string;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createRowStyles(theme), [theme]);
+  return (
+    <View style={styles.row} testID={testId}>
+      <View style={styles.headline}>
+        <Text
+          style={styles.clientId}
+          selectable
+          testID={testId ? `${testId}-client-id` : undefined}
+        >
+          {clientId}
+        </Text>
+      </View>
+      {onRequestUnrevoke ? (
+        <View style={styles.rowActions}>
+          <Button
+            kind="secondary"
+            label={unrevoking ? "Un-revoking…" : "Un-revoke"}
+            onPress={onRequestUnrevoke}
+            disabled={unrevoking}
+            testId={testId ? `${testId}-unrevoke` : undefined}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function DevicesScreen({
   thisClientId,
   getClient,
@@ -225,6 +285,9 @@ export function DevicesScreen({
     subscribeToConnectionChanges,
   });
   const [revokeState, setRevokeState] = useState<RevokeDeviceState>(IDLE_REVOKE_DEVICE_STATE);
+  const [unrevokeState, setUnrevokeState] = useState<UnrevokeDeviceState>(
+    IDLE_UNREVOKE_DEVICE_STATE,
+  );
 
   const rows = useMemo(() => {
     const sorted = sortTrustedDevices(snapshot.devices, thisClientId);
@@ -237,6 +300,10 @@ export function DevicesScreen({
   // in a client that (dis)gained the capability. Never gates on a stale
   // snapshot of the client taken once at mount.
   const canRevoke = Boolean(getClient()?.revokeTrustedDevice);
+  // Mirrors `canRevoke` exactly: the Un-revoke affordance is omitted —
+  // never rendered disabled — when the client predates the
+  // `trusted_device.unrevoke` wire pair.
+  const canUnrevoke = Boolean(getClient()?.unrevokeTrustedDevice);
 
   function handleRefresh(): void {
     refreshDevices();
@@ -265,7 +332,10 @@ export function DevicesScreen({
       if (outcome.status === "success") {
         setRevokeState((current) => completeRevokeDevice(current, clientId));
         // Only now — from the daemon's own confirmation — does the
-        // device disappear, never spliced out ahead of it.
+        // device disappear, never spliced out ahead of it. Remember it
+        // for the "Recently revoked" section so a mistaken revoke has
+        // an in-app path back via Un-revoke.
+        setUnrevokeState((current) => rememberRevokedDevice(current, clientId));
         refreshDevices();
         return;
       }
@@ -274,6 +344,34 @@ export function DevicesScreen({
           ? "Device revocation isn't available on this connection."
           : (outcome.error ?? "Couldn't revoke this device.");
       setRevokeState((current) => failRevokeDevice(current, clientId, message));
+    });
+  }
+
+  // Un-revoking needs no confirmation dialog (see
+  // `unrevoke-device-model.ts`'s header): a single tap lifts the denylist
+  // entry and disconnects nobody. This is the only path that ever calls
+  // performUnrevokeDevice, and it is only reachable once
+  // beginUnrevokeDevice has marked the row pending.
+  function handleUnrevoke(clientId: string): void {
+    const begin = beginUnrevokeDevice(unrevokeState, clientId);
+    if (!begin.clientId) return;
+    const pending = begin.clientId;
+    setUnrevokeState(begin.state);
+    void performUnrevokeDevice(getClient(), pending).then((outcome) => {
+      if (outcome.status === "success") {
+        setUnrevokeState((current) => completeUnrevokeDevice(current, pending));
+        // The device itself stays disconnected until it reconnects on its
+        // own — un-revoking only re-admits its next `hello` — but the
+        // trusted list is still refreshed so any already-reconnected row
+        // shows up without a manual reload.
+        refreshDevices();
+        return;
+      }
+      const message =
+        outcome.status === "unavailable"
+          ? "Device un-revocation isn't available on this connection."
+          : (outcome.error ?? "Couldn't un-revoke this device.");
+      setUnrevokeState((current) => failUnrevokeDevice(current, pending, message));
     });
   }
 
@@ -335,12 +433,36 @@ export function DevicesScreen({
           />
         ))}
       </Section>
+      {unrevokeState.revokedClientIds.length > 0 ? (
+        <Section title="Recently revoked" testId={testId ? `${testId}-revoked-section` : undefined}>
+          {unrevokeState.error ? (
+            <Banner
+              tone="danger"
+              message={unrevokeState.error.message}
+              testId={testId ? `${testId}-unrevoke-error` : undefined}
+            />
+          ) : null}
+          {unrevokeState.revokedClientIds.map((clientId) => (
+            <RevokedDeviceRow
+              key={clientId}
+              clientId={clientId}
+              onRequestUnrevoke={canUnrevoke ? () => handleUnrevoke(clientId) : undefined}
+              unrevoking={
+                unrevokeState.phase === "unrevoking" && unrevokeState.pendingClientId === clientId
+              }
+              testId={testId ? `${testId}-revoked-${clientId}` : undefined}
+            />
+          ))}
+        </Section>
+      ) : null}
       <Dialog
         open={revokeState.target !== null}
         title="Revoke this device?"
         description={
           revokeState.target
-            ? `"${revokeState.target.clientId}" will be disconnected immediately and can no longer reconnect, even if it can still authenticate to this daemon. Push notifications to it stop too, unless it registered for them before this update — those may keep arriving until it registers again. This can't be undone from the app yet, so only revoke a device you're sure you want permanently blocked.`
+            ? canUnrevoke
+              ? `"${revokeState.target.clientId}" will be disconnected immediately and can no longer reconnect, even if it can still authenticate to this daemon. Push notifications to it stop too, unless it registered for them before this update — those may keep arriving until it registers again. Changed your mind later? Un-revoke it from the Recently revoked section below so it can connect again.`
+              : `"${revokeState.target.clientId}" will be disconnected immediately and can no longer reconnect, even if it can still authenticate to this daemon. Push notifications to it stop too, unless it registered for them before this update — those may keep arriving until it registers again. This can't be undone from the app yet, so only revoke a device you're sure you want permanently blocked.`
             : ""
         }
         confirmLabel="Revoke"

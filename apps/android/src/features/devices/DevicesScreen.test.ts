@@ -176,4 +176,63 @@ describe("DevicesScreen source", () => {
     expect(code).toMatch(/export function DevicesScreen\(/);
     expect(code).toMatch(/export default DevicesScreen;/);
   });
+
+  it("offers Un-revoke through the shared client accessor, never a separate onUnrevoke prop", () => {
+    // Mirrors the T42A2 revoke seam: un-revocation goes through the same
+    // `getClient()` accessor listing already uses, gated by `canUnrevoke`
+    // rather than a second callback prop.
+    expect(code).not.toMatch(/onUnrevoke/);
+    expect(code).toMatch(/canUnrevoke\s*=\s*Boolean\(getClient\(\)\?\.unrevokeTrustedDevice\)/);
+    expect(code).toMatch(/performUnrevokeDevice\(getClient\(\),\s*pending\)/);
+  });
+
+  it("never offers Un-revoke when the client lacks the wire method — the affordance is omitted, never disabled", () => {
+    expect(code).toMatch(/onRequestUnrevoke=\{/);
+    expect(code).toMatch(/canUnrevoke \? \(\) => handleUnrevoke\(clientId\) : undefined/);
+  });
+
+  it("renders a Recently revoked section from the session-remembered clientIds, never from the trusted list", () => {
+    expect(code).toMatch(/Recently revoked/);
+    expect(code).toMatch(/unrevokeState\.revokedClientIds\.length > 0/);
+    expect(code).toMatch(/revokedClientIds\.map\(\(clientId\) =>/);
+    expect(code).toMatch(/<RevokedDeviceRow/);
+  });
+
+  it("remembers a revoke success for the Recently revoked section, never speculatively", () => {
+    const confirmBody = code.match(/function handleConfirmRevoke\(\)[\s\S]*?\n  \}/)?.[0] ?? "";
+    const successBranch = confirmBody.match(/status === "success"[\s\S]*?return;/)?.[0] ?? "";
+    expect(successBranch).toMatch(/rememberRevokedDevice\(current,\s*clientId\)/);
+  });
+
+  it("only calls performUnrevokeDevice by way of beginUnrevokeDevice marking the row pending", () => {
+    const unrevokeBody = code.match(/function handleUnrevoke\(clientId[\s\S]*?\n  \}/);
+    expect(unrevokeBody).not.toBeNull();
+    expect(unrevokeBody?.[0]).toMatch(/beginUnrevokeDevice\(unrevokeState,\s*clientId\)/);
+    expect(unrevokeBody?.[0]).toMatch(/if \(!begin\.clientId\) return;/);
+    expect(unrevokeBody?.[0]).toMatch(/performUnrevokeDevice\(/);
+  });
+
+  it("drops the Recently revoked row only after a successful un-revoke, never speculatively", () => {
+    const unrevokeBody = code.match(/function handleUnrevoke\(clientId[\s\S]*?\n  \}/)?.[0] ?? "";
+    const successBranch = unrevokeBody.match(/status === "success"[\s\S]*?return;/)?.[0] ?? "";
+    expect(successBranch).toMatch(/completeUnrevokeDevice\(current,\s*pending\)/);
+    expect(successBranch).toMatch(/refreshDevices\(\)/);
+  });
+
+  it("shows a named error banner on a failed un-revoke, keeping the row present for retry", () => {
+    expect(code).toMatch(/unrevokeState\.error/);
+    expect(code).toMatch(/testId \? `\$\{testId\}-unrevoke-error` : undefined/);
+  });
+
+  it("tells the truth in the revoke dialog: undo is offered exactly when the client supports it", () => {
+    expect(code).toMatch(/\? canUnrevoke/);
+    expect(code).toMatch(/Un-revoke it from the Recently revoked section below/);
+    expect(code).toMatch(/This can't be undone from the app yet/);
+  });
+
+  it("names the un-revoke landing in its own doc comment rather than implying it is still missing", () => {
+    expect(source).toMatch(/CORRECTED \(device-unrevoke\)/);
+    expect(source).toMatch(/Recently revoked/);
+    expect(source).toMatch(/canUnrevoke/);
+  });
 });

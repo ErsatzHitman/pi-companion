@@ -15,6 +15,7 @@ export type {
   TrustedDevicesClient,
   TrustedDevicesLoadStatus,
   TrustedDevicesSnapshot,
+  TrustedDeviceUnrevokeResult,
 } from "./trusted-devices-model.js";
 export { UNREAD_DEVICE_PUSH_STATUS, describeDevicePushStatus } from "./device-push-status-model.js";
 export type { DevicePushStatusSnapshot } from "./device-push-status-model.js";
@@ -34,6 +35,22 @@ export type {
   RevokeDevicePhase,
   RevokeDeviceState,
 } from "./revoke-device-model.js";
+export {
+  IDLE_UNREVOKE_DEVICE_STATE,
+  beginUnrevokeDevice,
+  completeUnrevokeDevice,
+  failUnrevokeDevice,
+  forgetRevokedDevice,
+  performUnrevokeDevice,
+  rememberRevokedDevice,
+} from "./unrevoke-device-model.js";
+export type {
+  BeginUnrevokeResult,
+  UnrevokeDeviceError,
+  UnrevokeDeviceOutcome,
+  UnrevokeDevicePhase,
+  UnrevokeDeviceState,
+} from "./unrevoke-device-model.js";
 export { useTrustedDevices } from "./use-trusted-devices.js";
 export type { UseTrustedDevicesOptions, UseTrustedDevicesResult } from "./use-trusted-devices.js";
 export { useDevicePushStatus } from "./use-device-push-status.js";
