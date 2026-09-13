@@ -20,15 +20,19 @@ import { formatSystemNotificationPrompt, startAgentRun } from "./agent-prompt.js
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
 import type {
+  AgentCapabilityFlags,
   AgentClient,
   AgentCreateSessionOptions,
   AgentFeature,
   AgentLaunchContext,
+  AgentMode,
+  AgentPermissionRequest,
   AgentPromptInput,
   AgentProvider,
   AgentPersistenceHandle,
   AgentRunOptions,
   AgentRunResult,
+  AgentRuntimeInfo,
   AgentSession,
   AgentSessionConfig,
   AgentSlashCommand,
@@ -79,7 +83,7 @@ function waitForAgentLifecycle(
   });
 }
 
-const TEST_CAPABILITIES = {
+const TEST_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: false,
   supportsSessionPersistence: false,
   supportsSessionListing: true,
@@ -87,7 +91,7 @@ const TEST_CAPABILITIES = {
   supportsMcpServers: false,
   supportsReasoningStream: false,
   supportsToolInvocations: false,
-} as const;
+};
 
 function createFeature(args: { id: string; label: string; value: boolean }): AgentFeature {
   return {
@@ -372,8 +376,10 @@ class TestAgentSession implements AgentSession {
   readonly id = randomUUID();
   private runtimeModel: string | null = null;
   private subscribers = new Set<(event: AgentStreamEvent) => void>();
-  private turnIdCounter = 0;
-  private interrupted = false;
+  // Public (not private) so tests can seed and observe turn bookkeeping
+  // without casts; a write-only private would trip TS6133 (see `interrupted`).
+  turnIdCounter = 0;
+  interrupted = false;
 
   constructor(private readonly config: AgentSessionConfig) {}
 
@@ -385,7 +391,10 @@ class TestAgentSession implements AgentSession {
     };
   }
 
-  async startTurn(): Promise<{ turnId: string }> {
+  async startTurn(
+    _prompt: AgentPromptInput,
+    _options?: AgentRunOptions,
+  ): Promise<{ turnId: string }> {
     this.interrupted = false;
     const turnId = `turn-${++this.turnIdCounter}`;
     // Use setTimeout so events arrive after the caller sets up the foreground waiter
@@ -416,7 +425,7 @@ class TestAgentSession implements AgentSession {
 
   async *streamHistory(): AsyncGenerator<AgentStreamEvent> {}
 
-  async getRuntimeInfo() {
+  async getRuntimeInfo(): Promise<AgentRuntimeInfo> {
     return {
       provider: this.provider,
       sessionId: this.id,
@@ -425,23 +434,23 @@ class TestAgentSession implements AgentSession {
     };
   }
 
-  async getAvailableModes() {
+  async getAvailableModes(): Promise<AgentMode[]> {
     return [];
   }
 
-  async getCurrentMode() {
+  async getCurrentMode(): Promise<string | null> {
     return null;
   }
 
   async setMode(): Promise<void> {}
 
-  getPendingPermissions() {
+  getPendingPermissions(): AgentPermissionRequest[] {
     return [];
   }
 
   async respondToPermission(): Promise<void> {}
 
-  describePersistence() {
+  describePersistence(): AgentPersistenceHandle | null {
     return {
       provider: this.provider,
       sessionId: this.id,
@@ -727,6 +736,10 @@ class StreamingAssistantClient implements AgentClient {
   readonly provider = "codex" as const;
   readonly capabilities = TEST_CAPABILITIES;
 
+  async fetchCatalog() {
+    return { models: [], modes: [] };
+  }
+
   async isAvailable(): Promise<boolean> {
     return true;
   }
@@ -780,6 +793,9 @@ function fakeCodexEmitting(args: FakeCodexEmitterArgs): AgentClient {
     capabilities: TEST_CAPABILITIES,
     async isAvailable() {
       return true;
+    },
+    async fetchCatalog() {
+      return { models: [], modes: [] };
     },
     async createSession(config: AgentSessionConfig) {
       return new FakeCodexSession(config);
@@ -1156,7 +1172,7 @@ test("listDraftCommands uses explicit model config without default model fetchin
     kind: "command",
   };
   class DraftCommandSession extends TestAgentSession {
-    override async listCommands(): Promise<AgentSlashCommand[]> {
+    async listCommands(): Promise<AgentSlashCommand[]> {
       return [draftCommand];
     }
   }
@@ -1739,6 +1755,9 @@ test("listProviderAvailability uses registered client keys, including custom pro
     async isAvailable() {
       return true;
     },
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    },
     async createSession() {
       throw new Error("not implemented");
     },
@@ -1971,7 +1990,7 @@ test("createAgent closes and rejects a provider session that cannot honor MCP se
 
     override async startTurn(): Promise<{ turnId: string }> {
       promptStarted = true;
-      return super.startTurn();
+      return super.startTurn("");
     }
 
     override async close(): Promise<void> {
@@ -2938,6 +2957,10 @@ test("reloadAgentSession passes daemon launch env through the provider launch co
   class ReloadCaptureClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
     lastCreateLaunchContext: AgentLaunchContext | undefined;
     lastResumeLaunchContext: AgentLaunchContext | undefined;
 
@@ -3039,6 +3062,10 @@ test("reloadAgentSession preserves timeline and does not force history replay", 
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
 
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
+
     async isAvailable(): Promise<boolean> {
       return true;
     }
@@ -3103,7 +3130,7 @@ test("reloadAgentSession preserves timeline and does not force history replay", 
 test("reloadAgentSession clears provider children before rehydrating from disk", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-provider-child-reload-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
-  let activeSession: TestAgentSession | null = null;
+  let activeSession!: TestAgentSession | null;
   class ProviderChildClient extends TestAgentClient {
     override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
       activeSession = new TestAgentSession(config);
@@ -3129,7 +3156,8 @@ test("reloadAgentSession clears provider children before rehydrating from disk",
   const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
     workspaceId: undefined,
   });
-  activeSession?.pushEvent({
+  if (!activeSession) throw new Error("Expected a created session");
+  activeSession.pushEvent({
     type: "provider_subagent",
     provider: "codex",
     event: { type: "upsert", id: "stale-child", title: "Stale child", status: "running" },
@@ -3209,7 +3237,7 @@ test("hydrateTimelineFromProvider restores and broadcasts provider children from
 test("force provider hydration removes children absent from current history", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-provider-child-force-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
-  let session: TestAgentSession | null = null;
+  let session!: TestAgentSession | null;
   class ProviderChildForceClient extends TestAgentClient {
     override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
       session = new TestAgentSession(config);
@@ -3225,7 +3253,8 @@ test("force provider hydration removes children absent from current history", as
   const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
     workspaceId: undefined,
   });
-  session?.pushEvent({
+  if (!session) throw new Error("Expected a created session");
+  session.pushEvent({
     type: "provider_subagent",
     provider: "codex",
     event: { type: "upsert", id: "removed-by-rewind", status: "completed" },
@@ -3275,13 +3304,13 @@ test("reloadAgentSession preserves current title when config title is unset", as
 
   const beforeReload = await storage.get(snapshot.id);
   expect(beforeReload?.title).toBe("Generated title");
-  expect(beforeReload?.config?.title).toBeUndefined();
+  expect(beforeReload?.config).not.toHaveProperty("title");
 
   await manager.reloadAgentSession(snapshot.id);
 
   const afterReload = await storage.get(snapshot.id);
   expect(afterReload?.title).toBe("Generated title");
-  expect(afterReload?.config?.title).toBeUndefined();
+  expect(afterReload?.config).not.toHaveProperty("title");
 });
 
 test("setTitle bumps updatedAt and persists title in the same snapshot write", async () => {
@@ -3451,7 +3480,7 @@ test("later explicit config mutations win over events emitted by earlier mutatio
 
 test("session config drift events update state through the stream channel", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-session-config-events-"));
-  let capturedSession: TestAgentSession | null = null;
+  let capturedSession!: TestAgentSession | null;
   class ConfigEventClient extends TestAgentClient {
     override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
       capturedSession = new TestAgentSession(config);
@@ -3488,7 +3517,8 @@ test("session config drift events update state through the stream channel", asyn
     { agentId: snapshot.id, replayState: false },
   );
 
-  capturedSession?.pushEvent({
+  if (!capturedSession) throw new Error("Expected a created session");
+  capturedSession.pushEvent({
     type: "mode_changed",
     provider: "codex",
     currentModeId: "build",
@@ -3497,7 +3527,7 @@ test("session config drift events update state through the stream channel", asyn
       { id: "build", label: "Build" },
     ],
   });
-  capturedSession?.pushEvent({
+  capturedSession.pushEvent({
     type: "model_changed",
     provider: "codex",
     runtimeInfo: {
@@ -3508,7 +3538,7 @@ test("session config drift events update state through the stream channel", asyn
       thinkingOptionId: "low",
     },
   });
-  capturedSession?.pushEvent({
+  capturedSession.pushEvent({
     type: "thinking_option_changed",
     provider: "codex",
     thinkingOptionId: "high",
@@ -3838,7 +3868,6 @@ test("reloadAgentSession cancels active run and resumes existing session once th
     private readonly gate = new Promise<void>((resolve) => {
       this.releaseGate = resolve;
     });
-    private activeTurnId: string | null = null;
 
     constructor(
       config: AgentSessionConfig,
@@ -3852,7 +3881,6 @@ test("reloadAgentSession cancels active run and resumes existing session once th
     override async startTurn(): Promise<{ turnId: string }> {
       this.delayedInterrupted = false;
       const turnId = `delayed-turn-${Date.now()}`;
-      this.activeTurnId = turnId;
       // Push turn_started, then thread_started, then wait on gate
       setTimeout(async () => {
         this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
@@ -3910,6 +3938,10 @@ test("reloadAgentSession cancels active run and resumes existing session once th
   class DelayedPersistenceClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
     createSessionCalls = 0;
     resumeSessionCalls = 0;
     private nextSessionNumber = 1;
@@ -4146,7 +4178,7 @@ test("getAgent does not expose committed history internals once manager owns the
     text: "history stays behind manager",
   });
 
-  const live = manager.getAgent(snapshot.id) as Record<string, unknown>;
+  const live = manager.getAgent(snapshot.id) as unknown as Record<string, unknown>;
   expect(live).not.toBeNull();
   expect("timeline" in live).toBe(false);
   expect("timelineRows" in live).toBe(false);
@@ -4300,9 +4332,15 @@ test("fetchTimeline supports older-history pagination with before seq", async ()
     text: "fifth",
   });
 
+  const head = await manager.fetchTimeline(snapshot.id, {
+    direction: "tail",
+    limit: 0,
+  });
+
   const result = await manager.fetchTimeline(snapshot.id, {
     direction: "before",
     cursor: {
+      epoch: head.epoch,
       seq: 5,
     },
     limit: 2,
@@ -4410,6 +4448,10 @@ test("hydrateTimeline preserves assistant chunk, reasoning, and tool timeline hi
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
 
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
+
     async isAvailable(): Promise<boolean> {
       return true;
     }
@@ -4492,6 +4534,10 @@ test("hydrateTimeline preserves reasoning between assistant chunks", async () =>
   class ReasoningInterleavedHistoryClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
 
     async isAvailable(): Promise<boolean> {
       return true;
@@ -5870,6 +5916,10 @@ test("runAgent assembles finalText from trailing assistant chunks", async () => 
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
 
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
+
     async isAvailable(): Promise<boolean> {
       return true;
     }
@@ -6249,6 +6299,10 @@ test("clearAgentAttention on errored agent stays cleared until a new error trans
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
 
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
+
     async isAvailable(): Promise<boolean> {
       return true;
     }
@@ -6347,13 +6401,17 @@ test("streamAgent clears pending run when startTurn fails before a turn id exist
       if (this.attempt === 1) {
         throw new Error("Invalid request: missing field `text`");
       }
-      return super.startTurn();
+      return super.startTurn("");
     }
   }
 
   class FailsOnceClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
     readonly session = new FailsOnceBeforeTurnSession({
       provider: "codex",
       cwd: workdir,
@@ -6964,6 +7022,10 @@ test("turn_failed emits a system error assistant timeline message and keeps erro
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
 
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
+
     async isAvailable(): Promise<boolean> {
       return true;
     }
@@ -7041,6 +7103,10 @@ test("turn_failed surfaces provider code and diagnostic in system error message"
   class DetailedFailureClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
 
     async isAvailable(): Promise<boolean> {
       return true;
@@ -7132,6 +7198,10 @@ test("permission request notifies once without forcing unread attention state", 
   class PermissionClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
 
     async isAvailable(): Promise<boolean> {
       return true;
@@ -7269,6 +7339,10 @@ test("respondToPermission updates currentModeId after plan approval", async () =
   class PlanModeTestClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
 
     async isAvailable(): Promise<boolean> {
       return true;
@@ -7558,7 +7632,6 @@ test("close during in-flight stream does not clear persistence sessionId", async
     readonly capabilities = TEST_CAPABILITIES;
     readonly id = randomUUID();
     private threadId: string | null = this.id;
-    private closed = false;
     private subscribers = new Set<(event: AgentStreamEvent) => void>();
     private turnIdCounter = 0;
 
@@ -7628,7 +7701,6 @@ test("close during in-flight stream does not clear persistence sessionId", async
     }
 
     async interrupt(): Promise<void> {
-      this.closed = true;
       // Push turn_canceled for any active turn
       if (this.turnIdCounter > 0) {
         this.pushEvent({
@@ -7641,7 +7713,6 @@ test("close during in-flight stream does not clear persistence sessionId", async
     }
 
     async close(): Promise<void> {
-      this.closed = true;
       this.threadId = null;
       // Push turn_canceled for any active turn
       if (this.turnIdCounter > 0) {
@@ -7658,6 +7729,10 @@ test("close during in-flight stream does not clear persistence sessionId", async
   class CloseRaceClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
 
     async isAvailable(): Promise<boolean> {
       return true;
@@ -8254,6 +8329,10 @@ test("hydrateTimeline keeps provider user_message items when no canonical user h
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
 
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
+
     async isAvailable(): Promise<boolean> {
       return true;
     }
@@ -8318,6 +8397,10 @@ test("hydrateTimeline preserves provider replay timestamps and marks missing one
   class TimestampedHistoryClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
 
     async isAvailable(): Promise<boolean> {
       return true;
@@ -8392,6 +8475,10 @@ test("provider user_message is recorded from the live stream", async () => {
   class UnexpectedUserMsgClient implements AgentClient {
     readonly provider = "codex" as const;
     readonly capabilities = TEST_CAPABILITIES;
+
+    async fetchCatalog() {
+      return { models: [], modes: [] };
+    }
     async isAvailable(): Promise<boolean> {
       return true;
     }
@@ -8414,7 +8501,7 @@ test("provider user_message is recorded from the live stream", async () => {
     workspaceId: undefined,
   });
 
-  await manager.runAgent(snapshot.id, { text: "do something" });
+  await manager.runAgent(snapshot.id, "do something");
 
   const timeline = manager.getTimeline(snapshot.id);
   const userMessages = timeline.filter((item) => item.type === "user_message");
@@ -8474,11 +8561,12 @@ test("canonical submitted prompt keeps wire identity while rewind resolves provi
       this.pushEvent({
         type: "turn_canceled",
         provider: this.provider,
+        reason: "Interrupted",
         turnId: "turn-submitted-user-message",
       });
     }
 
-    override async revertFiles({ messageId }: { messageId: string }): Promise<void> {
+    async revertFiles({ messageId }: { messageId: string }): Promise<void> {
       this.rewindMessageIds.push(messageId);
     }
   }
@@ -8501,8 +8589,8 @@ test("canonical submitted prompt keeps wire identity while rewind resolves provi
   });
   const events: AgentManagerEvent[] = [];
   manager.subscribe((event) => events.push(event), { replayState: false });
-  const streamEvents = () =>
-    events.flatMap((event) => {
+  const streamEvents = (): Array<Record<string, unknown>> =>
+    events.flatMap((event): Array<Record<string, unknown>> => {
       if (event.type !== "agent_stream") return [];
       if (event.event.type !== "timeline") return [{ type: event.event.type }];
       const item = event.event.item;
@@ -8597,7 +8685,7 @@ test("authoritative timeline records a daemon-handled submitted prompt before it
       supportsRewindConversation: true,
     };
 
-    override tryHandleOutOfBand(prompt: AgentPromptInput) {
+    tryHandleOutOfBand(prompt: AgentPromptInput) {
       if (prompt !== "/handled") return null;
       return {
         run: async ({ emit }: { emit: (event: AgentStreamEvent) => void }) => {
@@ -8916,7 +9004,7 @@ test("user_message events wrapping a paseo-system envelope are not added to the 
     workspaceId: undefined,
   });
 
-  await manager.runAgent(snapshot.id, { text: "do something" });
+  await manager.runAgent(snapshot.id, "do something");
 
   const timeline = manager.getTimeline(snapshot.id);
   const userMessages = timeline.filter((item) => item.type === "user_message");
@@ -9031,7 +9119,7 @@ test("onWorkspaceStateMayHaveChanged is called when a completed shell tool call 
     workspaceId: undefined,
   });
 
-  await manager.runAgent(snapshot.id, { text: "merge it" });
+  await manager.runAgent(snapshot.id, "merge it");
 
   expect(onWorkspaceStateMayHaveChanged).toHaveBeenCalledTimes(1);
   expect(onWorkspaceStateMayHaveChanged).toHaveBeenCalledWith({ cwd: workdir });
@@ -9067,7 +9155,7 @@ test("onWorkspaceStateMayHaveChanged is not called for non-shell tool calls", as
     workspaceId: undefined,
   });
 
-  await manager.runAgent(snapshot.id, { text: "read it" });
+  await manager.runAgent(snapshot.id, "read it");
 
   expect(onWorkspaceStateMayHaveChanged).not.toHaveBeenCalled();
 });
@@ -9102,7 +9190,7 @@ test("onWorkspaceStateMayHaveChanged is not called for running shell tool calls"
     workspaceId: undefined,
   });
 
-  await manager.runAgent(snapshot.id, { text: "merge it" });
+  await manager.runAgent(snapshot.id, "merge it");
 
   expect(onWorkspaceStateMayHaveChanged).not.toHaveBeenCalled();
 });

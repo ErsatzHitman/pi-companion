@@ -77,22 +77,63 @@ function toolCall(options?: {
   error?: unknown;
 }): Extract<AgentStreamEvent, { type: "timeline" }> {
   const status = options?.status ?? "running";
-  return timeline(
-    {
-      type: "tool_call",
-      callId: options?.callId ?? "tool-1",
-      name: "shell",
-      status,
-      error: status === "failed" ? (options?.error ?? "failed") : null,
-      detail: {
-        type: "shell",
-        command: "printf ok",
-        output: options?.output ?? "",
-        exitCode: status === "completed" ? 0 : null,
-      },
-    },
-    options,
-  );
+  const callId = options?.callId ?? "tool-1";
+  const detailBase = {
+    type: "shell" as const,
+    command: "printf ok",
+    output: options?.output ?? "",
+  };
+  const base = {
+    type: "tool_call" as const,
+    callId,
+    name: "shell" as const,
+  };
+  // One branch per status so each returned literal keeps a single status
+  // value: a shared `{ status, error: conditional }` object is not
+  // assignable to the ToolCallTimelineItem discriminated union.
+  switch (status) {
+    case "failed":
+      return timeline(
+        {
+          ...base,
+          status,
+          error: options?.error ?? "failed",
+          detail: { ...detailBase, exitCode: null },
+        },
+        options,
+      );
+    case "completed":
+      return timeline(
+        {
+          ...base,
+          status,
+          error: null,
+          detail: { ...detailBase, exitCode: 0 },
+        },
+        options,
+      );
+    case "canceled":
+      return timeline(
+        {
+          ...base,
+          status,
+          error: null,
+          detail: { ...detailBase, exitCode: null },
+        },
+        options,
+      );
+    case "running":
+    default:
+      return timeline(
+        {
+          ...base,
+          status,
+          error: null,
+          detail: { ...detailBase, exitCode: null },
+        },
+        options,
+      );
+  }
 }
 
 describe("AgentStreamCoalescer", () => {

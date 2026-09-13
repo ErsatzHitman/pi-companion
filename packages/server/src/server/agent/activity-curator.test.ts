@@ -19,15 +19,27 @@ function toolCallItem(params: {
     input: params.input ?? null,
     output: params.output ?? null,
   };
-  return {
-    type: "tool_call",
+  const base = {
+    type: "tool_call" as const,
     callId: params.callId,
     name: params.name,
-    status,
     detail,
-    error: status === "failed" ? (params.error ?? { message: "failed" }) : null,
     metadata: params.metadata,
   };
+  // One branch per status so each returned literal keeps a single status
+  // value: a shared `{ status, error: conditional }` object is not
+  // assignable to the ToolCallTimelineItem discriminated union.
+  switch (status) {
+    case "failed":
+      return { ...base, status, error: params.error ?? { message: "failed" } };
+    case "completed":
+      return { ...base, status, error: null };
+    case "canceled":
+      return { ...base, status, error: null };
+    case "running":
+    default:
+      return { ...base, status, error: null };
+  }
 }
 
 function row(seq: number, item: AgentTimelineItem): AgentTimelineRow {

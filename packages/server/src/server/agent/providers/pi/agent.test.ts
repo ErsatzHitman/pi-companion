@@ -24,6 +24,7 @@ import {
   type AgentSession,
   type AgentSessionConfig,
   type AgentStreamEvent,
+  type AgentTimelineItem,
 } from "../../agent-sdk-types.js";
 import { PiRpcAgentClient, PiRpcAgentSession, transformPiModels } from "./agent.js";
 import { WorkspaceCheckpointStore } from "../../checkpoints/index.js";
@@ -180,16 +181,22 @@ class SessionEvents {
       .map((event) => event.item);
   }
 
-  timelineAndCompletionEvents() {
-    return this.events.flatMap((event) => {
-      if (event.type === "timeline") {
-        return [{ type: "timeline" as const, item: event.item }];
-      }
-      if (event.type === "turn_completed") {
-        return [{ type: "turn_completed" as const }];
-      }
-      return [];
-    });
+  timelineAndCompletionEvents(): Array<
+    { type: "timeline"; item: AgentTimelineItem } | { type: "turn_completed" }
+  > {
+    return this.events.flatMap(
+      (
+        event,
+      ): Array<{ type: "timeline"; item: AgentTimelineItem } | { type: "turn_completed" }> => {
+        if (event.type === "timeline") {
+          return [{ type: "timeline" as const, item: event.item }];
+        }
+        if (event.type === "turn_completed") {
+          return [{ type: "turn_completed" as const }];
+        }
+        return [];
+      },
+    );
   }
 
   eventTypes(): AgentStreamEvent["type"][] {
@@ -488,7 +495,7 @@ describe("PiRpcAgentSession", () => {
     });
 
     test("no client answering within the timeout resolves getEditorText with an empty string", async () => {
-      const { pi, session, events } = await createSession();
+      const { pi, events } = await createSession();
       const fakeSession = pi.latestSession();
 
       vi.useFakeTimers();
@@ -995,7 +1002,7 @@ describe("PiRpcAgentSession", () => {
       "--session",
       "/tmp/native-pi-session",
       "--extension",
-      actualLaunch.extensionPaths[0],
+      actualLaunch.extensionPaths![0],
     ]);
   });
 
@@ -1003,7 +1010,7 @@ describe("PiRpcAgentSession", () => {
     const pi = new FakePi();
     const client = createClient(pi);
     const session = await client.createSession(createConfig());
-    const extensionPath = pi.recordedLaunches[0]?.extensionPaths[0];
+    const extensionPath = pi.recordedLaunches[0]?.extensionPaths?.[0];
     expect(extensionPath).toBeDefined();
     const listeners = await loadPaseoExtensionListeners(extensionPath!);
     const submittedMessage = { role: "user", content: "new prompt" };
@@ -1068,11 +1075,11 @@ describe("PiRpcAgentSession", () => {
       "--thinking",
       "medium",
       "--extension",
-      actualLaunch.extensionPaths[0],
+      actualLaunch.extensionPaths![0],
     ]);
 
     await expect(
-      applyPaseoExtensionSystemPrompt(actualLaunch.extensionPaths[0]!, "Pi project prompt"),
+      applyPaseoExtensionSystemPrompt(actualLaunch.extensionPaths![0]!, "Pi project prompt"),
     ).resolves.toBe("Pi project prompt\n\nAgent prompt\n\nDaemon prompt");
 
     await session.close();
@@ -1117,10 +1124,10 @@ describe("PiRpcAgentSession", () => {
       "--session",
       "/tmp/native-pi-session",
       "--extension",
-      actualLaunch.extensionPaths[0],
+      actualLaunch.extensionPaths![0],
     ]);
     await expect(
-      applyPaseoExtensionSystemPrompt(actualLaunch.extensionPaths[0]!, "Pi project prompt"),
+      applyPaseoExtensionSystemPrompt(actualLaunch.extensionPaths![0]!, "Pi project prompt"),
     ).resolves.toBe("Pi project prompt\n\nAgent prompt\n\nDaemon prompt");
   });
 
@@ -1936,7 +1943,7 @@ describe("PiRpcAgentClient", () => {
       "--session",
       sessionFile,
       "--extension",
-      actualLaunch.extensionPaths[0],
+      actualLaunch.extensionPaths![0],
     ]);
     expect(imported.config).toMatchObject({
       provider: "pi",
@@ -2423,7 +2430,7 @@ describe("PiRpcAgentClient", () => {
       "--mcp-config",
       actualLaunch.mcpConfigPath,
       "--extension",
-      actualLaunch.extensionPaths[0],
+      actualLaunch.extensionPaths![0],
     ]);
     expect(session.capabilities.supportsMcpServers).toBe(true);
 
@@ -2503,7 +2510,7 @@ describe("PiRpcAgentClient", () => {
       "--thinking",
       "medium",
       "--extension",
-      actualLaunch.extensionPaths[0],
+      actualLaunch.extensionPaths![0],
     ]);
     expect(actualLaunch.mcpConfigPath).toBeUndefined();
     expect(session.capabilities.supportsMcpServers).toBe(false);

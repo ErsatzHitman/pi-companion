@@ -84,7 +84,20 @@
 // file read it) resolved exactly that one error; the production check in
 // `provider-registry.ts` is unaffected and still proven able to fail in
 // both directions (see that file's own T296 doc comment).
-export const TYPECHECK_ERROR_CEILING = 1044;
+//
+// chore/type-errors-a lowered this from 1044 to 938 (106 errors across nine
+// test files under src/server/agent/): agent-manager.test.ts's fakes were
+// re-anchored to current production types (AgentCapabilityFlags-typed
+// TEST_CAPABILITIES, production-typed TestAgentSession method signatures,
+// per-class fetchCatalog stubs), plus the same fetchCatalog stub in
+// providers/pi/agent.test.ts, narrowed timeline-event projections,
+// ToolCallTimelineItem discriminated-union helpers (curator, coalescer x2),
+// sync resolveCreateConfig fakes and indexed-call mocks
+// (provider-snapshot-manager.test.ts), FetchCatalogOptions import
+// (rewind.test.ts), ParsedToolReadInput keys (tool-call-read-gutter),
+// and unknown-first PiChild fake (cli-runtime.test.ts). No production
+// source semantics changed.
+export const TYPECHECK_ERROR_CEILING = 938;
 
 // T119: how far the measured error count is allowed to fall below the
 // ceiling in one run without an explicit ceiling update. A real fix lowers
