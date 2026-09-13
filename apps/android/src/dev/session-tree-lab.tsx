@@ -30,7 +30,9 @@
  * `agent.fork.response`, `DaemonClient.forkAgent`); clone/rename still have
  * none. This lab's `sessionTreeLabPort` is still a plain recording fake, not
  * a real client — proving the sheet's OWN wiring is correct, never that a
- * real `DaemonClient` is reachable from it today.
+ * real `DaemonClient` is reachable from it today (fork-agent-android's
+ * `adaptSessionTreeForkClient`/`resolveSessionTreeForkClient` is that real
+ * path; this lab still exercises only the fake, on purpose).
  */
 import { useMemo, useState } from "react";
 import { ScrollView, Text } from "react-native";

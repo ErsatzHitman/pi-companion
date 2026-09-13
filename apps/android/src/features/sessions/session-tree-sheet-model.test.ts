@@ -5,6 +5,7 @@ import { sessions as coreSessions } from "@picompanion/frontend-core";
 import {
   MAX_INDENT_DEPTH,
   SessionTreeActionUnavailableError,
+  adaptSessionTreeForkClient,
   cloneSessionTreeNode,
   describeSessionTreeActionUnavailable,
   flattenVisibleSessionTreeRows,
@@ -179,5 +180,107 @@ describe("forkSessionTreeNode / cloneSessionTreeNode / renameSessionTreeNode: th
       SessionTreeActionUnavailableError,
     );
     expect(cloneAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe("adaptSessionTreeForkClient: the entryId adapter", () => {
+  // Head entries keyed by agent id — the route's "last known head entry"
+  // stand-in. `r1` is the fixture root (which itself carries no forkPoint,
+  // proving the entry comes from the resolver, never the node); `f1` omits
+  // entryIndex on purpose; nothing is known for "ghost".
+  const headEntries = new Map<string, { entryId: string; entryIndex?: number }>([
+    ["r1", { entryId: "m9", entryIndex: 4 }],
+    ["f1", { entryId: "m3" }],
+  ]);
+  const resolveHeadEntry = (agentId: string) => headEntries.get(agentId);
+
+  function forkCapableFake(
+    agent: { id: string; title?: string | null } | null = { id: "r1-fork", title: "Branched" },
+  ) {
+    return {
+      forkAgent: vi.fn(async (_agentId: string, _options: unknown) => ({ agent })),
+    };
+  }
+
+  it("returns undefined for a client without forkAgent (null / undefined / fork-less fake)", () => {
+    expect(adaptSessionTreeForkClient(null, resolveHeadEntry)).toBeUndefined();
+    expect(adaptSessionTreeForkClient(undefined, resolveHeadEntry)).toBeUndefined();
+    expect(adaptSessionTreeForkClient({}, resolveHeadEntry)).toBeUndefined();
+    expect(adaptSessionTreeForkClient({ cloneAgent: vi.fn() }, resolveHeadEntry)).toBeUndefined();
+  });
+
+  it("supplies the resolver's entryId/entryIndex and unwraps agent.id/agent.title", async () => {
+    const fake = forkCapableFake();
+    const adapted = adaptSessionTreeForkClient(fake, resolveHeadEntry);
+    expect(adapted).toBeDefined();
+
+    const result = await adapted!.forkAgent!("r1", { name: "Branched" });
+
+    expect(fake.forkAgent).toHaveBeenCalledTimes(1);
+    expect(fake.forkAgent).toHaveBeenCalledWith("r1", {
+      entryId: "m9",
+      entryIndex: 4,
+      name: "Branched",
+    });
+    expect(result).toEqual({ agentId: "r1-fork", name: "Branched" });
+  });
+
+  it("omits entryIndex when the resolver supplies none, and omits a null name", async () => {
+    const fake = forkCapableFake({ id: "f1-fork", title: null });
+    const adapted = adaptSessionTreeForkClient(fake, resolveHeadEntry);
+
+    const result = await adapted!.forkAgent!("f1", { name: null });
+
+    expect(fake.forkAgent).toHaveBeenCalledWith("f1", { entryId: "m3" });
+    expect(result).toEqual({ agentId: "f1-fork", name: null });
+  });
+
+  it("rejects rather than mapping a null-agent resolution (the wire's failure shape)", async () => {
+    const adapted = adaptSessionTreeForkClient(forkCapableFake(null), resolveHeadEntry);
+    await expect(adapted!.forkAgent!("r1", { name: "Branched" })).rejects.toThrow(
+      "did not return a new session",
+    );
+  });
+
+  it("propagates a daemon rejection unchanged, mapping nothing", async () => {
+    const forkAgent = vi.fn(async () => {
+      throw new Error("unknown entry m9");
+    });
+    const adapted = adaptSessionTreeForkClient({ forkAgent }, resolveHeadEntry);
+    await expect(adapted!.forkAgent!("r1")).rejects.toThrow("unknown entry m9");
+  });
+
+  it("throws a truthful error without calling forkAgent when no head entry is known", async () => {
+    const fake = forkCapableFake();
+    const adapted = adaptSessionTreeForkClient(fake, resolveHeadEntry);
+    await expect(adapted!.forkAgent!("ghost")).rejects.toThrow(
+      "No timeline entry known for session ghost",
+    );
+    expect(fake.forkAgent).not.toHaveBeenCalled();
+  });
+
+  it("exposes fork only — no cloneAgent/renameAgent on the adapted port", () => {
+    const adapted = adaptSessionTreeForkClient(forkCapableFake(), resolveHeadEntry)!;
+    expect(typeof adapted.forkAgent).toBe("function");
+    expect("cloneAgent" in adapted).toBe(false);
+    expect("renameAgent" in adapted).toBe(false);
+    expect(isSessionTreeActionAvailable(adapted, "fork")).toBe(true);
+    expect(isSessionTreeActionAvailable(adapted, "clone")).toBe(false);
+    expect(isSessionTreeActionAvailable(adapted, "rename")).toBe(false);
+  });
+
+  it("forkSessionTreeNode dispatches through an adapted port end to end", async () => {
+    const { root } = buildFixture();
+    const fake = forkCapableFake();
+    const adapted = adaptSessionTreeForkClient(fake, resolveHeadEntry)!;
+
+    const result = await forkSessionTreeNode(adapted, root, { name: "Branched" });
+
+    expect(fake.forkAgent).toHaveBeenCalledWith("r1", {
+      entryId: "m9",
+      entryIndex: 4,
+      name: "Branched",
+    });
+    expect(result).toEqual({ agentId: "r1-fork", name: "Branched" });
   });
 });

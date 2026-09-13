@@ -39,9 +39,11 @@
  * build today. CORRECTED (fork-agent-ui): this previously said that was
  * because `packages/client/src` sent none of `forkAgent`, `cloneAgent`, or a
  * rename request yet. The fork half has since landed, but this sheet still
- * takes no `entryId` (see that file's DISCLOSED SHAPE GAP), so no adapter
- * wires a real `DaemonClient.forkAgent` here yet and `client` stays absent on
- * real builds regardless. When the selected session's action row
+ * takes no `entryId` itself — that file's `adaptSessionTreeForkClient`
+ * (plus `session-route-daemon-clients.ts`'s `resolveSessionTreeForkClient`)
+ * now supplies the head `entryId` per agent, so `client` CAN be a real
+ * adapted `DaemonClient.forkAgent`; it stays absent on real builds only
+ * until a route passes one. When the selected session's action row
  * renders, each of Fork/Clone/Rename is disabled and captioned with
  * `describeSessionTreeActionUnavailable`'s truthful sentence whenever
  * `client` lacks that method — never an enabled control whose only

@@ -70,6 +70,20 @@
  * instance this file already narrows nine times above satisfies this
  * tenth port as-is too, with no adapter.
  *
+ * **fork-agent-android adds `resolveSessionTreeForkClient` below**, the
+ * same pattern an eleventh time, and the first one that ADAPTS rather
+ * than casts: `SessionTreeSheet`'s `SessionTreeClientPort.forkAgent`
+ * takes only `{ name? }` while the real `DaemonClient.forkAgent`
+ * requires `{ entryId, entryIndex?, name? }`, so the live instance is
+ * adapted through `adaptSessionTreeForkClient` (which supplies the head
+ * `entryId` per agent id from `resolveHeadEntry` and maps the wire's
+ * `{ agent: { id, title } }` to the port's `{ agentId, name }`) instead
+ * of being handed over unchanged. `undefined` (never `null`) with no
+ * active lifecycle, no live client, or a client with no `forkAgent` —
+ * matching every sibling resolver above — and the adapted port exposes
+ * fork only (clone stays out of scope), so the sheet keeps rendering
+ * Clone/Rename disabled with their truthful unavailable text.
+ *
  * **T352 adds `resolveAgentUsageClient` below**, the same pattern an
  * eighth time: the Live screen's Context card needs this session's
  * token usage, and the daemon delivers it as `lastUsage` on the whole
@@ -118,8 +132,11 @@
  * under plain `vitest`; every existing proof about that file is
  * source-text only (`index.test.ts`'s `readCode()`/`readComponentCode()`).
  * Pulling this one resolve step into its own module — importing only
- * *types* from `features/composer` (erased at compile time, so this
- * file never touches `react-native` even transitively) — lets
+ * *types* from `features/composer` (erased at compile time), plus one
+ * value import (`adaptSessionTreeForkClient`) from the RN-free
+ * `features/sessions/session-tree-sheet-model.ts`, which itself imports
+ * nothing at runtime, so this file never touches `react-native` even
+ * transitively — lets
  * `./session-route-daemon-clients.test.ts` prove the resolve step
  * itself with a real counting fake and real function calls, not a
  * regex: "whatever `getDaemonClient()` returns reaches the caller
@@ -134,6 +151,11 @@ import type {
   DaemonTurnStatusSource,
 } from "../features/composer";
 import type { AgentSnapshotSource, AttachmentDownloadTokenClient } from "../features/transcript";
+import {
+  adaptSessionTreeForkClient,
+  type SessionTreeClientPort,
+  type SessionTreeHeadEntryResolver,
+} from "../features/sessions/session-tree-sheet-model";
 import type { DaemonAgentUsageSource } from "../features/telemetry";
 import type { VoiceTranscriptionClient } from "../features/voice";
 
@@ -375,5 +397,26 @@ export function resolveSessionControlsClient(
       | DaemonSessionControlsSource
       | null
       | undefined) ?? undefined
+  );
+}
+
+/**
+ * fork-agent-android: the eleventh narrow port — see this file's module
+ * doc for why this one adapts instead of casting. `resolveHeadEntry`
+ * supplies the head entry per agent id (e.g. the route's last known head
+ * entry); the adapted port then forks any session at its own entry id.
+ * `undefined` (never `null`) with no active lifecycle, no live client
+ * yet, or a live client with no `forkAgent` — matching every sibling
+ * resolver above — so `SessionTreeSheet` keeps its Fork action disabled
+ * with the truthful unavailable text instead of offering a control that
+ * can only fail.
+ */
+export function resolveSessionTreeForkClient(
+  connection: SessionRouteConnectionSource,
+  resolveHeadEntry: SessionTreeHeadEntryResolver,
+): SessionTreeClientPort | undefined {
+  return adaptSessionTreeForkClient(
+    connection.getActiveLifecycle()?.getDaemonClient(),
+    resolveHeadEntry,
   );
 }

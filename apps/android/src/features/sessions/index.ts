@@ -73,6 +73,7 @@ export { SessionTreeSheet, type SessionTreeSheetProps } from "./session-tree-she
 export {
   MAX_INDENT_DEPTH as SESSION_TREE_MAX_INDENT_DEPTH,
   SessionTreeActionUnavailableError,
+  adaptSessionTreeForkClient,
   cloneSessionTreeNode,
   describeSessionTreeActionUnavailable,
   flattenVisibleSessionTreeRows,
@@ -86,7 +87,9 @@ export {
   type SessionTreeActionResult,
   type SessionTreeClientPort,
   type SessionTreeCloneOptions,
+  type SessionTreeForkEntry,
   type SessionTreeForkOptions,
+  type SessionTreeHeadEntryResolver,
   type SessionTreeRenameOptions,
   type SessionTreeSheetRow,
 } from "./session-tree-sheet-model";
