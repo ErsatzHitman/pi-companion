@@ -97,7 +97,11 @@
 // (rewind.test.ts), ParsedToolReadInput keys (tool-call-read-gutter),
 // and unknown-first PiChild fake (cli-runtime.test.ts). No production
 // source semantics changed.
-export const TYPECHECK_ERROR_CEILING = 938;
+export const TYPECHECK_ERROR_CEILING = 854;
+
+// Merged batches A+B lowered this from 1044 to 854 (190 errors): batch B
+// fixed 85 outside src/server/agent/**, batch A fixed 106 inside it.
+// Measured on main after both merges (960 after B alone, 854 after A).
 
 // T119: how far the measured error count is allowed to fall below the
 // ceiling in one run without an explicit ceiling update. A real fix lowers
