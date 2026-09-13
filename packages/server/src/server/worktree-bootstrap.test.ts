@@ -15,7 +15,28 @@ import {
   type WorktreeConfig,
 } from "../utils/worktree.js";
 import type { TerminalManager } from "../terminal/terminal-manager.js";
-import type { TerminalSession } from "../terminal/terminal.js";
+import type { TerminalExitInfo, TerminalSession } from "../terminal/terminal.js";
+
+import type { ServiceProxySubsystem } from "./service-proxy.js";
+
+// Wraps a real ScriptRouteStore (kept for listRoutes/getRouteEntry assertions)
+// as a full ServiceProxySubsystem. spawnWorkspaceScript only exercises route
+// registration/removal; middleware/standalone are never called in these tests,
+// so those stubs throw if ever reached.
+function asServiceProxySubsystem(routeStore: ScriptRouteStore): ServiceProxySubsystem {
+  return Object.assign(routeStore, {
+    middleware: () => {
+      throw new Error("middleware not used in worktree-bootstrap tests");
+    },
+    upgradeHandler: () => {
+      throw new Error("upgradeHandler not used in worktree-bootstrap tests");
+    },
+    startStandalone: async () => {
+      throw new Error("startStandalone not used in worktree-bootstrap tests");
+    },
+    stopStandalone: async () => {},
+  });
+}
 
 interface CreateAgentWorktreeTestOptions {
   cwd: string;
@@ -256,6 +277,7 @@ describe("runAsyncWorktreeBootstrap", () => {
             id: "term-ready",
             name: options.name ?? "Terminal",
             cwd: options.cwd,
+            workspaceId: options.workspaceId,
             send: () => {
               sendAt = Date.now();
             },
@@ -268,8 +290,24 @@ describe("runAsyncWorktreeBootstrap", () => {
             onExit: () => () => {},
             onCommandFinished: () => () => {},
             onTitleChange: () => () => {},
+            onActivityChange: () => () => {},
             getSize: () => ({ rows: 0, cols: 0 }),
             getTitle: () => undefined,
+            getActivity: () => null,
+            setActivity: () => {},
+            clearActivityAttention: () => false,
+            setTitle: () => {},
+            getStateSnapshot: () => ({
+              state: {
+                rows: 0,
+                cols: 0,
+                grid: [],
+                scrollback: [],
+                cursor: { row: 0, col: 0 },
+              },
+              revision: 0,
+            }),
+            getReplayPreamble: () => "",
             getExitInfo: () => null,
             getState: () => ({
               rows: 0,
@@ -283,16 +321,40 @@ describe("runAsyncWorktreeBootstrap", () => {
           };
         },
         registerCwdEnv() {},
+        validateTerminalActivityToken() {
+          return "unknown" as const;
+        },
         getTerminal() {
           return undefined;
         },
+        async getTerminalState() {
+          return null;
+        },
+        setTerminalTitle() {
+          return false;
+        },
+        async setTerminalActivity() {
+          return false;
+        },
+        async clearTerminalAttention() {
+          return false;
+        },
         killTerminal() {},
         async killTerminalAndWait() {},
+        async captureTerminal() {
+          return { lines: [], totalLines: 0 };
+        },
         listDirectories() {
           return [];
         },
         killAll() {},
         subscribeTerminalsChanged() {
+          return () => {};
+        },
+        subscribeTerminalActivity() {
+          return () => {};
+        },
+        subscribeTerminalWorkspaceContributionChanged() {
           return () => {};
         },
       },
@@ -307,6 +369,7 @@ describe("runAsyncWorktreeBootstrap", () => {
 
   interface CreateTerminalCall {
     cwd: string;
+    workspaceId: string;
     name?: string;
     title?: string;
     env?: Record<string, string>;
@@ -334,7 +397,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         createTerminalCalls.push(options);
         terminalCounter += 1;
         const terminalId = `term-${terminalCounter}`;
-        let exitHandler: ((info: { exitCode: number | null }) => void) | null = null;
+        let exitHandler: ((info: TerminalExitInfo) => void) | null = null;
         let commandFinishedHandler: ((info: { exitCode: number | null }) => void) | null = null;
         const sentInputs: string[] = [];
         terminalRecords.push({
@@ -345,7 +408,7 @@ describe("runAsyncWorktreeBootstrap", () => {
           },
           triggerExit: (exitCode) => {
             if (exitHandler) {
-              exitHandler({ exitCode });
+              exitHandler({ exitCode, signal: null, lastOutputLines: [] });
             }
           },
         });
@@ -354,6 +417,7 @@ describe("runAsyncWorktreeBootstrap", () => {
           id: terminalId,
           name: options.name ?? "Terminal",
           cwd: options.cwd,
+          workspaceId: options.workspaceId,
           send: (message) => {
             if (message.type === "input") {
               sentInputs.push(message.data);
@@ -390,6 +454,19 @@ describe("runAsyncWorktreeBootstrap", () => {
           getTitle: () => undefined,
           getActivity: () => null,
           setActivity: () => {},
+          clearActivityAttention: () => false,
+          setTitle: () => {},
+          getStateSnapshot: () => ({
+            state: {
+              rows: 1,
+              cols: 1,
+              grid: [[{ char: "$" }]],
+              scrollback: [],
+              cursor: { row: 0, col: 0 },
+            },
+            revision: 0,
+          }),
+          getReplayPreamble: () => "",
           getExitInfo: () => null,
           killAndWait: async () => {},
         };
@@ -426,6 +503,12 @@ describe("runAsyncWorktreeBootstrap", () => {
       },
       subscribeTerminalActivity() {
         return () => {};
+      },
+      subscribeTerminalWorkspaceContributionChanged() {
+        return () => {};
+      },
+      async clearTerminalAttention() {
+        return false;
       },
     };
   }
@@ -521,7 +604,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-socket-service",
       scriptName: "web",
       daemonPort: null,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls, terminalRecords),
     });
@@ -565,7 +648,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-script-exit",
       scriptName: "typecheck",
       daemonPort: null,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -604,7 +687,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-script-rerun",
       scriptName: "typecheck",
       daemonPort: null,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -624,7 +707,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-script-rerun",
       scriptName: "typecheck",
       daemonPort: null,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -664,6 +747,7 @@ describe("runAsyncWorktreeBootstrap", () => {
     const terminalManager = createStubTerminalManager(createTerminalCalls, terminalRecords);
     const existingTerminal = await terminalManager.createTerminal({
       cwd: repoDir,
+      workspaceId: repoDir,
       name: "typecheck",
       title: "typecheck",
     });
@@ -683,7 +767,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-script-existing-terminal",
       scriptName: "typecheck",
       daemonPort: null,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -725,7 +809,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-script-terminal-exit",
       scriptName: "typecheck",
       daemonPort: null,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -762,7 +846,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-script-duplicate",
       scriptName: "typecheck",
       daemonPort: null,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -775,7 +859,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         branchName: "feature-script-duplicate",
         scriptName: "typecheck",
         daemonPort: null,
-        serviceProxy: routeStore,
+        serviceProxy: asServiceProxySubsystem(routeStore),
         runtimeStore,
         terminalManager,
       }),
@@ -810,7 +894,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-socket-service",
       scriptName: "api",
       daemonPort: 6767,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls, terminalRecords),
     });
@@ -865,7 +949,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       scriptName: "api",
       daemonPort: 6767,
       serviceProxyPublicBaseUrl: "https://services.example.com",
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls, terminalRecords),
     });
@@ -930,7 +1014,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-respawn-service",
       scriptName: "api",
       daemonPort: 6767,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -942,7 +1026,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-respawn-service",
       scriptName: "worker",
       daemonPort: 6767,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -976,7 +1060,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-respawn-service",
       scriptName: "api",
       daemonPort: 6767,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
@@ -1033,13 +1117,13 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-before-rename",
       scriptName: "api",
       daemonPort: 6767,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager,
     });
 
     const updateRoutesForBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged: () => {},
     });
     updateRoutesForBranchChange(repoDir, "feature-before-rename", "feature-after-rename");
@@ -1098,7 +1182,7 @@ describe("runAsyncWorktreeBootstrap", () => {
         branchName: "feature-collision-service",
         scriptName: "app-server",
         daemonPort: 6767,
-        serviceProxy: routeStore,
+        serviceProxy: asServiceProxySubsystem(routeStore),
         runtimeStore,
         terminalManager: createStubTerminalManager(createTerminalCalls),
       }),
@@ -1133,7 +1217,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       branchName: "feature-collision-service",
       scriptName: "app-server",
       daemonPort: 6767,
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls),
     });
@@ -1186,7 +1270,7 @@ describe("runAsyncWorktreeBootstrap", () => {
       scriptName: "web",
       daemonPort: 6767,
       daemonListenHost: "100.64.0.20",
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls),
     });

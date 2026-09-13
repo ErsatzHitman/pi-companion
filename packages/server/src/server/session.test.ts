@@ -51,6 +51,11 @@ import {
   asGitHubService,
   asWorkspaceGitService,
   asDaemonConfigStore,
+  asTerminalManager,
+  asServiceProxy,
+  asWorkspaceScriptRuntimeStore,
+  asWorkspaceAutoName,
+  asProviderUsageService,
   createProviderSnapshotManagerStub,
 } from "./test-utils/session-stubs.js";
 import { isPlatform } from "../test-utils/platform.js";
@@ -60,7 +65,11 @@ import {
   GitHubCommandError,
   type GitHubService,
 } from "../services/github-service.js";
-import type { CheckDetails, ForgeService } from "../services/forge-service.js";
+import type {
+  CheckDetails,
+  ForgeService,
+  MergePullRequestOptions,
+} from "../services/forge-service.js";
 import type { GitHubPullRequestStatusFacts } from "../services/github-facts.js";
 
 interface SessionHandlerInternals {
@@ -311,12 +320,17 @@ interface SessionForTestOptions {
     resolveForge?: ReturnType<typeof vi.fn>;
     getWorkspaceGitMetadata?: ReturnType<typeof vi.fn>;
     getProjectSlug?: ReturnType<typeof vi.fn>;
+    registerWorkspace?: ReturnType<typeof vi.fn>;
   };
-  workspaceRegistry?: { get: ReturnType<typeof vi.fn> };
+  workspaceRegistry?: Partial<SessionOptions["workspaceRegistry"]>;
   projectRegistry?: Partial<SessionOptions["projectRegistry"]>;
-  terminalManager?: SessionOptions["terminalManager"];
-  serviceProxy?: SessionOptions["serviceProxy"];
-  scriptRuntimeStore?: SessionOptions["scriptRuntimeStore"];
+  terminalManager?:
+    | { [K in keyof NonNullable<SessionOptions["terminalManager"]>]?: unknown }
+    | null;
+  serviceProxy?: { [K in keyof NonNullable<SessionOptions["serviceProxy"]>]?: unknown };
+  scriptRuntimeStore?: {
+    [K in keyof NonNullable<SessionOptions["scriptRuntimeStore"]>]?: unknown;
+  };
   getDaemonTcpPort?: () => number | null;
   getDaemonTcpHost?: () => string | null;
   providerSnapshotManager?: ProviderSnapshotManager;
@@ -358,7 +372,7 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     resolveForge: vi.fn().mockResolvedValue({ forge: "github", service: github }),
     // Mirror production: invalidateForge resolves the forge and busts the
     // adapter's cache. The resolved forge here is github, so delegate to it.
-    invalidateForge: vi.fn((cwd: string) => github.invalidate({ cwd })),
+    invalidateForge: vi.fn((cwd: string) => github.invalidate?.({ cwd })),
     getProjectSlug: vi.fn(),
     ...options.workspaceGitService,
   };
@@ -390,19 +404,27 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
       ...options.agentStorage,
     }),
     projectRegistry: {
-      list: vi.fn().mockResolvedValue([]),
-      get: vi.fn(),
+      list: vi.fn(async () => []),
+      get: vi.fn(async () => null),
       getOrCreateActiveByRoot: vi.fn(),
       upsert: vi.fn(),
+      update: vi.fn(),
       archive: vi.fn(),
       remove: vi.fn(),
       initialize: vi.fn(),
       existsOnDisk: vi.fn(),
       ...options.projectRegistry,
     },
-    workspaceRegistry: options.workspaceRegistry ?? {
-      get: vi.fn(),
-      list: vi.fn().mockResolvedValue([]),
+    workspaceRegistry: {
+      get: vi.fn(async () => null),
+      list: vi.fn(async () => []),
+      update: vi.fn(),
+      upsert: vi.fn(),
+      archive: vi.fn(),
+      remove: vi.fn(),
+      initialize: vi.fn(),
+      existsOnDisk: vi.fn(),
+      ...options.workspaceRegistry,
     },
     chatService: asChatService(),
     scheduleService: asScheduleService(),
@@ -410,6 +432,8 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     checkoutDiffManager: asCheckoutDiffManager(checkoutDiffManager),
     github: asGitHubService(github),
     workspaceGitService: asWorkspaceGitService(workspaceGitService),
+    workspaceAutoName: asWorkspaceAutoName({}),
+    providerUsageService: asProviderUsageService({}),
     daemonConfigStore: asDaemonConfigStore({
       get: vi.fn(() => ({
         mcp: { injectIntoAgents: false },
@@ -419,11 +443,18 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     }),
     stt: options.stt ?? null,
     tts: null,
-    terminalManager: options.terminalManager ?? null,
+    terminalManager:
+      options.terminalManager === null
+        ? null
+        : options.terminalManager
+          ? asTerminalManager(options.terminalManager)
+          : null,
     providerSnapshotManager:
       options.providerSnapshotManager ?? createProviderSnapshotManagerStub().manager,
-    serviceProxy: options.serviceProxy,
-    scriptRuntimeStore: options.scriptRuntimeStore,
+    serviceProxy: options.serviceProxy ? asServiceProxy(options.serviceProxy) : undefined,
+    scriptRuntimeStore: options.scriptRuntimeStore
+      ? asWorkspaceScriptRuntimeStore(options.scriptRuntimeStore)
+      : undefined,
     getDaemonTcpPort: options.getDaemonTcpPort,
     getDaemonTcpHost: options.getDaemonTcpHost,
     voice: options.voice,
@@ -1757,8 +1788,8 @@ describe("session provider refresh cwd routing", () => {
       createProviderSnapshotManagerStub();
     providerSnapshotManager.getSnapshot = vi.fn(() => [
       {
-        provider: "codex",
-        status: "loading",
+        provider: "codex" as const,
+        status: "loading" as const,
         enabled: false,
       },
     ]);
@@ -1788,8 +1819,8 @@ describe("session provider refresh cwd routing", () => {
       createProviderSnapshotManagerStub();
     providerSnapshotManager.getSnapshot = vi.fn(() => [
       {
-        provider: "codex",
-        status: "loading",
+        provider: "codex" as const,
+        status: "loading" as const,
         enabled: false,
       },
     ]);
@@ -2722,14 +2753,17 @@ describe("session checkout pull request merge", () => {
     const messages: unknown[] = [];
     const github = {
       invalidate: vi.fn(),
-      mergePullRequest: vi.fn(
-        async (input: { status?: { forgeSpecific?: { mergeStateStatus?: string | null } } }) => {
-          if (input.status?.forgeSpecific?.mergeStateStatus === "BLOCKED") {
-            throw new Error("GitHub does not report this pull request as ready for direct merge");
-          }
-          return { success: true };
-        },
-      ),
+      mergePullRequest: vi.fn(async (input: MergePullRequestOptions) => {
+        const forgeSpecific = input.status?.forgeSpecific;
+        if (
+          forgeSpecific &&
+          "mergeStateStatus" in forgeSpecific &&
+          forgeSpecific.mergeStateStatus === "BLOCKED"
+        ) {
+          throw new Error("GitHub does not report this pull request as ready for direct merge");
+        }
+        return { success: true as const };
+      }),
     };
     const createSnapshot = (mergeStateStatus: "CLEAN" | "BLOCKED") => ({
       forge: {
@@ -2939,7 +2973,7 @@ describe("session checkout pull request auto-merge", () => {
       invalidate: vi.fn(),
       enablePullRequestAutoMerge: vi.fn(async (input) => {
         assertPullRequestAutoMergeEnableReady(input);
-        return { success: true };
+        return { success: true as const };
       }),
     };
     const workspaceGitService = {
@@ -3001,7 +3035,7 @@ describe("session checkout pull request auto-merge", () => {
       invalidate: vi.fn(),
       disablePullRequestAutoMerge: vi.fn(async (input) => {
         assertPullRequestAutoMergeDisableReady(input);
-        return { success: true };
+        return { success: true as const };
       }),
     };
     const workspaceGitService = {
@@ -3116,7 +3150,7 @@ describe("session checkout pull request auto-merge", () => {
       invalidate: vi.fn(),
       enablePullRequestAutoMerge: vi.fn(async (input) => {
         assertPullRequestAutoMergeEnableReady(input);
-        return { success: true };
+        return { success: true as const };
       }),
     };
     const workspaceGitService = {
@@ -3177,7 +3211,7 @@ describe("session checkout pull request auto-merge", () => {
       invalidate: vi.fn(),
       disablePullRequestAutoMerge: vi.fn(async (input) => {
         assertPullRequestAutoMergeDisableReady(input);
-        return { success: true };
+        return { success: true as const };
       }),
     };
     const workspaceGitService = {
@@ -3237,7 +3271,7 @@ describe("session checkout pull request auto-merge", () => {
       invalidate: vi.fn(),
       disablePullRequestAutoMerge: vi.fn(async (input) => {
         assertPullRequestAutoMergeDisableReady(input);
-        return { success: true };
+        return { success: true as const };
       }),
     };
     const workspaceGitService = {
@@ -4268,8 +4302,8 @@ describe("session workspace script handling", () => {
         subscribeTerminalsChanged: vi.fn(() => () => {}),
         subscribeTerminalWorkspaceContributionChanged: vi.fn(() => () => {}),
       },
-      serviceProxy: { listRoutesForWorkspace: vi.fn(() => []) },
-      scriptRuntimeStore: { listForWorkspace: vi.fn(() => []) },
+      serviceProxy: {},
+      scriptRuntimeStore: {},
       getDaemonTcpPort: () => 6767,
       getDaemonTcpHost: () => "127.0.0.1",
       messages,
@@ -4570,9 +4604,9 @@ describe("session pull request timeline handling", () => {
     const messages: unknown[] = [];
     const checkDetailRequests: Array<{
       cwd: string;
-      repoOwner: string;
-      repoName: string;
-      checkRunId: number;
+      repoOwner?: string;
+      repoName?: string;
+      checkRunId?: number;
       workflowRunId?: number;
     }> = [];
     const checkDetails: CheckDetails = {
@@ -4753,7 +4787,7 @@ describe("chat/schedule/loop dispatch routing (behavior preservation)", () => {
       .filter(
         (m): m is Extract<SessionOutboundMessage, { type: "rpc_error" }> => m.type === "rpc_error",
       )
-      .find((m) => m.payload.requestId === msg.requestId);
+      .find((m) => m.payload.requestId === ("requestId" in msg ? msg.requestId : undefined));
     expect(routed, `${msg.type} did not route to a handler (silent no-op)`).toBeDefined();
     expect(routed?.payload.code).toBe(code);
   });
@@ -5523,7 +5557,11 @@ describe("T38B0c: queue-mode requests and per-message routing", () => {
       });
 
       expect(tryRunOutOfBand).toHaveBeenCalledTimes(1);
-      const [, , runOptions] = tryRunOutOfBand.mock.calls[0] as [unknown, unknown, unknown];
+      const [, , runOptions] = tryRunOutOfBand.mock.calls[0] as unknown as [
+        unknown,
+        unknown,
+        unknown,
+      ];
       expect(runOptions).toMatchObject({ streamingBehavior });
       expect(messages).toEqual([
         {
@@ -5551,7 +5589,7 @@ describe("T38B0c: queue-mode requests and per-message routing", () => {
     });
 
     expect(tryRunOutOfBand).toHaveBeenCalledTimes(1);
-    const [, , runOptions] = tryRunOutOfBand.mock.calls[0] as [
+    const [, , runOptions] = tryRunOutOfBand.mock.calls[0] as unknown as [
       unknown,
       unknown,
       { streamingBehavior?: unknown } | undefined,
