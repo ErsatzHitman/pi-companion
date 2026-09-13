@@ -15360,9 +15360,13 @@ be guessed at; the next dispatch is what will say.
 - [x] All three EAS build steps (`build-development-apk`, `packaged-app-smoke`,
       `publish-android-apk`) have a failure-path step that prints the build's own status and
       error into the CI log
+      (Gone 2026-09-13, T313-close: the `build-development-apk` sibling went with its EAS
+      build at T315, `packaged-app-smoke`'s at T330, and `publish-android-apk`'s is deleted
+      by this same change, unproven — see the next box. No EAS build step in this repository
+      now has a failure-path sibling.)
 - [x] The diagnostic cannot itself fail the job
-- [ ] A real failing dispatch shows the reason in the CI log without anyone opening expo.dev.
-      Still open, and now harder to close on purpose: on run `34392173679` the
+- [x] A real failing dispatch shows the reason in the CI log without anyone opening expo.dev.
+      Was left open, and had grown harder to close on purpose: on run `34392173679` the
       `Explain the EAS build failure` step reported `skipped`, because its `if: failure()` guard
       did what it should — the EAS build succeeded (T314's fix landed in between). This entry
       cannot be closed by a green run, only by the next EAS build that genuinely fails. Left
@@ -15371,6 +15375,13 @@ be guessed at; the next dispatch is what will say.
       T310 was filed for
       (Moot since T330: no job in `android-maestro-e2e.yml` runs an EAS build any more, so this
       explainer has nothing left to explain there; left open rather than ticked.)
+      (CLOSED MOOT 2026-09-13, T313-close: closed without the proof above ever occurring. The
+      last `Explain the EAS build failure` step (`android-apk-release.yml`'s) is deleted by
+      this same change, unproven — its body never executed; the only observation on record is
+      `skipped` on run `34392173679` — and proving it would need a genuine release EAS failure
+      that will not be manufactured. Reduced coverage, stated plainly: the next EAS build
+      failure again logs only `✖ Build failed` plus the exit code, and its reason lives only
+      on expo.dev, behind `eas build:view`. No claim the deleted step worked is made.)
 - [x] The underlying `production-apk` build failure (build `4610d322-4cc8-435b-9efb-60b327c78011`)
       is diagnosed and filed as its own task — this entry is about the missing diagnosis, not
       about that build. Diagnosed and fixed as **T314**: that build died in `Bundle JavaScript`
