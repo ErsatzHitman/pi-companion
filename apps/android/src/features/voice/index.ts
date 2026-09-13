@@ -41,6 +41,16 @@
  * connected daemon now transcribes for real; the honest
  * `"transcription-unavailable"` outcome still covers the no-connection
  * case, never a silent no-op.
+ *
+ * **Voice vocabulary (this task).** `voice-vocabulary-model.ts` owns the
+ * user-maintained vocabulary list (persisted words/phrases plus the
+ * deterministic `applyVoiceVocabularyRepair` pass `voice-model.ts`'s
+ * `requestStop` applies after cleanup) and `voice-vocabulary-section.tsx`
+ * draws its settings section, mounted by `../settings/SettingsScreen.tsx`.
+ * Disclosed seam, not a silent claim: `Composer.tsx` does not yet thread
+ * the stored list into the controller's `vocabulary` dep, so words saved
+ * in settings take effect once that one prop is threaded — the repair
+ * itself is proven in `voice-model.test.ts` wherever a caller passes it.
  */
 export {
   applyTranscriptToDraft,
@@ -48,6 +58,23 @@ export {
   createVoiceCaptureController,
   IDLE_VOICE_STATE,
 } from "./voice-model";
+export {
+  applyVoiceVocabularyRepair,
+  createVoiceVocabularyController,
+  MAX_VOICE_VOCABULARY_ENTRIES,
+  MAX_VOICE_VOCABULARY_ENTRY_LENGTH,
+  normalizeVoiceVocabularyEntry,
+  VOICE_VOCABULARY_STORAGE_KEY,
+} from "./voice-vocabulary-model";
+export type {
+  VoiceVocabularyAddResult,
+  VoiceVocabularyController,
+  VoiceVocabularyControllerDeps,
+  VoiceVocabularySnapshot,
+  VoiceVocabularySnapshotListener,
+} from "./voice-vocabulary-model";
+export { VoiceVocabularySection } from "./voice-vocabulary-section";
+export type { VoiceVocabularySectionProps } from "./voice-vocabulary-section";
 export type {
   VoiceCancelOutcome,
   VoiceCancelReason,

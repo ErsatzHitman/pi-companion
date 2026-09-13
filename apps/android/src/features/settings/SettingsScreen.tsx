@@ -17,6 +17,7 @@ import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import { usePressScale } from "../../ui/theme/use-press-scale";
 import { createSettingsController, type SettingsSnapshot } from "./settings-model";
+import { VoiceVocabularySection } from "../voice";
 import {
   settingsHostAccessibilityLabel,
   settingsHostDetail,
@@ -58,16 +59,23 @@ export interface SettingsScreenProps {
 }
 
 /**
- * App settings (T32C1, plan.md §9.3). Today the one persisted setting is
- * the haptics toggle both `features/approvals/use-approvals-queue.ts` and
+ * App settings (T32C1, plan.md §9.3). The persisted settings are the
+ * haptics toggle both `features/approvals/use-approvals-queue.ts` and
  * `features/transcript/transcript-status-haptics-model.ts` need — see
  * this task's report for the two-line seam filed at each real call
- * site, which live outside this task's `Owns` grant.
+ * site, which live outside this task's `Owns` grant — and the voice
+ * vocabulary list, owned by `../voice/voice-vocabulary-model.ts` and
+ * drawn by its `VoiceVocabularySection` (mounted below, between "On
+ * this device" and "More").
  *
  * All persistence/default/validation logic lives in `settings-model.ts`,
  * unit tested there; this component only renders the current snapshot
  * and forwards the toggle press — mirrors `OnboardingGate.tsx`'s
- * controller/view split exactly.
+ * controller/view split exactly. The voice vocabulary list below it is the
+ * same split one level down: `../voice/voice-vocabulary-model.ts` owns
+ * the store, `../voice/voice-vocabulary-section.tsx` draws it, and this
+ * screen only mounts that section with the same `storage` it already
+ * receives.
  *
  * **Mounted at `/h/:serverId/settings`** by
  * `app/h/[serverId]/(tabs)/settings.tsx` (T32S11).
@@ -184,6 +192,10 @@ export function SettingsScreen({
           </Text>
         </Card>
       </Section>
+      <VoiceVocabularySection
+        storage={storage}
+        testId={testId ? `${testId}-voice-vocabulary` : undefined}
+      />
       {onOpenDevices || onOpenDiagnostics ? (
         <Section
           title="More"

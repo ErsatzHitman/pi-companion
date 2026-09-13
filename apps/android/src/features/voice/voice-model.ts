@@ -96,12 +96,19 @@
  * Whisper-family models routinely emit an ellipsis or a dash after a
  * filler — "Um... hello there", "Um—hello" — and the narrower rule left
  * both unchanged; see `cleanTranscript`'s own comment for the exact
- * character set). It does NOT do `D:\Handy`'s `audio_toolkit/text.rs` custom-word
- * repair (Levenshtein distance + Soundex phonetics): that repair needs a
- * user-maintained vocabulary list this product has no UI for yet, and
- * applying fuzzy phonetic matching with nothing to match against would
- * only introduce new errors. It does NOT route text through an LLM: the
- * latency cost (a second network round trip after the transcription round
+ * character set). A second, OPTIONAL pass follows in `requestStop`
+ * below: `applyVoiceVocabularyRepair` from
+ * `./voice-vocabulary-model.ts` rewrites case-insensitive whole-word
+ * matches of the user's own vocabulary entries to the saved canonical
+ * spelling ("kubernetes" → "Kubernetes") — longest entries first,
+ * never touching anything that is not already the entry's letters up
+ * to casing. It is still NOT `D:\Handy`'s `audio_toolkit/text.rs`
+ * custom-word repair (Levenshtein distance + Soundex phonetics): fuzzy
+ * phonetic matching rewrites words the speaker never said, trading one
+ * transcription error for a new one, while the deterministic pass fixes
+ * the failure mode a vocabulary list can actually own — the model heard
+ * the right word but wrote it wrong — without that trade. It does NOT
+ * route text through an LLM: the latency cost (a second network round trip after the transcription round
  * trip already paid) is not worth it for the fixes actually being made
  * here, which are all pure string operations with no ambiguity to
  * resolve. The hallucination guard for a silent/non-speech clip (a known
@@ -165,6 +172,7 @@ import { security } from "@picompanion/frontend-core";
 
 import { resolvePermission, type PermissionState } from "../composer/permission-recovery.js";
 import type { VoiceCapturePort } from "./voice-capture-port.js";
+import { applyVoiceVocabularyRepair } from "./voice-vocabulary-model.js";
 
 /**
  * The narrow speech-transcription surface a voice draft needs — same
@@ -318,6 +326,16 @@ export interface VoiceCaptureControllerDeps {
   transcribe?: VoiceTranscriptionClient;
   /** BCP-47-ish language hint passed to `transcribe.transcribeVoiceClip`, e.g. `"en"`. Omitted entirely when unset — the daemon falls back to its own configured dictation language. */
   language?: string;
+  /**
+   * Optional user vocabulary (`./voice-vocabulary-model.ts`), applied by
+   * `requestStop` as a deterministic post-cleanup pass
+   * (`applyVoiceVocabularyRepair`): case-insensitive whole-word matches
+   * are rewritten to the saved canonical spelling. Omitted or empty
+   * (today's default mount — `Composer.tsx` does not yet thread the
+   * stored list through) leaves the cleaned transcript untouched; see
+   * that module's header for what the pass is and is not.
+   */
+  vocabulary?: readonly string[];
   now?: () => number;
 }
 
@@ -344,7 +362,7 @@ export interface VoiceCaptureController {
 export function createVoiceCaptureController(
   deps: VoiceCaptureControllerDeps,
 ): VoiceCaptureController {
-  const { port, transcribe, language } = deps;
+  const { port, transcribe, language, vocabulary } = deps;
   const now = deps.now ?? (() => Date.now());
 
   let state: VoiceState = IDLE_VOICE_STATE;
@@ -401,14 +419,18 @@ export function createVoiceCaptureController(
     }
 
     const cleaned = cleanTranscript(rawText);
-    if (cleaned.length === 0) {
+    // The vocabulary pass only ever rewrites saved entries to their
+    // canonical casing, so it can never empty a non-empty transcript —
+    // an `empty-transcript` here still means cleanup produced empty.
+    const repaired = applyVoiceVocabularyRepair(cleaned, vocabulary ?? []);
+    if (repaired.length === 0) {
       return { outcome: "empty-transcript" };
     }
 
     return {
       outcome: "drafted",
-      text: cleaned,
-      looksSecretShaped: security.isSecretShaped(cleaned),
+      text: repaired,
+      looksSecretShaped: security.isSecretShaped(repaired),
     };
   }
 
