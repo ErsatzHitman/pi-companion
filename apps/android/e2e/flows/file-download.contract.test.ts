@@ -104,9 +104,10 @@ describe("file-download.yaml anchors exist in source", () => {
       expect(code).toMatch(/useAgentCwd\(resolveAgentSnapshotClient\(core\.connection\), agentId/);
     });
 
-    it("passes a real client, downloadOrigin, connectionPath and fetchImpl through — a real HTTP origin is genuinely wired once paired", () => {
+    it("passes a relay-forwarded client, downloadOrigin, connectionPath and fetchImpl through — a real HTTP origin is genuinely wired once paired", () => {
       const code = readCode(FILES_ROUTE_TSX);
-      expect(code).toMatch(/client=\{core\.fileBrowserClient\}/);
+      expect(code).toMatch(/client=\{fileClient\}/);
+      expect(code).toMatch(/withRelayFileDownload\(\s*core\.fileBrowserClient,/);
       expect(code).toMatch(/downloadOrigin=\{downloadOrigin\}/);
       expect(code).toMatch(/connectionPath=\{connectionPath\}/);
       expect(code).toMatch(/fetchImpl=\{fetchImpl\}/);
@@ -321,6 +322,10 @@ describe("createFileDownloadController — the real download path a device can't
       fetchCalls += 1;
       throw new Error("must never be called — the refusal happens before any byte fetch");
     };
+    // No `downloadFileBytes` on this client: an old daemon (or adapter)
+    // genuinely lacking the chunk-loop capability — the one case that
+    // still refuses. A capability-carrying client takes the relay path
+    // proven in the next test instead.
     const client: FileBrowserClient = {
       listDirectory: () => Promise.reject(new Error("not used")),
       requestDownloadToken: async (cwd, path) => ({
@@ -349,5 +354,54 @@ describe("createFileDownloadController — the real download path a device can't
     expect(state.error?.title).toBe(FILE_DOWNLOAD_FLOW.relayRefusalTitle);
     expect(state.error?.description).toBe(FILE_DOWNLOAD_FLOW.relayRefusalDescription);
     expect(fetchCalls).toBe(0);
+  });
+
+  it("relay with the chunk-loop capability: an issued token plus in-channel bytes assemble the file with no HTTP GET at all", async () => {
+    const fileBytes = new TextEncoder().encode("relay in-channel payload");
+    const chunkCalls: Array<{ cwd: string; path: string }> = [];
+    const requestedUrls: string[] = [];
+    const client: FileBrowserClient = {
+      listDirectory: () => Promise.reject(new Error("not used")),
+      requestDownloadToken: async (cwd, path) => ({
+        cwd,
+        path,
+        token: "e2e-relay-token",
+        fileName: "download.txt",
+        mimeType: "text/plain",
+        size: fileBytes.length,
+        error: null,
+      }),
+      downloadFileBytes: async (options) => {
+        chunkCalls.push({ cwd: options.cwd, path: options.path });
+        return { bytes: fileBytes, size: fileBytes.length };
+      },
+    };
+    const fetchImpl: DownloadFetch = async (url) => {
+      requestedUrls.push(url);
+      throw new Error("must never be called — relay bytes ride the E2EE channel");
+    };
+
+    const controller = createFileDownloadController({
+      client,
+      downloadOrigin: null,
+      connectionPath: "relay",
+      fetchImpl,
+    });
+    // Exactly what DownloadPanel's "Download" button calls
+    // (`controller.download(workspaceRoot, entry.path, entry.name)`,
+    // `files-screen.tsx`) for a real, listed file row.
+    controller.download("/workspace/root", "notes/download.txt", "download.txt");
+
+    // Flush the token-request microtask, then the chunk-loop microtasks.
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+
+    const state = controller.getState();
+    expect(state.status).toBe("success");
+    expect(state.progress).toBe(1);
+    expect(state.file).not.toBeNull();
+    const file = state.file as DownloadedFile;
+    expect(new TextDecoder().decode(file.bytes)).toBe("relay in-channel payload");
+    expect(chunkCalls).toEqual([{ cwd: "/workspace/root", path: "notes/download.txt" }]);
+    expect(requestedUrls).toEqual([]);
   });
 });

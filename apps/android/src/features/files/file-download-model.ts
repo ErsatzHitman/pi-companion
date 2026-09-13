@@ -64,6 +64,31 @@
  * `chunks`/`received`, `progress` back at `0` — so a retry after a
  * cancelled or failed download never appends to, or duplicates, bytes
  * from the abandoned attempt.
+ *
+ * Relay path: when `downloadOrigin` is falsy *because* the session is
+ * relay-paired (`connectionPath === "relay"`) and the client exposes the
+ * chunk-loop download (`supportsRelayFileDownload` —
+ * `file-browser-client.ts`), a successfully issued token takes the bytes
+ * home inside the existing E2EE channel via
+ * `client.downloadFileBytes({ cwd, path })` instead of `fetchImpl`'s HTTP
+ * GET — `fetchImpl` is never called, and progress is indeterminate
+ * (`null`) until the single promise settles, because the chunk loop
+ * reports no per-chunk progress to its caller. The token request is kept
+ * (unlike web's relay path, which skips it): the daemon's
+ * business-level checks still explain themselves first through
+ * `explainFileDownloadTokenResult` (a vanished file reads "no longer
+ * exists", not a generic transfer failure), and only a token that was
+ * actually issued — with nowhere HTTP to fetch it — takes the relay
+ * branch. The same generation guard covers it: a `cancel()` (or a newer
+ * `download()`) before the promise settles discards the late bytes,
+ * never presenting them. The `MAX_DOWNLOAD_BYTES` bound is enforced
+ * post-assembly here (the size is unknown until the chunks arrive —
+ * there is nothing to check up front against) but still before the bytes
+ * are exposed in `state.file`, so an oversized relay download lands in
+ * the same named `"refused"` state, never as a file. A relay-paired
+ * session whose client has no chunk-loop method at all (an old daemon or
+ * adapter) keeps the `FILE_DOWNLOAD_NO_RELAY_ORIGIN` refusal — the
+ * sentinel survives for exactly that case.
  */
 import type { Clock } from "@picompanion/frontend-core";
 
@@ -202,12 +227,13 @@ export interface FileDownloadControllerOptions {
    * Which connection path produced (or would produce) `downloadOrigin`
    * (T66) — `"direct" | "relay" | null`, matching `daemon-connection-
    * store.ts`'s `DaemonConnectionPath`. Only consulted when
-   * `downloadOrigin` is falsy, to choose between the two distinct named
-   * refusals: `"relay"` raises `FILE_DOWNLOAD_NO_RELAY_ORIGIN` (a
-   * permanent, by-design limitation — see that sentinel's doc), anything
-   * else raises the generic `FILE_DOWNLOAD_NO_ORIGIN`. Defaults to
-   * `null`, which keeps every caller built before T66 (and every
-   * existing test) on the generic message unchanged.
+   * `downloadOrigin` is falsy: `"relay"` *with* a chunk-loop-capable
+   * client downloads inside the E2EE channel (see this module's doc);
+   * `"relay"` *without* one raises `FILE_DOWNLOAD_NO_RELAY_ORIGIN` (a
+   * permanent, by-design limitation for old daemons — see that sentinel's
+   * doc); anything else raises the generic `FILE_DOWNLOAD_NO_ORIGIN`.
+   * Defaults to `null`, which keeps every caller built before T66 (and
+   * every existing test) on the generic message unchanged.
    */
   connectionPath?: "direct" | "relay" | null;
   /** Fetches a download token's URL. No default: unlike `requestDownloadToken` (an `FileBrowserClient` member), there is no ambient global this controller can safely assume exists across every host environment it might run in, so a caller with no real transport wired yet must pass one that always rejects, not omit this. */
@@ -277,6 +303,68 @@ export function createFileDownloadController(
     requestDownloadTokenWithTimeout(client, cwd, path, clock, tokenTimeoutMs).then(
       (tokenResult) => {
         if (thisGeneration !== generation) return; // superseded by cancel()/a newer download()
+
+        // Relay path (see this module's doc): no direct origin, but the
+        // client can fetch the bytes inside the E2EE channel itself. This
+        // branch runs *after* the token request settles so the
+        // business-level token failure above (vanished file, outside the
+        // workspace) still explains itself first; only a successfully
+        // issued token with nowhere to fetch it takes the relay path — a
+        // client without the chunk-loop method falls through to the
+        // `FILE_DOWNLOAD_NO_RELAY_ORIGIN` refusal below, exactly as before.
+        const relayDownload =
+          !downloadOrigin && connectionPath === "relay" ? client.downloadFileBytes : undefined;
+        if (relayDownload && tokenResult.token) {
+          setState({
+            ...state,
+            status: "downloading",
+            fileName: tokenResult.fileName ?? fileName,
+            progress: null,
+          });
+          relayDownload({ cwd, path }).then(
+            (relayResult) => {
+              if (thisGeneration !== generation) return; // cancelled/superseded while the chunk loop was in flight — the bytes are discarded, never presented
+              // Post-assembly bound (see this module's doc): the size is
+              // unknown until the chunks arrive, so this is checked here —
+              // still before `state.file` is ever set — rather than
+              // pre-flight like the token path's own size check below.
+              const totalBytes = relayResult.size ?? relayResult.bytes.byteLength;
+              if (totalBytes > MAX_DOWNLOAD_BYTES) {
+                setState({
+                  ...state,
+                  status: "refused",
+                  fileName: relayResult.fileName ?? fileName,
+                  progress: null,
+                  refusal: explainOversizedDownload(totalBytes),
+                });
+                return;
+              }
+              setState({
+                ...state,
+                status: "success",
+                progress: 1,
+                file: {
+                  fileName: relayResult.fileName ?? tokenResult.fileName ?? fileName,
+                  mimeType:
+                    relayResult.mimeType ?? tokenResult.mimeType ?? "application/octet-stream",
+                  bytes: relayResult.bytes,
+                  size: relayResult.bytes.byteLength,
+                },
+              });
+            },
+            (error: unknown) => {
+              if (thisGeneration !== generation) return;
+              const raw = error instanceof Error ? error.message : String(error);
+              setState({
+                ...state,
+                status: "error",
+                progress: null,
+                error: explainFileDownloadError(raw),
+              });
+            },
+          );
+          return;
+        }
 
         const explanation = explainFileDownloadTokenResult(tokenResult);
         if (explanation || !tokenResult.token) {

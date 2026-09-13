@@ -52,6 +52,66 @@ export interface FileDownloadClient {
    * daemon's raw explanation on a transport-level failure.
    */
   requestDownloadToken(cwd: string, path: string): Promise<FileDownloadTokenResult>;
+
+  /**
+   * Relay-path chunk-loop download (the `file_download_bytes` protocol
+   * pair, served fetch-and-forward inside the existing E2EE channel so a
+   * relay-paired caller gets bytes no direct HTTP endpoint could serve).
+   * `use-file-download.ts` calls this instead of the token+HTTP round
+   * trip above whenever there is no direct origin to fetch from.
+   *
+   * Optional, like every transfer member on Android's own
+   * `FileBrowserClient`: a client object without it (the pending-
+   * connection placeholder, an adapter written before the pair existed)
+   * keeps the old `FILE_DOWNLOAD_NO_ORIGIN` behaviour unchanged.
+   *
+   * Shaped to match `@picompanion/client`'s
+   * `DaemonClient.downloadFileBytes(options)`
+   * (`packages/client/src/daemon-client.ts`) — same option names, same
+   * result fields — so a real `DaemonClient` satisfies this member
+   * structurally with no adapter, exactly like `requestDownloadToken`
+   * above. Only `cwd`+`path` are passed (the daemon's chunk handler is
+   * workspace-`cwd`-scoped; `agentId` is accepted on its wire but never
+   * used as a scope there, so attachments cannot ride this — see
+   * `attachment-image-resolver.ts`'s module doc for that boundary).
+   */
+  downloadFileBytes?(options: RelayFileDownloadOptions): Promise<RelayDownloadedFileBytes>;
+}
+
+/**
+ * The `cwd`+`path` subset of `@picompanion/client`'s
+ * `DownloadFileBytesOptions` this feature actually passes — see
+ * `FileDownloadClient.downloadFileBytes`'s doc for why only these two.
+ */
+export interface RelayFileDownloadOptions {
+  readonly cwd: string;
+  readonly path: string;
+}
+
+/**
+ * Matches `@picompanion/client`'s `DownloadedFileBytes`
+ * (`packages/client/src/daemon-client.ts`) field for field, so that
+ * method's resolved value is assignable here with no conversion.
+ */
+export interface RelayDownloadedFileBytes {
+  readonly bytes: Uint8Array;
+  readonly size?: number;
+  readonly mimeType?: string;
+  readonly fileName?: string;
+}
+
+/**
+ * Capability probe for the relay download path: whether `client` carries
+ * the chunk-loop download at all. This is a method-presence probe,
+ * deliberately — the protocol advertises no server-features flag for the
+ * `file_download_bytes` pair (and `packages/*` is frozen to this task),
+ * so there is nothing else to read. A new client against an old daemon
+ * still rejects the unknown wire type as an ordinary, explainable
+ * download error; only a client object without the method at all keeps
+ * the `FILE_DOWNLOAD_NO_ORIGIN` refusal.
+ */
+export function supportsRelayFileDownload(client: FileDownloadClient): boolean {
+  return typeof client.downloadFileBytes === "function";
 }
 
 /**
@@ -65,11 +125,13 @@ export const FILE_DOWNLOAD_NOT_CONNECTED = "FILE_DOWNLOAD_NOT_CONNECTED";
 /**
  * Sentinel error message `use-file-download.ts` raises when a token was
  * issued but no reachable HTTP origin is available to fetch it from:
- * the connected route is a relay (which proxies only the encrypted
- * WebSocket, with no direct HTTP endpoint — see
- * `attachment-image-resolver.ts`'s `resolveDirectHttpOrigin`), or no
- * connection exists yet. `routes/screens/host-session-files-screen.tsx`
- * resolves the direct origin when one is available.
+ * no connection exists yet — or the connected route is a relay whose
+ * client carries no chunk-loop download either (see
+ * `supportsRelayFileDownload`: a relay pairing whose client *does*
+ * expose `downloadFileBytes` never reaches this sentinel — it downloads
+ * inside the E2EE channel instead). `routes/screens/
+ * host-session-files-screen.tsx` resolves the direct origin when one is
+ * available.
  */
 export const FILE_DOWNLOAD_NO_ORIGIN = "FILE_DOWNLOAD_NO_ORIGIN";
 

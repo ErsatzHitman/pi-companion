@@ -212,6 +212,157 @@ describe("useFileDownload (T30B4)", () => {
     expect(result.current.state.error?.title).toMatch(/aren't available yet/i);
   });
 
+  describe("relay path (no origin, chunk-loop client)", () => {
+    it("downloads inside the E2EE channel without requesting a token or calling fetch, saving the daemon-attributed bytes", async () => {
+      const requestDownloadToken = vi.fn(async () => tokenResult());
+      const downloadFileBytes = vi.fn(async (_options: { cwd: string; path: string }) => ({
+        bytes: new Uint8Array([1, 2, 3, 4]),
+        size: 4,
+        mimeType: "text/plain",
+        fileName: "notes.txt",
+      }));
+      const client: FileDownloadClient = { requestDownloadToken, downloadFileBytes };
+      const fetchImpl = vi.fn(async (): Promise<MinimalFetchResponse> => {
+        throw new Error("fetchImpl must never be called on the relay path");
+      });
+      const saveBlob = vi.fn();
+      const { result } = renderHook(() =>
+        useFileDownload({ client, downloadOrigin: null, fetchImpl, saveBlob }),
+      );
+
+      act(() => result.current.download("/workspace", "notes.txt", "notes.txt"));
+
+      await waitFor(() => expect(result.current.state.status).toBe("success"));
+      expect(result.current.state.progress).toBe(1);
+      expect(requestDownloadToken).not.toHaveBeenCalled();
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(downloadFileBytes).toHaveBeenCalledWith({ cwd: "/workspace", path: "notes.txt" });
+      expect(saveBlob).toHaveBeenCalledTimes(1);
+      const [savedBytes, savedName, savedMime] = saveBlob.mock.calls[0] as [
+        Uint8Array,
+        string,
+        string,
+      ];
+      expect(Array.from(savedBytes)).toEqual([1, 2, 3, 4]);
+      expect(savedName).toBe("notes.txt");
+      expect(savedMime).toBe("text/plain");
+    });
+
+    it("falls back to the suggested name and a generic MIME type when the daemon attributes neither", async () => {
+      const client: FileDownloadClient = {
+        requestDownloadToken: vi.fn(async () => tokenResult()),
+        downloadFileBytes: vi.fn(async () => ({ bytes: new Uint8Array([7]) })),
+      };
+      const saveBlob = vi.fn();
+      const { result } = renderHook(() =>
+        useFileDownload({ client, downloadOrigin: null, saveBlob }),
+      );
+
+      act(() => result.current.download("/workspace", "blob.bin", "suggested.bin"));
+
+      await waitFor(() => expect(result.current.state.status).toBe("success"));
+      const [, savedName, savedMime] = saveBlob.mock.calls[0] as [Uint8Array, string, string];
+      expect(savedName).toBe("suggested.bin");
+      expect(savedMime).toBe("application/octet-stream");
+    });
+
+    it("surfaces a chunk-loop rejection as an explained error without losing the path", async () => {
+      const client: FileDownloadClient = {
+        requestDownloadToken: vi.fn(async () => tokenResult()),
+        downloadFileBytes: vi.fn(async () => {
+          throw new Error("ENOENT: no such file or directory");
+        }),
+      };
+      const saveBlob = vi.fn();
+      const { result } = renderHook(() =>
+        useFileDownload({ client, downloadOrigin: null, saveBlob }),
+      );
+
+      act(() => result.current.download("/workspace", "gone.txt", "gone.txt"));
+
+      await waitFor(() => expect(result.current.state.status).toBe("error"));
+      expect(result.current.state.path).toBe("gone.txt");
+      expect(result.current.state.error?.description).toBe("ENOENT: no such file or directory");
+      expect(saveBlob).not.toHaveBeenCalled();
+    });
+
+    it("retry re-runs the chunk loop against the same path after a relay failure", async () => {
+      let attempt = 0;
+      const downloadFileBytes = vi.fn(async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error("socket hang up");
+        return { bytes: new Uint8Array([1]) };
+      });
+      const client: FileDownloadClient = {
+        requestDownloadToken: vi.fn(async () => tokenResult()),
+        downloadFileBytes,
+      };
+      const { result } = renderHook(() =>
+        useFileDownload({ client, downloadOrigin: null, saveBlob: vi.fn() }),
+      );
+
+      act(() => result.current.download("/workspace", "notes.txt", "notes.txt"));
+      await waitFor(() => expect(result.current.state.status).toBe("error"));
+
+      act(() => result.current.retry());
+      await waitFor(() => expect(result.current.state.status).toBe("success"));
+
+      expect(downloadFileBytes).toHaveBeenCalledTimes(2);
+      expect(downloadFileBytes).toHaveBeenNthCalledWith(2, {
+        cwd: "/workspace",
+        path: "notes.txt",
+      });
+    });
+
+    it("cancel() while the chunk loop is in flight never saves the late bytes", async () => {
+      const chunkLoop = deferred<{ bytes: Uint8Array }>();
+      const client: FileDownloadClient = {
+        requestDownloadToken: vi.fn(async () => tokenResult()),
+        downloadFileBytes: vi.fn(() => chunkLoop.promise),
+      };
+      const saveBlob = vi.fn();
+      const { result } = renderHook(() =>
+        useFileDownload({ client, downloadOrigin: null, saveBlob }),
+      );
+
+      act(() => result.current.download("/workspace", "notes.txt", "notes.txt"));
+      await waitFor(() => expect(result.current.state.status).toBe("downloading"));
+
+      act(() => result.current.cancel());
+      expect(result.current.state.status).toBe("cancelled");
+
+      await act(async () => {
+        chunkLoop.resolve({ bytes: new Uint8Array([1, 2, 3]) });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(result.current.state.status).toBe("cancelled");
+      expect(saveBlob).not.toHaveBeenCalled();
+    });
+
+    it("a direct origin still takes the token+HTTP round trip even when the client also exposes the chunk loop", async () => {
+      const requestDownloadToken = vi.fn(async () => tokenResult({ size: 3 }));
+      const downloadFileBytes = vi.fn(async () => ({
+        bytes: new Uint8Array([9, 9, 9]),
+      }));
+      const client: FileDownloadClient = { requestDownloadToken, downloadFileBytes };
+      const saveBlob = vi.fn();
+      const { fetchImpl } = fetchStreaming([new Uint8Array([1, 2, 3])]);
+      const { result } = renderHook(() =>
+        useFileDownload({ client, downloadOrigin: "http://127.0.0.1:6768", fetchImpl, saveBlob }),
+      );
+
+      act(() => result.current.download("/workspace", "README.md", "README.md"));
+
+      await waitFor(() => expect(result.current.state.status).toBe("success"));
+      expect(requestDownloadToken).toHaveBeenCalledTimes(1);
+      expect(downloadFileBytes).not.toHaveBeenCalled();
+      const [savedBytes] = saveBlob.mock.calls[0] as [Uint8Array];
+      expect(Array.from(savedBytes)).toEqual([1, 2, 3]);
+    });
+  });
+
   it("explains a non-ok HTTP response while fetching the token URL", async () => {
     const client: FileDownloadClient = {
       requestDownloadToken: vi.fn(async () => tokenResult()),

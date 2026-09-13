@@ -200,6 +200,33 @@ describe("useAttachmentImageResolver", () => {
     ).toBeUndefined();
   });
 
+  it("relay images stay on the reference-card fallback even when the client exposes the chunk-loop download (the daemon's chunk handler is workspace-cwd-scoped and cannot address agentId-scoped attachment paths — see the module doc), and the chunk loop is never called", async () => {
+    const theImage = image();
+    const { client, calls } = fakeClient(() => ({
+      token: "tok_1",
+      mimeType: "image/png",
+      error: null,
+    }));
+    const downloadFileBytes = vi.fn(async () => ({ bytes: new Uint8Array([1]) }));
+    const relayCapableClient = { ...client, downloadFileBytes };
+    const { result } = renderHook(() =>
+      useAttachmentImageResolver({
+        client: relayCapableClient,
+        agentId: "agent-1",
+        downloadOrigin: null,
+        entries: [userMessage("m1", [theImage])],
+      }),
+    );
+
+    // Let any wrongly-kicked-off request settle, then prove nothing was
+    // requested at all — neither a token nor a chunk-loop read.
+    await waitFor(() => expect(calls).toEqual([]), SETTLE_WAIT);
+    expect(downloadFileBytes).not.toHaveBeenCalled();
+    expect(
+      result.current(theImage, { entryId: "m1", speaker: "user", index: 0, total: 1 }),
+    ).toBeUndefined();
+  });
+
   it("resolves a real fetchable URL once the token request settles, and never requests the same path twice", async () => {
     const theImage = image();
     const { client, calls } = fakeClient(() => ({

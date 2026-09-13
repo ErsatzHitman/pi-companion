@@ -6,8 +6,9 @@ import {
   buildFileDownloadUrl,
   explainFileDownloadError,
   explainFileDownloadTokenResult,
+  supportsRelayFileDownload,
 } from "./file-download-client.js";
-import type { FileDownloadTokenResult } from "./file-download-client.js";
+import type { FileDownloadClient, FileDownloadTokenResult } from "./file-download-client.js";
 
 describe("buildFileDownloadUrl (T30B4)", () => {
   it("builds the daemon's exact /api/files/download route with a token query param", () => {
@@ -76,5 +77,50 @@ describe("explainFileDownloadTokenResult (T30B4)", () => {
       tokenResult({ token: null, error: "cwd is required" }),
     );
     expect(explanation?.title).toBe("Couldn't download this file");
+  });
+});
+
+describe("supportsRelayFileDownload (relay chunk-loop capability probe)", () => {
+  function relayTokenResult(): FileDownloadTokenResult {
+    return {
+      cwd: "/workspace",
+      path: "README.md",
+      token: "tok_1",
+      fileName: "README.md",
+      mimeType: "text/markdown",
+      size: 12,
+      error: null,
+    };
+  }
+
+  it("returns false for a token-only client (no chunk-loop method at all)", () => {
+    const client: FileDownloadClient = {
+      requestDownloadToken: async () => relayTokenResult(),
+    };
+    expect(supportsRelayFileDownload(client)).toBe(false);
+  });
+
+  it("returns true once the client exposes downloadFileBytes", () => {
+    const client: FileDownloadClient = {
+      requestDownloadToken: async () => relayTokenResult(),
+      downloadFileBytes: async () => ({ bytes: new Uint8Array([1, 2, 3]) }),
+    };
+    expect(supportsRelayFileDownload(client)).toBe(true);
+  });
+
+  it("a chunk-loop result carries the bytes the relay path saves, with daemon-attributed name/type when present", async () => {
+    const client: FileDownloadClient = {
+      requestDownloadToken: async () => relayTokenResult(),
+      downloadFileBytes: async () => ({
+        bytes: new Uint8Array([9, 8, 7]),
+        size: 3,
+        mimeType: "text/plain",
+        fileName: "notes.txt",
+      }),
+    };
+    const result = await client.downloadFileBytes!({ cwd: "/workspace", path: "notes.txt" });
+    expect(Array.from(result.bytes)).toEqual([9, 8, 7]);
+    expect(result.fileName).toBe("notes.txt");
+    expect(result.mimeType).toBe("text/plain");
   });
 });

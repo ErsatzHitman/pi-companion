@@ -57,6 +57,20 @@
  * acceptance this task's brief names for an unreachable file, not a
  * regression this task introduces.
  *
+ * **Why relay images do NOT ride the chunk-loop download the files
+ * feature uses.** `DaemonClient.downloadFileBytes` (the
+ * `file_download_bytes` pair the files feature's relay path is built
+ * on) is workspace-`cwd`-scoped on the daemon: `agentId` is accepted on
+ * its wire but never used as a filesystem scope there, and a request
+ * without a usable `cwd` gets an error envelope (see
+ * `handleFileDownloadBytesRequest` in `packages/server/src/server/
+ * session/files/workspace-files-session.ts`). Timeline image `path`s are
+ * agentId-scoped daemon staging paths (see `requestAttachmentDownloadToken`'s
+ * own contract), not workspace-relative paths, so pointing this hook at
+ * the chunk loop would only trade today's honest fallback for a daemon
+ * rejection. Relay image resolution needs a daemon-side agentId-scoped
+ * chunk read that does not exist yet — deliberately out of scope here.
+ *
  * **A disclosed limitation of the token itself, not of this module.**
  * `DownloadTokenStore.consumeToken` (`packages/server/src/server/
  * file-download/token-store.ts`) deletes an entry the instant it is
@@ -167,7 +181,14 @@ export interface UseAttachmentImageResolverOptions {
   /** `null` with no live connection — every image resolves to `undefined` (the reference-card fallback). */
   client: AttachmentDownloadTokenClient | null;
   agentId: string;
-  /** `resolveDirectHttpOrigin`'s result — `null` on a relay connection or with no connection yet. */
+  /**
+   * `resolveDirectHttpOrigin`'s result — `null` on a relay connection or
+   * with no connection yet. Relay stays `null` *without* a chunk-loop
+   * fallback (unlike the files feature's relay path): the daemon's chunk
+   * handler is workspace-`cwd`-scoped and cannot address agentId-scoped
+   * attachment paths — see this module's doc comment — so a relay image
+   * is left to the reference-card fallback, never to a doomed request.
+   */
   downloadOrigin: string | null;
   /** The live transcript this session is rendering; only entries carrying `images` are read. */
   entries: readonly timeline.TranscriptEntry[];

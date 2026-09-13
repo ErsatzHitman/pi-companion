@@ -5,6 +5,7 @@ import {
   FILE_BROWSER_TIMEOUT,
   FILE_DOWNLOAD_NO_ORIGIN,
   FILE_DOWNLOAD_NO_RELAY_ORIGIN,
+  FILE_DOWNLOAD_NOT_CONNECTED,
   FILE_DOWNLOAD_TOKEN_TIMEOUT,
   FILE_DOWNLOAD_TRANSFER_FAILED,
   FILE_OPS_NOT_CONNECTED,
@@ -32,6 +33,9 @@ import {
   explainRefusedFileKind,
   isNotADirectoryError,
   isPathNotFoundError,
+  supportsRelayFileDownload,
+  withRelayFileDownload,
+  type FileBrowserClient,
   type FileDownloadTokenResult,
   type FileReadResult,
   type FileUploadResult,
@@ -379,6 +383,73 @@ describe("download (T35A4)", () => {
       error: null,
     };
     expect(explainFileDownloadTokenResult(result)).toBeNull();
+  });
+});
+
+describe("relay chunk-loop capability (file_download_bytes pair)", () => {
+  function tokenOnlyClient(): FileBrowserClient {
+    return {
+      listDirectory: () => Promise.reject(new Error("not used")),
+      requestDownloadToken: async (cwd, path) => ({
+        cwd,
+        path,
+        token: "tok",
+        fileName: "a.txt",
+        mimeType: "text/plain",
+        size: 1,
+        error: null,
+      }),
+    };
+  }
+
+  it("supportsRelayFileDownload is false for a token-only client, true once downloadFileBytes is present", () => {
+    expect(supportsRelayFileDownload(tokenOnlyClient())).toBe(false);
+    expect(
+      supportsRelayFileDownload({
+        ...tokenOnlyClient(),
+        downloadFileBytes: async () => ({ bytes: new Uint8Array([1]) }),
+      }),
+    ).toBe(true);
+  });
+
+  it("withRelayFileDownload returns the same reference when the base already exposes the method", () => {
+    const base = {
+      ...tokenOnlyClient(),
+      downloadFileBytes: async () => ({ bytes: new Uint8Array([1]) }),
+    };
+    expect(withRelayFileDownload(base, () => null)).toBe(base);
+  });
+
+  it("withRelayFileDownload forwards to the live client read fresh per call", async () => {
+    const liveBytes = new Uint8Array([4, 5, 6]);
+    let live: {
+      downloadFileBytes?: (options: {
+        cwd: string;
+        path: string;
+      }) => Promise<{ bytes: Uint8Array }>;
+    } | null = null;
+    const wrapped = withRelayFileDownload(tokenOnlyClient(), () => live);
+    expect(supportsRelayFileDownload(wrapped)).toBe(true);
+
+    // No live client yet: the download no-client sentinel, matching the
+    // token path's own missing-method shape (`requestDownloadTokenWithTimeout`).
+    await expect(wrapped.downloadFileBytes!({ cwd: "/ws", path: "a.txt" })).rejects.toThrow(
+      FILE_DOWNLOAD_NOT_CONNECTED,
+    );
+
+    live = { downloadFileBytes: async (_options) => ({ bytes: liveBytes }) };
+    const result = await wrapped.downloadFileBytes!({ cwd: "/ws", path: "a.txt" });
+    expect(result.bytes).toBe(liveBytes);
+  });
+
+  it("withRelayFileDownload keeps every base member (listing still reaches the adapter)", async () => {
+    const wrapped = withRelayFileDownload(
+      {
+        listDirectory: async () => ({ path: "", entries: [] }),
+      },
+      () => null,
+    );
+    await expect(wrapped.listDirectory("/ws", "")).resolves.toEqual({ path: "", entries: [] });
   });
 });
 

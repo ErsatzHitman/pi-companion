@@ -5,6 +5,10 @@ import { resolveAgentSnapshotClient } from "../../../../../../app-shell/session-
 import { buildDaemonHttpOrigin } from "../../../../../../features/connect/daemon-connection-store.js";
 import { useConnectionStatus } from "../../../../../../features/connect";
 import { FilesScreen } from "../../../../../../features/files";
+import {
+  withRelayFileDownload,
+  type RelayFileDownloadSource,
+} from "../../../../../../features/files/file-browser-client.js";
 import { useAgentCwd } from "../../../../../../features/transcript";
 import { createFetchDownload } from "../../../../../../platform/file-download-fetch.js";
 import { useAppCore } from "../../../../../core-context";
@@ -27,8 +31,10 @@ import { useAppCore } from "../../../../../core-context";
  * `FilesScreen`'s "Not connected" `ErrorState` rendered permanently
  * regardless of any real connection — the exact defect this task's brief
  * names. `client` is now `AppCore.fileBrowserClient`
- * (`../../../../../app-shell/core.ts`), the same "always a real, stable
- * object; every method reads the live connection fresh" adapter
+ * (`../../../../../app-shell/core.ts`), wrapped by this route's own
+ * `withRelayFileDownload` forward (see this file's "Relay chunk-loop
+ * forward" section) — the same "always a real, stable object; every
+ * method reads the live connection fresh" adapter
  * `AppCore.sessionService` already established — never a client
  * constructed in this route file.
  *
@@ -68,13 +74,27 @@ import { useAppCore } from "../../../../../core-context";
  * `path`, `"direct" | "relay" | null`) straight through to
  * `FilesScreen`, unaltered. `createFileDownloadController`
  * (`file-download-model.ts`) reads it only when `downloadOrigin` is
- * falsy, to choose between two distinct named refusals: a relay-paired
- * session's missing origin is `FILE_DOWNLOAD_NO_RELAY_ORIGIN` (a
- * permanent, by-design limitation — bridging HTTP over the relay tunnel
- * is real work in `packages/relay`, off-limits this wave; see T66's
- * report for the filed seam naming the task that should own it), never
- * conflated with a merely-not-yet-connected session's generic
- * `FILE_DOWNLOAD_NO_ORIGIN`.
+ * falsy: a relay-paired session whose client exposes the chunk-loop
+ * download fetches the bytes inside the E2EE channel instead of raising
+ * (see that module's doc); a relay-paired session whose client has no
+ * chunk-loop method at all — an old daemon or adapter — keeps the
+ * `FILE_DOWNLOAD_NO_RELAY_ORIGIN` refusal, never conflated with a
+ * merely-not-yet-connected session's generic `FILE_DOWNLOAD_NO_ORIGIN`.
+ *
+ * **Relay chunk-loop forward.** `AppCore.fileBrowserClient` predates the
+ * `file_download_bytes` pair and forwards no transfer member at all, so
+ * the controller's capability probe would never see one through it — the
+ * same forward-gap shape `core.ts`'s own `readFile`/`writeFile` forwards
+ * closed one wave at a time (see those comments). `fileClient` below
+ * closes it for this route without touching the shared adapter:
+ * `withRelayFileDownload` (`features/files/file-browser-client.ts`)
+ * returns the adapter unchanged if it ever grows the method itself, and
+ * otherwise wraps it with a forwarder that reads the live `DaemonClient`
+ * fresh off `core.connection` per call (never memoized across a
+ * reconnect — the same fresh-read contract
+ * `app-shell/session-route-daemon-clients.ts`'s resolvers establish).
+ * With no live client the forward rejects `FILE_DOWNLOAD_NOT_CONNECTED`,
+ * matching every other forwarder's no-client shape.
  *
  * **T32S14 mount**: `fetchImpl` was the one remaining piece this doc
  * comment used to say stayed omitted — `../../../../../../platform/
@@ -121,6 +141,19 @@ export default function SessionFilesRoute() {
   const core = useAppCore();
   const { daemonAddress, path: connectionPath } = useConnectionStatus(core.connection);
   const downloadOrigin = daemonAddress ? buildDaemonHttpOrigin(daemonAddress) : null;
+  // See this route's own doc comment's "Relay chunk-loop forward" section.
+  const fileClient = useMemo(
+    () =>
+      withRelayFileDownload(
+        core.fileBrowserClient,
+        () =>
+          core.connection.getActiveLifecycle()?.getDaemonClient() as unknown as
+            | RelayFileDownloadSource
+            | null
+            | undefined,
+      ),
+    [core.connection, core.fileBrowserClient],
+  );
   // T32S14: see this route's own doc comment's "T32S14 mount" section.
   const fetchImpl = useMemo(() => createFetchDownload(), []);
   // See this route's own doc comment's "Workspace root" section.
@@ -131,7 +164,7 @@ export default function SessionFilesRoute() {
       agentId={agentId}
       path={path ?? []}
       workspaceRoot={cwd ?? ""}
-      client={core.fileBrowserClient}
+      client={fileClient}
       filePicker={core.filePicker}
       sharing={core.sharing}
       downloadOrigin={downloadOrigin}

@@ -33,9 +33,15 @@ const routeApi = getRouteApi("/h/$serverId/session/$agentId/files/$");
  * `downloadOrigin` reuses `HostSessionScreen`'s exact derivation off
  * `hostController.getCurrentProfile()`/`info.kind` and
  * `resolveDirectHttpOrigin`: `null` on a relay connection (or with no
- * connection yet) is by design — a relay proxies only the encrypted
- * WebSocket and has no direct HTTP endpoint to fetch bytes from (see
- * `attachment-image-resolver.ts`'s module doc).
+ * connection yet) — a relay proxies only the encrypted WebSocket and has
+ * no direct HTTP endpoint to fetch bytes from (see
+ * `attachment-image-resolver.ts`'s module doc). A `null` origin no longer
+ * means downloads are unavailable on relay: the route passes the same
+ * live client as `downloadClient`, and `use-file-download.ts` downloads
+ * through its chunk-loop method (`FileDownloadClient.downloadFileBytes`,
+ * `file-download-client.ts`) inside the E2EE channel instead of raising
+ * `FILE_DOWNLOAD_NO_ORIGIN` — that sentinel now only fires for a client
+ * without the chunk-loop method at all.
  */
 export function HostSessionFilesScreen() {
   const { serverId, agentId, _splat } = routeApi.useParams();
