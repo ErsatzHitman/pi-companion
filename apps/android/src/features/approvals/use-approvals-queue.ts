@@ -74,10 +74,9 @@ export interface UseApprovalsQueueOptions {
    */
   vibrationPlatform?: VibrationPlatform;
   /**
-   * Whether haptics are enabled by the app/system setting. No settings
-   * surface exists yet for this anywhere in `apps/android` (see
-   * `approvals-haptics-model.ts`'s doc comment) — defaults to `true`
-   * rather than inventing a private toggle.
+   * Whether haptics are enabled by the app/system setting. The toggle lives
+   * in `SettingsScreen.tsx` (persisted by `settings-model.ts`); call sites
+   * thread its `hapticsEnabled` through — defaults to `true` when unset.
    */
   hapticsEnabled?: boolean;
 }
