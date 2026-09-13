@@ -21,7 +21,7 @@ import {
   type CreateWorktreeOptions,
   type WorktreeConfig,
   type PaseoWorktreeInfo,
-} from "./worktree";
+} from "./worktree.js";
 import type { PaseoConfig } from "@picompanion/protocol/paseo-config-schema";
 import { getPaseoWorktreeMetadataPath } from "./worktree-metadata.js";
 import {

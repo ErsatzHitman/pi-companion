@@ -1,4 +1,5 @@
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import type { PathLike } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -175,7 +176,7 @@ describe("findExecutable", () => {
 
 describe("executableExists", () => {
   test("returns the path when it already exists", () => {
-    const exists = (candidate: string) => candidate === "/usr/local/bin/codex";
+    const exists = (candidate: PathLike) => String(candidate) === "/usr/local/bin/codex";
 
     expect(executableExists("/usr/local/bin/codex", exists)).toBe("/usr/local/bin/codex");
   });
@@ -184,7 +185,7 @@ describe("executableExists", () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, "platform", { value: "win32", writable: true });
     try {
-      const exists = (candidate: string) => candidate === "C:\\tools\\codex.cmd";
+      const exists = (candidate: PathLike) => String(candidate) === "C:\\tools\\codex.cmd";
 
       expect(executableExists("C:\\tools\\codex", exists)).toBe("C:\\tools\\codex.cmd");
     } finally {
@@ -196,7 +197,7 @@ describe("executableExists", () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, "platform", { value: "win32", writable: true });
     try {
-      const exists = (candidate: string) => candidate === "C:\\tools\\codex.ps1";
+      const exists = (candidate: PathLike) => String(candidate) === "C:\\tools\\codex.ps1";
 
       expect(executableExists("C:\\tools\\codex", exists)).toBeNull();
     } finally {
