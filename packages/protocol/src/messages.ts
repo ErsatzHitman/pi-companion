@@ -1825,6 +1825,31 @@ export const AgentRewindResponseMessageSchema = z.object({
   }),
 });
 
+export const ForkAgentRequestMessageSchema = z.object({
+  type: z.literal("agent.fork.request"),
+  agentId: z.string(),
+  entryId: z.string(),
+  entryIndex: z.number().int().nonnegative().optional(),
+  name: z.string().optional(),
+  requestId: z.string(),
+});
+
+export const ForkAgentResponseMessageSchema = z.object({
+  type: z.literal("agent.fork.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    agent: AgentSnapshotPayloadSchema.nullable(),
+    forkPoint: z
+      .object({
+        messageId: z.string(),
+        index: z.number().int().nonnegative(),
+      })
+      .nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const UpdateAgentResponseMessageSchema = z.object({
   type: z.literal("update_agent_response"),
   payload: AgentActionResponsePayloadSchema,
@@ -3028,6 +3053,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentDetachRequestMessageSchema,
   AgentRewindRequestMessageSchema,
+  ForkAgentRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   AgentEditorTextResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -3361,6 +3387,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentForkContext: z.boolean().optional(),
         // COMPAT(agentForkContextCursor): added in v0.1.108, remove gate after 2027-01-14.
         agentForkContextCursor: z.boolean().optional(),
+        // COMPAT(agentFork): added in v0.3.0, remove gate after 2027-03-13.
+        agentFork: z.boolean().optional(),
         // COMPAT(providerSubagents): added in v0.1.107, remove gate after 2027-01-12.
         providerSubagents: z.boolean().optional(),
         // COMPAT(workspacePinning): added in v0.1.107, remove gate after 2027-01-12.
@@ -6017,6 +6045,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentDetachResponseMessageSchema,
   AgentRewindResponseMessageSchema,
+  ForkAgentResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
   ProjectIconSetResponseSchema,
@@ -6237,6 +6266,7 @@ export type GetAutoCompactionResponseMessage = z.infer<
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
+export type ForkAgentResponseMessage = z.infer<typeof ForkAgentResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
 export type ProjectIconSetResponse = z.infer<typeof ProjectIconSetResponseSchema>;
