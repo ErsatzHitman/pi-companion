@@ -116,15 +116,20 @@ export interface SessionsClient {
    * no browser-facing wire message existed and every client omitted it.
    */
   forkSession?(sourceSessionId: string, input: ForkSessionInput): Promise<ForkSessionResult>;
-  /** Clones `sourceSessionId` into a brand-new session (T38A3's `clone`; needs no entryId, unlike `fork`). Optional — no clone wire message exists yet (see `daemon-sessions-client.ts`'s `cloneAgent` doc), so every client this feature can build today either omits this member or implements it against a fake. */
+  /** Clones `sourceSessionId` into a brand-new session (T38A3's `clone`; needs no entryId, unlike `fork`). Always implemented by `createDaemonSessionsClient` — the clone wire (`agent.clone.request`/`agent.clone.response`, `DaemonClient.cloneAgent`) has landed, so `DaemonAgentClient.cloneAgent` is required. Optional here only so the minimal test doubles other tasks construct (just `{ createSession }`) keep compiling. CORRECTED (wire-apps-followup): this previously said "no clone wire message exists yet (see `daemon-sessions-client.ts`'s `cloneAgent` doc), so every client this feature can build today either omits this member or implements it against a fake." That was true when written and is false now. */
   cloneSession?(sourceSessionId: string, input?: CloneSessionInput): Promise<CloneSessionResult>;
   /**
-   * Renames `sessionId` (T38A4, `set_session_name`). Optional for the
-   * same reason as `cloneSession`: no browser-facing wire
+   * Renames `sessionId` (T38A4, `set_session_name`). Always implemented by
+   * `createDaemonSessionsClient` — the rename wire (`agent.rename.request`/
+   * `agent.rename.response`, `DaemonClient.renameAgent`) has landed, so
+   * `DaemonAgentClient.renameAgent` is required. Optional here only so the
+   * minimal test doubles other tasks construct keep compiling. CORRECTED
+   * (wire-apps-followup): this previously said "no browser-facing wire
    * message backs this yet either — see `daemon-sessions-client.ts`'s
    * `renameAgent` doc for the disclosed gap, which is the same shape as
-   * `cloneAgent`'s. (CORRECTED fork-agent-ui: this previously named
-   * `forkAgent`/`cloneAgent` together; the fork half has landed.)
+   * `cloneAgent`'s." That was true when written and is false now.
+   * (CORRECTED fork-agent-ui history preserved: this previously named
+   * `forkAgent`/`cloneAgent` together; the fork half landed first.)
    */
   renameSession?(sessionId: string, input: RenameSessionInput): Promise<RenameSessionResult>;
 }

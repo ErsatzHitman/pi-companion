@@ -25,21 +25,18 @@
  * ## Fork/clone/rename: an injected port, never a bare, unconditionally
  * enabled affordance
  *
- * `packages/client/src` still sends no `cloneAgent` or rename request —
- * confirmed at T39A's own review the same way T110 confirmed the fork half:
- * `grep -rn "forkAgent|cloneAgent" packages/client/src` returned 0 then.
- * CORRECTED (fork-agent-ui): this previously said it sent none of `forkAgent`,
- * `cloneAgent`, or rename either. The fork half has since landed
- * (`agent.fork.request`/`agent.fork.response`, `DaemonClient.forkAgent`), so
- * only the clone/rename half of that sentence is still true. T110 is the task
- * that added the real wire-connected `DaemonClient.forkAgent` — this module
- * still cannot depend on a matching `cloneAgent`/rename method landing, and
- * must not ship an enabled Clone/Rename affordance whose only real-build
- * outcome is a failure banner. (Fork is served through
- * `adaptSessionTreeForkClient` below — the entryId adapter the DISCLOSED
- * SHAPE GAP called for — so a real `DaemonClient.forkAgent` can back this
- * sheet's Fork action; Clone/Rename stay gated until their own wire
- * methods land.)
+ * CORRECTED (wire-apps-followup): this previously said
+ * "`packages/client/src` still sends no `cloneAgent` or rename request" and
+ * that "Clone/Rename stay gated until their own wire methods land". Both
+ * halves have since landed (`agent.clone.request`/`agent.clone.response` +
+ * `DaemonClient.cloneAgent`, `agent.rename.request`/`agent.rename.response` +
+ * `DaemonClient.renameAgent`), so a real `DaemonClient` can now back all
+ * three of this sheet's actions — fork through `adaptSessionTreeForkClient`
+ * (the entryId adapter), clone through `adaptSessionTreeCloneClient`, and
+ * rename through `adaptSessionTreeRenameClient` below. The port stays
+ * optional-per-method so partial fakes and the no-client case still render
+ * truthful unavailable states instead of an enabled control that can only
+ * fail.
  *
  * So every action below is expressed against `SessionTreeClientPort`, an
  * object whose three methods are all OPTIONAL — deliberately the
@@ -72,9 +69,17 @@
  * head entry per agent id) and maps the wire's `{ agent: { id, title } }`
  * to this port's `{ agentId, name }`, following `host-session-screen.tsx`'s
  * `adaptEditFromHereForkClient` mapping shape (a null name is sent as
- * absent, a null agent rejects rather than mapping). Clone stays out of
- * scope: no `cloneAgent` wire message or client method exists, so an
- * adapted port exposes fork only.
+ * absent, a null agent rejects rather than mapping). Clone needs no such
+ * adapter for a missing id — `DaemonClient.cloneAgent` takes only an
+ * optional `name` — so `adaptSessionTreeCloneClient` below is a straight
+ * null-mapping adapter (null name sent as absent, null agent rejects).
+ * Rename maps the port's `{ name }` options object onto the real
+ * `DaemonClient.renameAgent(agentId, name)` two-string shape via
+ * `adaptSessionTreeRenameClient`. CORRECTED (wire-apps-followup): this
+ * previously said "Clone stays out of scope: no `cloneAgent` wire message
+ * or client method exists, so an adapted port exposes fork only." That was
+ * true when written and is false now — the clone and rename wires have
+ * landed, and the adapted ports below expose all three.
  *
  * Repository invariant: this module must never import React, React
  * Native, Expo, DOM types, or browser globals.
@@ -163,10 +168,15 @@ export interface SessionTreeActionResult {
 /**
  * The injected fork/clone/rename port — see the module doc's "Fork/
  * clone/rename" section. Every method is optional so an object
- * implementing none of them (today's only real shape) still structurally
- * satisfies this interface, exactly as `DaemonAgentClient` on web keeps
- * being satisfied by a real `DaemonClient` that implements none of its
- * own `forkAgent?`/`cloneAgent?`/`renameAgent?`.
+ * implementing none of them (the no-client case) still structurally
+ * satisfies this interface. CORRECTED (wire-apps-followup): this previously
+ * said that was "today's only real shape" and "exactly as
+ * `DaemonAgentClient` on web keeps being satisfied by a real `DaemonClient`
+ * that implements none of its own `forkAgent?`/`cloneAgent?`/`renameAgent?`\".
+ * Both halves are false now: a current real `DaemonClient` implements all
+ * three wires, and web's `DaemonAgentClient` requires all three — this
+ * port stays optional-per-method only so partial fakes and the no-client
+ * case keep rendering truthful unavailable states.
  */
 export interface SessionTreeClientPort {
   forkAgent?(agentId: string, options?: SessionTreeForkOptions): Promise<SessionTreeActionResult>;
@@ -232,10 +242,13 @@ function hasSessionTreeForkAgent(client: unknown): client is SessionTreeForkDaem
  * Returns `undefined` when `client` is absent or implements no
  * `forkAgent` — the disconnected/fork-less case — so callers keep the
  * same "`undefined` means unavailable" contract every
- * `session-route-daemon-clients.ts` resolver already honours. The adapted
- * port exposes fork only (clone stays out of scope: no `cloneAgent` wire
- * message or client method exists), so `isSessionTreeActionAvailable`
- * still reports clone/rename unavailable against it.
+ * `session-route-daemon-clients.ts` resolver already honours. CORRECTED
+ * (wire-apps-followup): this previously said "The adapted port exposes fork
+ * only (clone stays out of scope: no `cloneAgent` wire message or client
+ * method exists)". That was true when written and is false now — use
+ * `adaptSessionTreeCloneClient`/`adaptSessionTreeRenameClient` below (or the
+ * combined `resolveSessionTreeForkClient` resolver) for the clone/rename
+ * halves, which follow this same null-mapping shape.
  */
 export function adaptSessionTreeForkClient(
   client: unknown,
@@ -258,6 +271,103 @@ export function adaptSessionTreeForkClient(
       });
       if (!agent) {
         throw new Error("Fork did not return a new session.");
+      }
+      return { agentId: agent.id, name: agent.title ?? null };
+    },
+  };
+}
+
+/**
+ * The narrow slice of a real `DaemonClient` the clone adapter needs — only
+ * `cloneAgent`, duck-typed so this RN-free module never imports
+ * `@picompanion/client`. The `agent` nullability mirrors the wire's own
+ * failure shape (`agent.clone.response` carries a null agent on failure):
+ * a real `DaemonClient.cloneAgent` rejects before resolving that null, but
+ * the structural contract admits it so the real class satisfies this
+ * interface as-is.
+ */
+interface SessionTreeCloneDaemonClient {
+  cloneAgent(
+    agentId: string,
+    options: { name?: string },
+  ): Promise<{ agent: { id: string; title?: string | null } | null }>;
+}
+
+function hasSessionTreeCloneAgent(client: unknown): client is SessionTreeCloneDaemonClient {
+  return !!client && typeof (client as { cloneAgent?: unknown }).cloneAgent === "function";
+}
+
+/**
+ * Adapts a real clone-capable client to `SessionTreeClientPort` — the clone
+ * half of `adaptSessionTreeForkClient`'s shape, minus the entryId supply
+ * (clone takes only an optional `name`, so no head-entry resolver is
+ * needed). A null `name` is sent as absent (the wire takes string-or-absent,
+ * never null), and a null-agent resolution rejects with "Clone did not
+ * return a new session." instead of mapping — the identical mapping shape
+ * the fork adapter applies to its own `name` and `agent`.
+ *
+ * Returns `undefined` when `client` is absent or implements no `cloneAgent`,
+ * matching `adaptSessionTreeForkClient`'s contract.
+ */
+export function adaptSessionTreeCloneClient(client: unknown): SessionTreeClientPort | undefined {
+  if (!hasSessionTreeCloneAgent(client)) {
+    return undefined;
+  }
+  const cloneCapableClient = client;
+  return {
+    async cloneAgent(agentId, options) {
+      const { agent } = await cloneCapableClient.cloneAgent(agentId, {
+        ...(options?.name != null ? { name: options.name } : {}),
+      });
+      if (!agent) {
+        throw new Error("Clone did not return a new session.");
+      }
+      return { agentId: agent.id, name: agent.title ?? null };
+    },
+  };
+}
+
+/**
+ * The narrow slice of a real `DaemonClient` the rename adapter needs — only
+ * `renameAgent`, duck-typed so this RN-free module never imports
+ * `@picompanion/client`. The real method takes the new name as a bare
+ * second string (`renameAgent(agentId, name)`), while this port takes it as
+ * an options object (`renameAgent(agentId, { name })`) — the adapter maps
+ * one onto the other. The `agent` nullability mirrors the wire's own failure
+ * shape (`agent.rename.response` carries a null agent on failure).
+ */
+interface SessionTreeRenameDaemonClient {
+  renameAgent(
+    agentId: string,
+    name: string,
+  ): Promise<{ agent: { id: string; title?: string | null } | null }>;
+}
+
+function hasSessionTreeRenameAgent(client: unknown): client is SessionTreeRenameDaemonClient {
+  return !!client && typeof (client as { renameAgent?: unknown }).renameAgent === "function";
+}
+
+/**
+ * Adapts a real rename-capable client to `SessionTreeClientPort` — the rename
+ * half of the same mapping shape: the port's `{ name }` options object is
+ * sent as the real method's bare `name` string, and a null-agent resolution
+ * rejects with "Rename did not return a session." instead of mapping.
+ * The sheet's `TextField` ("New name", `session-tree-sheet.tsx`) is the UI
+ * surface that supplies this name, so rename is wired — not left disabled.
+ *
+ * Returns `undefined` when `client` is absent or implements no `renameAgent`,
+ * matching both adapters above.
+ */
+export function adaptSessionTreeRenameClient(client: unknown): SessionTreeClientPort | undefined {
+  if (!hasSessionTreeRenameAgent(client)) {
+    return undefined;
+  }
+  const renameCapableClient = client;
+  return {
+    async renameAgent(agentId, options) {
+      const { agent } = await renameCapableClient.renameAgent(agentId, options.name);
+      if (!agent) {
+        throw new Error("Rename did not return a session.");
       }
       return { agentId: agent.id, name: agent.title ?? null };
     },

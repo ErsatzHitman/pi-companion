@@ -17,13 +17,19 @@ import { createDaemonSettingsClient } from "./daemon-settings-client.js";
  * — replaced, not deleted, per this repository's rule that a capability
  * landing must correct the test that recorded its absence.
  *
- * **Auto-retry remains world 3** — no wire message, no `DaemonClient`
- * method — see `settings-client.ts`'s header comment for the full audit of
- * why (auto-retry has no daemon-internal path at all, unlike auto-compaction's
- * already-existing `PiRuntimeSession.setAutoCompaction`). Those two
- * assertions are UNCHANGED: should a future task add either, this test
- * starts failing immediately, which is exactly the "never state a
- * capability is absent after it has landed" guard this repository requires.
+ * **wire-apps-followup UPDATE**: auto-retry now has the same real wire
+ * (`set_auto_retry_request`/`get_auto_retry_request`,
+ * `packages/protocol/src/messages.ts`) and real
+ * `DaemonClient.setAutoRetry`/`getAutoRetry` methods
+ * (`packages/client/src/daemon-client.ts`), so the two assertions below
+ * that used to prove their ABSENCE now prove their PRESENCE and behaviour
+ * instead — replaced, not deleted, per this repository's rule that a
+ * capability landing must correct the test that recorded its absence.
+ * CORRECTED (wire-apps-followup): this previously said "**Auto-retry
+ * remains world 3** — no wire message, no `DaemonClient` method" and that
+ * "Those two assertions are UNCHANGED: should a future task add either,
+ * this test starts failing immediately". That future task has landed, so
+ * the assertions now prove presence.
  */
 describe("createDaemonSettingsClient against the real DaemonClient", () => {
   const realDaemonMethods = DaemonClient.prototype as unknown as Record<string, unknown>;
@@ -33,9 +39,9 @@ describe("createDaemonSettingsClient against the real DaemonClient", () => {
     expect(typeof realDaemonMethods.setAutoCompaction).toBe("function");
   });
 
-  it("confirms the real DaemonClient still has neither auto-retry method (world 3, unchanged by T131)", () => {
-    expect(typeof realDaemonMethods.getAutoRetry).toBe("undefined");
-    expect(typeof realDaemonMethods.setAutoRetry).toBe("undefined");
+  it("confirms the real DaemonClient now has both auto-retry methods (wire-apps-followup)", () => {
+    expect(typeof realDaemonMethods.getAutoRetry).toBe("function");
+    expect(typeof realDaemonMethods.setAutoRetry).toBe("function");
   });
 
   it("resolves auto-compaction's SettingsClient methods to real bound functions for a real DaemonClient instance, so the UI can round-trip through them instead of rendering 'unsupported'", () => {
@@ -53,13 +59,26 @@ describe("createDaemonSettingsClient against the real DaemonClient", () => {
     expect(typeof client.setAutoCompaction).toBe("function");
   });
 
-  it("still resolves auto-retry's SettingsClient methods to undefined for a real DaemonClient instance, so the UI renders 'unsupported' rather than a control that silently does nothing", () => {
+  it("resolves auto-retry's SettingsClient methods to real bound functions for a real DaemonClient instance, so the UI can round-trip through them instead of rendering 'unsupported'", () => {
     const daemon = Object.create(DaemonClient.prototype) as InstanceType<typeof DaemonClient>;
     const client = createDaemonSettingsClient(
       daemon as unknown as Parameters<typeof createDaemonSettingsClient>[0],
     );
 
-    expect(client.getAutoRetry).toBeUndefined();
-    expect(client.setAutoRetry).toBeUndefined();
+    expect(typeof client.getAutoRetry).toBe("function");
+    expect(typeof client.setAutoRetry).toBe("function");
+  });
+
+  it("discards the auto-retry provider notice: setAutoRetry resolves void even though the daemon method resolves a notice-or-null envelope", async () => {
+    const daemon = {
+      getAutoRetry: async () => true,
+      setAutoRetry: async () => ({ type: "notice", message: "applied" }),
+    };
+    const client = createDaemonSettingsClient(
+      daemon as unknown as Parameters<typeof createDaemonSettingsClient>[0],
+    );
+
+    await expect(client.setAutoRetry?.("agt_retry_0001", false)).resolves.toBeUndefined();
+    await expect(client.getAutoRetry?.("agt_retry_0001")).resolves.toBe(true);
   });
 });

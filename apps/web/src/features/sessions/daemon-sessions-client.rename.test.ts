@@ -6,12 +6,13 @@ import type { DaemonAgentClient, DaemonAgentSnapshot } from "./daemon-sessions-c
 /**
  * Proves `createDaemonSessionsClient`'s rename adapter logic against a
  * FAKE `DaemonAgentClient`, not a live daemon and not the real
- * `@picompanion/client` `DaemonClient` class (which does not implement
- * `renameAgent` at all — see that interface's doc comment in
- * `daemon-sessions-client.ts` for the disclosed protocol/client gap,
- * the same shape as `cloneAgent`'s; CORRECTED fork-agent-ui: this previously
- * named `forkAgent`/`cloneAgent` together, but the fork half has since
- * landed and `forkAgent` is now required). Mirrors
+ * `@picompanion/client` `DaemonClient` class (which implements `renameAgent`
+ * for real — see that interface's doc comment in
+ * `daemon-sessions-client.ts`). CORRECTED (wire-apps-followup): this
+ * previously said the real class "does not implement `renameAgent` at all
+ * — see that interface's doc comment for the disclosed protocol/client
+ * gap"; that gap has since landed, so `baseFakeDaemon` now carries all
+ * three required members and `renameSession` is always exposed. Mirrors
  * `daemon-sessions-client.fork-clone.test.ts`'s structure exactly. No
  * socket is opened and no live daemon (dev or production) is contacted
  * anywhere in this file.
@@ -38,21 +39,15 @@ function baseFakeDaemon(): DaemonAgentClient {
       agent: AGENT,
       forkPoint: { messageId: "m0", index: 0 },
     })),
+    cloneAgent: vi.fn(async () => ({ agent: AGENT })),
+    renameAgent: vi.fn(async () => ({ agent: AGENT })),
   };
 }
 
 describe("createDaemonSessionsClient rename (T38A4, fake daemon — no live daemon contacted)", () => {
-  it("does not expose renameSession when the injected daemon lacks renameAgent", () => {
+  it("always exposes renameSession (renameAgent is required)", () => {
     const client = createDaemonSessionsClient(baseFakeDaemon());
-    expect(client.renameSession).toBeUndefined();
-  });
-
-  it("still does not expose renameSession on a daemon that implements forkAgent/cloneAgent but no renameAgent", () => {
-    const client = createDaemonSessionsClient({
-      ...baseFakeDaemon(),
-      cloneAgent: vi.fn(),
-    });
-    expect(client.renameSession).toBeUndefined();
+    expect(typeof client.renameSession).toBe("function");
   });
 
   it("renameSession sends the session id and name to daemon.renameAgent and maps the result", async () => {
@@ -61,7 +56,7 @@ describe("createDaemonSessionsClient rename (T38A4, fake daemon — no live daem
 
     const result = await client.renameSession?.("agt_rename_0001", { name: "Renamed title" });
 
-    expect(renameAgent).toHaveBeenCalledWith("agt_rename_0001", { name: "Renamed title" });
+    expect(renameAgent).toHaveBeenCalledWith("agt_rename_0001", "Renamed title");
     expect(result?.session.id).toBe("agt_rename_0001");
     expect(result?.session.title).toBe("Renamed title");
   });
@@ -74,6 +69,15 @@ describe("createDaemonSessionsClient rename (T38A4, fake daemon — no live daem
 
     await expect(client.renameSession?.("agt_rename_0001", { name: "New name" })).rejects.toThrow(
       "session not found",
+    );
+  });
+
+  it("renameSession rejects rather than mapping a null-agent resolution (the wire's failure shape)", async () => {
+    const renameAgent = vi.fn(async () => ({ agent: null }));
+    const client = createDaemonSessionsClient({ ...baseFakeDaemon(), renameAgent });
+
+    await expect(client.renameSession?.("agt_rename_0001", { name: "New name" })).rejects.toThrow(
+      "did not return a session",
     );
   });
 });

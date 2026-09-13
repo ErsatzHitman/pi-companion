@@ -36,5 +36,8 @@ export function createPendingConnectionSessionsClient(): SessionsClient {
     cloneSession() {
       return Promise.reject(new Error(SESSIONS_NOT_CONNECTED));
     },
+    renameSession() {
+      return Promise.reject(new Error(SESSIONS_NOT_CONNECTED));
+    },
   };
 }

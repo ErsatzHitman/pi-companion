@@ -3,6 +3,20 @@
  * "queues and automation" RPC group: `set_auto_compaction`,
  * `set_auto_retry`, `abort_retry`).
  *
+ * **wire-apps-followup UPDATE — auto-retry's world changed too.**
+ * The `set_auto_retry_request`/`get_auto_retry_request` wire pair
+ * (`packages/protocol/src/messages.ts`), the `session.ts` handlers, the
+ * `AgentManager`/`PiRpcAgentSession` methods, and
+ * `DaemonClient.setAutoRetry`/`getAutoRetry`
+ * (`packages/client/src/daemon-client.ts`) have all landed, mirroring
+ * T131's auto-compaction shape exactly. Auto-retry is therefore no
+ * longer world 3 either: it now has a real wire, mounted on web through
+ * `daemon-settings-client.ts`'s `createDaemonSettingsClient` the same way
+ * auto-compaction is. CORRECTED (wire-apps-followup): this previously
+ * said "Auto-retry still has no daemon-internal path at all (see below)
+ * and remains world 3 unchanged". That sentence was true when T131 wrote
+ * it and is false now that the auto-retry wire has landed.
+ *
  * **T131 UPDATE — auto-compaction's world changed, auto-retry's did not.**
  * T131 built `set_auto_compaction_request`/`get_auto_compaction_request`
  * (`packages/protocol/src/messages.ts`), the `session.ts` handlers, the
@@ -20,11 +34,23 @@
  * rather than leaving both half-built (see this file's own
  * `SettingsClient` interface doc, unchanged, and
  * `daemon-settings-client.ts`'s module doc for the up-to-date split).
+ * CORRECTED (wire-apps-followup): the preceding two sentences are preserved
+ * verbatim as T131 wrote them — auto-retry's wire has since landed (see the
+ * wire-apps-followup UPDATE above), so they are historical record, not
+ * current claims.
  *
  * The grep evidence immediately below is preserved verbatim as it stood
  * before T131 (auto-compaction's grep lines are now stale by construction
  * — that is what T131 closed — and are kept here only as the historical
- * record of the finding this task corrected, not as a current claim):
+ * record of the finding this task corrected, not as a current claim).
+ * CORRECTED (wire-apps-followup): auto-retry's two grep lines below are
+ * now stale the same way — `set_auto_retry_request`/`_response` and
+ * `get_auto_retry_request`/`_response` exist in
+ * `packages/protocol/src/messages.ts`, and `DaemonClient.setAutoRetry`/
+ * `getAutoRetry` exist in `packages/client/src/daemon-client.ts`. They are
+ * kept verbatim as the historical record T131 recorded, not as current
+ * claims; `rpc-command-web-parity.ts`'s `set_auto_retry` entry is now
+ * `"covered"`, leaving only `abort_retry` as a gap in this group.
  *
  * - `grep -n "auto_compaction\|autoCompaction\|AutoCompaction" packages/protocol/src/messages.ts`
  *   -> zero hits. No `set_auto_compaction_request`/`_response` wire
@@ -69,23 +95,19 @@
  *   `PiSessionState.autoCompactionEnabled` (declared on `PiSessionState` in
  *   `packages/server/src/server/agent/providers/pi/rpc-types.ts`).
  *
- * - **Auto-retry has no daemon-internal path at all**, not even a slash
- *   command: `grep -n "retry" packages/server/src/server/agent/providers/pi/runtime.ts
- *   packages/server/src/server/agent/providers/pi/cli-runtime.ts` returns
- *   zero. Retries run unconditionally — `agent.ts`'s `handleSessionEvent`
- *   method, in its `auto_retry_start`/`auto_retry_end` cases, has no
- *   enablement check of any kind, it always forwards Pi's own retry
- *   lifecycle as `pi_retry` events. `rpc-types.ts`'s `PiRpcCommand` union
- *   declares a `set_auto_retry` Pi-RPC-command *arm*
- *   (`{ id?: string; type: "set_auto_retry"; enabled: boolean }`,
- *   added by T38A0 as a type-level mirror of Pi's own RPC surface) but
- *   `grep -rn "setAutoRetry" packages/server/src` is zero — nothing ever
- *   constructs or sends that command. Closing this gap needs a NEW
- *   `PiRuntimeSession.setAutoRetry` method (there is no Pi CLI runtime
- *   call to wrap it around yet, unlike auto-compaction's
- *   `cli-runtime.ts`'s `setAutoCompaction` method) in addition to the
- *   same three protocol/session/client layers auto-compaction needs.
- *   This is a strictly bigger gap than auto-compaction's.
+ * - **Auto-retry now has the same three-layer wire auto-compaction got
+ *   in T131.** CORRECTED (wire-apps-followup): this previously said
+ *   "**Auto-retry has no daemon-internal path at all**, not even a slash
+ *   command: `grep -n \"retry\" ...` returns zero. Retries run
+ *   unconditionally" and that closing the gap "needs a NEW
+ *   `PiRuntimeSession.setAutoRetry` method (there is no Pi CLI runtime call
+ *   to wrap it around yet)". That was true when written and is false now:
+ *   `PiRuntimeSession.setAutoRetry` exists, the
+ *   `set_auto_retry_request`/`get_auto_retry_request` wire pair exists,
+ *   and `DaemonClient.setAutoRetry`/`getAutoRetry` send them — the same
+ *   three-layer shape auto-compaction has. The historical grep lines are
+ *   preserved above as the record of what T38B2 found, not as current
+ *   claims.
  *
  * There is also a pre-existing GENERIC wire mechanism —
  * `set_agent_feature_request`/`_response` (`SetAgentFeatureRequestMessageSchema`/
@@ -122,10 +144,15 @@
  * `AgentTurnClient` (four independently-optional methods, the same
  * "a client that omits a method leaves the control in its own explained
  * unsupported state rather than throwing" contract `use-queue-modes.ts`
- * and `use-model-thinking.ts` already establish). No shipped
+ * and `use-model-thinking.ts` already establish). CORRECTED
+ * (wire-apps-followup): this previously said "No shipped
  * `@picompanion/client` `DaemonClient` implements any of these four
  * method names — `daemon-settings-client.ts` proves that against the
- * real class, not a hand-rolled stand-in.
+ * real class". That was true when T38B2 wrote it and false now: a current
+ * real `DaemonClient` implements all four, and
+ * `daemon-settings-client.ts` now proves their PRESENCE (not absence)
+ * against the real class — the `"unsupported"` state survives only for
+ * partial fakes and stale clients.
  */
 export interface SettingsClient {
   /**
@@ -138,11 +165,17 @@ export interface SettingsClient {
   /** Changes whether auto-compaction is enabled for this agent. */
   setAutoCompaction?(agentId: string, enabled: boolean): Promise<void>;
   /**
-   * Reads whether auto-retry is currently enabled for this agent. No real
+   * Reads whether auto-retry is currently enabled for this agent.
+   * CORRECTED (wire-apps-followup): this previously said "No real
    * provider can ever report `false` here today — see this file's header
    * comment on why auto-retry has no daemon-internal off-switch at all —
-   * so a real implementation of this method does not exist to disagree
-   * with that; `DAEMON_AUTO_RETRY_ALWAYS_ON` documents it instead.
+   * so a real implementation of this method does not exist". That was
+   * true when written and is false now: the daemon has a real off-switch
+   * (`PiRuntimeSession.setAutoRetry` + the `set_auto_retry_request` wire),
+   * so a real implementation exists and can report `false`;
+   * `DAEMON_AUTO_RETRY_ALWAYS_ON` below now documents only the fallback
+   * explanation for clients that still omit this pair, not the daemon's
+   * real behaviour.
    */
   getAutoRetry?(agentId: string): Promise<boolean>;
   /** Changes whether auto-retry is enabled for this agent. */
@@ -165,12 +198,18 @@ export interface SettingsClient {
 export const DAEMON_DEFAULT_AUTO_COMPACTION_ENABLED = true;
 
 /**
- * Auto-retry's real daemon behaviour today: always on, with no
- * configuration point anywhere server-side — see this file's header
- * comment (`agent.ts`'s `handleSessionEvent` forwards every retry
- * lifecycle unconditionally; no `PiRuntimeSession` method or Pi CLI
- * runtime call exists to disable it). This is not "defaults to true and can be turned
- * off later" the way auto-compaction is — there is currently no daemon
- * concept of auto-retry being off at all.
+ * Auto-retry's fallback explanation for clients that still omit the
+ * get/set pair (partial fakes, stale builds). CORRECTED
+ * (wire-apps-followup): this previously said "Auto-retry's real daemon
+ * behaviour today: always on, with no configuration point anywhere
+ * server-side" and "there is currently no daemon concept of auto-retry
+ * being off at all". That was true when written and is false now: the
+ * daemon has a real configuration point (`PiRuntimeSession.setAutoRetry`
+ * + the `set_auto_retry_request`/`get_auto_retry_request` wire), so "off"
+ * is a real state a current daemon reports. This constant stays `true`
+ * only as the daemon's default for a fresh session (matching
+ * auto-compaction's `DAEMON_DEFAULT_AUTO_COMPACTION_ENABLED` convention)
+ * and as the truthful `"unsupported"` text for connections that cannot
+ * change it yet — not as a claim about what the daemon can do.
  */
 export const DAEMON_AUTO_RETRY_ALWAYS_ON = true;

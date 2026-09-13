@@ -6,21 +6,24 @@ import type { DaemonAgentClient, DaemonAgentSnapshot } from "./daemon-sessions-c
 /**
  * Proves `createDaemonSessionsClient`'s fork/clone adapter logic against
  * a FAKE `DaemonAgentClient`, not a live daemon and not the real
- * `@picompanion/client` `DaemonClient` class (which implements `forkAgent`
- * for real — see that interface's doc comment in
- * `daemon-sessions-client.ts` — but still implements no `cloneAgent`;
- * the clone half of T38A3's gap stays open).
- * Unlike `daemon-sessions-client.fixture.test.ts` (real `DaemonClient` +
- * a recorded `@picompanion/protocol` wire fixture, proving
- * create/archive/delete/fetch/fork against an actual protocol shape), this
- * file never opens a socket and never touches a real daemon — it only
- * proves that `createDaemonSessionsClient` builds the right request and
- * maps the right response.
+ * `@picompanion/client` `DaemonClient` class (which implements `forkAgent`,
+ * `cloneAgent` and `renameAgent` for real — see that interface's doc comment
+ * in `daemon-sessions-client.ts`). Unlike
+ * `daemon-sessions-client.fixture.test.ts` (real `DaemonClient` + a recorded
+ * `@picompanion/protocol` wire fixture, proving create/archive/delete/fetch/
+ * fork/clone/rename against an actual protocol shape), this file never opens
+ * a socket and never touches a real daemon — it only proves that
+ * `createDaemonSessionsClient` builds the right request and maps the right
+ * response.
  *
  * CORRECTED (fork-agent-ui): this previously said the real `DaemonClient`
  * implemented neither `forkAgent` nor `cloneAgent`; the fork half has since
  * landed, so `baseFakeDaemon` below now carries a `forkAgent` (required)
  * and the "lacks forkAgent" case is gone — `forkSession` is always exposed.
+ * CORRECTED (wire-apps-followup): the clone half has since landed too, so
+ * `baseFakeDaemon` now carries `cloneAgent` and `renameAgent` (both
+ * required) and `cloneSession`/`renameSession` are always exposed — the
+ * "omits cloneSession without cloneAgent" case is gone the same way.
  */
 const AGENT: DaemonAgentSnapshot = {
   id: "agt_fork_0001",
@@ -44,14 +47,16 @@ function baseFakeDaemon(): DaemonAgentClient {
       agent: AGENT,
       forkPoint: { messageId: "m0", index: 0 },
     })),
+    cloneAgent: vi.fn(async () => ({ agent: AGENT })),
+    renameAgent: vi.fn(async () => ({ agent: AGENT })),
   };
 }
 
 describe("createDaemonSessionsClient fork/clone (T38A3, fake daemon — no live daemon contacted)", () => {
-  it("always exposes forkSession (forkAgent is required) but omits cloneSession without cloneAgent", () => {
+  it("always exposes forkSession and cloneSession (forkAgent/cloneAgent are required)", () => {
     const client = createDaemonSessionsClient(baseFakeDaemon());
     expect(typeof client.forkSession).toBe("function");
-    expect(client.cloneSession).toBeUndefined();
+    expect(typeof client.cloneSession).toBe("function");
   });
 
   it("forkSession sends the source id and input to daemon.forkAgent and maps the result", async () => {
@@ -125,13 +130,31 @@ describe("createDaemonSessionsClient fork/clone (T38A3, fake daemon — no live 
     expect(result?.session.id).toBe("agt_fork_0001");
   });
 
-  it("cloneSession works with no input at all (name is optional)", async () => {
+  it("cloneSession works with no input at all (name is optional, sent as absent)", async () => {
     const cloneAgent = vi.fn(async () => ({ agent: AGENT }));
     const client = createDaemonSessionsClient({ ...baseFakeDaemon(), cloneAgent });
 
     await client.cloneSession?.("agt_source_0001");
 
-    expect(cloneAgent).toHaveBeenCalledWith("agt_source_0001", { name: undefined });
+    expect(cloneAgent).toHaveBeenCalledWith("agt_source_0001", {});
+  });
+
+  it("cloneSession omits a null name from the daemon call (the wire takes string-or-absent, never null)", async () => {
+    const cloneAgent = vi.fn(async () => ({ agent: AGENT }));
+    const client = createDaemonSessionsClient({ ...baseFakeDaemon(), cloneAgent });
+
+    await client.cloneSession?.("agt_source_0001", { name: null });
+
+    expect(cloneAgent).toHaveBeenCalledWith("agt_source_0001", {});
+  });
+
+  it("cloneSession rejects rather than mapping a null-agent resolution (the wire's failure shape)", async () => {
+    const cloneAgent = vi.fn(async () => ({ agent: null }));
+    const client = createDaemonSessionsClient({ ...baseFakeDaemon(), cloneAgent });
+
+    await expect(client.cloneSession?.("agt_source_0001")).rejects.toThrow(
+      "did not return a new session",
+    );
   });
 
   it("cloneSession propagates a rejection from daemon.cloneAgent without mapping anything", async () => {

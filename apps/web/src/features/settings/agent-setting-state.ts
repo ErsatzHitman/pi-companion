@@ -6,8 +6,12 @@
  *
  * - `"no-client"`: no live settings client is wired at all.
  * - `"unsupported"`: a client is wired but omits this setting's get/set
- *   pair — see `settings-client.ts`'s header comment for why this is
- *   the state a real `DaemonClient` renders today for BOTH settings.
+ *   pair. CORRECTED (wire-apps-followup): this previously said this "is
+ *   the state a real `DaemonClient` renders today for BOTH settings".
+ *   That was true when written and is false now: a current real
+ *   `DaemonClient` implements both pairs, so `"unsupported"` now covers
+ *   only partial fakes and stale clients — see `settings-client.ts`'s
+ *   header comment for the up-to-date audit.
  * - `"loading"`: the initial fetch is in flight.
  * - `"error"`: the initial fetch failed; `unavailableReason` carries the
  *   daemon's raw explanation.
