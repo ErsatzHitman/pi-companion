@@ -134,7 +134,7 @@ describe("ScheduleStore", () => {
       runs: [],
     });
 
-    let releaseFirstUpdate: (() => void) | null = null;
+    let releaseFirstUpdate: () => void = () => {};
     const firstUpdateBlocked = new Promise<void>((resolve) => {
       releaseFirstUpdate = resolve;
     });
@@ -174,7 +174,7 @@ describe("ScheduleStore", () => {
       };
     });
 
-    releaseFirstUpdate?.();
+    releaseFirstUpdate();
     const [, second] = await Promise.all([firstUpdate, secondUpdate]);
 
     expect(secondSawRunCount).toBe(1);
@@ -232,7 +232,7 @@ describe("ScheduleStore", () => {
       runs: [],
     });
 
-    let releaseCompletion: (() => void) | null = null;
+    let releaseCompletion: () => void = () => {};
     const completionBlocked = new Promise<void>((resolve) => {
       releaseCompletion = resolve;
     });
@@ -252,7 +252,7 @@ describe("ScheduleStore", () => {
     });
     await completionStarted;
 
-    let releaseUpsertList: (() => void) | null = null;
+    let releaseUpsertList: () => void = () => {};
     const upsertListBlocked = new Promise<void>((resolve) => {
       releaseUpsertList = resolve;
     });
@@ -287,9 +287,9 @@ describe("ScheduleStore", () => {
     });
 
     await upsertListed;
-    releaseCompletion?.();
+    releaseCompletion();
     await completeOriginal;
-    releaseUpsertList?.();
+    releaseUpsertList();
 
     const upserted = await upsert;
     expect(upserted.id).not.toBe(created.id);

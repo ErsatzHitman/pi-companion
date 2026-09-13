@@ -91,12 +91,17 @@ function createScheduleService(options: TestScheduleServiceOptions): ScheduleSer
       cwd: input.cwd,
       kind: "directory",
       displayName: "test-project",
-      title: input.firstAgentContext.prompt,
+      title: input.firstAgentContext.prompt ?? null,
       branch: null,
       baseBranch: null,
+      worktreeRoot: null,
+      isPaseoOwnedWorktree: false,
+      mainRepoRoot: null,
       createdAt: timestamp,
       updatedAt: timestamp,
       archivedAt: null,
+      autoArchivedChangeRequestUrl: null,
+      pinnedAt: null,
     };
     workspaces.set(workspaceId, workspace);
     return workspace;
@@ -108,6 +113,9 @@ function createScheduleService(options: TestScheduleServiceOptions): ScheduleSer
         workspaceId: workspace.workspaceId,
         cwd: workspace.cwd,
         kind: workspace.kind,
+        worktreeRoot: workspace.worktreeRoot ?? null,
+        isPaseoOwnedWorktree: workspace.isPaseoOwnedWorktree ?? false,
+        mainRepoRoot: workspace.mainRepoRoot ?? null,
       }));
   const archiveDefaultWorkspace: ScheduleServiceOptions["archiveWorkspace"] = async (
     workspaceId,
@@ -200,6 +208,7 @@ async function createRegistryBackedScheduleWorkspaceDeps(rootDir: string): Promi
     projectRegistry,
     workspaceRegistry,
     workspaceGitService,
+    logger: createTestLogger(),
   });
   return {
     workspaceRegistry,
@@ -229,6 +238,9 @@ async function createRegistryBackedScheduleWorkspaceDeps(rootDir: string): Promi
                     workspaceId: workspace.workspaceId,
                     cwd: workspace.cwd,
                     kind: workspace.kind,
+                    worktreeRoot: workspace.worktreeRoot ?? null,
+                    isPaseoOwnedWorktree: workspace.isPaseoOwnedWorktree ?? false,
+                    mainRepoRoot: workspace.mainRepoRoot ?? null,
                   })),
               archiveWorkspaceRecord: async (id) => {
                 await workspaceRegistry.archive(id, new Date().toISOString());
@@ -270,7 +282,7 @@ function buildAgentRecord(params: {
     lastStatus: "closed" as const,
     lastModeId: "default",
     config: { modeId: "default" },
-    runtimeInfo: null,
+    runtimeInfo: undefined,
     features: [],
     persistence: null,
     requiresAttention: false,
@@ -520,10 +532,13 @@ describe("ScheduleService", () => {
       runOnCreate: false,
     });
 
-    expect(created.target.config).toMatchObject({
-      provider: "claude",
-      model: "test-model",
-      cwd: tempDir,
+    expect(created.target).toMatchObject({
+      type: "new-agent",
+      config: {
+        provider: "claude",
+        model: "test-model",
+        cwd: tempDir,
+      },
     });
     expect(await workspaceRegistry.list()).toEqual([]);
   });
@@ -743,14 +758,17 @@ describe("ScheduleService", () => {
       newAgentConfig: { cwd: join(tempDir, "also-missing") },
     });
 
-    expect(updated.target.config).toMatchObject({
-      provider: "claude",
-      cwd: join(tempDir, "also-missing"),
+    expect(updated.target).toMatchObject({
+      type: "new-agent",
+      config: {
+        provider: "claude",
+        cwd: join(tempDir, "also-missing"),
+      },
     });
   });
 
   test("concurrent run finish and update preserve the target config and run outcome", async () => {
-    let finishRun: (() => void) | null = null;
+    let finishRun: () => void = () => {};
     const runBlocked = new Promise<void>((resolve) => {
       finishRun = resolve;
     });
@@ -804,7 +822,7 @@ describe("ScheduleService", () => {
       id: legacy.id,
       newAgentConfig: { modeId: "full-access" },
     });
-    finishRun?.();
+    finishRun();
     await Promise.all([tickPromise, updatePromise]);
 
     const inspected = await service.inspect(legacy.id);
@@ -843,7 +861,7 @@ describe("ScheduleService", () => {
       permission: null,
       lastMessage: "compacted",
     });
-    manager.archiveAgent = async () => {};
+    manager.archiveAgent = async () => ({ archivedAt: new Date().toISOString() });
     const service = createScheduleService({
       paseoHome: tempDir,
       logger: createTestLogger(),
@@ -855,21 +873,22 @@ describe("ScheduleService", () => {
         const snapshot = {
           id: "00000000-0000-0000-0000-000000000322",
           provider: "claude",
-          cwd: input.cwd ?? tempDir,
+          cwd: input.kind === "mcp" ? (input.cwd ?? tempDir) : input.config.cwd,
           workspaceId: input.workspaceId,
           status: "idle",
           lifecycle: "idle",
         };
         return {
-          snapshot: snapshot as Awaited<
+          snapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["snapshot"],
-          liveSnapshot: snapshot as Awaited<
+          liveSnapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["liveSnapshot"],
           background: true,
           initialPromptStarted: false,
           initialPromptError: null,
+          settleBackgroundDispatch: async () => {},
         };
       },
       now: () => now,
@@ -919,7 +938,7 @@ describe("ScheduleService", () => {
       permission: null,
       lastMessage: null,
     });
-    manager.archiveAgent = async () => {};
+    manager.archiveAgent = async () => ({ archivedAt: new Date().toISOString() });
     const service = createScheduleService({
       paseoHome: tempDir,
       logger: createTestLogger(),
@@ -933,21 +952,22 @@ describe("ScheduleService", () => {
               ? "00000000-0000-0000-0000-000000000323"
               : "00000000-0000-0000-0000-000000000324",
           provider: "claude",
-          cwd: input.cwd ?? tempDir,
+          cwd: input.kind === "mcp" ? (input.cwd ?? tempDir) : input.config.cwd,
           workspaceId: input.workspaceId,
           status: "idle",
           lifecycle: "idle",
         };
         return {
-          snapshot: snapshot as Awaited<
+          snapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["snapshot"],
-          liveSnapshot: snapshot as Awaited<
+          liveSnapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["liveSnapshot"],
           background: true,
           initialPromptStarted: false,
           initialPromptError: null,
+          settleBackgroundDispatch: async () => {},
         };
       },
       now: () => now,
@@ -992,7 +1012,7 @@ describe("ScheduleService", () => {
       permission: null,
       lastMessage: null,
     });
-    manager.archiveAgent = async () => {};
+    manager.archiveAgent = async () => ({ archivedAt: new Date().toISOString() });
     const service = createScheduleService({
       paseoHome: tempDir,
       logger: createTestLogger(),
@@ -1003,21 +1023,22 @@ describe("ScheduleService", () => {
         const snapshot = {
           id: "00000000-0000-0000-0000-000000000325",
           provider: "claude",
-          cwd: input.cwd ?? tempDir,
+          cwd: input.kind === "mcp" ? (input.cwd ?? tempDir) : input.config.cwd,
           workspaceId: input.workspaceId,
           status: "idle",
           lifecycle: "idle",
         };
         return {
-          snapshot: snapshot as Awaited<
+          snapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["snapshot"],
-          liveSnapshot: snapshot as Awaited<
+          liveSnapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["liveSnapshot"],
           background: true,
           initialPromptStarted: false,
           initialPromptError: null,
+          settleBackgroundDispatch: async () => {},
         };
       },
       now: () => now,
@@ -1042,7 +1063,7 @@ describe("ScheduleService", () => {
     const logger = createTestLogger();
     const warn = vi.fn();
     logger.warn = warn as typeof logger.warn;
-    logger.child = (() => logger) as typeof logger.child;
+    logger.child = (() => logger) as unknown as typeof logger.child;
     const archiveError = new Error("archive exploded");
     const manager = new AgentManager({
       logger: createTestLogger(),
@@ -1063,21 +1084,22 @@ describe("ScheduleService", () => {
         const snapshot = {
           id: agentId,
           provider: "claude",
-          cwd: input.cwd ?? tempDir,
+          cwd: input.kind === "mcp" ? (input.cwd ?? tempDir) : input.config.cwd,
           workspaceId: input.workspaceId,
           status: "idle",
           lifecycle: "idle",
         };
         return {
-          snapshot: snapshot as Awaited<
+          snapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["snapshot"],
-          liveSnapshot: snapshot as Awaited<
+          liveSnapshot: snapshot as unknown as Awaited<
             ReturnType<ScheduleServiceOptions["createAgent"]>
           >["liveSnapshot"],
           background: true,
           initialPromptStarted: false,
           initialPromptError: null,
+          settleBackgroundDispatch: async () => {},
         };
       },
       archiveWorkspace: async () => {
@@ -2003,7 +2025,7 @@ describe("ScheduleService", () => {
     const runStarted = new Promise<void>((resolve) => {
       releaseRun = resolve;
     });
-    let finishRun: (() => void) | null = null;
+    let finishRun: () => void = () => {};
     const runBlocked = new Promise<void>((resolve) => {
       finishRun = resolve;
     });
@@ -2045,7 +2067,7 @@ describe("ScheduleService", () => {
     expect(paused.status).toBe("paused");
     expect(paused.nextRunAt).toBeNull();
 
-    finishRun?.();
+    finishRun();
     await tickPromise;
 
     const inspected = await service.inspect(created.id);
@@ -2081,7 +2103,7 @@ describe("ScheduleService", () => {
       config: {
         modeId: "default",
       },
-      runtimeInfo: null,
+      runtimeInfo: undefined,
       features: [],
       persistence: null,
       requiresAttention: false,

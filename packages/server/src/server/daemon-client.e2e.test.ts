@@ -24,6 +24,7 @@ import type {
   AgentSessionConfig,
   AgentStreamEvent,
 } from "./agent/agent-sdk-types.js";
+import type { SessionOutboundMessage } from "@picompanion/protocol/messages";
 
 const openaiApiKey = process.env.OPENAI_API_KEY ?? null;
 
@@ -636,7 +637,7 @@ class FailingResumeSession extends NonPersistentReloadSession {
   describePersistence(): AgentPersistenceHandle | null {
     return {
       provider: "claude",
-      sessionId: this.id,
+      sessionId: this.id ?? "failing-resume-session",
       metadata: { cwd: process.cwd() },
     };
   }
@@ -664,15 +665,16 @@ function resolveSpeechConfig() {
     return {
       providers: {
         dictationStt: { provider: "local" as const, explicit: true },
+        voiceTurnDetection: { provider: "local" as const, explicit: true },
         voiceStt: { provider: "local" as const, explicit: true },
         voiceTts: { provider: "local" as const, explicit: true },
       },
       local: {
         modelsDir: localModelsDir,
         models: {
-          dictationStt: "parakeet-tdt-0.6b-v2-int8",
-          voiceStt: "parakeet-tdt-0.6b-v2-int8",
-          voiceTts: "kokoro-en-v0_19",
+          dictationStt: "parakeet-tdt-0.6b-v2-int8" as const,
+          voiceStt: "parakeet-tdt-0.6b-v2-int8" as const,
+          voiceTts: "kokoro-en-v0_19" as const,
           voiceTtsSpeakerId: 0,
         },
       },
@@ -682,6 +684,7 @@ function resolveSpeechConfig() {
     return {
       providers: {
         dictationStt: { provider: "openai" as const, explicit: true },
+        voiceTurnDetection: { provider: "openai" as const, explicit: true },
         voiceStt: { provider: "openai" as const, explicit: true },
         voiceTts: { provider: "openai" as const, explicit: true },
       },
@@ -717,7 +720,7 @@ test("handles session actions", async () => {
   const cwd = tmpCwd();
   const created = await ctx.client.createAgent({
     config: {
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd,
     },
   });
@@ -744,7 +747,7 @@ test("archives agents and excludes them from default listings", async () => {
   try {
     const created = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd,
       },
     });
@@ -772,7 +775,7 @@ test("interrupts a running agent before archiving", async () => {
   try {
     const created = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd,
       },
     });
@@ -813,7 +816,7 @@ test("send_agent_message auto-unarchives archived agents", async () => {
   try {
     const created = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd,
       },
     });
@@ -836,7 +839,7 @@ test("refresh_agent auto-unarchives archived agents", async () => {
   try {
     const created = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd,
       },
     });
@@ -918,7 +921,7 @@ test("resume_agent auto-unarchives archived agents", async () => {
   try {
     const created = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd,
       },
     });
@@ -1058,7 +1061,7 @@ test("update_agent persists unloaded title and labels across auto-unarchive", as
   try {
     const created = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd,
       },
     });
@@ -1292,7 +1295,9 @@ test("creates agent and exercises lifecycle", async () => {
     subscribe: { subscriptionId: "daemon-client-lifecycle" },
   });
 
-  const agentUpdatePromise = waitForSignal(15000, (resolve) => {
+  const agentUpdatePromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "agent_update" }>
+  >(15000, (resolve) => {
     const unsubscribe = ctx.client.on("agent_update", (message) => {
       if (message.type !== "agent_update") {
         return;
@@ -1306,29 +1311,32 @@ test("creates agent and exercises lifecycle", async () => {
   });
 
   const createRequestId = `create-${Date.now()}`;
-  const createdStatusPromise = waitForSignal(15000, (resolve) => {
-    const unsubscribe = ctx.client.on("status", (message) => {
-      if (message.type !== "status") {
-        return;
-      }
-      const payload = message.payload as {
-        status?: string;
-        agentId?: string;
-        requestId?: string;
-      };
-      if (payload.status !== "agent_created") {
-        return;
-      }
-      if (payload.requestId !== createRequestId) {
-        return;
-      }
-      resolve(message);
-    });
-    return unsubscribe;
-  });
+  const createdStatusPromise = waitForSignal<Extract<SessionOutboundMessage, { type: "status" }>>(
+    15000,
+    (resolve) => {
+      const unsubscribe = ctx.client.on("status", (message) => {
+        if (message.type !== "status") {
+          return;
+        }
+        const payload = message.payload as {
+          status?: string;
+          agentId?: string;
+          requestId?: string;
+        };
+        if (payload.status !== "agent_created") {
+          return;
+        }
+        if (payload.requestId !== createRequestId) {
+          return;
+        }
+        resolve(message);
+      });
+      return unsubscribe;
+    },
+  );
 
   const agent = await ctx.client.createAgent({
-    ...getFullAccessConfig("codex"),
+    ...getFullAccessConfig("pi"),
     cwd,
     title: "Daemon Client V2",
     requestId: createRequestId,
@@ -1340,34 +1348,40 @@ test("creates agent and exercises lifecycle", async () => {
   expect(fetchedResult?.agent.id).toBe(agent.id);
 
   const agentUpdate = await agentUpdatePromise;
+  if (agentUpdate.payload.kind !== "upsert") {
+    throw new Error("Expected agent_update upsert");
+  }
   expect(agentUpdate.payload.agent.id).toBe(agent.id);
   const createdStatus = await createdStatusPromise;
-  expect((createdStatus.payload as { agentId?: string }).agentId).toBe(agent.id);
+  expect((createdStatus.payload as unknown as { agentId?: string }).agentId).toBe(agent.id);
 
   const failRequestId = `fail-${Date.now()}`;
-  const failedStatusPromise = waitForSignal(15000, (resolve) => {
-    const unsubscribe = ctx.client.on("status", (message) => {
-      if (message.type !== "status") {
-        return;
-      }
-      const payload = message.payload as {
-        status?: string;
-        requestId?: string;
-      };
-      if (payload.status !== "agent_create_failed") {
-        return;
-      }
-      if (payload.requestId !== failRequestId) {
-        return;
-      }
-      resolve(message);
-    });
-    return unsubscribe;
-  });
+  const failedStatusPromise = waitForSignal<Extract<SessionOutboundMessage, { type: "status" }>>(
+    15000,
+    (resolve) => {
+      const unsubscribe = ctx.client.on("status", (message) => {
+        if (message.type !== "status") {
+          return;
+        }
+        const payload = message.payload as {
+          status?: string;
+          requestId?: string;
+        };
+        if (payload.status !== "agent_create_failed") {
+          return;
+        }
+        if (payload.requestId !== failRequestId) {
+          return;
+        }
+        resolve(message);
+      });
+      return unsubscribe;
+    },
+  );
 
   await expect(
     ctx.client.createAgent({
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: "/this/path/does/not/exist/12345",
       title: "Should Fail",
       requestId: failRequestId,
@@ -1382,21 +1396,24 @@ test("creates agent and exercises lifecycle", async () => {
     }
   });
 
-  const statusPromise = waitForSignal(15000, (resolve) => {
-    const unsubscribeStatus = ctx.client.on("status", (message) => {
-      if (message.type !== "status") {
-        return;
-      }
-      if (message.payload.status !== "agent_refreshed") {
-        return;
-      }
-      if ((message.payload as { agentId?: string }).agentId !== agent.id) {
-        return;
-      }
-      resolve(message);
-    });
-    return unsubscribeStatus;
-  });
+  const statusPromise = waitForSignal<Extract<SessionOutboundMessage, { type: "status" }>>(
+    15000,
+    (resolve) => {
+      const unsubscribeStatus = ctx.client.on("status", (message) => {
+        if (message.type !== "status") {
+          return;
+        }
+        if (message.payload.status !== "agent_refreshed") {
+          return;
+        }
+        if ((message.payload as unknown as { agentId?: string }).agentId !== agent.id) {
+          return;
+        }
+        resolve(message);
+      });
+      return unsubscribeStatus;
+    },
+  );
 
   const refreshResult = await ctx.client.refreshAgent(agent.id);
   unsubscribe();
@@ -1405,7 +1422,7 @@ test("creates agent and exercises lifecycle", async () => {
   expect(refreshResult.agentId).toBe(agent.id);
   expect(sawRefresh).toBe(true);
   const statusMessage = await statusPromise;
-  expect((statusMessage.payload as { agentId?: string }).agentId).toBe(agent.id);
+  expect((statusMessage.payload as unknown as { agentId?: string }).agentId).toBe(agent.id);
 
   const timelineResult = await ctx.client.fetchAgentTimeline(agent.id, {
     direction: "tail",
@@ -1467,12 +1484,14 @@ test("creates agent and exercises lifecycle", async () => {
   await ctx.client.cancelAgent(agent.id);
 
   const modelsRequestId = `models-${Date.now()}`;
-  const modelsPromise = waitForSignal(30000, (resolve) => {
+  const modelsPromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "list_provider_models_response" }>
+  >(30000, (resolve) => {
     const unsubscribeModels = ctx.client.on("list_provider_models_response", (message) => {
       if (message.type !== "list_provider_models_response") {
         return;
       }
-      if (message.payload.provider !== "codex") {
+      if (message.payload.provider !== "pi") {
         return;
       }
       if (message.payload.requestId !== modelsRequestId) {
@@ -1483,19 +1502,21 @@ test("creates agent and exercises lifecycle", async () => {
     return unsubscribeModels;
   });
 
-  const models = await ctx.client.listProviderModels("codex", {
+  const models = await ctx.client.listProviderModels("pi", {
     cwd,
     requestId: modelsRequestId,
   });
   const modelsMessage = await modelsPromise;
-  expect(models.provider).toBe("codex");
+  expect(models.provider).toBe("pi");
   expect(models.fetchedAt).toBeTruthy();
   expect(models.requestId).toBe(modelsRequestId);
-  expect(modelsMessage.payload.provider).toBe("codex");
+  expect(modelsMessage.payload.provider).toBe("pi");
   expect(modelsMessage.payload.requestId).toBe(modelsRequestId);
 
   const commandsRequestId = `commands-${Date.now()}`;
-  const commandsResponsePromise = waitForSignal(15000, (resolve) => {
+  const commandsResponsePromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "list_commands_response" }>
+  >(15000, (resolve) => {
     const unsubscribeCommands = ctx.client.on("list_commands_response", (message) => {
       if (message.type !== "list_commands_response") {
         return;
@@ -1524,7 +1545,9 @@ test("creates agent and exercises lifecycle", async () => {
 
   const persistence = finalState.final?.persistence;
 
-  const agentDeletedPromise = waitForSignal(15000, (resolve) => {
+  const agentDeletedPromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "agent_deleted" }>
+  >(15000, (resolve) => {
     const unsubscribeDeleted = ctx.client.on("agent_deleted", (message) => {
       if (message.type !== "agent_deleted") {
         return;
@@ -1556,12 +1579,14 @@ test("handles permission flow", async () => {
   const filePath = path.join(cwd, "permission.txt");
 
   const agent = await ctx.client.createAgent({
-    ...getAskModeConfig("codex"),
+    ...getAskModeConfig("pi"),
     cwd,
     title: "Permission Test",
   });
 
-  const permissionRequestPromise = waitForSignal(60000, (resolve) => {
+  const permissionRequestPromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "agent_permission_request" }>
+  >(60000, (resolve) => {
     const unsubscribe = ctx.client.on("agent_permission_request", (message) => {
       if (message.type !== "agent_permission_request") {
         return;
@@ -1574,7 +1599,9 @@ test("handles permission flow", async () => {
     return unsubscribe;
   });
 
-  const permissionResolvedPromise = waitForSignal(60000, (resolve) => {
+  const permissionResolvedPromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "agent_permission_resolved" }>
+  >(60000, (resolve) => {
     const unsubscribe = ctx.client.on("agent_permission_resolved", (message) => {
       if (message.type !== "agent_permission_resolved") {
         return;
@@ -1628,7 +1655,7 @@ test("handles permission flow", async () => {
 test("exposes raw session events for reachable screens", async () => {
   const cwd = tmpCwd();
   const agent = await ctx.client.createAgent({
-    ...getFullAccessConfig("codex"),
+    ...getFullAccessConfig("pi"),
     cwd,
     title: "Raw Events Test",
   });
@@ -1655,7 +1682,7 @@ speechTest(
     let sawAssistantChunk = false;
     let sawAssistantLog = false;
 
-    const transcriptSeen = waitForSignal(60000, (resolve) => {
+    const transcriptSeen = waitForSignal<void>(60000, (resolve) => {
       const unsubscribeChunk = ctx.client.on("assistant_chunk", (message) => {
         if (message.type !== "assistant_chunk") {
           return;
@@ -1671,7 +1698,7 @@ speechTest(
         }
         if (message.payload.type === "transcript") {
           sawTranscriptLog = true;
-          resolve();
+          resolve(undefined);
         }
         if (message.payload.type === "assistant") {
           sawAssistantLog = true;
@@ -1702,13 +1729,15 @@ speechTest(
     const voiceCwd = tmpCwd();
     const voiceAgent = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd: voiceCwd,
       },
     });
     await ctx.client.setVoiceMode(true, voiceAgent.id);
 
-    const transcription = waitForSignal(30_000, (resolve) => {
+    const transcription = waitForSignal<
+      Extract<SessionOutboundMessage, { type: "transcription_result" }>["payload"]
+    >(30_000, (resolve) => {
       const unsubscribe = ctx.client.on("transcription_result", (message) => {
         if (message.type !== "transcription_result") {
           return;
@@ -1718,7 +1747,7 @@ speechTest(
       return unsubscribe;
     });
 
-    const errorSignal = waitForSignal(30_000, (resolve) => {
+    const errorSignal = waitForSignal<string>(30_000, (resolve) => {
       const unsubscribeStatus = ctx.client.on("status", (message) => {
         if (message.type !== "status") {
           return;
@@ -1751,7 +1780,7 @@ speechTest(
       expect(sampleRate).toBe(16000);
       const format = "audio/pcm;rate=16000;bits=16";
 
-      const earlyTranscription = waitForSignal(1000, (resolve) => {
+      const earlyTranscription = waitForSignal<string>(1000, (resolve) => {
         const unsubscribe = ctx.client.on("transcription_result", (message) => {
           if (message.type !== "transcription_result") {
             return;
@@ -1899,7 +1928,7 @@ test("supports git and file operations", async () => {
   writeFileSync(downloadFile, downloadContents, "utf-8");
 
   const agent = await ctx.client.createAgent({
-    ...getFullAccessConfig("codex"),
+    ...getFullAccessConfig("pi"),
     cwd,
     title: "Git/File Test",
   });
@@ -1917,7 +1946,9 @@ test("supports git and file operations", async () => {
   expect(diffResult.files.some((file) => file.path === "test.txt")).toBe(true);
 
   const listRequestId = `list-${Date.now()}`;
-  const listMessagePromise = waitForSignal(15000, (resolve) => {
+  const listMessagePromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "file_explorer_response" }>
+  >(15000, (resolve) => {
     const unsubscribeList = ctx.client.on("file_explorer_response", (message) => {
       if (message.type !== "file_explorer_response") {
         return;
@@ -1943,7 +1974,9 @@ test("supports git and file operations", async () => {
   expect(listMessage.payload.requestId).toBe(listRequestId);
 
   const fileRequestId = `file-${Date.now()}`;
-  const fileMessagePromise = waitForSignal(15000, (resolve) => {
+  const fileMessagePromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "file_explorer_response" }>
+  >(15000, (resolve) => {
     const unsubscribeFile = ctx.client.on("file_explorer_response", (message) => {
       if (message.type !== "file_explorer_response") {
         return;
@@ -1969,7 +2002,9 @@ test("supports git and file operations", async () => {
   expect(fileMessage.payload.requestId).toBe(fileRequestId);
 
   const tokenRequestId = `token-${Date.now()}`;
-  const tokenMessagePromise = waitForSignal(15000, (resolve) => {
+  const tokenMessagePromise = waitForSignal<
+    Extract<SessionOutboundMessage, { type: "file_download_token_response" }>
+  >(15000, (resolve) => {
     const unsubscribeToken = ctx.client.on("file_download_token_response", (message) => {
       if (message.type !== "file_download_token_response") {
         return;

@@ -170,7 +170,12 @@ function createGitHubServiceForStatus(
   return {
     listPullRequests: async () => [],
     listIssues: async () => [],
-    searchIssuesAndPrs: async () => ({ items: [], githubFeaturesEnabled: true }),
+    searchIssuesAndPrs: async () => ({
+      items: [],
+      featuresEnabled: true,
+      authState: "authenticated" as const,
+      githubFeaturesEnabled: true,
+    }),
     getPullRequest: async () => ({
       number: 1,
       title: "PR",
@@ -180,6 +185,7 @@ function createGitHubServiceForStatus(
       baseRefName: "main",
       headRefName: "feature",
       labels: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
     }),
     getPullRequestHeadRef: async () => "feature",
     getPullRequestCheckoutTarget: async ({ number }) => ({
@@ -199,6 +205,18 @@ function createGitHubServiceForStatus(
       url: "https://github.com/getpaseo/paseo/pull/1",
       number: 1,
     }),
+    getPullRequestTimeline: async () => {
+      throw new Error("not implemented in test stub");
+    },
+    getCheckDetails: async () => {
+      throw new Error("not implemented in test stub");
+    },
+    enablePullRequestAutoMerge: async () => {
+      throw new Error("not implemented in test stub");
+    },
+    disablePullRequestAutoMerge: async () => {
+      throw new Error("not implemented in test stub");
+    },
     mergePullRequest: async () => ({ success: true }),
     isAuthenticated: async () => true,
     invalidate: () => {},
@@ -213,6 +231,7 @@ function createPullRequestStatus(overrides?: Partial<CurrentPullRequestStatus>) 
     baseRefName: "main",
     headRefName: "feature",
     isMerged: false,
+    mergeable: "UNKNOWN" as const,
     checks: [],
     checksStatus: "none" as const,
     reviewDecision: null,
@@ -549,6 +568,7 @@ describe("checkout git utilities", () => {
 
     const status = await getCheckoutStatus(repoDir);
     expect(status.isGit).toBe(true);
+    if (!status.isGit) throw new Error("Expected git checkout");
     expect(status.currentBranch).toBe("main");
     expect(status.isDirty).toBe(true);
     expect(status.hasRemote).toBe(false);
@@ -560,6 +580,7 @@ describe("checkout git utilities", () => {
     await commitAll(repoDir, "update file");
 
     const cleanStatus = await getCheckoutStatus(repoDir);
+    if (!cleanStatus.isGit) throw new Error("Expected git checkout");
     expect(cleanStatus.isDirty).toBe(false);
     const message = execFileSync("git", ["log", "-1", "--pretty=%B"], { cwd: repoDir })
       .toString()
@@ -1655,6 +1676,7 @@ const x = 1;
 
     const status = await getCheckoutStatus(result.worktreePath, { paseoHome });
     expect(status.isGit).toBe(true);
+    if (!status.isGit) throw new Error("Expected git checkout");
     expect(realpathSync.native(status.repoRoot)).toBe(realpathSync.native(result.worktreePath));
     expect(status.isDirty).toBe(true);
     expect(status.isPaseoOwnedWorktree).toBe(true);
@@ -1667,6 +1689,7 @@ const x = 1;
     await commitAll(result.worktreePath, "worktree update");
 
     const cleanStatus = await getCheckoutStatus(result.worktreePath, { paseoHome });
+    if (!cleanStatus.isGit) throw new Error("Expected git checkout");
     expect(cleanStatus.isDirty).toBe(false);
     const message = execFileSync("git", ["log", "-1", "--pretty=%B"], {
       cwd: result.worktreePath,
@@ -1714,6 +1737,7 @@ const x = 1;
 
     const status = await getCheckoutStatus(worktree.worktreePath, { paseoHome });
     expect(status.isGit).toBe(true);
+    if (!status.isGit) throw new Error("Expected git checkout");
     expect(status.isPaseoOwnedWorktree).toBe(true);
     expect(realpathSync.native(status.mainRepoRoot ?? "")).toBe(
       realpathSync.native(mainCheckoutDir),
@@ -1728,6 +1752,7 @@ const x = 1;
 
     const status = await getCheckoutStatus(worktreeDir, { paseoHome });
     expect(status.isGit).toBe(true);
+    if (!status.isGit) throw new Error("Expected git checkout");
     expect(realpathSync.native(status.repoRoot)).toBe(realpathSync.native(worktreeDir));
     expect(status.isPaseoOwnedWorktree).toBe(false);
     expect(realpathSync.native(status.mainRepoRoot ?? "")).toBe(realpathSync.native(repoDir));
@@ -2614,6 +2639,7 @@ const x = 1;
         ],
         checksStatus: "none",
         reviewDecision: null,
+        mergeable: "UNKNOWN",
       },
     });
   });
@@ -3506,6 +3532,7 @@ const x = 1;
 
     const status = await getCheckoutStatus(worktree.worktreePath, { paseoHome });
     expect(status.isGit).toBe(true);
+    if (!status.isGit) throw new Error("Expected git checkout");
     expect(status.baseRef).toBe("develop");
     expect(status.aheadBehind?.ahead).toBe(1);
 
@@ -3659,6 +3686,7 @@ const x = 1;
 
     const status = await getCheckoutStatus(worktree.worktreePath, { paseoHome });
     expect(status.isGit).toBe(true);
+    if (!status.isGit) throw new Error("Expected git checkout");
     expect(status.currentBranch).toBe("feature");
     expect(realpathSync.native(status.repoRoot)).toBe(realpathSync.native(worktree.worktreePath));
     expect(status.isPaseoOwnedWorktree).toBe(true);
