@@ -105,3 +105,41 @@ describe("transcript-window.tsx: both windowed-out edges have a real, wired affo
     expect(code).toMatch(/onAction=\{handleJumpToTail\}/);
   });
 });
+
+describe("transcript-window.tsx: transcript find bar", () => {
+  it("renders the find bar above the list, driven by the search-model snapshot", () => {
+    const code = readCode();
+    expect(code).toMatch(/<TranscriptSearchBar/);
+    expect(code).toMatch(/snapshot=\{searchSnapshot\}/);
+    expect(code).toMatch(/onQueryChange=\{handleSearchQueryChange\}/);
+    expect(code).toMatch(/onNext=\{handleSearchNext\}/);
+    expect(code).toMatch(/onPrevious=\{handleSearchPrevious\}/);
+  });
+
+  it("derives the snapshot from core entries only, never crashing on a non-core row", () => {
+    const code = readCode();
+    expect(code).toMatch(/transcriptSearchSnapshot\(searchState, searchableEntries\)/);
+    expect(code).toMatch(/typeof entry\.kind === "string"/);
+  });
+
+  it("reveals an off-window match before scrolling to it, keyed on the stable active key", () => {
+    const code = readCode();
+    expect(code).toMatch(/windowRef\.current!\.revealIndex\(fullIndex\)/);
+    expect(code).toMatch(/scrollToIndex\(\{ index: windowIndex, viewPosition: 0\.5/);
+    expect(code).toMatch(/}, \[searchSnapshot\.activeKey\]\);/);
+  });
+
+  it("highlights only the active match's row, from theme tokens", () => {
+    const code = readCode();
+    expect(code).toMatch(/item\.id !== activeSearchEntryId/);
+    expect(code).toMatch(/style=\{styles\.searchActive\}/);
+    expect(code).toMatch(/borderColor: theme\.colors\.accent/);
+    expect(code).toMatch(/backgroundColor: theme\.colors\["accent-tint"\]/);
+  });
+
+  it("retries a scroll that raced a window reveal on the next tick", () => {
+    const code = readCode();
+    expect(code).toMatch(/onScrollToIndexFailed=\{handleScrollToIndexFailed\}/);
+    expect(code).toMatch(/listRef\.current\?\.scrollToIndex\(\{ index: info\.index/);
+  });
+});

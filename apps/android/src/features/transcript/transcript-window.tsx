@@ -55,9 +55,21 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 
+import { timeline } from "@picompanion/frontend-core";
+
 import { Banner, Button } from "../../ui/primitives";
 import { BLOCK_GAP } from "../../ui/theme/block-shape";
 import { useTheme } from "../../ui/theme/theme-context";
+import { TranscriptSearchBar } from "./transcript-search-bar";
+import {
+  activeTranscriptSearchEntryId,
+  createTranscriptSearchState,
+  nextTranscriptSearchMatch,
+  previousTranscriptSearchMatch,
+  setTranscriptSearchQuery,
+  transcriptSearchSnapshot,
+  type TranscriptSearchState,
+} from "./transcript-search-model";
 import {
   createTranscriptWindow,
   DEFAULT_TRANSCRIPT_WINDOW_CONFIG,
@@ -112,6 +124,16 @@ function metricsFromScrollEvent(
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     container: { flex: 1, gap: theme.spacing[2] },
+    // The active find match: an accent outline over an accent-tint fill —
+    // the same two roles web's `.pc-transcript__row--search-active` uses —
+    // with the count label (`role=status` there, live-region `Text` here)
+    // naming the match, so the highlight is never colour-only (plan.md §10.5).
+    searchActive: {
+      borderWidth: 1,
+      borderColor: theme.colors.accent,
+      borderRadius: theme.radii.control,
+      backgroundColor: theme.colors["accent-tint"],
+    },
     list: { flex: 1 },
     // The artifact's `.t { padding: 12px 12px 4px; gap: 9px }` — the
     // transcript's own inset and the space between its blocks.
@@ -141,6 +163,64 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
   const listRef = useRef<FlatList<T> | null>(null);
 
   const [snapshot, setSnapshot] = useState(() => windowRef.current!.applyEntries(entries));
+
+  // Plain-text find over the transcript (`transcript-search-model.ts` over
+  // `@picompanion/frontend-core`'s shared search — no regex, no filters, no
+  // persistence). The query/cursor live here, next to the `FlatList` ref
+  // that scrolls to a match and the window that reveals one outside the
+  // current slice; `TranscriptSearchBar` renders only the field, the shared
+  // count, and the two navigation buttons. Only entries carrying a core
+  // `kind` are searchable — this list is generic over `T`, so anything else
+  // is skipped rather than matched wrongly.
+  const [searchState, setSearchState] = useState<TranscriptSearchState>(
+    () => createTranscriptSearchState(),
+  );
+  const searchableEntries = useMemo(() => {
+    const core = entries as unknown as readonly timeline.TranscriptEntry[];
+    return core.filter((entry) => typeof entry.kind === "string");
+  }, [entries]);
+  const searchSnapshot = useMemo(
+    () => transcriptSearchSnapshot(searchState, searchableEntries),
+    [searchState, searchableEntries],
+  );
+  const activeSearchEntryId = activeTranscriptSearchEntryId(searchSnapshot);
+
+  const handleSearchQueryChange = (query: string) => {
+    setSearchState((current) => setTranscriptSearchQuery(current, query));
+  };
+  const handleSearchNext = () => {
+    const total = searchSnapshot.totalCount;
+    setSearchState((current) => nextTranscriptSearchMatch(current, total));
+  };
+  const handleSearchPrevious = () => {
+    const total = searchSnapshot.totalCount;
+    setSearchState((current) => previousTranscriptSearchMatch(current, total));
+  };
+
+  // Scrolls to the active match. Keyed on the stable `activeKey` (not the
+  // match object), so a new row elsewhere — which re-derives the snapshot
+  // without moving this match — never re-scrolls to it. An off-window match
+  // is revealed first (`revealIndex`, still bounded to `maxWindowRows`), so
+  // navigation never lands on a row that is not mounted.
+  useEffect(() => {
+    const activeId = searchSnapshot.current?.entryId;
+    if (searchSnapshot.activeKey === null || !activeId) {
+      return;
+    }
+    const fullIndex = entries.findIndex((entry) => entry.id === activeId);
+    if (fullIndex < 0) {
+      return;
+    }
+    const next = windowRef.current!.revealIndex(fullIndex);
+    setSnapshot(next);
+    const windowIndex = next.windowedEntries.findIndex((entry) => entry.id === activeId);
+    if (windowIndex >= 0) {
+      listRef.current?.scrollToIndex({ index: windowIndex, viewPosition: 0.5, animated: false });
+    }
+    // `activeKey` already identifies the match; `entries` is read fresh each
+    // run rather than tracked, so an unrelated batch does not re-scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchSnapshot.activeKey]);
 
   useEffect(() => {
     const next = windowRef.current!.applyEntries(entries);
@@ -181,11 +261,37 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
     }
   };
 
-  const renderItem: ListRenderItem<T> = ({ item }) =>
-    renderRow(item, testId ? `${testId}-row-${item.id}` : `transcript-window-row-${item.id}`);
+  const renderItem: ListRenderItem<T> = ({ item }) => {
+    const rowTestId = testId ? `${testId}-row-${item.id}` : `transcript-window-row-${item.id}`;
+    const row = renderRow(item, rowTestId);
+    if (item.id !== activeSearchEntryId) {
+      return row;
+    }
+    return (
+      <View style={styles.searchActive} testID={`${rowTestId}-search-active`}>
+        {row}
+      </View>
+    );
+  };
+
+  const handleScrollToIndexFailed = (info: { index: number }) => {
+    // The reveal above committed a new windowed slice that the native list
+    // has not mounted yet: retry once on the next tick, when the new data
+    // is in the tree. The standard `FlatList` fallback for exactly this race.
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: false });
+    }, 100);
+  };
 
   return (
     <View style={styles.container} testID={testId}>
+      <TranscriptSearchBar
+        snapshot={searchSnapshot}
+        onQueryChange={handleSearchQueryChange}
+        onNext={handleSearchNext}
+        onPrevious={handleSearchPrevious}
+        testId={testId ? `${testId}-search` : undefined}
+      />
       {snapshot.hiddenOlderCount > 0 ? (
         <Button
           kind="secondary"
@@ -206,6 +312,7 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
         onScrollBeginDrag={handleScrollBeginDrag}
         onScrollEndDrag={handleScrollEndDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
+        onScrollToIndexFailed={handleScrollToIndexFailed}
         ListFooterComponent={footer ?? undefined}
         testID={testId ? `${testId}-list` : undefined}
       />

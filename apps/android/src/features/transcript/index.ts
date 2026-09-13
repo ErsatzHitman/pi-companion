@@ -128,6 +128,20 @@ export {
   todoProgress,
 } from "./todo-row-model";
 export type { TodoItemState, TodoProgress, TodoRow } from "./todo-row-model";
+export { TranscriptSearchBar } from "./transcript-search-bar";
+export type { TranscriptSearchBarProps } from "./transcript-search-bar";
+export {
+  activeTranscriptSearchEntryId,
+  createTranscriptSearchState,
+  nextTranscriptSearchMatch,
+  previousTranscriptSearchMatch,
+  setTranscriptSearchQuery,
+  transcriptSearchSnapshot,
+} from "./transcript-search-model";
+export type {
+  TranscriptSearchSnapshot,
+  TranscriptSearchState,
+} from "./transcript-search-model";
 export { TranscriptWindowList } from "./transcript-window";
 export type { TranscriptWindowListProps } from "./transcript-window";
 export {
