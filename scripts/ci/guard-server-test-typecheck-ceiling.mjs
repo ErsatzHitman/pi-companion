@@ -97,7 +97,12 @@
 // (rewind.test.ts), ParsedToolReadInput keys (tool-call-read-gutter),
 // and unknown-first PiChild fake (cli-runtime.test.ts). No production
 // source semantics changed.
-export const TYPECHECK_ERROR_CEILING = 123;
+export const TYPECHECK_ERROR_CEILING = 0;
+
+// 2026-09-14: the grandfathered backlog is GONE — 1044 to 0 across six
+// batches (B 85, A 106, C+D partials 300, E+F partials 276, G+H 155,
+// final tail to zero). With the ceiling at zero, ANY new test type error
+// fails the gate; the 307-file floor still guards tsgo-not-running.
 
 // Merged batches G+H lowered this from 278 to 123 (155 errors):
 // session.workspaces suite to zero plus mcp-server and tail suites.

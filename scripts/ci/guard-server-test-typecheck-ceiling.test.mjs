@@ -111,13 +111,15 @@ test("evaluateTypecheckRun fails when the error count exceeds the ceiling", () =
   assert.ok(result.reasons.some((r) => r.includes("exceeds the enforced ceiling")));
 });
 
-test("evaluateTypecheckRun T119 probe 1: a count that collapses far below the ceiling with no ceiling change FAILS", () => {
+test("evaluateTypecheckRun T119 probe 1: excluding test files instead of fixing them FAILS", () => {
   // The exact probe from docs/issues-from-plan.md: re-excluding
-  // src/**/*.test.ts took the real count from 1054 (now 1051) to 75,
-  // reported here with the real, unmoved TYPECHECK_ERROR_CEILING.
-  const result = evaluateTypecheckRun({ errorCount: 75, resolvedTestFileCount: 0 });
+  // src/**/*.test.ts took the real count from 1054 (now 1051) to 75.
+  // At ceiling 0 the count cannot collapse below zero, so the probe now
+  // runs through the file-count floor instead: files excluded rather
+  // than fixed resolve fewer files, which fails regardless of the count.
+  const result = evaluateTypecheckRun({ errorCount: 0, resolvedTestFileCount: 0 });
   assert.equal(result.ok, false);
-  assert.ok(result.reasons.some((r) => r.includes("below the ceiling")));
+  assert.ok(result.reasons.some((r) => r.includes("below the floor")));
 });
 
 test("evaluateTypecheckRun does not trip the floor on a small, legitimate improvement", () => {
