@@ -1048,3 +1048,12 @@ segments, #171717 base (MIT (c) 2026 Nick, no code copied). Direction also
 pulled against the reaffirmed Beautiful UI rules (opaque surfaces, 1px rings
 not blurs) and RN has no backdrop-filter, making Android glass costly.
 Owner chose "stop, keep current visuals" — no styling changed.
+
+### Windows/Tauri desktop app (2026-09-13): scaffolded, then removed by owner
+
+A goal built a Tauri 2 shell at `apps/desktop` (wrapping `apps/web` dist unchanged,
+Acrylic glass, save-dialog seam, daemon-hint injection, NSIS config) on branch
+`desktop/scaffold`, reaching one commit (`d4643e9`) before the owner stopped it and
+ordered full removal. Removed: branch deleted, `apps/desktop/` deleted,
+`package-lock.json` reverted, tree back to clean `main`. No desktop code was ever
+merged; do not recreate it without a fresh owner decision.
