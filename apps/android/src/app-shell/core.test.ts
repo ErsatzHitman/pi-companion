@@ -1040,13 +1040,17 @@ describe("AppCore.settings (T32S11, P5-W16)", () => {
 });
 
 describe("AppCore.notifications (T32S12, P5-W18)", () => {
-  it("is a real NotificationsPlatform whose getPermissionState() actually resolves 'unsupported' (T32P3's unavailable->unsupported fold, not merely constructed)", async () => {
+  it("is a real NotificationsPlatform over the expo-notifications local port (not the unavailable fold)", async () => {
     const core = createAppCore();
-    await expect(core.notifications.getPermissionState()).resolves.toBe("unsupported");
-    await expect(core.notifications.requestPermission()).resolves.toBe("unsupported");
-    // show() degrades silently rather than throwing when unsupported --
-    // proves this is the real createAndroidNotificationsPlatform
-    // pipeline (T32P3), not a bare stub with different behaviour.
+    // No native module exists in this vitest sandbox, so the status reads
+    // read `undetermined` and folds to `"prompt"` — the honest
+    // never-asked state — rather than the old unavailable port's
+    // `"unsupported"`. On a real device this resolves the live OS state.
+    await expect(core.notifications.getPermissionState()).resolves.toBe("prompt");
+    await expect(core.notifications.requestPermission()).resolves.toBe("prompt");
+    // show() with a non-granted state is a silent no-op rather than a
+    // throw — the real createAndroidNotificationsPlatform pipeline, not
+    // a bare stub with different behaviour.
     await expect(
       core.notifications.show({ id: "n1", title: "t", body: "b" }),
     ).resolves.toBeUndefined();
