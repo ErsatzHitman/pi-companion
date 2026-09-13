@@ -34,6 +34,7 @@ import type { TerminalSession } from "../terminal/terminal.js";
 import type { AgentStorage, StoredAgentRecord } from "./agent/agent-storage.js";
 import {
   createPersistedProjectRecord,
+  createPersistedWorkspaceRecord,
   type PersistedProjectRecord,
   type PersistedWorkspaceRecord,
   type ProjectRegistry,
@@ -142,6 +143,7 @@ function createGitHubServiceStub(): ForgeService {
     searchIssuesAndPrs: async () => ({
       items: [],
       featuresEnabled: true,
+      authState: "authenticated" as const,
       githubFeaturesEnabled: true,
     }),
     getPullRequest: async ({ number }) => ({
@@ -153,6 +155,7 @@ function createGitHubServiceStub(): ForgeService {
       baseRefName: "main",
       headRefName: `pr-${number}`,
       labels: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
     }),
     getPullRequestHeadRef: async ({ number }) => `pr-${number}`,
     defaultCheckoutRefs: ({ changeRequestNumber }) => [
@@ -175,11 +178,34 @@ function createGitHubServiceStub(): ForgeService {
       isCrossRepository: false,
     }),
     getCurrentPullRequestStatus: async () => null,
+    getPullRequestTimeline: async () => ({
+      prNumber: 1,
+      repoOwner: "acme",
+      repoName: "repo",
+      items: [],
+      truncated: false,
+      error: null,
+    }),
+    getCheckDetails: async () => ({
+      checkRunId: 1,
+      workflowRunId: null,
+      name: "test",
+      status: null,
+      conclusion: null,
+      url: null,
+      detailsUrl: null,
+      output: null,
+      annotations: [],
+      failedJobs: [],
+      truncated: false,
+    }),
     createPullRequest: async () => ({
       number: 1,
       url: "https://github.com/acme/repo/pull/1",
     }),
     mergePullRequest: async () => ({ success: true }),
+    enablePullRequestAutoMerge: async () => ({ success: true }),
+    disablePullRequestAutoMerge: async () => ({ success: true }),
     isAuthenticated: async () => true,
     invalidate: () => {},
   };
@@ -188,6 +214,7 @@ function createGitHubServiceStub(): ForgeService {
 function createTerminalManagerStub(options?: {
   createTerminal?: (input: {
     cwd: string;
+    workspaceId: string;
     name?: string;
     env?: Record<string, string>;
   }) => Promise<TerminalSession>;
@@ -205,7 +232,12 @@ function createTerminalManagerStub(options?: {
     manager: {
       registerCwdEnv: vi.fn(),
       createTerminal: vi.fn(
-        async (input: { cwd: string; name?: string; env?: Record<string, string> }) => {
+        async (input: {
+          cwd: string;
+          workspaceId: string;
+          name?: string;
+          env?: Record<string, string>;
+        }) => {
           if (options?.createTerminal) {
             return options.createTerminal(input);
           }
@@ -214,6 +246,7 @@ function createTerminalManagerStub(options?: {
             id: `terminal-${terminals.length + 1}`,
             name: input.name ?? "Terminal",
             cwd: input.cwd,
+            workspaceId: input.workspaceId,
             getState: () => ({
               rows: 1,
               cols: 1,
@@ -226,7 +259,7 @@ function createTerminalManagerStub(options?: {
             onCommandFinished: () => () => {},
             onTitleChange: () => () => {},
             onActivityChange: () => () => {},
-            send: (message: { type: string; data: string }) => {
+            send: (message: { type: "input"; data: string }) => {
               if (message.type === "input") {
                 sent.push(message.data);
               }
@@ -237,6 +270,19 @@ function createTerminalManagerStub(options?: {
             getTitle: () => undefined,
             getActivity: () => null,
             setActivity: () => {},
+            clearActivityAttention: () => false,
+            setTitle: () => {},
+            getStateSnapshot: () => ({
+              state: {
+                rows: 1,
+                cols: 1,
+                scrollback: [[{ char: "$" }]],
+                grid: [],
+                cursor: { row: 0, col: 0 },
+              },
+              revision: 0,
+            }),
+            getReplayPreamble: () => "",
             getExitInfo: () => null,
           } satisfies TerminalSession;
           terminals.push({
@@ -249,7 +295,9 @@ function createTerminalManagerStub(options?: {
           return terminal;
         },
       ),
-      validateTerminalActivityToken: vi.fn(() => "unknown"),
+      validateTerminalActivityToken: vi.fn(
+        (_terminalId: string, _token: string) => "unknown" as const,
+      ),
       getTerminals: vi.fn(async () => []),
       getTerminal: vi.fn(() => undefined),
       killTerminal: vi.fn(),
@@ -263,7 +311,36 @@ function createTerminalManagerStub(options?: {
       subscribeTerminalsChanged: vi.fn(() => () => {}),
       subscribeTerminalActivity: vi.fn(() => () => {}),
       subscribeTerminalWorkspaceContributionChanged: vi.fn(() => () => {}),
+      clearTerminalAttention: vi.fn(async () => false),
     } satisfies TerminalManager,
+  };
+}
+
+function createTestGitSnapshot(): import("./workspace-git-service.js").WorkspaceGitRuntimeSnapshot {
+  return {
+    cwd: "/tmp/repo",
+    git: {
+      isGit: false,
+      repoRoot: null,
+      mainRepoRoot: null,
+      currentBranch: null,
+      remoteUrl: null,
+      isPaseoOwnedWorktree: false,
+      isDirty: null,
+      baseRef: null,
+      aheadBehind: null,
+      upstreamRef: null,
+      aheadOfOrigin: null,
+      behindOfOrigin: null,
+      hasRemote: false,
+      diffStat: null,
+    },
+    forge: {
+      featuresEnabled: false,
+      authState: "no_remote" as const,
+      pullRequest: null,
+      error: null,
+    },
   };
 }
 
@@ -281,6 +358,8 @@ function createWorkspaceDescriptor(input: {
     projectKind: "git",
     name: input.workspace.displayName,
     status: "done",
+    archivingAt: null,
+    statusEnteredAt: null,
     activityAt: null,
     diffStat: null,
     scripts: [],
@@ -327,6 +406,13 @@ function createPaseoWorktreeForTest(options: {
     upsert: async (record) => {
       options.events?.push(`project:${record.projectId}`);
       projects.set(record.projectId, record);
+    },
+    update: async (projectId, updater) => {
+      const project = projects.get(projectId);
+      if (!project) return null;
+      const updated = updater(project);
+      projects.set(projectId, updated);
+      return updated;
     },
     archive: async (projectId, archivedAt) => {
       const project = projects.get(projectId);
@@ -645,6 +731,11 @@ describe("runWorktreeSetupInBackground", () => {
         sessionLogger: createLogger(),
         terminalManager: null,
         archiveWorkspaceRecord: async () => {},
+        serviceProxy: null,
+        scriptRuntimeStore: null,
+        getDaemonTcpPort: null,
+        getDaemonTcpHost: null,
+        onScriptsChanged: null,
       },
       {
         requestCwd: sourceWorkspaceCwd,
@@ -701,6 +792,11 @@ describe("runWorktreeSetupInBackground", () => {
         sessionLogger: logger,
         terminalManager: terminalManager.manager,
         archiveWorkspaceRecord,
+        serviceProxy: null,
+        scriptRuntimeStore: null,
+        getDaemonTcpPort: null,
+        getDaemonTcpHost: null,
+        onScriptsChanged: null,
       },
       {
         requestCwd: repoDir,
@@ -800,6 +896,11 @@ describe("runWorktreeSetupInBackground", () => {
         sessionLogger: logger,
         terminalManager: null,
         archiveWorkspaceRecord,
+        serviceProxy: null,
+        scriptRuntimeStore: null,
+        getDaemonTcpPort: null,
+        getDaemonTcpHost: null,
+        onScriptsChanged: null,
       },
       {
         requestCwd: repoDir,
@@ -874,6 +975,11 @@ describe("runWorktreeSetupInBackground", () => {
           sessionLogger: logger,
           terminalManager: null,
           archiveWorkspaceRecord,
+          serviceProxy: null,
+          scriptRuntimeStore: null,
+          getDaemonTcpPort: null,
+          getDaemonTcpHost: null,
+          onScriptsChanged: null,
         },
         {
           requestCwd: repoDir,
@@ -998,6 +1104,11 @@ describe("runWorktreeSetupInBackground", () => {
         sessionLogger: logger,
         terminalManager: terminalManager.manager,
         archiveWorkspaceRecord,
+        serviceProxy: null,
+        scriptRuntimeStore: null,
+        getDaemonTcpPort: null,
+        getDaemonTcpHost: null,
+        onScriptsChanged: null,
       },
       {
         requestCwd: repoDir,
@@ -1093,6 +1204,11 @@ describe("runWorktreeSetupInBackground", () => {
         sessionLogger: logger,
         terminalManager: terminalManager.manager,
         archiveWorkspaceRecord,
+        serviceProxy: null,
+        scriptRuntimeStore: null,
+        getDaemonTcpPort: null,
+        getDaemonTcpHost: null,
+        onScriptsChanged: null,
       },
       {
         requestCwd: repoDir,
@@ -1175,6 +1291,11 @@ describe("runWorktreeSetupInBackground", () => {
         sessionLogger: logger,
         terminalManager: terminalManager.manager,
         archiveWorkspaceRecord,
+        serviceProxy: null,
+        scriptRuntimeStore: null,
+        getDaemonTcpPort: null,
+        getDaemonTcpHost: null,
+        onScriptsChanged: null,
       },
       {
         requestCwd: repoDir,
@@ -1205,9 +1326,9 @@ describe("runWorktreeSetupInBackground", () => {
       [
         "ws-feature-a",
         {
-          status: "completed",
+          status: "completed" as const,
           detail: {
-            type: "worktree_setup",
+            type: "worktree_setup" as const,
             worktreePath: "/repo/.paseo/worktrees/feature-a",
             branchName: "feature-a",
             log: "done",
@@ -1436,16 +1557,19 @@ describe("handleCreatePaseoWorktreeRequest", () => {
         baseBranch: "main",
         branchName: "fix-attached-pr-context",
       },
-      workspace: {
+      workspace: createPersistedWorkspaceRecord({
         workspaceId: "ws-fix-attached-pr-context",
         projectId: "/tmp/repo",
         cwd: "/tmp/worktrees/fix-attached-pr-context/packages/core",
-        kind: "worktree" as const,
+        kind: "worktree",
         displayName: "fix-attached-pr-context",
+        worktreeRoot: "/tmp/worktrees/fix-attached-pr-context",
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot: "/tmp/repo",
         createdAt: "2026-04-30T00:00:00.000Z",
         updatedAt: "2026-04-30T00:00:00.000Z",
         archivedAt: null,
-      },
+      }),
       repoRoot: "/tmp/repo",
       created: true,
     }));
@@ -1454,7 +1578,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
       attachments: [
         {
           type: "github_pr" as const,
-          mimeType: "application/github-pr",
+          mimeType: "application/github-pr" as const,
           number: 123,
           title: "Fix worktree naming",
           url: "https://github.com/getpaseo/paseo/pull/123",
@@ -1560,7 +1684,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
     const { tempDir, repoDir } = createGitRepo();
     cleanupPaths.push(tempDir);
     const paseoHome = path.join(tempDir, ".paseo");
-    const resolveDefaultBranch = vi.fn(async () => "main");
+    const resolveDefaultBranch = vi.fn(async (_repoRoot: string) => "main");
 
     const result = await createPaseoWorktreeForTest({ paseoHome })(
       {
@@ -1601,29 +1725,9 @@ describe("handleCreatePaseoWorktreeRequest", () => {
             paseoHome,
             createPaseoWorktree: createPaseoWorktreeForTest({ paseoHome, events }),
           }),
-          describeWorkspaceRecord: vi.fn(async (result) => ({
-            id: result.workspace.workspaceId,
-            projectId: result.workspace.projectId,
-            projectDisplayName: path.basename(repoDir),
-            projectRootPath: repoDir,
-            projectKind: "git",
-            workspaceKind: "worktree",
-            name: "single-call",
-            status: "done",
-            activityAt: null,
-            diffStat: { additions: 0, deletions: 0 },
-            scripts: [],
-            gitRuntime: {
-              currentBranch: "single-call",
-              remoteUrl: null,
-              isPaseoOwnedWorktree: true,
-              isDirty: false,
-              aheadBehind: null,
-              aheadOfOrigin: null,
-              behindOfOrigin: null,
-            },
-            githubRuntime: null,
-          })),
+          describeWorkspaceRecord: vi.fn(async (result) =>
+            createWorkspaceDescriptor({ workspace: result.workspace, repoDir }),
+          ),
         },
         {
           type: "create_paseo_worktree_request",
@@ -1650,7 +1754,7 @@ describe("handleCreatePaseoWorktreeRequest", () => {
     const { tempDir, repoDir } = createGitRepo();
     const paseoHome = path.join(tempDir, ".paseo");
     const emitted: SessionOutboundMessage[] = [];
-    const backgroundWork = vi.fn(async () => {});
+    const backgroundWork = vi.fn(async (_input: { repoRoot: string }) => {});
     const warmWorkspaceGitData = vi.fn(async () => {});
     let registeredWorktreePath: string | null = null;
 
@@ -1835,8 +1939,22 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
     const workspaceA = "ws-worktree-scope-A";
     const workspaceB = "ws-worktree-scope-B";
     const activeWorkspaces = [
-      { workspaceId: workspaceA, cwd: sharedCwd, kind: "worktree" as const },
-      { workspaceId: workspaceB, cwd: sharedCwd, kind: "worktree" as const },
+      {
+        workspaceId: workspaceA,
+        cwd: sharedCwd,
+        kind: "worktree" as const,
+        worktreeRoot: sharedCwd,
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot: repoDir,
+      },
+      {
+        workspaceId: workspaceB,
+        cwd: sharedCwd,
+        kind: "worktree" as const,
+        worktreeRoot: sharedCwd,
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot: repoDir,
+      },
     ];
     const archivedWorkspaceRecords: string[] = [];
     const listActiveWorkspaces = vi.fn(async () => activeWorkspaces);
@@ -1847,7 +1965,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         paseoHome,
         github: createGitHubServiceStub(),
         workspaceGitService: {
-          getSnapshot: vi.fn(async () => null),
+          getSnapshot: vi.fn(async () => createTestGitSnapshot()),
           listWorktrees: vi.fn(async () => []),
         },
         agentManager: {
@@ -1877,6 +1995,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         worktreePath: sharedCwd,
         repoRoot: repoDir,
         scope: "worktree",
+        deleteWorktreeFromDisk: false,
       },
     );
 
@@ -1908,7 +2027,14 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
     });
     const workspaceId = "ws-default-scope";
     const activeWorkspaces = [
-      { workspaceId, cwd: created.worktreePath, kind: "worktree" as const },
+      {
+        workspaceId,
+        cwd: created.worktreePath,
+        kind: "worktree" as const,
+        worktreeRoot: created.worktreePath,
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot: repoDir,
+      },
     ];
     const archivedWorkspaceRecords: string[] = [];
     const emitted: SessionOutboundMessage[] = [];
@@ -1918,7 +2044,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         paseoHome,
         github: createGitHubServiceStub(),
         workspaceGitService: {
-          getSnapshot: vi.fn(async () => null),
+          getSnapshot: vi.fn(async () => createTestGitSnapshot()),
           listWorktrees: vi.fn(async () => []),
         },
         agentManager: {
@@ -1951,6 +2077,8 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         requestId: "req-default-scope",
         worktreePath: created.worktreePath,
         repoRoot: repoDir,
+        scope: "workspace",
+        deleteWorktreeFromDisk: false,
       },
     );
 
@@ -1983,8 +2111,22 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
     const workspaceA = "ws-default-scope-sibling-A";
     const workspaceB = "ws-default-scope-sibling-B";
     const activeWorkspaces = [
-      { workspaceId: workspaceA, cwd: sharedCwd, kind: "worktree" as const },
-      { workspaceId: workspaceB, cwd: sharedCwd, kind: "local_checkout" as const },
+      {
+        workspaceId: workspaceA,
+        cwd: sharedCwd,
+        kind: "worktree" as const,
+        worktreeRoot: sharedCwd,
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot: repoDir,
+      },
+      {
+        workspaceId: workspaceB,
+        cwd: sharedCwd,
+        kind: "local_checkout" as const,
+        worktreeRoot: null,
+        isPaseoOwnedWorktree: false,
+        mainRepoRoot: null,
+      },
     ];
     const archivedWorkspaceRecords: string[] = [];
     const emitted: SessionOutboundMessage[] = [];
@@ -1994,7 +2136,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         paseoHome,
         github: createGitHubServiceStub(),
         workspaceGitService: {
-          getSnapshot: vi.fn(async () => null),
+          getSnapshot: vi.fn(async () => createTestGitSnapshot()),
           listWorktrees: vi.fn(async () => []),
         },
         agentManager: {
@@ -2027,6 +2169,8 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
         requestId: "req-default-scope-sibling",
         worktreePath: sharedCwd,
         repoRoot: repoDir,
+        scope: "workspace",
+        deleteWorktreeFromDisk: false,
       },
     );
 
@@ -2059,8 +2203,22 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
     const workspaceA = "ws-delete-flag-a";
     const workspaceB = "ws-delete-flag-b";
     const activeWorkspaces = [
-      { workspaceId: workspaceA, cwd: sharedCwd, kind: "worktree" as const },
-      { workspaceId: workspaceB, cwd: sharedCwd, kind: "worktree" as const },
+      {
+        workspaceId: workspaceA,
+        cwd: sharedCwd,
+        kind: "worktree" as const,
+        worktreeRoot: sharedCwd,
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot: repoDir,
+      },
+      {
+        workspaceId: workspaceB,
+        cwd: sharedCwd,
+        kind: "worktree" as const,
+        worktreeRoot: sharedCwd,
+        isPaseoOwnedWorktree: true,
+        mainRepoRoot: repoDir,
+      },
     ];
     const archivedWorkspaceRecords: string[] = [];
     const emitted: SessionOutboundMessage[] = [];
@@ -2070,7 +2228,7 @@ describe("handlePaseoWorktreeArchiveRequest worktree scope", () => {
       paseoHome,
       github: createGitHubServiceStub(),
       workspaceGitService: {
-        getSnapshot: vi.fn(async () => null),
+        getSnapshot: vi.fn(async () => createTestGitSnapshot()),
         listWorktrees: vi.fn(async () => []),
       },
       agentManager: {

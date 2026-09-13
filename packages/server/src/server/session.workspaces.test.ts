@@ -60,6 +60,8 @@ import {
   asCheckoutDiffManager,
   asDaemonConfigStore,
   asTerminalManager,
+  asWorkspaceAutoName,
+  asProviderUsageService,
   asSessionInternals,
   createProviderSnapshotManagerStub,
   isSessionOutboundMessage,
@@ -173,6 +175,8 @@ interface SessionTestAccess {
   updateClientCapabilities(capabilities: Record<string, unknown> | null): void;
   emit(message: unknown): void;
   onMessage(message: unknown): void;
+  getClientActivity(): unknown;
+  cleanup(): Promise<void>;
   paseoHome: string;
   terminalManager: {
     killTerminal(id: string): unknown;
@@ -294,7 +298,7 @@ function makeStoredAgent(input: {
     labels: {},
     lastStatus: "closed",
     lastModeId: null,
-    config: { provider: "codex", cwd: input.cwd },
+    config: null,
     runtimeInfo: { provider: "codex", sessionId: null },
     features: [],
     persistence: null,
@@ -405,6 +409,7 @@ function createWorkspaceRuntimeSnapshot(
       isDirty: false,
       baseRef: "main",
       aheadBehind: { ahead: 0, behind: 0 },
+      upstreamRef: null,
       aheadOfOrigin: 0,
       behindOfOrigin: 0,
       hasRemote: true,
@@ -412,6 +417,7 @@ function createWorkspaceRuntimeSnapshot(
     },
     forge: {
       featuresEnabled: true,
+      authState: "authenticated",
       pullRequest: {
         url: "https://github.com/acme/repo/pull/123",
         title: "Runtime payloads",
@@ -688,6 +694,7 @@ function createSessionForWorkspaceTests(
             updatedAt: input.timestamp,
           }),
         upsert: async () => {},
+        update: async () => null,
         archive: async () => {},
         remove: async () => {},
       },
@@ -702,8 +709,6 @@ function createSessionForWorkspaceTests(
           unsubscribe: () => {},
         }),
         scheduleRefreshForCwd: () => {},
-        onWorkspaceStateMayHaveChanged: () => {},
-        invalidateForge: () => {},
         getMetrics: () => ({
           checkoutDiffTargetCount: 0,
           checkoutDiffSubscriptionCount: 0,
@@ -736,6 +741,7 @@ function createSessionForWorkspaceTests(
       tts: null,
       providerSnapshotManager,
       terminalManager: options.terminalManager ?? null,
+      providerUsageService: asProviderUsageService({}),
     }),
   );
   return session;
@@ -966,8 +972,6 @@ test("create_agent_request keeps requested child cwd when grouped under an exist
             unsubscribe: () => {},
           }),
           scheduleRefreshForCwd: () => {},
-          onWorkspaceStateMayHaveChanged: () => {},
-          invalidateForge: () => {},
           getMetrics: () => ({
             checkoutDiffTargetCount: 0,
             checkoutDiffSubscriptionCount: 0,
@@ -986,6 +990,8 @@ test("create_agent_request keeps requested child cwd when grouped under an exist
         tts: null,
         providerSnapshotManager: createProviderSnapshotManagerStub().manager,
         terminalManager: null,
+        workspaceAutoName: asWorkspaceAutoName({}),
+        providerUsageService: asProviderUsageService({}),
       }),
     );
     await session.handleMessage({
@@ -1120,7 +1126,6 @@ test("create_agent_request launches from an exact subdirectory in a created work
           unsubscribe: () => {},
         }),
         scheduleRefreshForCwd: () => {},
-        onWorkspaceStateMayHaveChanged: () => {},
         getMetrics: () => ({
           checkoutDiffTargetCount: 0,
           checkoutDiffSubscriptionCount: 0,
@@ -1150,6 +1155,7 @@ test("create_agent_request launches from an exact subdirectory in a created work
       tts: null,
       providerSnapshotManager: createProviderSnapshotManagerStub().manager,
       terminalManager: null,
+      providerUsageService: asProviderUsageService({}),
     });
 
     await session.handleMessage({
@@ -1157,7 +1163,7 @@ test("create_agent_request launches from an exact subdirectory in a created work
       requestId: "req-create-worktree-child",
       config: { provider: "codex", cwd: child },
       attachments: [],
-      worktree: { mode: "branch-off", newBranch: "feature/created-worktree" },
+      worktree: { mode: "branch-off" as const, newBranch: "feature/created-worktree" },
     });
 
     const [createdAgent] = agentManager.listAgents();
@@ -1259,8 +1265,6 @@ test("create_agent_request does not title an existing workspace from the agent p
             unsubscribe: () => {},
           }),
           scheduleRefreshForCwd: () => {},
-          onWorkspaceStateMayHaveChanged: () => {},
-          invalidateForge: () => {},
           getMetrics: () => ({
             checkoutDiffTargetCount: 0,
             checkoutDiffSubscriptionCount: 0,
@@ -1277,10 +1281,22 @@ test("create_agent_request does not title an existing workspace from the agent p
         mcpBaseUrl: null,
         stt: null,
         tts: null,
-        generateWorkspaceName: async () => {
-          generateCalls += 1;
-          return { title: "Generated title that must not be written", branch: null };
-        },
+        workspaceAutoName: new WorkspaceAutoName({
+          agentManager,
+          workspaceRegistry,
+          workspaceGitService: createNoopWorkspaceGitService(),
+          providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+          readDaemonConfig: () => ({ metadataGeneration: { providers: [] } }),
+          gitMutation: { notifyGitMutation: async () => {} },
+          emitWorkspaceUpdateForCwd: async () => {},
+          emitWorkspaceUpdateForWorkspaceId: async () => {},
+          logger: asSessionLogger(logger),
+          generateWorkspaceName: async () => {
+            generateCalls += 1;
+            return { title: "Generated title that must not be written", branch: null };
+          },
+        }),
+        providerUsageService: asProviderUsageService({}),
         providerSnapshotManager: createProviderSnapshotManagerStub().manager,
         terminalManager: null,
       }),
@@ -1419,7 +1435,7 @@ test("agent_update placement does not refresh git snapshots", async () => {
       workspaceId: workspace.workspaceId,
       lifecycle: "running",
       updatedAt: "2026-03-30T15:00:00.000Z",
-    }),
+    }) as unknown as ManagedAgent,
   );
 
   expect(getSnapshot).not.toHaveBeenCalled();
@@ -1460,7 +1476,7 @@ test("agent_update emits remove when the agent has no workspaceId", async () => 
       cwd: UNREGISTERED_CWD,
       lifecycle: "running",
       updatedAt: "2026-03-30T15:00:00.000Z",
-    }),
+    }) as unknown as ManagedAgent,
   );
 
   expect(getSnapshot).not.toHaveBeenCalled();
@@ -1590,8 +1606,6 @@ test("archive emits an authoritative agent_update upsert for subscribed clients"
           unsubscribe: () => {},
         }),
         scheduleRefreshForCwd: () => {},
-        onWorkspaceStateMayHaveChanged: () => {},
-        invalidateForge: () => {},
         getMetrics: () => ({
           checkoutDiffTargetCount: 0,
           checkoutDiffSubscriptionCount: 0,
@@ -1952,8 +1966,6 @@ test("close_items_request archives agents and kills terminals in one batch", asy
           unsubscribe: () => {},
         }),
         scheduleRefreshForCwd: () => {},
-        onWorkspaceStateMayHaveChanged: () => {},
-        invalidateForge: () => {},
         getMetrics: () => ({
           checkoutDiffTargetCount: 0,
           checkoutDiffSubscriptionCount: 0,
@@ -2139,8 +2151,6 @@ test("close_items_request archives stored agents that are not currently loaded",
           unsubscribe: () => {},
         }),
         scheduleRefreshForCwd: () => {},
-        onWorkspaceStateMayHaveChanged: () => {},
-        invalidateForge: () => {},
         getMetrics: () => ({
           checkoutDiffTargetCount: 0,
           checkoutDiffSubscriptionCount: 0,
@@ -2288,8 +2298,6 @@ test("close_items_request continues after an archive failure", async () => {
           unsubscribe: () => {},
         }),
         scheduleRefreshForCwd: () => {},
-        onWorkspaceStateMayHaveChanged: () => {},
-        invalidateForge: () => {},
         getMetrics: () => ({
           checkoutDiffTargetCount: 0,
           checkoutDiffSubscriptionCount: 0,
@@ -3371,8 +3379,6 @@ test("workspace update stream keeps persisted workspace visible after agents sto
           unsubscribe: () => {},
         }),
         scheduleRefreshForCwd: () => {},
-        onWorkspaceStateMayHaveChanged: () => {},
-        invalidateForge: () => {},
         getMetrics: () => ({
           checkoutDiffTargetCount: 0,
           checkoutDiffSubscriptionCount: 0,
@@ -5703,6 +5709,7 @@ test("archive_workspace_request archives a worktree-kind workspace and removes t
           isDirty: false,
           baseRef: null,
           aheadBehind: null,
+          upstreamRef: null,
           aheadOfOrigin: null,
           behindOfOrigin: null,
           hasRemote: false,
@@ -5710,6 +5717,7 @@ test("archive_workspace_request archives a worktree-kind workspace and removes t
         },
         forge: {
           featuresEnabled: false,
+          authState: "no_remote",
           pullRequest: null,
           error: null,
         },

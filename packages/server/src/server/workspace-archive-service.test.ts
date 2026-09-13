@@ -42,6 +42,7 @@ function createGitHubServiceStub(): ForgeService {
     searchIssuesAndPrs: async () => ({
       items: [],
       featuresEnabled: true,
+      authState: "authenticated" as const,
       githubFeaturesEnabled: true,
     }),
     getPullRequest: async ({ number }) => ({
@@ -53,6 +54,7 @@ function createGitHubServiceStub(): ForgeService {
       baseRefName: "main",
       headRefName: `pr-${number}`,
       labels: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
     }),
     getPullRequestHeadRef: async ({ number }) => `pr-${number}`,
     getPullRequestCheckoutTarget: async ({ number }) => ({
@@ -65,11 +67,34 @@ function createGitHubServiceStub(): ForgeService {
       isCrossRepository: false,
     }),
     getCurrentPullRequestStatus: async () => null,
+    getPullRequestTimeline: async () => ({
+      prNumber: 1,
+      repoOwner: "acme",
+      repoName: "repo",
+      items: [],
+      truncated: false,
+      error: null,
+    }),
+    getCheckDetails: async () => ({
+      checkRunId: 1,
+      workflowRunId: null,
+      name: "test",
+      status: null,
+      conclusion: null,
+      url: null,
+      detailsUrl: null,
+      output: null,
+      annotations: [],
+      failedJobs: [],
+      truncated: false,
+    }),
     createPullRequest: async () => ({
       number: 1,
       url: "https://github.com/acme/repo/pull/1",
     }),
     mergePullRequest: async () => ({ success: true }),
+    enablePullRequestAutoMerge: async () => ({ success: true }),
+    disablePullRequestAutoMerge: async () => ({ success: true }),
     isAuthenticated: async () => true,
     invalidate: () => {},
   };
@@ -148,7 +173,18 @@ function createArchiveDeps(input: ArchiveDepsInput): ArchiveTestDependencies {
       }),
       archiveSnapshot: vi.fn(async (agentId: string, _archivedAt: string) => {
         archivedSnapshotIds.push(agentId);
-        return {};
+        return {
+          id: agentId,
+          provider: "codex",
+          cwd: "/tmp",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          labels: {},
+          lastStatus: "closed" as const,
+          config: null,
+          persistence: null,
+          archivedAt: _archivedAt,
+        };
       }),
     },
     agentStorage: {
@@ -201,6 +237,9 @@ describe("archiveByScope", () => {
             workspaceId,
             cwd: worktree.worktreePath,
             kind: "worktree",
+            worktreeRoot: worktree.worktreePath,
+            isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
         ],
       }),
@@ -243,8 +282,22 @@ describe("archiveByScope", () => {
       createArchiveDeps({
         paseoHome,
         activeWorkspaces: [
-          { workspaceId: workspaceA, cwd: worktree.worktreePath, kind: "worktree" },
-          { workspaceId: workspaceB, cwd: worktree.worktreePath, kind: "local_checkout" },
+          {
+            workspaceId: workspaceA,
+            cwd: worktree.worktreePath,
+            kind: "worktree",
+            worktreeRoot: worktree.worktreePath,
+            isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
+          },
+          {
+            workspaceId: workspaceB,
+            cwd: worktree.worktreePath,
+            kind: "local_checkout",
+            worktreeRoot: null,
+            isPaseoOwnedWorktree: false,
+            mainRepoRoot: null,
+          },
         ],
       }),
       {
@@ -280,6 +333,7 @@ describe("archiveByScope", () => {
             kind: "worktree",
             worktreeRoot: worktree.worktreePath,
             isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
           {
             workspaceId: siblingWorkspaceId,
@@ -287,6 +341,7 @@ describe("archiveByScope", () => {
             kind: "worktree",
             worktreeRoot: worktree.worktreePath,
             isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
         ],
       }),
@@ -322,6 +377,7 @@ describe("archiveByScope", () => {
             kind: "worktree",
             worktreeRoot: worktree.worktreePath,
             isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
           {
             workspaceId: subdirectoryWorkspaceId,
@@ -329,6 +385,7 @@ describe("archiveByScope", () => {
             kind: "worktree",
             worktreeRoot: worktree.worktreePath,
             isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
         ],
       }),
@@ -449,6 +506,7 @@ describe("archiveByScope", () => {
             kind: "worktree",
             worktreeRoot: worktree.worktreePath,
             isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
           {
             workspaceId: workspaceB,
@@ -456,6 +514,7 @@ describe("archiveByScope", () => {
             kind: "worktree",
             worktreeRoot: worktree.worktreePath,
             isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
           {
             workspaceId: workspaceC,
@@ -463,6 +522,7 @@ describe("archiveByScope", () => {
             kind: "worktree",
             worktreeRoot: worktree.worktreePath,
             isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
           },
         ],
       }),
@@ -490,7 +550,16 @@ describe("archiveByScope", () => {
     const result = await archiveByScope(
       createArchiveDeps({
         paseoHome: path.join(tempDir, ".paseo"),
-        activeWorkspaces: [{ workspaceId, cwd: localCheckoutDir, kind: "local_checkout" }],
+        activeWorkspaces: [
+          {
+            workspaceId,
+            cwd: localCheckoutDir,
+            kind: "local_checkout",
+            worktreeRoot: null,
+            isPaseoOwnedWorktree: false,
+            mainRepoRoot: null,
+          },
+        ],
       }),
       {
         scope: { kind: "workspace", workspaceId },
@@ -515,8 +584,22 @@ describe("archiveByScope", () => {
     const deps = createArchiveDeps({
       paseoHome,
       activeWorkspaces: [
-        { workspaceId: workspaceA, cwd: worktree.worktreePath, kind: "worktree" },
-        { workspaceId: workspaceB, cwd: worktree.worktreePath, kind: "worktree" },
+        {
+          workspaceId: workspaceA,
+          cwd: worktree.worktreePath,
+          kind: "worktree",
+          worktreeRoot: worktree.worktreePath,
+          isPaseoOwnedWorktree: true,
+          mainRepoRoot: repoDir,
+        },
+        {
+          workspaceId: workspaceB,
+          cwd: worktree.worktreePath,
+          kind: "worktree",
+          worktreeRoot: worktree.worktreePath,
+          isPaseoOwnedWorktree: true,
+          mainRepoRoot: repoDir,
+        },
       ],
     });
     const originalArchiveWorkspaceRecord = deps.archiveWorkspaceRecord;
@@ -596,7 +679,16 @@ describe("archiveByScope", () => {
 
     const deps = createArchiveDeps({
       paseoHome,
-      activeWorkspaces: [{ workspaceId, cwd: worktree.worktreePath, kind: "worktree" }],
+      activeWorkspaces: [
+        {
+          workspaceId,
+          cwd: worktree.worktreePath,
+          kind: "worktree",
+          worktreeRoot: worktree.worktreePath,
+          isPaseoOwnedWorktree: true,
+          mainRepoRoot: repoDir,
+        },
+      ],
     });
 
     const archivingByWorkspaceId = new Map<string, string>();
@@ -685,7 +777,14 @@ describe("archiveByScope", () => {
     const deps = createArchiveDeps({
       paseoHome,
       activeWorkspaces: [
-        { workspaceId: targetWorkspaceId, cwd: worktree.worktreePath, kind: "worktree" },
+        {
+          workspaceId: targetWorkspaceId,
+          cwd: worktree.worktreePath,
+          kind: "worktree",
+          worktreeRoot: worktree.worktreePath,
+          isPaseoOwnedWorktree: true,
+          mainRepoRoot: repoDir,
+        },
       ],
     });
     deps.agentManager = {
@@ -696,7 +795,18 @@ describe("archiveByScope", () => {
       }),
       archiveSnapshot: vi.fn(async (agentId: string, _archivedAt: string) => {
         deps.archivedSnapshotIds.push(agentId);
-        return {};
+        return {
+          id: agentId,
+          provider: "codex",
+          cwd: "/tmp",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          labels: {},
+          lastStatus: "closed" as const,
+          config: null,
+          persistence: null,
+          archivedAt: _archivedAt,
+        };
       }),
     };
     deps.agentStorage = {
@@ -735,9 +845,30 @@ describe("archiveByScope", () => {
       createArchiveDeps({
         paseoHome,
         activeWorkspaces: [
-          { workspaceId: workspaceA, cwd: worktree.worktreePath, kind: "worktree" },
-          { workspaceId: workspaceB, cwd: worktree.worktreePath, kind: "worktree" },
-          { workspaceId: workspaceC, cwd: worktree.worktreePath, kind: "local_checkout" },
+          {
+            workspaceId: workspaceA,
+            cwd: worktree.worktreePath,
+            kind: "worktree",
+            worktreeRoot: worktree.worktreePath,
+            isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
+          },
+          {
+            workspaceId: workspaceB,
+            cwd: worktree.worktreePath,
+            kind: "worktree",
+            worktreeRoot: worktree.worktreePath,
+            isPaseoOwnedWorktree: true,
+            mainRepoRoot: repoDir,
+          },
+          {
+            workspaceId: workspaceC,
+            cwd: worktree.worktreePath,
+            kind: "local_checkout",
+            worktreeRoot: null,
+            isPaseoOwnedWorktree: false,
+            mainRepoRoot: null,
+          },
         ],
       }),
       {
@@ -762,8 +893,22 @@ describe("resolveWorkspaceIdAtPath", () => {
     const result = await resolveWorkspaceIdAtPath(
       {
         listActiveWorkspaces: async () => [
-          { workspaceId: "ws-local", cwd: targetPath, kind: "local_checkout" },
-          { workspaceId: "ws-worktree", cwd: targetPath, kind: "worktree" },
+          {
+            workspaceId: "ws-local",
+            cwd: targetPath,
+            kind: "local_checkout",
+            worktreeRoot: null,
+            isPaseoOwnedWorktree: false,
+            mainRepoRoot: null,
+          },
+          {
+            workspaceId: "ws-worktree",
+            cwd: targetPath,
+            kind: "worktree",
+            worktreeRoot: targetPath,
+            isPaseoOwnedWorktree: true,
+            mainRepoRoot: null,
+          },
         ],
         findWorkspaceIdForCwd: vi.fn(async () => "ws-local"),
       },
@@ -779,7 +924,14 @@ describe("resolveWorkspaceIdAtPath", () => {
     const result = await resolveWorkspaceIdAtPath(
       {
         listActiveWorkspaces: async () => [
-          { workspaceId: "ws-nested", cwd: "/worktrees/repo", kind: "worktree" },
+          {
+            workspaceId: "ws-nested",
+            cwd: "/worktrees/repo",
+            kind: "worktree",
+            worktreeRoot: "/worktrees/repo",
+            isPaseoOwnedWorktree: true,
+            mainRepoRoot: null,
+          },
         ],
         findWorkspaceIdForCwd: vi.fn(async () => "ws-nested"),
       },
