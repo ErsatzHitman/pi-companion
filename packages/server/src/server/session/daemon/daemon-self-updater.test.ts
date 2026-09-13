@@ -246,7 +246,7 @@ describe("DaemonSelfUpdater", () => {
       }),
     ).rejects.toBeInstanceOf(DaemonSelfUpdateInProgressError);
 
-    resolveInstall?.({ exitCode: 0, stdout: "updated", stderr: "" });
+    resolveInstall!({ exitCode: 0, stdout: "updated", stderr: "" });
     await expect(firstUpdate).resolves.toMatchObject({ success: true });
     expect(calls).toEqual(["inspect", "installLatest", "inspect"]);
   });

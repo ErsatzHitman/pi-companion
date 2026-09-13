@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { once } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
+import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import pino from "pino";
 import { describe, expect, it } from "vitest";
@@ -21,7 +22,7 @@ class FakeLocalSpeechWorker extends EventEmitter {
   public connected = true;
   public killed = false;
   public pid = 12345;
-  public readonly stderr = new EventEmitter() as NodeJS.ReadableStream;
+  public readonly stderr = new EventEmitter() as unknown as Readable;
   public readonly sent: LocalSpeechWorkerRequest[] = [];
   public disconnects = 0;
   public kills = 0;
@@ -42,6 +43,18 @@ class FakeLocalSpeechWorker extends EventEmitter {
     this.killed = true;
     this.connected = false;
     return true;
+  }
+
+  on(event: "message", listener: (message: LocalSpeechWorkerToParentMessage) => void): this;
+  on(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
+  on(
+    event: "message" | "close",
+    listener:
+      | ((message: LocalSpeechWorkerToParentMessage) => void)
+      | ((code: number | null, signal: NodeJS.Signals | null) => void),
+  ): this {
+    super.on(event, listener as (...args: unknown[]) => void);
+    return this;
   }
 
   respond(request: LocalSpeechWorkerRequest, result?: unknown): void {
@@ -182,12 +195,15 @@ describe("LocalSpeechWorkerClient", () => {
     const provider = new WorkerBackedSpeechToTextProvider(client, "voiceStt");
     const session = provider.createSession({ logger: pino({ level: "silent" }) });
 
-    const transcriptPromise = once(session as EventEmitter, "transcript");
-    const committedPromise = once(session as EventEmitter, "committed");
+    const transcriptPromise = once(session as unknown as EventEmitter, "transcript");
+    const committedPromise = once(session as unknown as EventEmitter, "committed");
 
     const connect = session.connect();
     const createRequest = workers[0].sent[0];
     expect(createRequest).toMatchObject({ type: "session.create", kind: "voiceStt" });
+    if (createRequest.type !== "session.create") {
+      throw new Error("Expected session.create request");
+    }
     workers[0].respond(createRequest, { requiredSampleRate: 16000 });
     await connect;
 
@@ -251,7 +267,7 @@ describe("LocalSpeechWorkerClient", () => {
     const provider = new WorkerBackedSpeechToTextProvider(client, "dictationStt");
     const session = provider.createSession({ logger: pino({ level: "silent" }) });
     let observedError: Error | null = null;
-    (session as EventEmitter).on("error", (error: Error) => {
+    (session as unknown as EventEmitter).on("error", (error: Error) => {
       observedError = error;
     });
 
@@ -265,7 +281,9 @@ describe("LocalSpeechWorkerClient", () => {
       session.commit();
       await waitForMicrotasks();
 
-      expect(observedError?.message).not.toBe("Local speech worker IPC channel is not writable");
+      expect((observedError as Error | null)?.message).not.toBe(
+        "Local speech worker IPC channel is not writable",
+      );
     } finally {
       client.shutdown();
       for (const worker of workers) {
@@ -352,12 +370,15 @@ describe("LocalSpeechWorkerClient", () => {
     const { client, workers } = createClient();
     const provider = new WorkerBackedTurnDetectionProvider(client);
     const session = provider.createSession({ logger: pino({ level: "silent" }) });
-    const startedPromise = once(session as EventEmitter, "speech_started");
-    const stoppedPromise = once(session as EventEmitter, "speech_stopped");
+    const startedPromise = once(session as unknown as EventEmitter, "speech_started");
+    const stoppedPromise = once(session as unknown as EventEmitter, "speech_stopped");
 
     const connect = session.connect();
     const createRequest = workers[0].sent[0];
     expect(createRequest).toMatchObject({ type: "session.create", kind: "vad" });
+    if (createRequest.type !== "session.create") {
+      throw new Error("Expected session.create request");
+    }
     workers[0].respond(createRequest, { requiredSampleRate: 16000 });
     await connect;
 

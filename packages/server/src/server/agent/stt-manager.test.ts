@@ -3,18 +3,40 @@ import pino from "pino";
 import { EventEmitter } from "node:events";
 
 import { STTManager } from "./stt-manager.js";
-import { PersistedConfigSchema } from "../persisted-config.js";
+import { PersistedConfigSchema, type PersistedConfig } from "../persisted-config.js";
 import { resolveSpeechConfig } from "../speech/speech-config-resolver.js";
 import type {
   SpeechToTextProvider,
+  StreamingTranscriptionCommittedEvent,
+  StreamingTranscriptionEvent,
   StreamingTranscriptionSession,
   TranscriptionResult,
 } from "../speech/speech-provider.js";
 
 type SessionParams = Parameters<SpeechToTextProvider["createSession"]>[0];
-type StreamingOn = StreamingTranscriptionSession["on"];
-type StreamingOnEvent = Parameters<StreamingOn>[0];
-type StreamingOnHandler = Parameters<StreamingOn>[1];
+
+function createSessionOn(emitter: EventEmitter): StreamingTranscriptionSession["on"] {
+  function on(
+    event: "committed",
+    handler: (payload: StreamingTranscriptionCommittedEvent) => void,
+  ): unknown;
+  function on(
+    event: "transcript",
+    handler: (payload: StreamingTranscriptionEvent) => void,
+  ): unknown;
+  function on(event: "error", handler: (err: unknown) => void): unknown;
+  function on(
+    event: string,
+    handler:
+      | ((payload: StreamingTranscriptionCommittedEvent) => void)
+      | ((payload: StreamingTranscriptionEvent) => void)
+      | ((err: unknown) => void),
+  ): unknown {
+    emitter.on(event, handler as (...args: unknown[]) => void);
+    return undefined;
+  }
+  return on;
+}
 
 class FakeStt implements SpeechToTextProvider {
   public readonly id = "fake";
@@ -48,10 +70,7 @@ class FakeStt implements SpeechToTextProvider {
       },
       clear() {},
       close() {},
-      on(event: StreamingOnEvent, handler: StreamingOnHandler) {
-        emitter.on(event, handler as (...args: unknown[]) => void);
-        return undefined;
-      },
+      on: createSessionOn(emitter),
     };
   }
 }
@@ -87,10 +106,7 @@ class SequencedFakeStt implements SpeechToTextProvider {
       },
       clear() {},
       close() {},
-      on(event: StreamingOnEvent, handler: StreamingOnHandler) {
-        emitter.on(event, handler as (...args: unknown[]) => void);
-        return undefined;
-      },
+      on: createSessionOn(emitter),
     };
   }
 }
@@ -100,9 +116,13 @@ describe("STTManager", () => {
     const result = resolveSpeechConfig({
       paseoHome: "/tmp/paseo-home",
       env: params.env ?? ({} as NodeJS.ProcessEnv),
-      persisted: PersistedConfigSchema.parse(params.persisted ?? {}),
+      persisted: PersistedConfigSchema.parse(params.persisted ?? {}) as unknown as PersistedConfig,
     });
-    return result.speech.sttLanguages.voice;
+    const sttLanguages = result.speech.sttLanguages;
+    if (!sttLanguages) {
+      throw new Error("Expected sttLanguages in resolved speech config");
+    }
+    return sttLanguages.voice;
   }
 
   async function transcribeWithResolvedVoiceLanguage(params: {

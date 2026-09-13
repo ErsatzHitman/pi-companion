@@ -6,6 +6,7 @@ import {
   StructuredAgentFallbackError,
   StructuredAgentResponseError,
   type AgentCaller,
+  type StructuredAgentGenerationOptions,
 } from "./agent-response-loop.js";
 import type { AgentManager } from "./agent-manager.js";
 
@@ -171,13 +172,13 @@ describe("generateStructuredAgentResponseWithFallback", () => {
         { provider: "codex", model: "gpt-5.4-mini" },
       ],
       persistSession: false,
-      runner: async (options) => {
+      runner: async <TResult>(options: StructuredAgentGenerationOptions<TResult>) => {
         calls.push({
           provider: options.agentConfig.provider,
           model: options.agentConfig.model ?? undefined,
           persistSession: options.persistSession,
         });
-        return { summary: "ok" };
+        return { summary: "ok" } as unknown as TResult;
       },
     });
 
@@ -203,12 +204,12 @@ describe("generateStructuredAgentResponseWithFallback", () => {
         { provider: "claude", model: "haiku" },
         { provider: "codex", model: "gpt-5.4-mini" },
       ],
-      runner: async (options) => {
+      runner: async <TResult>(options: StructuredAgentGenerationOptions<TResult>) => {
         calls.push({
           provider: options.agentConfig.provider,
           model: options.agentConfig.model ?? undefined,
         });
-        return { summary: "ok" };
+        return { summary: "ok" } as unknown as TResult;
       },
     });
 
@@ -234,7 +235,7 @@ describe("generateStructuredAgentResponseWithFallback", () => {
         { provider: "claude", model: "haiku" },
         { provider: "codex", model: "gpt-5.4-mini" },
       ],
-      runner: async (options) => {
+      runner: async <TResult>(options: StructuredAgentGenerationOptions<TResult>) => {
         calls.push({
           provider: options.agentConfig.provider,
           model: options.agentConfig.model ?? undefined,
@@ -242,7 +243,7 @@ describe("generateStructuredAgentResponseWithFallback", () => {
         if (options.agentConfig.provider === "claude") {
           throw new Error("claude failed");
         }
-        return { summary: "ok" };
+        return { summary: "ok" } as unknown as TResult;
       },
     });
 

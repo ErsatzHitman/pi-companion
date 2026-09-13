@@ -156,7 +156,20 @@ function screenshotPayload(): Extract<BrowserToolsResponsePayload, { ok: true }>
   };
 }
 
-const routedToolCases = [
+interface RoutedToolCaseBase {
+  name: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  command: BrowserToolsExecuteInput["command"];
+  payload: Extract<BrowserToolsResponsePayload, { ok: true }>;
+  content: PaseoToolResult["content"];
+}
+
+type RoutedToolCase =
+  | (RoutedToolCaseBase & { structuredResult?: undefined })
+  | (RoutedToolCaseBase & { structuredResult: Record<string, unknown> });
+
+const routedToolCases: RoutedToolCase[] = [
   {
     name: "click",
     toolName: "browser_click",

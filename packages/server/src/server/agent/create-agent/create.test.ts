@@ -204,7 +204,7 @@ test("session create forwards clientMessageId to the initial prompt run options"
     provider: "codex",
     cwd: "/tmp/paseo-create-test",
     runtimeInfo: null,
-  } as ManagedAgent;
+  } as unknown as ManagedAgent;
   const streamAgent = vi.fn(() => (async function* noop() {})());
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
@@ -243,7 +243,7 @@ test("session create validates the requested mode against the provider's modes",
     provider: "opencode",
     cwd: "/tmp/paseo-create-test",
     runtimeInfo: null,
-  } as ManagedAgent;
+  } as unknown as ManagedAgent;
   const createAgent = vi.fn(async () => snapshot);
   const stub = createProviderSnapshotManagerStub();
   stub.resolveCreateConfig.mockRejectedValue(
@@ -286,7 +286,7 @@ test("session create applies the resolved mode from the provider create config",
     provider: "opencode",
     cwd: "/tmp/paseo-create-test",
     runtimeInfo: null,
-  } as ManagedAgent;
+  } as unknown as ManagedAgent;
   const createAgent = vi.fn(async () => snapshot);
   const stub = createProviderSnapshotManagerStub();
   stub.resolveCreateConfig.mockResolvedValue({
@@ -329,7 +329,7 @@ test("mcp create accepts provider-only internal input and leaves model undefined
     provider: "claude",
     cwd: "/tmp/paseo-create-test",
     runtimeInfo: null,
-  } as ManagedAgent;
+  } as unknown as ManagedAgent;
   const createAgent = vi.fn(async () => snapshot);
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
@@ -341,9 +341,9 @@ test("mcp create accepts provider-only internal input and leaves model undefined
     providerSnapshotManager: {
       resolveCreateConfig: vi.fn(async (input) => {
         expect(input.provider).toBe("claude");
-        return {};
+        return { modeId: undefined, featureValues: undefined };
       }),
-    } as Parameters<typeof createAgentCommand>[0]["providerSnapshotManager"],
+    } as unknown as Parameters<typeof createAgentCommand>[0]["providerSnapshotManager"],
   };
 
   await createAgentCommand(dependencies, {
@@ -574,7 +574,7 @@ test("mcp create exposes the created worktree before dispatching the initial pro
         logger,
         providerSnapshotManager: {
           async resolveCreateConfig() {
-            return {};
+            return { modeId: undefined, featureValues: undefined };
           },
         },
         createPaseoWorktree: async () => createdWorktree,

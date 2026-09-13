@@ -72,6 +72,9 @@ describe("serializeAgentStreamEvent", () => {
 
     const serialized = serializeAgentStreamEvent(event);
     expect(serialized).not.toBeNull();
+    if (event.item.type !== "user_message") {
+      throw new Error("Expected timeline.user_message event");
+    }
     if (!serialized || serialized.type !== "timeline" || serialized.item.type !== "user_message") {
       throw new Error("Expected timeline.user_message event");
     }

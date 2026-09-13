@@ -175,8 +175,6 @@ function createHarness(input: {
         unsubscribe: () => {},
       }),
       scheduleRefreshForCwd: () => {},
-      onWorkspaceStateMayHaveChanged: () => {},
-      invalidateForge: () => {},
       getMetrics: () => ({
         checkoutDiffTargetCount: 0,
         checkoutDiffSubscriptionCount: 0,
@@ -186,6 +184,8 @@ function createHarness(input: {
       dispose: () => {},
     }),
     workspaceGitService,
+    workspaceAutoName: createStub<SessionOptions["workspaceAutoName"]>({}),
+    providerUsageService: createStub<SessionOptions["providerUsageService"]>({}),
     daemonConfigStore: createStub<SessionOptions["daemonConfigStore"]>({
       get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
       onChange: () => () => {},

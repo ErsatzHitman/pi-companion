@@ -7,13 +7,13 @@ import type {
   AgentPermissionResult,
   AgentRunOptions,
   AgentPermissionResponse,
+  AgentStreamEvent,
 } from "./agent-sdk-types.js";
-import type { AgentStreamEvent } from "../messages.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import { respondToAgentPermission } from "./permission-response.js";
 
 class FakePermissionAgentManager {
-  permissionResult: AgentPermissionResult | void;
+  permissionResult!: AgentPermissionResult | void;
   hasRunInFlight = false;
   outOfBandHandled = false;
   permissionResponses: Array<{

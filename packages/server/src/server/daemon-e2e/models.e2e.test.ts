@@ -27,13 +27,13 @@ describe("daemon E2E", () => {
 
         // Should return at least one model
         expect(result.models).toBeTruthy();
-        expect(result.models.length).toBeGreaterThan(0);
+        expect(result.models?.length).toBeGreaterThan(0);
 
         // Verify model structure
-        const model = result.models[0];
-        expect(model.provider).toBe("pi");
-        expect(model.id).toBeTruthy();
-        expect(model.label).toBeTruthy();
+        const model = result.models?.[0];
+        expect(model?.provider).toBe("pi");
+        expect(model?.id).toBeTruthy();
+        expect(model?.label).toBeTruthy();
       } finally {
         await ctx.cleanup();
       }

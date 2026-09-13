@@ -11,7 +11,11 @@ import {
   type SessionOutboundMessage,
 } from "@picompanion/protocol/messages";
 import { Session, type SessionOptions } from "./session.js";
-import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
+import {
+  asProviderUsageService,
+  asWorkspaceAutoName,
+  createProviderSnapshotManagerStub,
+} from "./test-utils/session-stubs.js";
 import type { AgentTimelineRow } from "./agent/agent-manager.js";
 import { InMemoryAgentTimelineStore } from "./agent/agent-timeline-store.js";
 import type { AgentTimelineFetchOptions } from "./agent/agent-timeline-store-types.js";
@@ -268,6 +272,8 @@ function createSessionForWireCompatTest(options?: {
     stt: null,
     tts: null,
     providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+    workspaceAutoName: asWorkspaceAutoName({}),
+    providerUsageService: asProviderUsageService({}),
     terminalManager: null,
   });
 

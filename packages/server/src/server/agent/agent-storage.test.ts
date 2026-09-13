@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, vi } from "vitest";
 import os from "node:os";
 import path from "node:path";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, type Dirent } from "node:fs";
 import { promises as fs } from "node:fs";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
@@ -23,6 +23,7 @@ type ManagedAgentOverrides = Omit<
   pendingPermissions?: Map<string, AgentPermissionRequest>;
   session?: AgentSession | null;
   activeForegroundTurnId?: string | null;
+  sessionId?: string;
   runtimeInfo?: ManagedAgent["runtimeInfo"];
   attention?: ManagedAgent["attention"];
 };
@@ -109,10 +110,16 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     availableModes: overrides.availableModes ?? [],
     currentModeId: overrides.currentModeId ?? core.config.modeId ?? null,
     pendingPermissions: overrides.pendingPermissions ?? new Map<string, AgentPermissionRequest>(),
+    bufferedPermissionResolutions: new Map(),
+    inFlightPermissionResponses: new Set<string>(),
+    pendingReplacement: false,
+    finalizedForegroundTurnIds: new Set<string>(),
+    labels: {},
+    activeTurnId: core.activeForegroundTurnId,
+    activeTurnStartedAt: core.lifecycle === "running" ? core.now : null,
     activeForegroundTurnId: core.activeForegroundTurnId,
     foregroundTurnWaiters: new Set(),
     unsubscribeSession: null,
-    timeline: overrides.timeline ?? [],
     attention: overrides.attention ?? { requiresAttention: false },
     runtimeInfo:
       overrides.runtimeInfo ??
@@ -126,7 +133,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     lastUserMessageAt: overrides.lastUserMessageAt ?? core.now,
     lastUsage: overrides.lastUsage,
     lastError: overrides.lastError,
-  };
+  } as unknown as ManagedAgent;
 }
 
 describe("AgentStorage", () => {
@@ -210,7 +217,7 @@ describe("AgentStorage", () => {
     const reloaded = new AgentStorage(storagePath, logger);
     const persisted = await reloaded.get("agent-feature-values");
     expect(persisted?.config?.featureValues).toEqual({ fast_mode: true });
-    expect(buildSessionConfig(persisted!).featureValues).toEqual({ fast_mode: true });
+    expect(buildSessionConfig(persisted!)?.featureValues).toEqual({ fast_mode: true });
   });
 
   test("applySnapshot keeps featureValues absent when they were never set", async () => {
@@ -223,7 +230,7 @@ describe("AgentStorage", () => {
     const reloaded = new AgentStorage(storagePath, logger);
     const persisted = await reloaded.get("agent-no-feature-values");
     expect(persisted?.config?.featureValues).toBeUndefined();
-    expect(buildSessionConfig(persisted!).featureValues).toBeUndefined();
+    expect(buildSessionConfig(persisted!)?.featureValues).toBeUndefined();
   });
 
   test("buildConfigOverrides includes featureValues when present in stored config", async () => {
@@ -447,7 +454,7 @@ describe("AgentStorage", () => {
       ...initialRecord!,
       title: "Generated title",
     });
-    releasePendingWrite?.();
+    releasePendingWrite!();
 
     await applySnapshotPromise;
     const record = await storage.get(agentId);
@@ -570,7 +577,7 @@ describe("AgentStorage", () => {
     const hasAnyRecordFile = async () => {
       const projects = await fs
         .readdir(storagePath, { withFileTypes: true })
-        .catch(() => [] as Awaited<ReturnType<typeof fs.readdir>>);
+        .catch((): Dirent[] => []);
       const exists = await Promise.all(
         projects
           .filter((project) => project.isDirectory())

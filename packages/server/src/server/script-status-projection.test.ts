@@ -11,6 +11,7 @@ import {
 import { WorkspaceScriptPayloadSchema } from "@picompanion/protocol/messages";
 import type { ScriptHealthState } from "./script-health-monitor.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
+import { asServiceProxy } from "./test-utils/session-stubs.js";
 import { readPaseoConfig } from "../utils/worktree.js";
 import type { PaseoConfig } from "@picompanion/protocol/paseo-config-schema";
 import { createTestLogger } from "../test-utils/test-logger.js";
@@ -67,7 +68,7 @@ function buildPayloads(input: {
   const { routeStore, serviceProxy, ...rest } = input;
   return buildWorkspaceScriptPayloads({
     ...rest,
-    serviceProxy: serviceProxy ?? routeStore ?? new ScriptRouteStore(),
+    serviceProxy: asServiceProxy(serviceProxy ?? routeStore ?? new ScriptRouteStore()),
     paseoConfig,
   });
 }
@@ -171,7 +172,7 @@ describe("script-status-projection", () => {
       const payloads = buildPayloads({
         workspaceId,
         workspaceDirectory: workspace.repoDir,
-        serviceProxy: routeStore,
+        serviceProxy: asServiceProxy(routeStore),
         runtimeStore,
         daemonPort: 6767,
         gitMetadata: {
@@ -541,7 +542,7 @@ describe("script-status-projection", () => {
     const session = { emit: vi.fn() };
     const emitUpdate = createScriptStatusEmitter({
       sessions: () => [session],
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       runtimeStore,
       daemonPort: 6767,
       resolveWorkspaceDirectory: async (requestedWorkspaceId) =>

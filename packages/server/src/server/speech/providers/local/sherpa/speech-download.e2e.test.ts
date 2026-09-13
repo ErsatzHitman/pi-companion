@@ -104,6 +104,7 @@ downloadTest(
           dictationStt: { provider: "local", explicit: true },
           voiceStt: { provider: "local", explicit: true },
           voiceTts: { provider: "local", explicit: true },
+          voiceTurnDetection: { provider: "local", explicit: true },
         },
         local: {
           modelsDir,
