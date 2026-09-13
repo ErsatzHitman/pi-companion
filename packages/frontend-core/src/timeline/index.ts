@@ -133,7 +133,4 @@ export {
   nextTranscriptSearchIndex,
   previousTranscriptSearchIndex,
 } from "./transcript-search.js";
-export type {
-  TranscriptSearchMatch,
-  TranscriptSearchOptions,
-} from "./transcript-search.js";
+export type { TranscriptSearchMatch, TranscriptSearchOptions } from "./transcript-search.js";

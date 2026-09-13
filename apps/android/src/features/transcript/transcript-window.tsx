@@ -172,8 +172,8 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
   // count, and the two navigation buttons. Only entries carrying a core
   // `kind` are searchable — this list is generic over `T`, so anything else
   // is skipped rather than matched wrongly.
-  const [searchState, setSearchState] = useState<TranscriptSearchState>(
-    () => createTranscriptSearchState(),
+  const [searchState, setSearchState] = useState<TranscriptSearchState>(() =>
+    createTranscriptSearchState(),
   );
   const searchableEntries = useMemo(() => {
     const core = entries as unknown as readonly timeline.TranscriptEntry[];

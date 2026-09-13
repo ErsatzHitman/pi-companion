@@ -118,8 +118,7 @@ describe("Transcript find in transcript", () => {
     const { container } = render(<Transcript entries={messageEntries()} testId="transcript" />);
     await user.type(screen.getByTestId("transcript-search-input"), "needle");
 
-    const activeText = () =>
-      container.querySelector("[data-search-active]")?.textContent ?? "";
+    const activeText = () => container.querySelector("[data-search-active]")?.textContent ?? "";
     expect(activeText()).toContain("Hi there");
 
     await user.click(screen.getByTestId("transcript-search-next"));
@@ -227,9 +226,7 @@ describe("Transcript find in transcript", () => {
   it("exposes the search region to assistive tech", async () => {
     const user = userEvent.setup();
     render(<Transcript entries={messageEntries()} testId="transcript" />);
-    expect(
-      screen.getByRole("searchbox", { name: "Search transcript" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: "Search transcript" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Previous match" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Next match" })).toBeTruthy();
     await user.type(screen.getByTestId("transcript-search-input"), "needle");

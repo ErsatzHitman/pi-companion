@@ -244,7 +244,9 @@ export function findTranscriptSearchMatches(
 
 /** Distinct entries that hold at least one match — the "N entries" half
  * of a result summary, alongside `matches.length`'s occurrence count. */
-export function countTranscriptSearchMatchedEntries(matches: readonly TranscriptSearchMatch[]): number {
+export function countTranscriptSearchMatchedEntries(
+  matches: readonly TranscriptSearchMatch[],
+): number {
   let count = 0;
   let lastKey: string | null = null;
   for (const match of matches) {

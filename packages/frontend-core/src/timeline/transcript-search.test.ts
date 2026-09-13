@@ -45,9 +45,9 @@ describe("extractTranscriptSearchableText", () => {
     expect(extractTranscriptSearchableText(row({ kind: "thinking", id: "t1", text: "hmm" }))).toBe(
       "hmm",
     );
-    expect(
-      extractTranscriptSearchableText(row({ kind: "error", id: "e1", message: "boom" })),
-    ).toBe("boom");
+    expect(extractTranscriptSearchableText(row({ kind: "error", id: "e1", message: "boom" }))).toBe(
+      "boom",
+    );
   });
 
   it("joins todo item texts", () => {

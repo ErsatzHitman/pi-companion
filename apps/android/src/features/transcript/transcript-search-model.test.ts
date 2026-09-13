@@ -97,10 +97,7 @@ describe("transcriptSearchSnapshot", () => {
 
   it("follows the cursor through the match list", () => {
     const queried = setTranscriptSearchQuery(createTranscriptSearchState(), "needle");
-    const snapshot = transcriptSearchSnapshot(
-      nextTranscriptSearchMatch(queried, 2),
-      ENTRIES,
-    );
+    const snapshot = transcriptSearchSnapshot(nextTranscriptSearchMatch(queried, 2), ENTRIES);
     expect(snapshot.currentIndex).toBe(1);
     expect(snapshot.current?.entryId).toBe("t1");
     expect(snapshot.statusText).toBe("2 of 2");

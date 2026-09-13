@@ -440,7 +440,7 @@ interface TranscriptListItem {
  *
  * **Find in transcript.** A sticky search bar (`transcript-search-bar.tsx`)
  * sits above the rows: plain-text find over the renderable core entries
-   * (`timeline.findTranscriptSearchMatches`, `@picompanion/frontend-core` —
+ * (`timeline.findTranscriptSearchMatches`, `@picompanion/frontend-core` —
  * case-insensitive, no regex, no filters, no persistence), with the shared
  * count label and previous/next navigation that scrolls the virtualizer to
  * the active match (`align: "center"`, expanding its work group first when
@@ -587,7 +587,8 @@ export function Transcript({
       return timeline.previousTranscriptSearchIndex(clamped, searchMatches.length);
     });
   }, [searchMatches.length]);
-  const searchCurrent = searchMatches.length === 0 ? -1 : Math.min(searchIndex, searchMatches.length - 1);
+  const searchCurrent =
+    searchMatches.length === 0 ? -1 : Math.min(searchIndex, searchMatches.length - 1);
   const activeSearchMatch = searchCurrent >= 0 ? (searchMatches[searchCurrent] ?? null) : null;
   const activeSearchEntryKey = activeSearchMatch?.entryKey ?? null;
   const searchMatchKeys = useMemo(
@@ -599,9 +600,7 @@ export function Transcript({
    * identities) without moving this match, and the scroll effect below must
    * not re-fire for that — only for a genuinely different match. */
   const activeSearchMatchKey =
-    activeSearchMatch === null
-      ? null
-      : `${activeSearchMatch.entryKey}\n${activeSearchMatch.start}`;
+    activeSearchMatch === null ? null : `${activeSearchMatch.entryKey}\n${activeSearchMatch.start}`;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   /** Becomes `true` after the first successful tail-anchor, so an

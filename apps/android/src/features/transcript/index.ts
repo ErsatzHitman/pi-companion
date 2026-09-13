@@ -138,10 +138,7 @@ export {
   setTranscriptSearchQuery,
   transcriptSearchSnapshot,
 } from "./transcript-search-model";
-export type {
-  TranscriptSearchSnapshot,
-  TranscriptSearchState,
-} from "./transcript-search-model";
+export type { TranscriptSearchSnapshot, TranscriptSearchState } from "./transcript-search-model";
 export { TranscriptWindowList } from "./transcript-window";
 export type { TranscriptWindowListProps } from "./transcript-window";
 export {
