@@ -10,18 +10,19 @@
  * "Edit from here" button (`message-row.tsx`) into a real daemon fork
  * request and a real `SessionTreeNode`.
  *
- * ## What "real" means here, and the gap it does not close
+ * ## What "real" means here
  *
  * `client` is deliberately a narrow, OPTIONAL `EditFromHereForkClient`
  * rather than `@picompanion/client`'s full `DaemonClient` — mirroring
- * `features/sessions/daemon-sessions-client.ts`'s own disclosed gap for
- * `forkSession`/`forkAgent` (T38A3): no `fork_agent_request` wire
- * message exists in `@picompanion/protocol` today, so a real
- * `DaemonClient` never implements it, and this hook's `client` stays
- * `undefined` in production until a protocol+client task closes that gap
- * (T38A3 nominated T51A, or a split of it, as the natural owner — this
- * task changes nothing about that). Until then, calling `editFromHere`
- * on a valid target with no client reports "not connected" rather than
+ * `features/sessions/daemon-sessions-client.ts`'s `DaemonAgentClient.forkAgent`
+ * shape. CORRECTED (fork-agent-ui): this previously disclosed T38A3's gap —
+ * no `fork_agent_request` wire message, so a real `DaemonClient` never
+ * implemented it and this hook's `client` stayed `undefined` in production.
+ * That gap has closed for fork (`agent.fork.request`/`agent.fork.response`
+ * in `@picompanion/protocol`, `DaemonClient.forkAgent` in
+ * `@picompanion/client`, `host-session-screen.tsx`'s adapter): in production
+ * `client` is now defined on every connected render. It stays OPTIONAL so
+ * the genuinely-disconnected case still reports "not connected" rather than
  * silently doing nothing; an INVALID target (no predecessor, e.g.) is
  * still rejected before ever reaching `client` at all, via frontend-core's
  * own `InvalidEditFromHereTargetError`.
@@ -63,14 +64,14 @@ import { buildEditFromHereTargets } from "./edit-from-here-target.js";
 import type { EditFromHereTargetIndex } from "./edit-from-here-target.js";
 
 /**
- * DISCLOSED GAP (mirrors `daemon-sessions-client.ts`'s `DaemonAgentClient.
- * forkAgent`, T38A3): no browser-facing wire message exists for this yet,
- * so a real `DaemonClient` never implements it today. Declared narrowly
- * and structurally here — not imported from `features/sessions/` — so
- * this file stays decoupled from that directory's own owned shape; a
- * real `DaemonClient` that grows a compatible `forkAgent` the day the
- * wire gap closes can be adapted to this shape with no change to this
- * hook (see `host-session-screen.tsx`'s adapter).
+ * CORRECTED (fork-agent-ui): this previously mirrored
+ * `daemon-sessions-client.ts`'s disclosed T38A3 gap — no browser-facing wire
+ * message, so a real `DaemonClient` never implemented it. The fork wire has
+ * since landed; declared narrowly and structurally here — not imported from
+ * `features/sessions/` — so this file stays decoupled from that directory's
+ * own owned shape. `host-session-screen.tsx`'s adapter converts a real
+ * `DaemonClient.forkAgent` (`{ agent: { id } }`) to this shape
+ * (`{ agentId }`) with no change to this hook.
  */
 export interface EditFromHereForkClient {
   forkAgent(
@@ -102,7 +103,7 @@ export interface UseEditFromHereOptions {
   /** The transcript entries `edit-from-here-target.ts` derives fork targets from. */
   entries: readonly timeline.TranscriptEntry[];
   clock: Clock;
-  /** See this file's module doc's "what 'real' means here" section. `undefined` until a real wire message exists. */
+  /** A fork-capable client; `undefined` only while disconnected (defense in depth — see module doc). */
   client?: EditFromHereForkClient;
   onForked: (outcome: EditFromHereOutcome) => void;
 }

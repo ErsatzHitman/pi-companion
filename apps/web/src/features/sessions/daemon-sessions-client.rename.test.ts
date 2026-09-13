@@ -9,7 +9,9 @@ import type { DaemonAgentClient, DaemonAgentSnapshot } from "./daemon-sessions-c
  * `@picompanion/client` `DaemonClient` class (which does not implement
  * `renameAgent` at all — see that interface's doc comment in
  * `daemon-sessions-client.ts` for the disclosed protocol/client gap,
- * the same shape as `forkAgent`/`cloneAgent`'s). Mirrors
+ * the same shape as `cloneAgent`'s; CORRECTED fork-agent-ui: this previously
+ * named `forkAgent`/`cloneAgent` together, but the fork half has since
+ * landed and `forkAgent` is now required). Mirrors
  * `daemon-sessions-client.fork-clone.test.ts`'s structure exactly. No
  * socket is opened and no live daemon (dev or production) is contacted
  * anywhere in this file.
@@ -32,6 +34,10 @@ function baseFakeDaemon(): DaemonAgentClient {
     archiveAgent: vi.fn(),
     deleteAgent: vi.fn(),
     fetchAgents: vi.fn(),
+    forkAgent: vi.fn(async () => ({
+      agent: AGENT,
+      forkPoint: { messageId: "m0", index: 0 },
+    })),
   };
 }
 
@@ -41,10 +47,9 @@ describe("createDaemonSessionsClient rename (T38A4, fake daemon — no live daem
     expect(client.renameSession).toBeUndefined();
   });
 
-  it("still does not expose renameSession on a daemon that only implements forkAgent/cloneAgent", () => {
+  it("still does not expose renameSession on a daemon that implements forkAgent/cloneAgent but no renameAgent", () => {
     const client = createDaemonSessionsClient({
       ...baseFakeDaemon(),
-      forkAgent: vi.fn(),
       cloneAgent: vi.fn(),
     });
     expect(client.renameSession).toBeUndefined();
