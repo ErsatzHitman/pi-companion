@@ -1034,3 +1034,17 @@ source, MIT (c) 2026 Shane Levine). (3) A full swap is ~220 files across two
 platforms, invalidates the token output shapes, P3/P3.5 conformance work and
 ~12 guard/test contracts, with no ledger task proposing it. Owner chose
 "stop, keep Beautiful UI" — plan §10 and the near-exact-match rule stand.
+
+### Monocode-look refinement (2026-09-13): investigated, declined by owner
+
+Brief asked for Monocode's visual character (glass, airy, dark premium)
+without copying layout, under two false premises: no D:\ui-components work
+was ever completed (declined with zero code), and the foundation is the
+custom Beautiful UI-conformant system. Surveys found the signature frosted
+desktop is OS-window-level (transparent NSWindow + private CGS blur API /
+Acrylic) and has no browser/Android equivalent; portable remainder is alpha
+fills, 8/12/24px backdrop-blur over app content, 10%-alpha hairlines, inset
+segments, #171717 base (MIT (c) 2026 Nick, no code copied). Direction also
+pulled against the reaffirmed Beautiful UI rules (opaque surfaces, 1px rings
+not blurs) and RN has no backdrop-filter, making Android glass costly.
+Owner chose "stop, keep current visuals" — no styling changed.
