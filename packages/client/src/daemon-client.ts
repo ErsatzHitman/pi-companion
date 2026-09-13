@@ -91,6 +91,8 @@ import type {
   AgentRewindResponseMessage,
   AgentRewindMode,
   ForkAgentResponseMessage,
+  CloneAgentResponseMessage,
+  RenameAgentResponseMessage,
   ListTerminalsResponse,
   CreateTerminalResponse,
   SubscribeTerminalResponse,
@@ -630,6 +632,8 @@ type ScheduleUpdatePayload = Extract<
 export type FetchAgentTimelinePayload = FetchAgentTimelineResponseMessage["payload"];
 export type AgentForkContextPayload = AgentForkContextResponseMessage["payload"];
 export type ForkAgentResult = Pick<ForkAgentResponseMessage["payload"], "agent" | "forkPoint">;
+export type CloneAgentResult = Pick<CloneAgentResponseMessage["payload"], "agent">;
+export type RenameAgentResult = Pick<RenameAgentResponseMessage["payload"], "agent">;
 
 export type FetchAgentTimelineDirection = FetchAgentTimelinePayload["direction"];
 export type FetchAgentTimelineProjection = FetchAgentTimelinePayload["projection"];
@@ -3122,32 +3126,17 @@ export class DaemonClient {
    * below, which sends the `agent.fork.request` wire message
    * (`ForkAgentRequestMessageSchema`/`ForkAgentResponseMessageSchema`:
    * agentId, entryId, entryIndex?, name?, requestId -> agent snapshot +
-   * forkPoint).
-   *
-   * DISCLOSED GAP (T110, checked against `packages/protocol/src/messages.ts`
-   * and `packages/server/src/server/session.ts` — both searched for
-   * `clone_agent`, `rename_agent`, `agent.clone.`, `agent.rename.`, all zero
-   * hits): there is no `cloneAgent` or `renameAgent` method on this class
-   * because the protocol defines no clone/rename wire message for a client
-   * to send. T38A0's `packages/server/.../pi/rpc-types.ts` only mirrors Pi's
+   * forkPoint). To clone without a fork point, see `cloneAgent`
+   * (`agent.clone.request`/`agent.clone.response`: agentId, name?,
+   * requestId -> agent snapshot); to rename, see `renameAgent`
+   * (`agent.rename.request`/`agent.rename.response`: agentId, name,
+   * requestId -> agent snapshot). T38A0's
+   * `packages/server/.../pi/rpc-types.ts` only mirrors Pi's
    * `clone`/`set_session_name` RPC commands for the daemon's own use against
-   * its local Pi process (see that file's module comment); nothing turns
-   * them into a client-reachable `*_request`/`*_response` pair. This is the
-   * exact seam `apps/web/src/features/sessions/daemon-sessions-client.ts`
-   * already disclosed (T38A3/T38A4) and the clone/rename half is unchanged
-   * by this task: adding it requires new protocol schemas —
-   * `CloneAgentRequestMessageSchema`/`CloneAgentResponseMessageSchema`
-   * (agentId, name?, requestId -> agent snapshot), and
-   * `RenameAgentRequestMessageSchema`/`RenameAgentResponseMessageSchema`
-   * (agentId, name, requestId -> agent snapshot) — plus a
-   * `packages/server/src/server/session.ts` dispatch turning each into the
-   * matching Pi `PiRpcCommand` (`"clone"`/`"set_session_name"`).
-   * That is a protocol+server task (T110's Owns line is
-   * `packages/client/src/` only), not this one. Once those two pairs
-   * exist, the methods to add here are `cloneAgent`/`renameAgent`,
-   * matching this class's existing `send*`/`set*` shape and
-   * `DaemonAgentClient.cloneAgent`/`renameAgent`'s shape in
-   * `daemon-sessions-client.ts`.
+   * its local Pi process (see that file's module comment); the
+   * client-reachable pairs above turn them into `*_request`/`*_response`
+   * messages the session dispatches onto `AgentManager.cloneAgent` /
+   * `renameAgent`.
    */
   async buildAgentForkContext(
     agentId: string,
@@ -3311,6 +3300,71 @@ export class DaemonClient {
       throw new Error(payload.error);
     }
     return { agent: payload.agent, forkPoint: payload.forkPoint };
+  }
+
+  /**
+   * Clones an agent's config/cwd/workspace into a fresh agent.
+   *
+   * The optional `name` mirrors `forkAgent`'s: an omitted key stays off the
+   * wire entirely and the daemon applies its own default.
+   */
+  async cloneAgent(agentId: string, options: { name?: string } = {}): Promise<CloneAgentResult> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.clone.request",
+      requestId,
+      agentId,
+      ...(options.name !== undefined ? { name: options.name } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: 15000,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.clone.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { agent: payload.agent };
+  }
+
+  /** Renames an agent via the daemon's `set_session_name` path. */
+  async renameAgent(agentId: string, name: string): Promise<RenameAgentResult> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.rename.request",
+      requestId,
+      agentId,
+      name,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: 15000,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.rename.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { agent: payload.agent };
   }
 
   async cancelAgent(agentId: string): Promise<void> {

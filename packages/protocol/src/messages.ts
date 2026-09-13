@@ -1850,6 +1850,40 @@ export const ForkAgentResponseMessageSchema = z.object({
   }),
 });
 
+export const CloneAgentRequestMessageSchema = z.object({
+  type: z.literal("agent.clone.request"),
+  agentId: z.string(),
+  name: z.string().optional(),
+  requestId: z.string(),
+});
+
+export const CloneAgentResponseMessageSchema = z.object({
+  type: z.literal("agent.clone.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    agent: AgentSnapshotPayloadSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const RenameAgentRequestMessageSchema = z.object({
+  type: z.literal("agent.rename.request"),
+  agentId: z.string(),
+  name: z.string(),
+  requestId: z.string(),
+});
+
+export const RenameAgentResponseMessageSchema = z.object({
+  type: z.literal("agent.rename.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    agent: AgentSnapshotPayloadSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const UpdateAgentResponseMessageSchema = z.object({
   type: z.literal("update_agent_response"),
   payload: AgentActionResponsePayloadSchema,
@@ -3078,6 +3112,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentDetachRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   ForkAgentRequestMessageSchema,
+  CloneAgentRequestMessageSchema,
+  RenameAgentRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   AgentEditorTextResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -6085,6 +6121,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentDetachResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   ForkAgentResponseMessageSchema,
+  CloneAgentResponseMessageSchema,
+  RenameAgentResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
   ProjectIconSetResponseSchema,
@@ -6307,6 +6345,8 @@ export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureRespo
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type ForkAgentResponseMessage = z.infer<typeof ForkAgentResponseMessageSchema>;
+export type CloneAgentResponseMessage = z.infer<typeof CloneAgentResponseMessageSchema>;
+export type RenameAgentResponseMessage = z.infer<typeof RenameAgentResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
 export type ProjectIconSetResponse = z.infer<typeof ProjectIconSetResponseSchema>;
