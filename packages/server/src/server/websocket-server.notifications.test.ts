@@ -235,7 +235,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
       agentId: "agent-1",
-      provider: "claude",
+      providerId: "claude",
       reason: "finished",
     });
 
@@ -269,7 +269,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
       agentId: "agent-2",
-      provider: "claude",
+      providerId: "claude",
       reason: "finished",
     });
 
@@ -295,7 +295,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
       agentId: "agent-X",
-      provider: "claude",
+      providerId: "claude",
       reason: "finished",
     });
 
@@ -310,7 +310,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
       agentId: "agent-no-heartbeat",
-      provider: "claude",
+      providerId: "claude",
       reason: "finished",
     });
 
@@ -324,7 +324,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
       agentId: "agent-no-heartbeat",
-      provider: "claude",
+      providerId: "claude",
       reason: "error",
     });
 

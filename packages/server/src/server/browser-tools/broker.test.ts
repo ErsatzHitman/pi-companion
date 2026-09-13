@@ -151,6 +151,8 @@ describe("BrowserToolsBroker", () => {
               workspaceId: "workspace-1",
               url: "https://example.com",
               title: "Example",
+              isActive: false,
+              isLoading: false,
             },
           ],
         },
@@ -342,6 +344,8 @@ describe("BrowserToolsBroker", () => {
             workspaceId: "workspace-1",
             url: "https://one.example",
             title: "One",
+            isActive: false,
+            isLoading: false,
           },
         ],
       },
@@ -357,6 +361,8 @@ describe("BrowserToolsBroker", () => {
             workspaceId: "workspace-1",
             url: "https://two.example",
             title: "Two",
+            isActive: false,
+            isLoading: false,
           },
         ],
       },
@@ -467,11 +473,7 @@ describe("BrowserToolsBroker", () => {
   ] satisfies Array<{
     name: string;
     command: BrowserAutomationCommand;
-    result: BrowserAutomationExecuteResponse["payload"] extends infer Payload
-      ? Payload extends { ok: true }
-        ? Payload["result"]
-        : never
-      : never;
+    result: Extract<BrowserAutomationExecuteResponse["payload"], { ok: true }>["result"];
   }>)("routes $name to the host that owns the browser id", async ({ command, result }) => {
     const broker = createBroker();
     const other = new FakeBrowserHostClient("host-1");
@@ -592,6 +594,8 @@ describe("BrowserToolsBroker", () => {
             workspaceId: "workspace-1",
             url: "https://one.example",
             title: "One",
+            isActive: false,
+            isLoading: false,
           },
         ],
       },
