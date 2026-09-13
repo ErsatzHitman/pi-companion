@@ -172,7 +172,7 @@ describe("script-status-projection", () => {
       const payloads = buildPayloads({
         workspaceId,
         workspaceDirectory: workspace.repoDir,
-        serviceProxy: asServiceProxy(routeStore),
+        routeStore,
         runtimeStore,
         daemonPort: 6767,
         gitMetadata: {

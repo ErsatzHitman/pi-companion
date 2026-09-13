@@ -14,7 +14,7 @@ import {
 import type { ArchiveResult, ActiveWorkspaceRef } from "../workspace-archive-service.js";
 import type { WorkspaceGitRuntimeSnapshot } from "../workspace-git-service.js";
 import { createWorktree, type WorktreeConfig } from "../../utils/worktree.js";
-import type { ForgeService } from "../../../services/forge-service.js";
+import type { ForgeService } from "../../services/forge-service.js";
 import type { StoredAgentRecord } from "../agent/agent-storage.js";
 
 const CWD = "/tmp/paseo/worktrees/repo/branch";
@@ -49,6 +49,7 @@ function createSnapshot(overrides?: {
       remoteUrl: "https://github.com/acme/repo.git",
       isPaseoOwnedWorktree: true,
       isDirty: false,
+      upstreamRef: null,
       baseRef: "main",
       aheadBehind: { ahead: 0, behind: 0 },
       aheadOfOrigin: 0,
@@ -57,8 +58,9 @@ function createSnapshot(overrides?: {
       diffStat: { additions: 0, deletions: 0 },
       ...overrides?.git,
     },
-    github: {
+    forge: {
       featuresEnabled: true,
+      authState: "authenticated",
       pullRequest:
         overrides && "pullRequest" in overrides
           ? (overrides.pullRequest ?? null)
@@ -222,6 +224,7 @@ function createGitHubServiceStub(): ForgeService {
     searchIssuesAndPrs: async () => ({
       items: [],
       featuresEnabled: true,
+      authState: "authenticated" as const,
       githubFeaturesEnabled: true,
     }),
     getPullRequest: async ({ number }) => ({
@@ -233,6 +236,7 @@ function createGitHubServiceStub(): ForgeService {
       baseRefName: "main",
       headRefName: `pr-${number}`,
       labels: [],
+      updatedAt: "2026-04-11T00:00:00.000Z",
     }),
     getPullRequestHeadRef: async ({ number }) => `pr-${number}`,
     getPullRequestCheckoutTarget: async ({ number }) => ({
@@ -245,11 +249,28 @@ function createGitHubServiceStub(): ForgeService {
       isCrossRepository: false,
     }),
     getCurrentPullRequestStatus: async () => null,
+    getPullRequestTimeline: async () => ({
+      prNumber: 0,
+      repoOwner: "",
+      repoName: "",
+      items: [],
+      truncated: false,
+      error: null,
+    }),
+    getCheckDetails: async () => ({
+      checkRunId: 0,
+      name: "",
+      annotations: [],
+      failedJobs: [],
+      truncated: false,
+    }),
     createPullRequest: async () => ({
       number: 1,
       url: "https://github.com/acme/repo/pull/1",
     }),
     mergePullRequest: async () => ({ success: true }),
+    enablePullRequestAutoMerge: async () => ({ success: true as const }),
+    disablePullRequestAutoMerge: async () => ({ success: true as const }),
     isAuthenticated: async () => true,
     invalidate: () => {},
   };
@@ -285,6 +306,7 @@ function createRealOutcomeHarness(input: {
             remoteUrl: "https://github.com/acme/repo.git",
             isPaseoOwnedWorktree: true,
             isDirty: false,
+            upstreamRef: null,
             baseRef: "main",
             aheadBehind: { ahead: 0, behind: 0 },
             aheadOfOrigin: 0,
@@ -292,8 +314,9 @@ function createRealOutcomeHarness(input: {
             hasRemote: true,
             diffStat: { additions: 0, deletions: 0 },
           },
-          github: {
+          forge: {
             featuresEnabled: true,
+            authState: "authenticated",
             pullRequest: createPullRequest({ isMerged: true }),
             error: null,
           },
@@ -544,10 +567,26 @@ describe("archiveIfSafe", () => {
     const harness = createHarness({
       resolveWorkspaceIdAtPath: async () => "ws-merged-worktree",
     });
-    harness.options.listActiveWorkspaces = vi.fn(async () => [
-      { workspaceId: "ws-merged-worktree", cwd: CWD, kind: "worktree" as const },
-      { workspaceId: "ws-sibling", cwd: CWD, kind: "local_checkout" as const },
-    ]);
+    harness.options.listActiveWorkspaces = vi.fn(
+      async (): Promise<ActiveWorkspaceRef[]> => [
+        {
+          workspaceId: "ws-merged-worktree",
+          cwd: CWD,
+          kind: "worktree" as const,
+          worktreeRoot: CWD,
+          isPaseoOwnedWorktree: true,
+          mainRepoRoot: "/tmp/repo",
+        },
+        {
+          workspaceId: "ws-sibling",
+          cwd: CWD,
+          kind: "local_checkout" as const,
+          worktreeRoot: null,
+          isPaseoOwnedWorktree: false,
+          mainRepoRoot: null,
+        },
+      ],
+    );
 
     await runArchiveIfSafe(harness);
 
@@ -574,8 +613,22 @@ describe("archiveIfSafe", () => {
       repoDir,
       worktreePath: worktree.worktreePath,
       activeWorkspaces: [
-        { workspaceId: workspaceA, cwd: worktree.worktreePath, kind: "worktree" },
-        { workspaceId: workspaceB, cwd: worktree.worktreePath, kind: "local_checkout" },
+        {
+          workspaceId: workspaceA,
+          cwd: worktree.worktreePath,
+          kind: "worktree",
+          worktreeRoot: worktree.worktreePath,
+          isPaseoOwnedWorktree: true,
+          mainRepoRoot: repoDir,
+        },
+        {
+          workspaceId: workspaceB,
+          cwd: worktree.worktreePath,
+          kind: "local_checkout",
+          worktreeRoot: null,
+          isPaseoOwnedWorktree: false,
+          mainRepoRoot: null,
+        },
       ],
       archivedWorkspaceIds,
     });
@@ -604,7 +657,16 @@ describe("archiveIfSafe", () => {
       paseoHome,
       repoDir,
       worktreePath: worktree.worktreePath,
-      activeWorkspaces: [{ workspaceId: workspaceA, cwd: worktree.worktreePath, kind: "worktree" }],
+      activeWorkspaces: [
+        {
+          workspaceId: workspaceA,
+          cwd: worktree.worktreePath,
+          kind: "worktree",
+          worktreeRoot: worktree.worktreePath,
+          isPaseoOwnedWorktree: true,
+          mainRepoRoot: repoDir,
+        },
+      ],
       archivedWorkspaceIds,
     });
 
