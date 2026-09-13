@@ -34,7 +34,7 @@ describe("Transcript", () => {
     expect(screen.getByText("No messages yet")).toBeTruthy();
   });
 
-  it("renders user, assistant, thinking, and tool-call entries in order, and skips entry kinds this task does not own", () => {
+  it("renders user, assistant, thinking, tool-call, and todo entries in order, inline", () => {
     const entries: timeline.TranscriptEntry[] = [
       row({ kind: "user-message", id: "u1", seqStart: 1, seqEnd: 1, text: "Hello Pi" }),
       row({
@@ -64,7 +64,7 @@ describe("Transcript", () => {
         id: "todo1",
         seqStart: 4,
         seqEnd: 4,
-        items: [{ text: "still out of scope", completed: false }],
+        items: [{ text: "write the migration notes", completed: false }],
       }),
       row({
         kind: "assistant-message",
@@ -81,9 +81,11 @@ describe("Transcript", () => {
     expect(messageRows[0]?.textContent).toContain("Hello Pi");
     expect(messageRows[1]?.textContent).toContain("Hi there");
 
-    // The thinking entry renders (T28A3) and the tool-call entry renders
-    // (T28A4) between the two messages; the `todo` entry (still out of
-    // this task's scope) is silently skipped.
+    // The thinking entry renders (T28A3), the tool-call entry renders
+    // (T28A4), and the `todo` entry renders inline (the pinned dock above
+    // the composer keeps showing the latest list — see `todo-dock.tsx` —
+    // while this scroll keeps every list in history) between the tool
+    // call and the assistant message.
     const thinkingTrigger = screen.getByRole("button", { name: /considering/ });
     expect(thinkingTrigger).toBeTruthy();
     expect(screen.getByText("a plain-text tool result")).toBeTruthy();
@@ -99,12 +101,13 @@ describe("Transcript", () => {
     const order = Array.from(container.querySelectorAll<HTMLElement>("[data-index]")).map(
       (row) => row.textContent ?? "",
     );
-    expect(order).toHaveLength(4);
+    expect(order).toHaveLength(5);
     expect(order[0]).toContain("Hello Pi");
     expect(order[1]).toContain("considering");
     expect(order[2]).toContain("a plain-text tool result");
-    expect(order[3]).toContain("Hi there");
-    expect(screen.queryByText(/still out of scope/)).toBeNull();
+    expect(order[3]).toContain("write the migration notes");
+    expect(order[4]).toContain("Hi there");
+    expect(screen.getByText(/write the migration notes/)).toBeTruthy();
   });
 
   it("marks only the streaming entry as still responding", () => {
@@ -334,6 +337,203 @@ describe("Transcript compaction markers (T28A7)", () => {
         seqEnd: 2,
         status: "completed",
         trigger: "auto",
+      }),
+    ];
+    const { container } = render(<Transcript entries={entries} testId="transcript" />);
+    expect(await axe(container)).toHaveNoViolations();
+  }, 20_000);
+});
+
+/**
+ * Previously unrendered entry kinds — `error`, `extension-snapshot`,
+ * `unknown`, `todo` inline, and the web-local `"retry"` row for `pi_retry`
+ * auto and summarization retries — now render inline, in chronological
+ * order, each visibly distinct from a chat message rather than folded
+ * into one.
+ */
+describe("Transcript previously unrendered rows", () => {
+  it("renders error, extension-snapshot, unknown, todo, and retry rows between messages, in order", () => {
+    const entries: timeline.TranscriptEntry[] = [
+      row({ kind: "user-message", id: "u1", seqStart: 1, seqEnd: 1, text: "Hello Pi" }),
+      row({ kind: "error", id: "e1", seqStart: 2, seqEnd: 2, message: "turn blew up" }),
+      row({
+        kind: "extension-snapshot",
+        id: "s1",
+        seqStart: 3,
+        seqEnd: 3,
+        state: {
+          agentId: "agent-1",
+          revision: 1,
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          elements: [
+            {
+              id: "el-1",
+              ns: "pi-goal",
+              kind: "status",
+              placement: "rail",
+              payload: { kind: "status", text: "On track" },
+            },
+          ],
+        },
+      }),
+      row({
+        kind: "unknown",
+        id: "x1",
+        seqStart: 4,
+        seqEnd: 4,
+        rawType: "future_thing",
+        raw: { type: "future_thing" },
+      }),
+      row({
+        kind: "todo",
+        id: "todo1",
+        seqStart: 5,
+        seqEnd: 5,
+        items: [{ text: "keep the history", completed: false }],
+      }),
+      // The web-local retry row has no `TranscriptEntry` kind yet (see
+      // `retry-row.tsx`), so it arrives cast — exactly how a caller
+      // feeding `retryEntryFromPiRetryEvent` through `WebTranscriptEntry`
+      // presents one today.
+      {
+        kind: "retry",
+        id: "r1",
+        epoch: "epoch-1",
+        seqStart: 6,
+        seqEnd: 6,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        provider: "pi",
+        pending: false,
+        stale: false,
+        phase: "assistant",
+        attempt: 2,
+        maxAttempts: 5,
+      } as unknown as timeline.TranscriptEntry,
+      row({
+        kind: "assistant-message",
+        id: "a1",
+        seqStart: 7,
+        seqEnd: 7,
+        text: "Hi there",
+        corrected: false,
+      }),
+    ];
+    render(<Transcript entries={entries} testId="transcript" />);
+
+    const container = screen.getByTestId("transcript");
+    const order = Array.from(container.querySelectorAll<HTMLElement>("[data-index]")).map(
+      (item) => item.textContent ?? "",
+    );
+    expect(order).toHaveLength(7);
+    expect(order[0]).toContain("Hello Pi");
+    expect(order[1]).toContain("turn blew up");
+    expect(order[2]).toContain("Extension snapshot");
+    expect(order[3]).toContain("future_thing");
+    expect(order[4]).toContain("keep the history");
+    expect(order[5]).toContain("Automatic retry");
+    expect(order[6]).toContain("Hi there");
+
+    // Distinct from the two message rows: the error and retry rows are
+    // `role="status"` markers, never folded into a speaker-attributed
+    // bubble — the bubbles keep their own accessible names either way
+    // (the unknown row's native `<details>` disclosure is testing-library's
+    // third `group` role, not a message, so the bubbles are named, not
+    // counted).
+    expect(screen.getByRole("group", { name: "You" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Pi" })).toBeTruthy();
+    expect(screen.getByTestId("transcript-row-e1").getAttribute("role")).toBe("status");
+    expect(screen.getByTestId("transcript-row-r1").getAttribute("role")).toBe("status");
+  });
+
+  it("renders a summarization retry distinctly from an automatic one", () => {
+    const entries = [
+      {
+        kind: "retry",
+        id: "r1",
+        epoch: "epoch-1",
+        seqStart: 1,
+        seqEnd: 1,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        provider: "pi",
+        pending: false,
+        stale: false,
+        phase: "compaction",
+        attempt: 1,
+        maxAttempts: 3,
+        error: "summarizer timed out",
+      } as unknown as timeline.TranscriptEntry,
+    ];
+    render(<Transcript entries={entries} testId="transcript" />);
+    const text = screen.getByTestId("transcript-row-r1").textContent ?? "";
+    expect(text).toContain("Summarization retry");
+    expect(text).toContain("summarizer timed out");
+  });
+
+  it("keeps thinking/tool-call work groups split across a retry row", () => {
+    const toolCall = (id: string, seq: number) =>
+      row({
+        kind: "tool-call",
+        id,
+        seqStart: seq,
+        seqEnd: seq,
+        tool: {
+          family: "plain_text",
+          callId: `call-${id}`,
+          toolName: "note",
+          status: "completed",
+          displayName: "Note",
+          updateCount: 1,
+          text: `${id} output`,
+        },
+      });
+    const entries = [
+      toolCall("tc1", 1),
+      toolCall("tc2", 2),
+      {
+        kind: "retry",
+        id: "r1",
+        epoch: "epoch-1",
+        seqStart: 3,
+        seqEnd: 3,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        provider: "pi",
+        pending: false,
+        stale: false,
+        phase: "assistant",
+        attempt: 1,
+        maxAttempts: 3,
+      } as unknown as timeline.TranscriptEntry,
+      toolCall("tc3", 4),
+      toolCall("tc4", 5),
+    ];
+    render(<Transcript entries={entries} testId="transcript" />);
+    // Two two-member runs stay expanded on their own (a group of two
+    // starts expanded) rather than fusing into one collapsed four-member
+    // group across the retry: every tool output still renders.
+    expect(screen.getByText("tc1 output")).toBeTruthy();
+    expect(screen.getByText("tc2 output")).toBeTruthy();
+    expect(screen.getByText("tc3 output")).toBeTruthy();
+    expect(screen.getByText("tc4 output")).toBeTruthy();
+  });
+
+  it("has no axe violations with every new row kind present", async () => {
+    const entries: timeline.TranscriptEntry[] = [
+      row({ kind: "user-message", id: "u1", seqStart: 1, seqEnd: 1, text: "Hello Pi" }),
+      row({ kind: "error", id: "e1", seqStart: 2, seqEnd: 2, message: "boom" }),
+      row({
+        kind: "todo",
+        id: "todo1",
+        seqStart: 3,
+        seqEnd: 3,
+        items: [{ text: "keep the history", completed: false }],
+      }),
+      row({
+        kind: "unknown",
+        id: "x1",
+        seqStart: 4,
+        seqEnd: 4,
+        rawType: "future_thing",
+        raw: {},
       }),
     ];
     const { container } = render(<Transcript entries={entries} testId="transcript" />);

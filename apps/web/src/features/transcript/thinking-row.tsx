@@ -9,7 +9,7 @@ import { TranscriptMeta } from "./transcript-meta.js";
  * thinking deltas"; `transcript-view.ts`'s `reasoning` -> `"thinking"`
  * projection). T28A3's sibling to `message-row.tsx`'s `CoreMessageEntry` —
  * see that file's doc comment for the full list of `TranscriptEntry`
- * kinds still owned by later tasks in this directory. */
+ * kinds this directory renders, all composed by `transcript.tsx`. */
 export type ThinkingTranscriptEntry = Extract<timeline.TranscriptEntry, { kind: "thinking" }>;
 
 export function isThinkingEntry(entry: timeline.TranscriptEntry): entry is ThinkingTranscriptEntry {

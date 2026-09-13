@@ -1,5 +1,5 @@
 export { Transcript } from "./transcript.js";
-export type { TranscriptProps } from "./transcript.js";
+export type { TranscriptProps, WebTranscriptEntry } from "./transcript.js";
 export { isCoreMessageEntry, TranscriptMessageRow } from "./message-row.js";
 export type { CoreMessageEntry, TranscriptMessageRowProps } from "./message-row.js";
 export { MessageAttachments } from "./message-attachments.js";
@@ -14,8 +14,29 @@ export { isToolCallEntry, TranscriptToolCallRow } from "./tool-call-row.js";
 export type { ToolCallTranscriptEntry, TranscriptToolCallRowProps } from "./tool-call-row.js";
 export { isCompactionEntry, TranscriptCompactionRow } from "./compaction-row.js";
 export type { CompactionTranscriptEntry, TranscriptCompactionRowProps } from "./compaction-row.js";
+export { isErrorEntry, TranscriptErrorRow } from "./error-row.js";
+export type { ErrorTranscriptEntry, TranscriptErrorRowProps } from "./error-row.js";
+export {
+  isExtensionSnapshotEntry,
+  TranscriptExtensionSnapshotRow,
+} from "./extension-snapshot-row.js";
+export type {
+  ExtensionSnapshotTranscriptEntry,
+  TranscriptExtensionSnapshotRowProps,
+} from "./extension-snapshot-row.js";
+export { isRetryEntry, retryEntryFromPiRetryEvent, TranscriptRetryRow } from "./retry-row.js";
+export type {
+  PiRetryStreamEvent,
+  RetryPhase,
+  RetryTranscriptEntry,
+  TranscriptRetryRowProps,
+} from "./retry-row.js";
 export { isTodoEntry, selectLatestTodoEntry, TodoDock } from "./todo-dock.js";
 export type { TodoDockProps, TodoTranscriptEntry } from "./todo-dock.js";
+export { TranscriptTodoRow } from "./todo-row.js";
+export type { TranscriptTodoRowProps } from "./todo-row.js";
+export { isUnknownEntry, TranscriptUnknownRow } from "./unknown-row.js";
+export type { UnknownTranscriptEntry, TranscriptUnknownRowProps } from "./unknown-row.js";
 export { TranscriptMeta } from "./transcript-meta.js";
 export type { TranscriptMetaProps, TranscriptSpeaker } from "./transcript-meta.js";
 export { buildEditFromHereTargets, canEditFromHere } from "./edit-from-here-target.js";

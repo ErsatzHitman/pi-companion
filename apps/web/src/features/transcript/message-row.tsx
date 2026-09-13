@@ -9,10 +9,11 @@ import { TranscriptMeta } from "./transcript-meta.js";
 
 /** The subset of `timeline.TranscriptEntry` this task renders (plan.md
  * §11.1's "assistant text" and user-message lifecycle states). Sibling
- * files in this same directory add row renderers for the remaining
- * `TranscriptEntry` kinds — `thinking-row.tsx` (T28A3), then later tasks
- * for tool calls, todo, error, compaction, extension snapshots, and the
- * `unknown` fallback.
+ * files in this same directory render every remaining `TranscriptEntry`
+ * kind — `thinking-row.tsx` (T28A3), `tool-call-row.tsx` (T28A4),
+ * `todo-row.tsx`, `error-row.tsx`, `compaction-row.tsx` (T28A7),
+ * `extension-snapshot-row.tsx`, `unknown-row.tsx`, and the web-local
+ * `retry-row.tsx` — all composed by `transcript.tsx.
  *
  * **Image content (T52A3).** T28A5 ("Render images, attachments, and
  * diffs") found that a `user-message`/`assistant-message`

@@ -19,10 +19,9 @@ import "./tool-call-row.css";
  * `CoreMessageEntry`, `thinking-row.tsx`'s `ThinkingTranscriptEntry`, and
  * `compaction-row.tsx`'s `CompactionTranscriptEntry` (T28A7) — see
  * `transcript.tsx`'s doc comment for the full, current list of
- * `TranscriptEntry` kinds this directory does and does not render yet
- * (todo, error, extension snapshots, and unknown remain unbuilt; there
- * is also no "retry" `TranscriptEntry` kind at all today — see
- * `compaction-row.tsx`'s doc comment for why).
+ * `TranscriptEntry` kinds this directory renders (every known kind renders
+ * inline today, plus the web-local `"retry"` row — see
+ * `compaction-row.tsx`'s doc comment for why that one stays web-local).
  *
  * T28A5 ("Render images, attachments, and diffs") added two things to
  * the bodies below: full unified-diff line rendering in `EditBody`, and

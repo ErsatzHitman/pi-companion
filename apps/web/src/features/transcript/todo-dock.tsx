@@ -16,12 +16,13 @@ export function isTodoEntry(entry: timeline.TranscriptEntry): entry is TodoTrans
  * The latest `todo` entry in a session's timeline, or `null` when the
  * session has never emitted one.
  *
- * `transcript.tsx`'s `isRenderableEntry` deliberately still excludes
- * `{ kind: "todo" }` from the scrolling transcript: the mockup draws the
- * task list *docked above the prompt bar* (`.dock-todo` inside
- * `.composer-inner`), not as a turn in the scroll. This selector is that
- * dock's data source — the same `transcriptEntries` array the transcript
- * reads, scanned from the tail so the newest list wins.
+ * The mockup draws the task list *docked above the prompt bar*
+ * (`.dock-todo` inside `.composer-inner`), not only as a turn in the
+ * scroll — so this selector feeds that dock (composed by
+ * `routes/screens/host-session-screen.tsx` directly above the composer)
+ * while `todo-row.tsx` renders the same entry inline in the scrolling
+ * transcript too: the dock always shows the session's latest list, and the
+ * scroll keeps every list in history, in chronological order.
  */
 export function selectLatestTodoEntry(
   entries: readonly timeline.TranscriptEntry[],
