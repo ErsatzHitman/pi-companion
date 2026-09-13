@@ -97,7 +97,11 @@
 // (rewind.test.ts), ParsedToolReadInput keys (tool-call-read-gutter),
 // and unknown-first PiChild fake (cli-runtime.test.ts). No production
 // source semantics changed.
-export const TYPECHECK_ERROR_CEILING = 278;
+export const TYPECHECK_ERROR_CEILING = 123;
+
+// Merged batches G+H lowered this from 278 to 123 (155 errors):
+// session.workspaces suite to zero plus mcp-server and tail suites.
+// Resolved file count unchanged — pure fixes.
 
 // Merged batches E+F (partial) lowered this from 554 to 278 (276 errors):
 // workspace/hub/terminal/loop/config suites plus the long tail
