@@ -16,7 +16,11 @@
  * connection-change behaviour, same "request each path at most once,
  * never retry a failed/no-token resolution", same single-use-token
  * disclosure (`DownloadTokenStore.consumeToken` deletes on read; see that
- * module's doc comment for the full reasoning, unchanged here).
+ * module's doc comment for the full reasoning, unchanged here) — including
+ * the relay chunk-loop branch (`downloadFileBytes({ agentId, path })` to a
+ * `data:` URI when there is no direct origin but the client exposes the
+ * chunk loop; reference-card fallback only for a client without the method
+ * or a rejected read).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { timeline } from "@picompanion/frontend-core";
@@ -24,8 +28,10 @@ import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
 
 import {
   applyResolvedAttachmentImage,
+  buildAttachmentDataUri,
   buildAttachmentDownloadUrl,
   collectTimelineImages,
+  supportsRelayAttachmentDownload,
   type AttachmentDownloadTokenClient,
 } from "./attachment-image-resolver-model";
 import type { AttachmentImageContext, ResolveImageUri } from "./message-attachments";
@@ -70,7 +76,15 @@ export function useAttachmentImageResolver({
   const imagePathsKey = images.map((image) => image.path).join(" ");
 
   useEffect(() => {
-    if (!client || !downloadOrigin) {
+    if (!client) {
+      return;
+    }
+    // Direct origin: the token+HTTP round trip. No direct origin but a
+    // chunk-loop method: the relay path. Neither: an old daemon or
+    // adapter — every image stays on the reference-card fallback, never a
+    // doomed request.
+    const useRelayChunkLoop = !downloadOrigin && supportsRelayAttachmentDownload(client);
+    if (!downloadOrigin && !useRelayChunkLoop) {
       return;
     }
     for (const image of images) {
@@ -78,13 +92,30 @@ export function useAttachmentImageResolver({
         continue;
       }
       requestedRef.current.add(image.path);
+      if (useRelayChunkLoop) {
+        client.downloadFileBytes!({ agentId, path: image.path })
+          .then((result) => {
+            if (!mountedRef.current || result.bytes.byteLength === 0) {
+              return;
+            }
+            const url = buildAttachmentDataUri(result.bytes, result.mimeType ?? image.mimeType);
+            setResolved((previous) => applyResolvedAttachmentImage(previous, image.path, url));
+          })
+          .catch(() => {
+            // Left unresolved: `MessageAttachments`' own reference-card
+            // fallback already covers "no uri" — this hook adds no second
+            // error surface. An old daemon's rejection of the chunk wire
+            // type lands here, which is exactly the old-daemon fallback.
+          });
+        continue;
+      }
       client
         .requestAttachmentDownloadToken(agentId, image.path)
         .then((payload) => {
           if (!mountedRef.current || !payload.token) {
             return;
           }
-          const url = buildAttachmentDownloadUrl(downloadOrigin, payload.token);
+          const url = buildAttachmentDownloadUrl(downloadOrigin!, payload.token);
           setResolved((previous) => applyResolvedAttachmentImage(previous, image.path, url));
         })
         .catch(() => {

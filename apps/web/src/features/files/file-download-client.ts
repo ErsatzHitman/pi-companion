@@ -70,10 +70,11 @@ export interface FileDownloadClient {
    * (`packages/client/src/daemon-client.ts`) — same option names, same
    * result fields — so a real `DaemonClient` satisfies this member
    * structurally with no adapter, exactly like `requestDownloadToken`
-   * above. Only `cwd`+`path` are passed (the daemon's chunk handler is
-   * workspace-`cwd`-scoped; `agentId` is accepted on its wire but never
-   * used as a scope there, so attachments cannot ride this — see
-   * `attachment-image-resolver.ts`'s module doc for that boundary).
+   * above. Only `cwd`+`path` are passed by this feature (it addresses
+   * browsed-workspace files; the daemon's chunk handler serves those
+   * through its workspace-`cwd` scope) — attachments ride the same pair
+   * with `{ agentId, path }` and no `cwd`, through the agentId-scoped
+   * attachment check (see `attachment-image-resolver.ts`'s module doc).
    */
   downloadFileBytes?(options: RelayFileDownloadOptions): Promise<RelayDownloadedFileBytes>;
 }

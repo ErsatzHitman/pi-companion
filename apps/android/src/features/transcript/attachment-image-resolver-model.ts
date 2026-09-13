@@ -34,10 +34,12 @@ import type { timeline } from "@picompanion/frontend-core";
 import { isCoreMessageEntry } from "./message-row-model";
 
 /**
- * The one method this hook needs off `@picompanion/client`'s
+ * The methods this hook needs off `@picompanion/client`'s
  * `DaemonClient` — a real `DaemonClient` satisfies this structurally
  * as-is, the same shape web's identically-named interface documents (see
- * that module's doc comment for the full T283 wire contract).
+ * that module's doc comment for the full T283 wire contract; the optional
+ * chunk-loop member matches `DaemonClient.downloadFileBytes`'s own
+ * `{ agentId, path }`-in/`{ bytes, mimeType }`-out subset).
  */
 export interface AttachmentDownloadTokenClient {
   requestAttachmentDownloadToken(
@@ -48,6 +50,63 @@ export interface AttachmentDownloadTokenClient {
     mimeType: string | null;
     error: string | null;
   }>;
+  /**
+   * Relay-path chunk-loop download (the `file_download_bytes` protocol
+   * pair, served fetch-and-forward inside the existing E2EE channel).
+   * The hook calls it with `{ agentId, path }` only — no `cwd` — and the
+   * daemon resolves it through the same attachment access check the token
+   * path uses. Optional: a client object without it (an adapter written
+   * before the pair existed) keeps the reference-card fallback.
+   */
+  downloadFileBytes?(options: { agentId: string; path: string }): Promise<{
+    bytes: Uint8Array;
+    mimeType?: string;
+    size?: number;
+    fileName?: string;
+  }>;
+}
+
+/**
+ * Capability probe for the relay attachment path: whether `client`
+ * carries the chunk-loop download at all. Byte-for-byte the same
+ * method-presence probe as web's identically-named function (see that
+ * module's doc comment for why it is duplicated rather than shared
+ * across platforms, and why the protocol advertises no flag for it).
+ */
+export function supportsRelayAttachmentDownload(client: AttachmentDownloadTokenClient): boolean {
+  return typeof client.downloadFileBytes === "function";
+}
+
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * Pure base64 encoder over raw bytes — byte-for-byte the same behaviour
+ * as web's identically-named function (no `Buffer`, no `btoa`, so every
+ * JS engine either app runs under encodes identically; see that module's
+ * doc comment).
+ */
+export function encodeBytesToBase64(bytes: Uint8Array): string {
+  let output = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index] ?? 0;
+    const second = index + 1 < bytes.length ? (bytes[index + 1] ?? 0) : 0;
+    const third = index + 2 < bytes.length ? (bytes[index + 2] ?? 0) : 0;
+    const quantum = (first << 16) | (second << 8) | third;
+    output += BASE64_ALPHABET[(quantum >> 18) & 63];
+    output += BASE64_ALPHABET[(quantum >> 12) & 63];
+    output += index + 1 < bytes.length ? BASE64_ALPHABET[(quantum >> 6) & 63] : "=";
+    output += index + 2 < bytes.length ? BASE64_ALPHABET[quantum & 63] : "=";
+  }
+  return output;
+}
+
+/**
+ * Turns chunk-loop bytes into a native-`Image`-renderable `data:` URI —
+ * byte-for-byte the same encoding as web's identically-named function.
+ * The relay path's answer to `buildAttachmentDownloadUrl`'s token URL.
+ */
+export function buildAttachmentDataUri(bytes: Uint8Array, mimeType: string): string {
+  return `data:${mimeType};base64,${encodeBytesToBase64(bytes)}`;
 }
 
 /** Matches `packages/server/src/server/bootstrap.ts`'s
