@@ -65,6 +65,7 @@ import { limitAgentTimelineItemContent } from "./agent-timeline-content.js";
 import { AgentRunState, type ForegroundTurnWaiter } from "./agent-run-state.js";
 import { getAgentProviderDefinition } from "@picompanion/protocol/provider-manifest";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
+import { buildAgentForkContextAttachment } from "./activity-curator.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
@@ -418,6 +419,18 @@ type ActiveManagedAgent =
 type LiveManagedAgent = ActiveManagedAgent;
 type AgentLabelPatch = Record<string, string | null>;
 
+export interface AgentForkPoint {
+  messageId: string;
+  index: number;
+}
+
+export interface AgentForkResult {
+  agent: ManagedAgent;
+  forkPoint: AgentForkPoint;
+}
+
+export type ForkAgentNameOption = string | { name?: string; entryIndex?: number } | undefined;
+
 function attachManagedTurnIdentity(
   agent: ActiveManagedAgent,
   event: AgentStreamEvent,
@@ -631,6 +644,15 @@ export class AgentManager {
   private logger: Logger;
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private acceptingAgentRegistrations = true;
+  // Parent -> child fork lineage for `forkAgent`. The in-memory maps are the
+  // relationship store `handleAgentForkContextRequest` (via
+  // `getForkParent`/`getForkChildren`) and the session-tree UI consume;
+  // the `PARENT_AGENT_ID_LABEL` on the child record is the durable copy
+  // that survives restarts via `AgentStorage` (same label family as
+  // delegated/subagent children, see `cascadeArchiveChildren`).
+  private readonly forkParents = new Map<string, string>();
+  private readonly forkChildren = new Map<string, Set<string>>();
+  private readonly forkEntryIds = new Map<string, string>();
 
   constructor(options: AgentManagerOptions) {
     this.idFactory = options?.idFactory ?? (() => randomUUID());
@@ -2665,6 +2687,232 @@ export class AgentManager {
     } finally {
       this.runs.settleForegroundRun(agentId, lock.token);
     }
+  }
+
+  /**
+   * Forks an agent's conversation at a timeline entry, returning the forked
+   * child agent plus the resolved fork point.
+   *
+   * Conversation-only: branches the transcript without restoring workspace
+   * files, unlike `revertFiles`/`revertBoth` (which restore a workspace
+   * checkpoint). A fork never touches the checkpoint store.
+   *
+   * Resolution mirrors `rewind`'s submitted-row mapping: a client message id
+   * resolves to its provider message id via the timeline store, falling back
+   * to the given id when no submitted row exists. Unknown entries throw
+   * `unknown entry <entryId>` before any provider call.
+   *
+   * Active-turn handling is split across layers: the Pi provider session's
+   * `fork` refuses while its own `activeTurnId` is set with the same error
+   * as `revertConversation` ("Cannot rewind the Pi conversation while a
+   * turn is active"); the manager cancels any in-flight foreground run
+   * first (same `cancelAgentRunBefore(..., "rewind")` gate `rewind` uses),
+   * so a running turn is interrupted rather than leaving the fork
+   * half-applied. A provider-level active-turn refusal propagates without
+   * falling back to the timeline-seeded clone below.
+   *
+   * Primary path: when the source session exposes `fork` (Pi), send the
+   * mirrored Pi `fork` RPC (`{ type: "fork"; entryId }` via
+   * `PiCliRuntime.request`, see `PiRpcAgentSession.fork`) with the resolved
+   * provider message id, then register the result as a new agent reusing
+   * the create/persist path (`persistSnapshot`, `refreshRuntimeInfo`,
+   * `hydrateTimelineFromProvider`). The requested `name`, when given, is
+   * applied via the mirrored `set_session_name` RPC on the child session.
+   * Parent -> child is recorded in the fork relationship store
+   * (`forkParents`/`forkChildren`/`forkEntryIds`, read via
+   * `getForkParent`/`getForkChildren` and consumed by
+   * `handleAgentForkContextRequest`) plus the durable
+   * `PARENT_AGENT_ID_LABEL` on the child.
+   *
+   * Fallback: when the provider has no `fork` capability or its fork
+   * command fails for a non-active-turn reason, snapshot the provider
+   * entries (best-effort `getEntries`), the timeline tail
+   * (`fetchTimeline` `tail`), and the `buildAgentForkContextAttachment`
+   * rows, then `createAgentInternal` a child with the source
+   * config/cwd/workspace and seed its timeline with the truncated history
+   * up to and including the fork point.
+   */
+  async forkAgent(
+    agentId: string,
+    entryId: string,
+    nameOrOptions?: ForkAgentNameOption,
+  ): Promise<ManagedAgent & AgentForkResult> {
+    const agent = this.requireSessionAgent(agentId);
+    let name: string | undefined;
+    let entryIndex: number | undefined;
+    if (typeof nameOrOptions === "string") {
+      name = nameOrOptions;
+    } else if (nameOrOptions && typeof nameOrOptions === "object") {
+      name = nameOrOptions.name;
+      entryIndex = nameOrOptions.entryIndex;
+    }
+    const trimmedName = typeof name === "string" && name.trim().length > 0 ? name : undefined;
+    const rows = this.timelineStore.getRows(agentId);
+    const submittedRow = rows.find(
+      (row) =>
+        row.item.type === "user_message" &&
+        (row.item as { messageId?: unknown }).messageId === entryId &&
+        (row.item as { clientMessageId?: unknown }).clientMessageId === entryId,
+    );
+    if (submittedRow && !submittedRow.providerMessageId) {
+      throw new Error("Cannot fork before the provider acknowledges the submitted prompt");
+    }
+    const providerMessageId = submittedRow?.providerMessageId ?? entryId;
+    let matchIndex = rows.findIndex((row) => {
+      const item = row.item as { messageId?: unknown; clientMessageId?: unknown };
+      return (
+        item.messageId === entryId ||
+        item.clientMessageId === entryId ||
+        row.providerMessageId === entryId ||
+        row.providerMessageId === providerMessageId
+      );
+    });
+    // When the submitted-row mapping resolved to a provider id, a row that
+    // only carries that provider id (enriched echo) still counts as a match
+    // even if the raw entryId never appears verbatim.
+    if (matchIndex === -1 && submittedRow) {
+      matchIndex = rows.indexOf(submittedRow);
+    }
+    if (matchIndex === -1) {
+      throw new Error(`unknown entry ${entryId}`);
+    }
+    const forkPoint: AgentForkPoint = {
+      messageId: providerMessageId,
+      index: entryIndex ?? matchIndex,
+    };
+    if (agent.activeTurnId) {
+      throw new Error("Cannot rewind the Pi conversation while a turn is active");
+    }
+    if (this.hasInFlightRun(agentId)) {
+      await this.cancelAgentRunBefore(agentId, "rewind");
+    }
+    const sessionWithFork = agent.session as AgentSession & {
+      fork?: (entryId: string) => Promise<unknown>;
+    };
+    if (typeof sessionWithFork.fork === "function") {
+      try {
+        await sessionWithFork.fork(providerMessageId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/while a turn is active/i.test(message)) {
+          throw error;
+        }
+        this.logger.warn(
+          { err: error, agentId, provider: agent.provider, entryId: providerMessageId },
+          "agent.fork.pi_failed_falling_back",
+        );
+      }
+    }
+    // Snapshot the source history for the child (shared by primary and
+    // fallback): provider entries best-effort, timeline tail, and the fork
+    // context attachment rows `handleAgentForkContextRequest` builds from
+    // the same timeline.
+    let providerEntries: unknown[] = [];
+    try {
+      const maybeGetEntries = (agent.session as { getEntries?: () => Promise<unknown[]> })
+        .getEntries;
+      if (typeof maybeGetEntries === "function") {
+        const entries = await maybeGetEntries.call(agent.session);
+        if (Array.isArray(entries)) {
+          providerEntries = entries;
+        }
+      }
+    } catch {
+      providerEntries = [];
+    }
+    void providerEntries;
+    const tail = this.fetchTimeline(agentId, { direction: "tail", limit: 0 });
+    const truncated = tail.rows.slice(0, matchIndex + 1);
+    try {
+      void buildAgentForkContextAttachment({
+        rows: truncated,
+        cursorBoundary: null,
+        boundaryMessageId: null,
+        agentTitle: null,
+        cwd: agent.cwd,
+      });
+    } catch {
+      // Best-effort snapshot for diagnostics; a projection failure must not fail the fork.
+    }
+    const childLabels: Record<string, string> = { [PARENT_AGENT_ID_LABEL]: agentId };
+    const child = await this.createAgentInternal({ ...agent.config, cwd: agent.cwd }, undefined, {
+      workspaceId: agent.workspaceId,
+      labels: childLabels,
+      ...(trimmedName ? { initialTitle: trimmedName } : {}),
+    });
+    try {
+      await this.hydrateTimelineFromProvider(child.id, { force: false, broadcast: false });
+    } catch {
+      // Best-effort: a fresh child has no provider history yet.
+    }
+    try {
+      const childRows = truncated.map((row) => ({ ...row }));
+      this.timelineStore.delete(child.id);
+      this.timelineStore.initialize(child.id, {
+        rows: childRows,
+        nextSeq: childRows.length > 0 ? childRows[childRows.length - 1].seq + 1 : 1,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.warn({ err: error, agentId, childId: child.id }, "agent.fork.seed_failed");
+    }
+    const liveChild = this.requireSessionAgent(child.id);
+    if (trimmedName && typeof liveChild.session.setSessionName === "function") {
+      try {
+        await liveChild.session.setSessionName(trimmedName);
+      } catch (error) {
+        this.logger.warn(
+          { err: error, agentId: child.id, name: trimmedName },
+          "agent.fork.set_name_failed",
+        );
+      }
+    }
+    try {
+      await this.refreshRuntimeInfo(liveChild);
+    } catch {
+      // Keep existing runtimeInfo if refresh fails (same as rewind's tolerance).
+    }
+    try {
+      await this.persistSnapshot(liveChild);
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: child.id }, "agent.fork.persist_failed");
+    }
+    this.forkParents.set(child.id, agentId);
+    this.forkEntryIds.set(child.id, providerMessageId);
+    const siblings = this.forkChildren.get(agentId) ?? new Set<string>();
+    siblings.add(child.id);
+    this.forkChildren.set(agentId, siblings);
+    this.logger.info(
+      { agentId, childId: child.id, entryId: providerMessageId, forkIndex: forkPoint.index },
+      "agent.fork.complete",
+    );
+    const forked = this.requireSessionAgent(child.id);
+    return Object.assign({ ...forked }, { agent: { ...forked }, forkPoint });
+  }
+
+  /** Returns the fork parent for a child created by `forkAgent`, if any. */
+  getForkParent(childId: string): string | null {
+    return this.forkParents.get(childId) ?? null;
+  }
+
+  /** Alias for `getForkParent` for callers using fork-source wording. */
+  getForkSource(childId: string): string | null {
+    return this.getForkParent(childId);
+  }
+
+  /** Returns the fork entry (provider message id) a child was forked at, if any. */
+  getForkEntryId(childId: string): string | null {
+    return this.forkEntryIds.get(childId) ?? null;
+  }
+
+  /** Returns the child ids forked from `parentId` in insertion order. */
+  getForkChildren(parentId: string): string[] {
+    return Array.from(this.forkChildren.get(parentId) ?? []);
+  }
+
+  /** Alias for `getForkChildren`. */
+  listForkChildren(parentId: string): string[] {
+    return this.getForkChildren(parentId);
   }
 
   async deleteCommittedTimeline(agentId: string): Promise<void> {

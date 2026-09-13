@@ -185,6 +185,15 @@ class FakeSession implements AgentSession {
     this.recordedCalls.push("revertBoth");
   }
 
+  async fork() {
+    this.recordedCalls.push("fork");
+    return {};
+  }
+
+  async setSessionName() {
+    this.recordedCalls.push("setSessionName");
+  }
+
   tryHandleOutOfBand(_prompt: AgentPromptInput) {
     this.recordedCalls.push("tryHandleOutOfBand");
     return {
@@ -219,6 +228,8 @@ describe("wrapSessionProvider", () => {
     await wrapped.revertConversation?.({ messageId: "message-1" });
     await wrapped.revertFiles?.({ messageId: "message-1" });
     await wrapped.revertBoth?.({ messageId: "message-1" });
+    await wrapped.fork?.("entry-1");
+    await wrapped.setSessionName?.("forked name");
     const handler = wrapped.tryHandleOutOfBand?.("/compact");
     await handler?.run({ emit: () => {} });
 
@@ -236,6 +247,8 @@ describe("wrapSessionProvider", () => {
       "revertConversation",
       "revertFiles",
       "revertBoth",
+      "fork",
+      "setSessionName",
       "tryHandleOutOfBand",
       "tryHandleOutOfBand.run",
     ]);
@@ -244,7 +257,7 @@ describe("wrapSessionProvider", () => {
   /**
    * Added at the P9-S merge gate. `forwardOptionalSessionMethods`' guard
    * (`typeof method === "function"`) had only its TRUE branch covered: the
-   * `FakeSession` above implements all 14 optional methods, so no test
+   * `FakeSession` above implements all 16 optional methods, so no test
    * constructed an inner session that LACKS one. That left the mechanism
    * this task chose over a `Proxy` free to regress into the exact behaviour
    * it was chosen to avoid — measured at the gate by mutating the guard to

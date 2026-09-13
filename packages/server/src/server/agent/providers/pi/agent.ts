@@ -1840,6 +1840,33 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   /**
+   * Forks the Pi conversation at `entryId` via the mirrored `fork` RPC
+   * command (`{ type: "fork"; entryId }`, see `rpc-types.ts`). Refuses
+   * while a turn is active with the same error as `revertConversation`.
+   * Conversation-only: branches the transcript without restoring workspace
+   * files, unlike `revertFiles`. Callers that need a new daemon agent from
+   * the forked session should capture the post-fork state (via `getState`)
+   * and register it separately; this method only branches the live Pi
+   * session in place.
+   */
+  async fork(entryId: string): Promise<unknown> {
+    if (this.activeTurnId) {
+      throw new Error("Cannot rewind the Pi conversation while a turn is active");
+    }
+    const result = await this.runtimeSession.request({ type: "fork", entryId });
+    await this.refreshState().catch(() => undefined);
+    return result;
+  }
+
+  /**
+   * Renames the Pi session via the mirrored `set_session_name` RPC command.
+   */
+  async setSessionName(name: string): Promise<void> {
+    await this.runtimeSession.request({ type: "set_session_name", name });
+    await this.refreshState().catch(() => undefined);
+  }
+
+  /**
    * Restores the workspace files to the state before the turn that owns
    * `messageId`. A change made outside the checkpoint system refuses the
    * restore with a conflict error unless `force` is set.

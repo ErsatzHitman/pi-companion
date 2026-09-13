@@ -67,6 +67,21 @@ async function createRewindHarness(options: { historyGate?: RewindHistoryGate } 
   return { manager, session, agentId: agent.id };
 }
 
+async function createForkHarness() {
+  const session = new FakeRewindSession();
+  let counter = 0;
+  const manager = new AgentManager({
+    clients: { claude: new FakeRewindClient(session) },
+    logger: createTestLogger(),
+    idFactory: () => `00000000-0000-4000-8000-0000000009${String(11 + counter++).padStart(2, "0")}`,
+  });
+  const agent = await manager.createAgent({ provider: "claude", cwd: process.cwd() }, undefined, {
+    workspaceId: undefined,
+  });
+  await manager.hydrateTimelineFromProvider(agent.id, { force: true });
+  return { manager, session, agentId: agent.id };
+}
+
 describe("AgentManager rewind", () => {
   test("rewinds the conversation and rehydrates the timeline", async () => {
     const { manager, session, agentId } = await createRewindHarness();
@@ -156,5 +171,53 @@ describe("AgentManager rewind", () => {
 
     historyGate.release();
     await rewind;
+  });
+});
+
+describe("AgentManager fork active-turn handling", () => {
+  test("forks the conversation into a child seeded with truncated history", async () => {
+    const { manager, agentId } = await createForkHarness();
+
+    const result = await manager.forkAgent(agentId, "message-1");
+    const childId = result.agent.id;
+
+    expect(childId).not.toBe(agentId);
+    expect(result.forkPoint).toEqual({ messageId: "message-1", index: 0 });
+    // Relationship store records parent -> child for fork-context consumers.
+    expect(manager.getForkParent(childId)).toBe(agentId);
+    expect(manager.getForkChildren(agentId)).toEqual([childId]);
+    expect(result.agent.labels["paseo.parent-agent-id"]).toBe(agentId);
+    // Child timeline carries the truncated source history through the fork point.
+    expect(manager.fetchTimeline(childId, { limit: 0 }).rows.map((row) => row.item)).toEqual([
+      { type: "user_message", text: "before", messageId: "message-1" },
+    ]);
+  });
+
+  test("refuses while a turn is active with the revertConversation error", async () => {
+    const { manager, agentId } = await createForkHarness();
+    const run = manager.streamAgent(agentId, "keep working");
+    await run.next();
+
+    await expect(manager.forkAgent(agentId, "message-1")).rejects.toThrow(
+      "Cannot rewind the Pi conversation while a turn is active",
+    );
+  });
+
+  test("rejects an unknown entry without creating a child", async () => {
+    const { manager, agentId } = await createForkHarness();
+    const before = manager.getForkChildren(agentId);
+
+    await expect(manager.forkAgent(agentId, "entry-missing")).rejects.toThrow(
+      "unknown entry entry-missing",
+    );
+    expect(manager.getForkChildren(agentId)).toEqual(before);
+  });
+
+  test("rejects an unknown agent", async () => {
+    const { manager } = await createForkHarness();
+
+    await expect(
+      manager.forkAgent("00000000-0000-4000-8000-000000009999", "message-1"),
+    ).rejects.toThrow("Unknown agent");
   });
 });

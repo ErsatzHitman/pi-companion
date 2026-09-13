@@ -2027,6 +2027,7 @@ export class Session {
       this.dispatchPiUiMessage(msg) ??
       this.dispatchVoiceAndControlMessage(msg) ??
       this.dispatchAgentRewindMessage(msg) ??
+      this.dispatchAgentForkMessage(msg) ??
       this.dispatchAgentRelationshipMessage(msg) ??
       this.dispatchAgentTimelineMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
@@ -2172,6 +2173,15 @@ export class Session {
     switch (msg.type) {
       case "agent.rewind.request":
         return this.handleAgentRewindRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchAgentForkMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "agent.fork.request":
+        return this.handleAgentForkRequest(msg);
       default:
         return undefined;
     }
@@ -4060,6 +4070,60 @@ export class Session {
           agentId: msg.agentId,
           ok: false,
           error: formatRewindFailureForWire(error),
+        },
+      });
+    }
+  }
+
+  private async handleAgentForkRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.fork.request" }>,
+  ): Promise<void> {
+    try {
+      await ensureAgentLoaded(msg.agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      const forked = await this.agentManager.forkAgent(
+        msg.agentId,
+        msg.entryId,
+        msg.entryIndex !== undefined
+          ? { ...(msg.name !== undefined ? { name: msg.name } : {}), entryIndex: msg.entryIndex }
+          : (msg.name as string | undefined),
+      );
+      const childSnapshot = (forked as unknown as { agent?: ManagedAgent }).agent as
+        | ManagedAgent
+        | undefined;
+      const childAgent = childSnapshot ?? (forked as unknown as ManagedAgent);
+      const agentPayload = await this.buildAgentPayload(childAgent);
+      const forkPoint = (forked as unknown as { forkPoint?: { messageId: string; index: number } })
+        .forkPoint ?? {
+        messageId: msg.entryId,
+        index: msg.entryIndex ?? 0,
+      };
+      this.emit({
+        type: "agent.fork.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          agent: agentPayload,
+          forkPoint,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, agentId: msg.agentId },
+        "Failed to handle agent.fork.request",
+      );
+      this.emit({
+        type: "agent.fork.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          agent: null,
+          forkPoint: null,
+          error: error instanceof Error ? error.message : String(error),
         },
       });
     }
@@ -7121,6 +7185,16 @@ export class Session {
         agentStorage: this.agentStorage,
         logger: this.sessionLogger,
       });
+      // Consume the fork relationship store `forkAgent` records into: a
+      // fork-context request for a forked child resolves its parent for
+      // diagnostics, while a request for a parent lists its children. This
+      // keeps lineage reads on the same store writes go to.
+      const forkParent = this.agentManager.getForkParent?.(msg.agentId) ?? null;
+      const forkChildren = this.agentManager.getForkChildren?.(msg.agentId) ?? [];
+      this.sessionLogger.trace(
+        { agentId: msg.agentId, forkParent, forkChildCount: forkChildren.length },
+        "agent.fork_context.relationship",
+      );
       const agentPayload = await this.buildAgentPayload(snapshot);
       const timeline = this.agentManager.fetchTimeline(msg.agentId, {
         direction: "tail",

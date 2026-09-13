@@ -329,6 +329,8 @@ const SESSION_OPTIONAL_METHOD_KEYS: Record<AgentSessionOptionalMethodKey, true> 
   revertConversation: true,
   revertFiles: true,
   revertBoth: true,
+  fork: true,
+  setSessionName: true,
   tryHandleOutOfBand: true,
 };
 
