@@ -14,6 +14,11 @@ import {
   type WorkspaceFilesSessionHost,
 } from "./workspace-files-session.js";
 import { DownloadTokenStore } from "../../file-download/token-store.js";
+import {
+  ATTACHMENT_TEMP_DIR_PREFIX,
+  type AttachmentTimelineLookup,
+} from "../../file-upload/attachment-access.js";
+import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
 import type { SessionOutboundMessage } from "../../messages.js";
 
 const tempDirs: string[] = [];
@@ -34,6 +39,7 @@ function makeSubsystem(
   options: {
     hasBinaryChannel?: boolean;
     emitBinary?: (frame: Uint8Array) => Promise<void> | void;
+    attachmentLookup?: AttachmentTimelineLookup;
   } = {},
 ) {
   const emitted: SessionOutboundMessage[] = [];
@@ -53,6 +59,7 @@ function makeSubsystem(
     downloadTokenStore: new DownloadTokenStore({ ttlMs: 60_000 }),
     paseoHome,
     logger: pino({ level: "silent" }),
+    ...(options.attachmentLookup ? { attachmentLookup: options.attachmentLookup } : {}),
   });
   return {
     subsystem,
@@ -433,6 +440,226 @@ describe("WorkspaceFilesSession", () => {
     expect(message.payload.dataBase64).toBe("");
     expect(message.payload.eof).toBe(true);
     expect(typeof message.payload.error).toBe("string");
+  });
+
+  function makeAttachmentLookup(
+    images: Record<string, AgentTimelineImageRef[] | null>,
+  ): AttachmentTimelineLookup {
+    return {
+      getAgentTimelineImages: (agentId) => (agentId in images ? images[agentId] : null),
+    };
+  }
+
+  function writeAttachmentFile(contents: string): {
+    dir: string;
+    ref: AgentTimelineImageRef;
+  } {
+    const dir = makeDir(ATTACHMENT_TEMP_DIR_PREFIX);
+    const filePath = join(dir, "attachment.png");
+    writeFileSync(filePath, contents);
+    return { dir, ref: { mimeType: "image/png", path: filePath, bytes: contents.length } };
+  }
+
+  function expectBytesResponse(emitted: SessionOutboundMessage[]) {
+    expect(emitted).toHaveLength(1);
+    const message = emitted[0];
+    if (message.type !== "file_download_bytes_response") {
+      throw new Error(`expected file_download_bytes_response, got ${message.type}`);
+    }
+    return message.payload;
+  }
+
+  test("serves an agentId-scoped attachment chunk with metadata and no cwd", async () => {
+    const { ref } = writeAttachmentFile("hello world");
+    const { subsystem, emitted } = makeSubsystem({
+      attachmentLookup: makeAttachmentLookup({ "agent-a": [ref] }),
+    });
+
+    await expect(
+      subsystem.handleFileDownloadBytesRequest({
+        type: "file_download_bytes_request",
+        agentId: "agent-a",
+        path: ref.path,
+        offset: 0,
+        length: 5,
+        requestId: "req-bytes-attachment",
+      }),
+    ).resolves.toBeUndefined();
+
+    const payload = expectBytesResponse(emitted);
+    expect(payload.error).toBeNull();
+    expect(payload.offset).toBe(0);
+    expect(payload.eof).toBe(false);
+    expect(payload.size).toBe(11);
+    expect(payload.mimeType).toBe("image/png");
+    expect(payload.fileName).toBe("attachment.png");
+    expect(Buffer.from(payload.dataBase64, "base64").toString("utf8")).toBe("hello");
+  });
+
+  test("marks the final agentId-scoped attachment chunk with eof", async () => {
+    const { ref } = writeAttachmentFile("hello world");
+    const { subsystem, emitted } = makeSubsystem({
+      attachmentLookup: makeAttachmentLookup({ "agent-a": [ref] }),
+    });
+
+    await subsystem.handleFileDownloadBytesRequest({
+      type: "file_download_bytes_request",
+      agentId: "agent-a",
+      path: ref.path,
+      offset: 6,
+      length: 65536,
+      requestId: "req-bytes-attachment-eof",
+    });
+
+    const payload = expectBytesResponse(emitted);
+    expect(payload.error).toBeNull();
+    expect(payload.offset).toBe(6);
+    expect(payload.eof).toBe(true);
+    expect(Buffer.from(payload.dataBase64, "base64").toString("utf8")).toBe("world");
+  });
+
+  test("refuses a cross-agent attachment chunk as an error envelope without throwing", async () => {
+    const { ref } = writeAttachmentFile("agent-a-bytes");
+    const other = writeAttachmentFile("agent-b-bytes");
+    const { subsystem, emitted } = makeSubsystem({
+      attachmentLookup: makeAttachmentLookup({ "agent-a": [ref], "agent-b": [other.ref] }),
+    });
+
+    await expect(
+      subsystem.handleFileDownloadBytesRequest({
+        type: "file_download_bytes_request",
+        agentId: "agent-b",
+        path: ref.path,
+        offset: 0,
+        length: 16,
+        requestId: "req-bytes-attachment-cross",
+      }),
+    ).resolves.toBeUndefined();
+
+    const payload = expectBytesResponse(emitted);
+    expect(payload.offset).toBe(0);
+    expect(payload.dataBase64).toBe("");
+    expect(payload.eof).toBe(true);
+    expect(payload.error).toBe("Attachment not found");
+  });
+
+  test("refuses an attachment chunk for an unknown agent as an error envelope without throwing", async () => {
+    const { ref } = writeAttachmentFile("hello world");
+    const { subsystem, emitted } = makeSubsystem({
+      attachmentLookup: makeAttachmentLookup({ "agent-a": [ref] }),
+    });
+
+    await expect(
+      subsystem.handleFileDownloadBytesRequest({
+        type: "file_download_bytes_request",
+        agentId: "missing-agent",
+        path: ref.path,
+        offset: 0,
+        length: 16,
+        requestId: "req-bytes-attachment-unknown",
+      }),
+    ).resolves.toBeUndefined();
+
+    const payload = expectBytesResponse(emitted);
+    expect(payload.dataBase64).toBe("");
+    expect(payload.eof).toBe(true);
+    expect(payload.error).toBe("Attachment not found");
+  });
+
+  test("reports a deleted attachment file as an error envelope without throwing", async () => {
+    const { dir, ref } = writeAttachmentFile("hello world");
+    rmSync(join(dir, "attachment.png"), { force: true });
+    const { subsystem, emitted } = makeSubsystem({
+      attachmentLookup: makeAttachmentLookup({ "agent-a": [ref] }),
+    });
+
+    await expect(
+      subsystem.handleFileDownloadBytesRequest({
+        type: "file_download_bytes_request",
+        agentId: "agent-a",
+        path: ref.path,
+        offset: 0,
+        length: 16,
+        requestId: "req-bytes-attachment-deleted",
+      }),
+    ).resolves.toBeUndefined();
+
+    const payload = expectBytesResponse(emitted);
+    expect(payload.dataBase64).toBe("");
+    expect(payload.eof).toBe(true);
+    expect(typeof payload.error).toBe("string");
+  });
+
+  test("reports an invalid attachment chunk length as an error envelope without throwing", async () => {
+    const { ref } = writeAttachmentFile("hello world");
+    const { subsystem, emitted } = makeSubsystem({
+      attachmentLookup: makeAttachmentLookup({ "agent-a": [ref] }),
+    });
+
+    await expect(
+      subsystem.handleFileDownloadBytesRequest({
+        type: "file_download_bytes_request",
+        agentId: "agent-a",
+        path: ref.path,
+        offset: 0,
+        length: 0,
+        requestId: "req-bytes-attachment-bad-length",
+      }),
+    ).resolves.toBeUndefined();
+
+    const payload = expectBytesResponse(emitted);
+    expect(payload.dataBase64).toBe("");
+    expect(payload.eof).toBe(true);
+    expect(payload.error).toBe("Invalid length");
+  });
+
+  test("keeps cwd-is-required when an agentId is sent but no attachment lookup is configured", async () => {
+    const { subsystem, emitted } = makeSubsystem();
+
+    await subsystem.handleFileDownloadBytesRequest({
+      type: "file_download_bytes_request",
+      agentId: "agent-a",
+      path: "/tmp/paseo-attachments-x/deadbeef.png",
+      offset: 0,
+      length: 16,
+      requestId: "req-bytes-attachment-no-lookup",
+    });
+
+    expect(emitted).toEqual([
+      {
+        type: "file_download_bytes_response",
+        payload: expect.objectContaining({
+          requestId: "req-bytes-attachment-no-lookup",
+          offset: 0,
+          dataBase64: "",
+          eof: true,
+          error: "cwd is required",
+        }),
+      },
+    ]);
+  });
+
+  test("prefers the workspace file when both cwd and agentId are present", async () => {
+    const cwd = makeDir("workspace-files-bytes-both-");
+    writeFileSync(join(cwd, "report.txt"), "workspace-bytes");
+    const { ref } = writeAttachmentFile("attachment-bytes");
+    const { subsystem, emitted } = makeSubsystem({
+      attachmentLookup: makeAttachmentLookup({ "agent-a": [ref] }),
+    });
+
+    await subsystem.handleFileDownloadBytesRequest({
+      type: "file_download_bytes_request",
+      cwd,
+      agentId: "agent-a",
+      path: "report.txt",
+      offset: 0,
+      length: 9,
+      requestId: "req-bytes-both",
+    });
+
+    const payload = expectBytesResponse(emitted);
+    expect(payload.error).toBeNull();
+    expect(Buffer.from(payload.dataBase64, "base64").toString("utf8")).toBe("workspace");
   });
 
   test("responds to a project icon request", async () => {

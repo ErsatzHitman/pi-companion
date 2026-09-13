@@ -4,8 +4,11 @@ import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
 
 import {
   applyResolvedAttachmentImage,
+  buildAttachmentDataUri,
   buildAttachmentDownloadUrl,
   collectTimelineImages,
+  encodeBytesToBase64,
+  supportsRelayAttachmentDownload,
 } from "./attachment-image-resolver-model";
 
 function image(overrides: Partial<AgentTimelineImageRef> = {}): AgentTimelineImageRef {
@@ -110,5 +113,54 @@ describe("applyResolvedAttachmentImage", () => {
     expect(next).not.toBe(map);
     expect(next.get("/p/b.png")).toBe("http://x/b");
     expect(map.has("/p/b.png")).toBe(false);
+  });
+});
+
+describe("encodeBytesToBase64", () => {
+  it("encodes known byte vectors without Buffer or btoa, identically to web", () => {
+    expect(encodeBytesToBase64(new Uint8Array([]))).toBe("");
+    expect(encodeBytesToBase64(new Uint8Array([1, 2, 3]))).toBe("AQID");
+    expect(encodeBytesToBase64(new Uint8Array([255]))).toBe("/w==");
+    expect(encodeBytesToBase64(new Uint8Array([104, 101, 108, 108, 111]))).toBe("aGVsbG8=");
+  });
+
+  it("encodes a two-byte tail with exactly one padding character", () => {
+    expect(encodeBytesToBase64(new Uint8Array([255, 254]))).toBe("//4=");
+  });
+});
+
+describe("buildAttachmentDataUri", () => {
+  it("prefixes the base64 bytes with the data: MIME header", () => {
+    expect(buildAttachmentDataUri(new Uint8Array([1, 2, 3]), "image/png")).toBe(
+      "data:image/png;base64,AQID",
+    );
+  });
+
+  it("carries the caller-supplied MIME type verbatim, never a fixed one", () => {
+    expect(buildAttachmentDataUri(new Uint8Array([255]), "image/jpeg")).toBe(
+      "data:image/jpeg;base64,/w==",
+    );
+  });
+});
+
+describe("supportsRelayAttachmentDownload", () => {
+  function tokenOnlyClient() {
+    return {
+      requestAttachmentDownloadToken: async () => ({
+        token: null as string | null,
+        mimeType: null as string | null,
+        error: "Attachment not found",
+      }),
+    };
+  }
+
+  it("is false for a token-only client, true once downloadFileBytes is present", () => {
+    expect(supportsRelayAttachmentDownload(tokenOnlyClient())).toBe(false);
+    expect(
+      supportsRelayAttachmentDownload({
+        ...tokenOnlyClient(),
+        downloadFileBytes: async () => ({ bytes: new Uint8Array([1]) }),
+      }),
+    ).toBe(true);
   });
 });

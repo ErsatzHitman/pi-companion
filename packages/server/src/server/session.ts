@@ -176,7 +176,10 @@ import type { HubRelationshipManagement } from "./hub/relationship-controller.js
 import { HubExecutionController } from "./hub/execution-controller.js";
 import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
-import { resolveAttachmentForDownload } from "./file-upload/attachment-access.js";
+import {
+  resolveAttachmentForDownload,
+  type AttachmentTimelineLookup,
+} from "./file-upload/attachment-access.js";
 import { PushTokenStore } from "./push/token-store.js";
 import {
   archivePersistedWorkspaceRecord,
@@ -762,6 +765,12 @@ export class Session {
       downloadTokenStore,
       paseoHome,
       logger: this.sessionLogger,
+      // The relay chunk loop's agentId-scoped branch resolves through
+      // the SAME lookup the token path below uses
+      // (`getAttachmentTimelineLookup`): the closure reads
+      // `this.agentManager` lazily at call time, so constructing it here
+      // — before `this.agentManager` is assigned just below — is safe.
+      attachmentLookup: this.getAttachmentTimelineLookup(),
     });
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
@@ -6936,6 +6945,35 @@ export class Session {
   }
 
   /**
+   * The one `AttachmentTimelineLookup` both attachment-serving paths
+   * resolve through: the `attachment_download_token_request` handler below
+   * and the relay `file_download_bytes_request` chunk branch (injected
+   * into `WorkspaceFilesSession` at construction). A single definition so
+   * the two paths can never drift into two different access checks: an
+   * agent with no loaded record yields `null` (whose outcome is the same
+   * `not_found` the `ensureAgentLoaded` fallthrough below produces), and
+   * only images already recorded on that agent's own timeline match.
+   */
+  private getAttachmentTimelineLookup(): AttachmentTimelineLookup {
+    return {
+      getAgentTimelineImages: (id) => this.collectAgentTimelineImages(id),
+    };
+  }
+
+  private collectAgentTimelineImages(agentId: string): readonly AgentTimelineImageRef[] | null {
+    if (!this.agentManager.getAgent(agentId)) {
+      return null;
+    }
+    const images: AgentTimelineImageRef[] = [];
+    for (const item of this.agentManager.getTimeline(agentId)) {
+      if ((item.type === "user_message" || item.type === "assistant_message") && item.images) {
+        images.push(...item.images);
+      }
+    }
+    return images;
+  }
+
+  /**
    * T283: issues a short-lived download token for a timeline attachment,
    * capability-scoped by cross-referencing `msg.path` against `msg.agentId`'s
    * own persisted timeline before ever touching the filesystem — see
@@ -6968,23 +7006,7 @@ export class Session {
 
     const result = await resolveAttachmentForDownload(
       { agentId, path: requestedPath },
-      {
-        getAgentTimelineImages: (id) => {
-          if (!this.agentManager.getAgent(id)) {
-            return null;
-          }
-          const images: AgentTimelineImageRef[] = [];
-          for (const item of this.agentManager.getTimeline(id)) {
-            if (
-              (item.type === "user_message" || item.type === "assistant_message") &&
-              item.images
-            ) {
-              images.push(...item.images);
-            }
-          }
-          return images;
-        },
-      },
+      this.getAttachmentTimelineLookup(),
     );
 
     if (result.status !== "ok") {

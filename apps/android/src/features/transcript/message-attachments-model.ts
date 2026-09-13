@@ -29,8 +29,12 @@
  * (`app/h/[serverId]/session/[agentId]/index.tsx`) now does, via
  * `use-attachment-image-resolver.ts`'s `useAttachmentImageResolver` — a
  * real photo attached on `apps/web` renders here over a direct daemon
- * connection; a relay-paired connection (no direct HTTP endpoint to fetch
- * a token URL from) or no connection at all still resolves every image to
+ * connection, and a relay-paired connection whose client exposes the
+ * chunk-loop download resolves real images through it too (a `data:` URI
+ * built from the downloaded bytes, via the same agentId-scoped daemon
+ * chunk read web's resolver uses). A relay pairing whose client has no
+ * chunk-loop method (an old daemon or adapter), or no connection at all,
+ * still resolves every image to
  * the reference card below, truthfully. Rather than inventing pixels or
  * dropping the reference silently, every image renders as an accessible
  * reference card — name, kind, size — through `imageAttachmentViewModel`
@@ -138,7 +142,8 @@ export interface ImageAttachmentViewModel {
    * absent or returns `undefined` for this image (see
    * `use-attachment-image-resolver.ts`'s module doc for the real,
    * by-design cases that produces: no live connection yet, a relay
-   * pairing, or a token request still in flight/failed). Always shown as
+   * pairing whose client has no chunk-loop method, or a token/chunk
+   * request still in flight/failed). Always shown as
    * visible text, never colour/icon alone. */
   note: string;
 }

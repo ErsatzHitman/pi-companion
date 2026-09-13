@@ -76,8 +76,11 @@ export type { AttachmentImageContext, ImageAttachmentViewModel } from "./message
 // core and the thin hook live in separate files.
 export {
   applyResolvedAttachmentImage,
+  buildAttachmentDataUri,
   buildAttachmentDownloadUrl,
   collectTimelineImages,
+  encodeBytesToBase64,
+  supportsRelayAttachmentDownload,
 } from "./attachment-image-resolver-model";
 export type { AttachmentDownloadTokenClient } from "./attachment-image-resolver-model";
 export { useAttachmentImageResolver } from "./use-attachment-image-resolver";

@@ -101,6 +101,17 @@ import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
  * currently live). */
 export const ATTACHMENT_TEMP_DIR_PREFIX = "paseo-attachments-";
 
+/**
+ * Plaintext ceiling for one `file_download_bytes` attachment chunk — the
+ * same 64KB Cloudflare WS frame margin
+ * `file-explorer/service.ts`'s `MAX_DOWNLOADABLE_CHUNK_BYTES` enforces for
+ * the workspace path (which mirrors
+ * `@picompanion/protocol`'s `MAX_FILE_DOWNLOAD_BYTES_LENGTH`).
+ * Re-declared here so the attachment chunk read does not import the
+ * workspace explorer service for a single constant.
+ */
+export const MAX_ATTACHMENT_CHUNK_BYTES = 65536;
+
 export interface AttachmentTimelineLookup {
   /** Every image reference recorded anywhere in `agentId`'s own persisted
    * timeline, or `null` when the agent does not exist / could not be
@@ -162,6 +173,92 @@ export async function resolveAttachmentForDownload(
       return { status: "not_found" };
     }
     return { status: "error", error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export interface AttachmentFileChunk {
+  /** The requested attachment path, echoed for envelope attribution. */
+  path: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  offset: number;
+  bytes: Buffer;
+  eof: boolean;
+}
+
+export interface ReadAttachmentChunkParams {
+  agentId: string;
+  path: string;
+  offset: number;
+  length: number;
+}
+
+/**
+ * Reads one `length`-byte slice of an agentId-scoped attachment starting
+ * at `offset`, for the relay `file_download_bytes` chunk loop. Reuses
+ * `resolveAttachmentForDownload` — the SAME membership + containment
+ * access check the `attachment_download_token_request` path uses — so no
+ * second authorization rule is invented here; a path that would not get a
+ * token can never get bytes either. Throws `Attachment not found` when
+ * the lookup refuses (the token path's own not-found string, so the
+ * chunk handler's error envelope matches it), and `Invalid
+ * offset`/`Invalid length` for out-of-range slicing, mirroring
+ * `file-explorer/service.ts`'s `readDownloadableFileChunk` bounds.
+ * Callers convert every throw into a `file_download_bytes_response`
+ * error envelope and never let it escape.
+ */
+export async function readAttachmentFileChunk(
+  params: ReadAttachmentChunkParams,
+  lookup: AttachmentTimelineLookup,
+): Promise<AttachmentFileChunk> {
+  const { agentId, path: requestedPath, offset, length } = params;
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error("Invalid offset");
+  }
+  if (!Number.isInteger(length) || length < 1 || length > MAX_ATTACHMENT_CHUNK_BYTES) {
+    throw new Error("Invalid length");
+  }
+  const result = await resolveAttachmentForDownload({ agentId, path: requestedPath }, lookup);
+  if (result.status === "not_found") {
+    throw new Error("Attachment not found");
+  }
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
+  const handle = await fs.open(result.file.absolutePath, "r");
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile()) {
+      throw new Error("Requested path is not a file");
+    }
+    const size = stats.size;
+    if (offset >= size) {
+      return {
+        path: requestedPath,
+        fileName: result.file.fileName,
+        mimeType: result.file.mimeType,
+        size,
+        offset,
+        bytes: Buffer.alloc(0),
+        eof: true,
+      };
+    }
+    const toRead = Math.min(length, size - offset);
+    const buffer = Buffer.alloc(toRead);
+    const { bytesRead } = await handle.read(buffer, 0, toRead, offset);
+    const bytes = bytesRead < toRead ? buffer.subarray(0, bytesRead) : buffer;
+    return {
+      path: requestedPath,
+      fileName: result.file.fileName,
+      mimeType: result.file.mimeType,
+      size,
+      offset,
+      bytes,
+      eof: offset + bytesRead >= size,
+    };
+  } finally {
+    await handle.close().catch(() => undefined);
   }
 }
 

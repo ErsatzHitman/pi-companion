@@ -48,28 +48,49 @@
  *   WebSocket URL from (`connection-url.ts`), so this needs no
  *   IPv6-bracketing logic of its own — only a scheme prefix.
  *
+ * **The relay pure pieces, unit-tested directly alongside the three above:**
+ * - `supportsRelayAttachmentDownload` probes for the chunk-loop method
+ *   (mirroring `features/files/file-download-client.ts`'s
+ *   `supportsRelayFileDownload`, duplicated here for the same
+ *   no-sibling-import reason as `buildAttachmentDownloadUrl` above).
+ * - `encodeBytesToBase64`/`buildAttachmentDataUri` turn chunk-loop bytes
+ *   into an `<img>`-renderable `data:` URI with no `Buffer`/`btoa`
+ *   dependency, so every JS engine either app runs under encodes
+ *   identically.
+ *
  * **What this means for the two acceptance directions.** A `"direct"`
  * connection (this app's only connection kind with any live daemon HTTP
- * endpoint at all, per this same reasoning) resolves real images. A
- * `"relay"` connection, or no connection yet, always returns `undefined`
- * for every image — `MessageAttachments`' own reference-card fallback is
- * what renders then, exactly the "no blank space, no broken `<img>`"
- * acceptance this task's brief names for an unreachable file, not a
- * regression this task introduces.
+ * endpoint at all, per this same reasoning) resolves real images through
+ * the token+HTTP round trip. A `"relay"` connection resolves real images
+ * too — through the `file_download_bytes` chunk loop inside the E2EE
+ * channel (see below), so the relay never sees anything but ciphertext.
+ * No connection yet always returns `undefined` for every image —
+ * `MessageAttachments`' own reference-card fallback is what renders then,
+ * exactly the "no blank space, no broken `<img>`" acceptance this task's
+ * brief names for an unreachable file, not a regression this task
+ * introduces.
  *
- * **Why relay images do NOT ride the chunk-loop download the files
- * feature uses.** `DaemonClient.downloadFileBytes` (the
- * `file_download_bytes` pair the files feature's relay path is built
- * on) is workspace-`cwd`-scoped on the daemon: `agentId` is accepted on
- * its wire but never used as a filesystem scope there, and a request
- * without a usable `cwd` gets an error envelope (see
- * `handleFileDownloadBytesRequest` in `packages/server/src/server/
- * session/files/workspace-files-session.ts`). Timeline image `path`s are
- * agentId-scoped daemon staging paths (see `requestAttachmentDownloadToken`'s
- * own contract), not workspace-relative paths, so pointing this hook at
- * the chunk loop would only trade today's honest fallback for a daemon
- * rejection. Relay image resolution needs a daemon-side agentId-scoped
- * chunk read that does not exist yet — deliberately out of scope here.
+ * **Relay images ride the chunk-loop download the files feature uses.**
+ * `DaemonClient.downloadFileBytes` (the `file_download_bytes` pair the
+ * files feature's relay path is built on) now serves agentId-scoped
+ * attachment paths as well as workspace-`cwd`-scoped file paths: a
+ * request without a usable `cwd` but with a non-empty `agentId` is
+ * resolved through the SAME `resolveAttachmentForDownload` membership +
+ * containment check the `attachment_download_token_request` path uses
+ * (see `handleFileDownloadBytesRequest` in `packages/server/src/server/
+ * session/files/workspace-files-session.ts` and `readAttachmentFileChunk`
+ * in `.../file-upload/attachment-access.ts`). This hook therefore calls
+ * `client.downloadFileBytes({ agentId, path })` whenever there is no
+ * direct origin to fetch a token URL from. The returned bytes are
+ * rendered as a `data:` URI (see `buildAttachmentDataUri`), so no object
+ * URL needs revoking when this hook's cache resets. A relay pairing whose
+ * client has no chunk-loop method at all — an old daemon or adapter —
+ * keeps the reference-card fallback, never a doomed request: that
+ * method-presence check (`supportsRelayAttachmentDownload`, mirroring
+ * `features/files/file-download-client.ts`'s `supportsRelayFileDownload`)
+ * is this capability's only old-daemon probe, and the daemon-side
+ * rejection of a chunk read an old daemon does not understand lands in
+ * the same fallback through the `.catch()` below.
  *
  * **A disclosed limitation of the token itself, not of this module.**
  * `DownloadTokenStore.consumeToken` (`packages/server/src/server/
@@ -94,11 +115,13 @@ import { isCoreMessageEntry } from "./message-row.js";
 import type { MessageAttachmentImageContext, ResolveImageSrc } from "./message-attachments.js";
 
 /**
- * The one method this hook needs off `@picompanion/client`'s
+ * The methods this hook needs off `@picompanion/client`'s
  * `DaemonClient` — a real `DaemonClient` satisfies this structurally
  * as-is (`requestAttachmentDownloadToken`'s real return type carries
  * every field here plus `agentId`/`path`/`fileName`/`size`/`requestId`;
- * see `daemon-client.ts`'s own doc comment for the T283 wire contract).
+ * see `daemon-client.ts`'s own doc comment for the T283 wire contract;
+ * `downloadFileBytes`'s real options/result carry every field here plus
+ * the workspace-path and transport fields this hook never passes).
  */
 export interface AttachmentDownloadTokenClient {
   requestAttachmentDownloadToken(
@@ -109,6 +132,71 @@ export interface AttachmentDownloadTokenClient {
     mimeType: string | null;
     error: string | null;
   }>;
+  /**
+   * Relay-path chunk-loop download (the `file_download_bytes` protocol
+   * pair, served fetch-and-forward inside the existing E2EE channel).
+   * This hook calls it with `{ agentId, path }` only — no `cwd` — and the
+   * daemon resolves it through the same attachment access check the token
+   * path uses. Optional, like every transfer member on the files
+   * feature's own client: a client object without it (an adapter written
+   * before the pair existed) keeps the reference-card fallback.
+   */
+  downloadFileBytes?(options: { agentId: string; path: string }): Promise<{
+    bytes: Uint8Array;
+    mimeType?: string;
+    size?: number;
+    fileName?: string;
+  }>;
+}
+
+/**
+ * Capability probe for the relay attachment path: whether `client`
+ * carries the chunk-loop download at all. A method-presence probe,
+ * deliberately — mirroring `features/files/file-download-client.ts`'s
+ * `supportsRelayFileDownload` (duplicated here rather than imported, per
+ * this directory's own established no-sibling-import convention cited
+ * above): the protocol advertises no server-features flag for the
+ * `file_download_bytes` pair, so there is nothing else to read. A client
+ * without the method at all keeps the reference-card fallback; a client
+ * with it against an old daemon rejects the unknown wire type, which the
+ * hook's `.catch()` below turns into the same fallback.
+ */
+export function supportsRelayAttachmentDownload(client: AttachmentDownloadTokenClient): boolean {
+  return typeof client.downloadFileBytes === "function";
+}
+
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * Pure base64 encoder over raw bytes — no `Buffer` (unavailable in the
+ * browser bundle) and no `btoa` (unavailable on some native runtimes),
+ * so this file and its Android mirror share the identical behaviour in
+ * every JS engine either app runs under. Chunked 3-bytes-at-a-time over
+ * the input; padding only on the final quantum.
+ */
+export function encodeBytesToBase64(bytes: Uint8Array): string {
+  let output = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index] ?? 0;
+    const second = index + 1 < bytes.length ? (bytes[index + 1] ?? 0) : 0;
+    const third = index + 2 < bytes.length ? (bytes[index + 2] ?? 0) : 0;
+    const quantum = (first << 16) | (second << 8) | third;
+    output += BASE64_ALPHABET[(quantum >> 18) & 63];
+    output += BASE64_ALPHABET[(quantum >> 12) & 63];
+    output += index + 1 < bytes.length ? BASE64_ALPHABET[(quantum >> 6) & 63] : "=";
+    output += index + 2 < bytes.length ? BASE64_ALPHABET[quantum & 63] : "=";
+  }
+  return output;
+}
+
+/**
+ * Turns chunk-loop bytes into an `<img>`-renderable `data:` URI. Pure —
+ * the relay path's answer to `buildAttachmentDownloadUrl`'s token URL:
+ * no object URL to revoke when this hook's cache resets, and the same
+ * helper the Android mirror uses for its own `Image` source.
+ */
+export function buildAttachmentDataUri(bytes: Uint8Array, mimeType: string): string {
+  return `data:${mimeType};base64,${encodeBytesToBase64(bytes)}`;
 }
 
 /** Matches `packages/server/src/server/bootstrap.ts`'s
@@ -183,11 +271,13 @@ export interface UseAttachmentImageResolverOptions {
   agentId: string;
   /**
    * `resolveDirectHttpOrigin`'s result — `null` on a relay connection or
-   * with no connection yet. Relay stays `null` *without* a chunk-loop
-   * fallback (unlike the files feature's relay path): the daemon's chunk
-   * handler is workspace-`cwd`-scoped and cannot address agentId-scoped
-   * attachment paths — see this module's doc comment — so a relay image
-   * is left to the reference-card fallback, never to a doomed request.
+   * with no connection yet. A `null` origin no longer means the reference
+   * card: on a relay pairing the hook downloads the bytes inside the E2EE
+   * channel via `client.downloadFileBytes({ agentId, path })` instead of
+   * the token+HTTP round trip (see this module's doc comment). Only a
+   * relay pairing whose client has no chunk-loop method at all — an old
+   * daemon or adapter, per `supportsRelayAttachmentDownload` — keeps the
+   * fallback.
    */
   downloadOrigin: string | null;
   /** The live transcript this session is rendering; only entries carrying `images` are read. */
@@ -235,7 +325,15 @@ export function useAttachmentImageResolver({
   const imagePathsKey = images.map((image) => image.path).join(" ");
 
   useEffect(() => {
-    if (!client || !downloadOrigin) {
+    if (!client) {
+      return;
+    }
+    // Direct origin: the token+HTTP round trip. No direct origin but a
+    // chunk-loop method: the relay path. Neither: an old daemon or
+    // adapter — every image stays on the reference-card fallback, never a
+    // doomed request.
+    const useRelayChunkLoop = !downloadOrigin && supportsRelayAttachmentDownload(client);
+    if (!downloadOrigin && !useRelayChunkLoop) {
       return;
     }
     for (const image of images) {
@@ -243,13 +341,31 @@ export function useAttachmentImageResolver({
         continue;
       }
       requestedRef.current.add(image.path);
+      if (useRelayChunkLoop) {
+        client.downloadFileBytes!({ agentId, path: image.path })
+          .then((result) => {
+            if (!mountedRef.current || result.bytes.byteLength === 0) {
+              return;
+            }
+            const url = buildAttachmentDataUri(result.bytes, result.mimeType ?? image.mimeType);
+            setResolved((previous) => applyResolvedAttachmentImage(previous, image.path, url));
+          })
+          .catch(() => {
+            // Left unresolved: `MessageAttachments`' own reference-card
+            // fallback already covers "no src" — this hook adds no second
+            // error surface (see module doc's "left unresolved forever,
+            // never retried"). An old daemon's rejection of the chunk wire
+            // type lands here, which is exactly the old-daemon fallback.
+          });
+        continue;
+      }
       client
         .requestAttachmentDownloadToken(agentId, image.path)
         .then((payload) => {
           if (!mountedRef.current || !payload.token) {
             return;
           }
-          const url = buildAttachmentDownloadUrl(downloadOrigin, payload.token);
+          const url = buildAttachmentDownloadUrl(downloadOrigin!, payload.token);
           setResolved((previous) => applyResolvedAttachmentImage(previous, image.path, url));
         })
         .catch(() => {

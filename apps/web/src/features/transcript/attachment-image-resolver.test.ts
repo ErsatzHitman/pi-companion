@@ -5,9 +5,12 @@ import type { AgentTimelineImageRef } from "@picompanion/protocol/agent-types";
 
 import {
   applyResolvedAttachmentImage,
+  buildAttachmentDataUri,
   buildAttachmentDownloadUrl,
   collectTimelineImages,
+  encodeBytesToBase64,
   resolveDirectHttpOrigin,
+  supportsRelayAttachmentDownload,
   useAttachmentImageResolver,
   type AttachmentDownloadTokenClient,
 } from "./attachment-image-resolver.js";
@@ -109,6 +112,36 @@ describe("resolveDirectHttpOrigin", () => {
   });
 });
 
+describe("encodeBytesToBase64", () => {
+  it("encodes known byte vectors without Buffer or btoa", () => {
+    expect(encodeBytesToBase64(new Uint8Array([]))).toBe("");
+    expect(encodeBytesToBase64(new Uint8Array([1, 2, 3]))).toBe("AQID");
+    expect(encodeBytesToBase64(new Uint8Array([255]))).toBe("/w==");
+    expect(encodeBytesToBase64(new TextEncoder().encode("hello"))).toBe("aGVsbG8=");
+  });
+});
+
+describe("buildAttachmentDataUri", () => {
+  it("prefixes the base64 bytes with the data: MIME header", () => {
+    expect(buildAttachmentDataUri(new Uint8Array([1, 2, 3]), "image/png")).toBe(
+      "data:image/png;base64,AQID",
+    );
+  });
+});
+
+describe("supportsRelayAttachmentDownload", () => {
+  it("is false for a token-only client, true once downloadFileBytes is present", () => {
+    const { client } = fakeClient(() => ({ token: "tok", mimeType: "image/png", error: null }));
+    expect(supportsRelayAttachmentDownload(client)).toBe(false);
+    expect(
+      supportsRelayAttachmentDownload({
+        ...client,
+        downloadFileBytes: async () => ({ bytes: new Uint8Array([1]) }),
+      }),
+    ).toBe(true);
+  });
+});
+
 describe("collectTimelineImages", () => {
   it("returns an empty array for entries with no images", () => {
     expect(collectTimelineImages([userMessage("m1")])).toEqual([]);
@@ -200,15 +233,59 @@ describe("useAttachmentImageResolver", () => {
     ).toBeUndefined();
   });
 
-  it("relay images stay on the reference-card fallback even when the client exposes the chunk-loop download (the daemon's chunk handler is workspace-cwd-scoped and cannot address agentId-scoped attachment paths — see the module doc), and the chunk loop is never called", async () => {
+  it("relay images resolve through the chunk loop to a data URI when the client exposes downloadFileBytes (the daemon now serves agentId-scoped chunk reads), and no token is requested", async () => {
     const theImage = image();
     const { client, calls } = fakeClient(() => ({
       token: "tok_1",
       mimeType: "image/png",
       error: null,
     }));
-    const downloadFileBytes = vi.fn(async () => ({ bytes: new Uint8Array([1]) }));
+    const downloadFileBytes = vi.fn(async (_options: { agentId: string; path: string }) => ({
+      bytes: new Uint8Array([1, 2, 3]),
+      mimeType: "image/png",
+    }));
     const relayCapableClient = { ...client, downloadFileBytes };
+    const { result, rerender } = renderHook(
+      ({ entries }: { entries: timeline.TranscriptEntry[] }) =>
+        useAttachmentImageResolver({
+          client: relayCapableClient,
+          agentId: "agent-1",
+          downloadOrigin: null,
+          entries,
+        }),
+      { initialProps: { entries: [userMessage("m1", [theImage])] } },
+    );
+
+    await waitFor(() => {
+      expect(result.current(theImage, { entryId: "m1", speaker: "user", index: 0, total: 1 })).toBe(
+        "data:image/png;base64,AQID",
+      );
+    }, SETTLE_WAIT);
+    // The token path is never touched on relay: the chunk loop is the
+    // only request, addressed by agentId (no cwd), exactly once.
+    expect(calls).toEqual([]);
+    expect(downloadFileBytes).toHaveBeenCalledTimes(1);
+    expect(downloadFileBytes).toHaveBeenCalledWith({ agentId: "agent-1", path: theImage.path });
+
+    // A re-render with the identical image paths must not re-request an
+    // already-resolved path.
+    rerender({ entries: [userMessage("m1", [theImage]), userMessage("m2")] });
+    await waitFor(() => {
+      expect(downloadFileBytes).toHaveBeenCalledTimes(1);
+    }, SETTLE_WAIT);
+  });
+
+  it("relay images prefer the chunk loop's MIME type but fall back to the timeline ref's own when the daemon omits it", async () => {
+    const theImage = image({ mimeType: "image/jpeg" });
+    const { client } = fakeClient(() => ({
+      token: "tok_1",
+      mimeType: "image/png",
+      error: null,
+    }));
+    const relayCapableClient = {
+      ...client,
+      downloadFileBytes: vi.fn(async () => ({ bytes: new Uint8Array([255]) })),
+    };
     const { result } = renderHook(() =>
       useAttachmentImageResolver({
         client: relayCapableClient,
@@ -218,13 +295,69 @@ describe("useAttachmentImageResolver", () => {
       }),
     );
 
+    await waitFor(() => {
+      expect(result.current(theImage, { entryId: "m1", speaker: "user", index: 0, total: 1 })).toBe(
+        "data:image/jpeg;base64,/w==",
+      );
+    }, SETTLE_WAIT);
+  });
+
+  it("relay images stay on the reference-card fallback when the client has no chunk-loop method (old daemon), and no token is requested either", async () => {
+    const theImage = image();
+    const { client, calls } = fakeClient(() => ({
+      token: "tok_1",
+      mimeType: "image/png",
+      error: null,
+    }));
+    const { result } = renderHook(() =>
+      useAttachmentImageResolver({
+        client,
+        agentId: "agent-1",
+        downloadOrigin: null,
+        entries: [userMessage("m1", [theImage])],
+      }),
+    );
+
     // Let any wrongly-kicked-off request settle, then prove nothing was
-    // requested at all — neither a token nor a chunk-loop read.
+    // requested at all — neither a token nor a chunk-loop read: with no
+    // direct origin and no chunk method there is nowhere to read from.
     await waitFor(() => expect(calls).toEqual([]), SETTLE_WAIT);
-    expect(downloadFileBytes).not.toHaveBeenCalled();
     expect(
       result.current(theImage, { entryId: "m1", speaker: "user", index: 0, total: 1 }),
     ).toBeUndefined();
+  });
+
+  it("a rejected relay chunk read leaves the image unresolved forever (old-daemon wire rejection is the same fallback, never retried)", async () => {
+    const theImage = image();
+    const { client } = fakeClient(() => ({
+      token: "tok_1",
+      mimeType: "image/png",
+      error: null,
+    }));
+    const downloadFileBytes = vi.fn(async () => {
+      throw new Error("Unknown message type");
+    });
+    const relayCapableClient = { ...client, downloadFileBytes };
+    const { result, rerender } = renderHook(
+      ({ entries }: { entries: timeline.TranscriptEntry[] }) =>
+        useAttachmentImageResolver({
+          client: relayCapableClient,
+          agentId: "agent-1",
+          downloadOrigin: null,
+          entries,
+        }),
+      { initialProps: { entries: [userMessage("m1", [theImage])] } },
+    );
+
+    await waitFor(() => expect(downloadFileBytes).toHaveBeenCalledTimes(1), SETTLE_WAIT);
+    expect(
+      result.current(theImage, { entryId: "m1", speaker: "user", index: 0, total: 1 }),
+    ).toBeUndefined();
+
+    rerender({ entries: [userMessage("m1", [theImage])] });
+    await waitFor(() => {
+      expect(downloadFileBytes).toHaveBeenCalledTimes(1);
+    }, SETTLE_WAIT);
   });
 
   it("resolves a real fetchable URL once the token request settles, and never requests the same path twice", async () => {

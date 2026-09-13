@@ -22,6 +22,8 @@ import type {
   SessionOutboundMessage,
 } from "../../messages.js";
 import { FileUploadStore } from "../../file-upload/index.js";
+import type { AttachmentTimelineLookup } from "../../file-upload/attachment-access.js";
+import { readAttachmentFileChunk } from "../../file-upload/attachment-access.js";
 import type { DownloadTokenStore } from "../../file-download/token-store.js";
 import {
   createDirectoryEntry,
@@ -56,6 +58,15 @@ export interface WorkspaceFilesSessionOptions {
   paseoHome: string;
   logger: pino.Logger;
   fileObserver?: FileObserver;
+  /**
+   * AgentId-scoped attachment lookup for the relay chunk loop — the SAME
+   * `AttachmentTimelineLookup` the `attachment_download_token_request`
+   * path resolves through (`Session` injects its own shared lookup here).
+   * Absent in unit tests that only exercise the workspace path; a
+   * no-`cwd` request with no usable lookup keeps the historic `cwd is
+   * required` envelope.
+   */
+  attachmentLookup?: AttachmentTimelineLookup;
 }
 
 /**
@@ -71,6 +82,7 @@ export class WorkspaceFilesSession {
   private readonly logger: pino.Logger;
   private readonly fileUploads: FileUploadStore;
   private readonly fileObserver: FileObserver;
+  private readonly attachmentLookup?: AttachmentTimelineLookup;
   private readonly fileSubscriptions = new Map<string, () => void>();
 
   constructor(options: WorkspaceFilesSessionOptions) {
@@ -79,6 +91,7 @@ export class WorkspaceFilesSession {
     this.logger = options.logger;
     this.fileUploads = new FileUploadStore({ paseoHome: options.paseoHome });
     this.fileObserver = options.fileObserver ?? workspaceFileObserver;
+    this.attachmentLookup = options.attachmentLookup;
   }
 
   async handleFileSubscribeRequest(request: FileSubscribeRequest): Promise<void> {
@@ -479,22 +492,67 @@ export class WorkspaceFilesSession {
 
   /**
    * Serves one `file_download_bytes_request` chunk fetch-and-forward INSIDE
-   * the E2EE channel (the relay only ever sees ciphertext). Reuses
-   * `getDownloadableFileInfo` (via `readDownloadableFileChunk`) so the
+   * the E2EE channel (the relay only ever sees ciphertext). The
+   * workspace-`cwd` path reuses `readDownloadableFileChunk` so the
    * scoped-root jail, the is-file gate, and the mime/size attribution are
-   * identical to `handleFileDownloadTokenRequest` — `agentId`, when
-   * present, is accepted on the wire but never used as a filesystem
-   * scope here; a request without a usable `cwd` gets an error envelope.
-   * Never throws: every failure (missing scope, missing file, jail
-   * rejection, short read) is an `error` envelope echoing the requested
-   * `offset` with empty `dataBase64` and `eof: true` so a chunk loop
-   * terminates instead of hanging.
+   * identical to `handleFileDownloadTokenRequest`. A request without a
+   * usable `cwd` but with a non-empty `agentId` is resolved as an
+   * agentId-scoped attachment through `readAttachmentFileChunk` — the SAME
+   * `resolveAttachmentForDownload` membership + containment check the
+   * `attachment_download_token_request` path uses, injected as
+   * `attachmentLookup`, so a path that would not get a token can never get
+   * bytes either. Never throws: every failure (missing scope, missing
+   * file, jail/containment rejection, short read) is an `error` envelope
+   * echoing the requested `offset` with empty `dataBase64` and `eof: true`
+   * so a chunk loop terminates instead of hanging.
    */
   async handleFileDownloadBytesRequest(request: FileDownloadBytesRequest): Promise<void> {
     const { path: requestedPath, offset, length, requestId } = request;
     const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
     const cwd = request.cwd?.trim() ?? "";
+    const agentId = request.agentId?.trim() ?? "";
     if (!cwd) {
+      if (agentId && this.attachmentLookup) {
+        this.logger.debug(
+          { agentId, path: requestedPath, offset },
+          `Handling file download bytes request for attachment ${requestedPath} (@${offset})`,
+        );
+        try {
+          const chunk = await readAttachmentFileChunk(
+            { agentId, path: requestedPath, offset, length },
+            this.attachmentLookup,
+          );
+          this.host.emit({
+            type: "file_download_bytes_response",
+            payload: {
+              requestId,
+              offset: chunk.offset,
+              dataBase64: chunk.bytes.toString("base64"),
+              eof: chunk.eof,
+              size: chunk.size,
+              mimeType: chunk.mimeType,
+              fileName: chunk.fileName,
+              error: null,
+            },
+          });
+        } catch (error) {
+          this.logger.error(
+            { err: error, agentId, path: requestedPath, offset },
+            `Failed to read attachment download bytes for agent ${agentId}`,
+          );
+          this.host.emit({
+            type: "file_download_bytes_response",
+            payload: {
+              requestId,
+              offset: safeOffset,
+              dataBase64: "",
+              eof: true,
+              error: getErrorMessage(error),
+            },
+          });
+        }
+        return;
+      }
       this.host.emit({
         type: "file_download_bytes_response",
         payload: {

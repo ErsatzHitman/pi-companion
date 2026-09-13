@@ -51,13 +51,17 @@ import "./message-attachments.css";
  * (`useAttachmentImageResolver`,
  * `features/transcript/attachment-image-resolver.ts`) — a phone
  * attachment sent from `apps/android` really does render here, over a
- * `"direct"` daemon connection. `resolveImageSrc` still resolves
- * `undefined` (this file's reference card, below) for every image with
- * no live connection yet, or a `"relay"`-paired one: a relay tunnel
- * proxies only the encrypted WebSocket, so there is no direct daemon HTTP
- * endpoint to fetch a token URL from — see
- * `attachment-image-resolver.ts`'s own module doc for why that is this
- * capability's real, by-design boundary, not a gap left open.
+ * `"direct"` daemon connection. An image with no live connection yet, or
+ * a `"relay"`-paired one whose client has no chunk-loop method (an old
+ * daemon or adapter — see `attachment-image-resolver.ts`'s
+ * `supportsRelayAttachmentDownload` probe), still resolves `undefined`
+ * (this file's reference card, below): a relay tunnel proxies only the
+ * encrypted WebSocket, so there is no direct daemon HTTP endpoint to fetch
+ * a token URL from, and without the chunk loop there is no other way to
+ * reach the bytes — that remainder is this capability's real, by-design
+ * boundary, not a gap left open. A relay pairing whose client *does*
+ * expose the chunk loop resolves real images through it (a `data:` URI
+ * built from the downloaded bytes), never the reference card.
  *
  * Rather than either faking a preview (inventing pixels this client
  * cannot actually fetch) or dropping the image silently, `resolveImageSrc`
