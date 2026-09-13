@@ -294,6 +294,152 @@ describe("PushTokenStore clientId attribution and revocation (T299)", () => {
   });
 });
 
+describe("PushTokenStore unattributed-token migration cleanup (post-T299)", () => {
+  function createInfoCapturingLogger(captured: unknown[][]): pino.Logger {
+    const logger = {
+      child: () => logger,
+      debug: () => undefined,
+      info: (...args: unknown[]) => {
+        captured.push(args);
+      },
+      warn: () => undefined,
+    };
+    return logger as unknown as pino.Logger;
+  }
+
+  test("load drops legacy entries that fail the current registration path and keeps live ones", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "paseo-push-tokens-cleanup-"));
+    const tokenPath = path.join(home, "push-tokens.json");
+    try {
+      const infoCalls: unknown[][] = [];
+      // Two live tokens (one needing a trim, exactly what addToken
+      // normalizes), two blank strings addToken would refuse, and two
+      // non-string entries no registration path could ever produce.
+      writeFileSync(
+        tokenPath,
+        JSON.stringify({
+          tokens: ["ExponentPushToken[live]", "  ExponentPushToken[padded]  ", "", "   ", 42, null],
+        }) + "\n",
+      );
+
+      const store = new PushTokenStore(createInfoCapturingLogger(infoCalls), tokenPath);
+
+      // Live entries survive, trimmed exactly like addToken normalizes.
+      expect(store.getAllTokens().sort()).toEqual(
+        ["ExponentPushToken[live]", "ExponentPushToken[padded]"].sort(),
+      );
+      // The file converged: dropped entries stay dropped on the next load.
+      const onDisk = JSON.parse(readFileSync(tokenPath, "utf-8")) as {
+        tokens: Array<{ clientId: string; token: string }>;
+      };
+      const byToken = (a: { token: string }, b: { token: string }) =>
+        a.token.localeCompare(b.token);
+      expect([...onDisk.tokens].sort(byToken)).toEqual(
+        [
+          { clientId: UNATTRIBUTED_CLIENT_ID, token: "ExponentPushToken[live]" },
+          { clientId: UNATTRIBUTED_CLIENT_ID, token: "ExponentPushToken[padded]" },
+        ].sort(byToken),
+      );
+      // Keeping the residual is a logged decision, not a silent one — and
+      // no token value ever reaches the log (credential-shaped).
+      expect(infoCalls.length).toBeGreaterThan(0);
+      expect(JSON.stringify(infoCalls)).not.toContain("ExponentPushToken");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("load drops invalid new-format unattributed entries and rewrites the file even with no legacy shape", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "paseo-push-tokens-cleanup-new-"));
+    const tokenPath = path.join(home, "push-tokens.json");
+    try {
+      // No bare-string entry here, so the pre-cleanup loader saw nothing
+      // to rewrite and this junk survived every restart on disk.
+      writeFileSync(
+        tokenPath,
+        JSON.stringify({
+          tokens: [
+            { clientId: UNATTRIBUTED_CLIENT_ID, token: "   " },
+            { clientId: "client-a", token: "ExponentPushToken[device-a]" },
+          ],
+        }) + "\n",
+      );
+
+      const store = new PushTokenStore(createLogger(), tokenPath);
+
+      expect(store.getAllTokens()).toEqual(["ExponentPushToken[device-a]"]);
+      const onDisk = JSON.parse(readFileSync(tokenPath, "utf-8")) as {
+        tokens: Array<{ clientId: string; token: string }>;
+      };
+      expect(onDisk.tokens).toEqual([
+        { clientId: "client-a", token: "ExponentPushToken[device-a]" },
+      ]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("re-registering a grandfathered value attributes it, so revoke then stops everything for the client", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "paseo-push-tokens-cleanup-backfill-"));
+    const tokenPath = path.join(home, "push-tokens.json");
+    try {
+      writeFileSync(
+        tokenPath,
+        JSON.stringify({ tokens: ["ExponentPushToken[legacy-same]"] }) + "\n",
+      );
+      const store = new PushTokenStore(createLogger(), tokenPath);
+
+      // The device re-registers the SAME value it held before attribution
+      // existed, plus a fresh one — both under its own clientId.
+      store.addToken("ExponentPushToken[legacy-same]", "client-a");
+      store.addToken("ExponentPushToken[legacy-fresh]", "client-a");
+
+      // One copy of each: the backfill moved the grandfathered entry, it
+      // did not duplicate it.
+      expect(store.getAllTokens().sort()).toEqual(
+        ["ExponentPushToken[legacy-fresh]", "ExponentPushToken[legacy-same]"].sort(),
+      );
+      // No unattributed residue left on disk either.
+      const onDisk = JSON.parse(readFileSync(tokenPath, "utf-8")) as {
+        tokens: Array<{ clientId: string; token: string }>;
+      };
+      expect(
+        onDisk.tokens.find((entry) => entry.clientId === UNATTRIBUTED_CLIENT_ID),
+      ).toBeUndefined();
+
+      store.removeTokensForClient("client-a");
+
+      // The send-time fan-out list — the actual consumption point — is empty.
+      expect(store.getAllTokens()).toEqual([]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("a kept grandfathered token survives an unrelated revoke — backfill never steals across clients", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "paseo-push-tokens-cleanup-keep-"));
+    const tokenPath = path.join(home, "push-tokens.json");
+    try {
+      writeFileSync(tokenPath, JSON.stringify({ tokens: ["ExponentPushToken[legacy]"] }) + "\n");
+      const store = new PushTokenStore(createLogger(), tokenPath);
+      store.addToken("ExponentPushToken[device-b]", "client-b");
+
+      // client-a never registered anything: its revoke touches neither the
+      // attributed token nor the kept grandfathered one.
+      store.removeTokensForClient("client-a");
+      expect(store.getAllTokens().sort()).toEqual(
+        ["ExponentPushToken[device-b]", "ExponentPushToken[legacy]"].sort(),
+      );
+
+      // And revoking the client that DID register removes only its own.
+      store.removeTokensForClient("client-b");
+      expect(store.getAllTokens()).toEqual(["ExponentPushToken[legacy]"]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
 describe.skipIf(process.platform === "win32")("PushTokenStore file permissions", () => {
   test("persists push tokens with private permissions", () => {
     const home = mkdtempSync(path.join(tmpdir(), "paseo-push-tokens-"));
