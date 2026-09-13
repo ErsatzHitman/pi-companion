@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { App } from "./App.js";
@@ -22,6 +22,7 @@ describe("App shell", () => {
   });
 
   afterEach(() => {
+    cleanup();
     window.localStorage.clear();
   });
 
@@ -40,7 +41,7 @@ describe("App shell", () => {
     expect(badge).toBeTruthy();
   }, 20_000);
 
-  it("shows connected when the daemon-served connection hint is present", async () => {
+  it("reflects the real connection lifecycle when the daemon-served connection hint is present: an unreachable hinted daemon reads disconnected, never connected", async () => {
     window.__PASEO_INITIAL_DAEMON_CONNECTION__ = {
       listen: "localhost:4317",
       useTls: false,
@@ -49,10 +50,14 @@ describe("App shell", () => {
 
     render(<App />);
 
-    // See the timeout note above: this route also lazily loads the
-    // `/connect` screen's heavier chunk on first navigation.
-    expect(await screen.findByText("Connected", {}, { timeout: 15_000 })).toBeTruthy();
-    expect(await screen.findByText("My Mac", {}, { timeout: 15_000 })).toBeTruthy();
+    // The shell badge is fed by `DaemonClientProvider`'s live
+    // `HostController` snapshot now, not by the hint alone: no daemon
+    // listens on this port in the test environment, so the bootstrap
+    // attempt fails and the badge honestly reads disconnected. (The old
+    // fake adapter rendered "Connected" straight from the hint without
+    // ever opening a socket.)
+    expect(await screen.findByText("Disconnected", {}, { timeout: 15_000 })).toBeTruthy();
+    expect(screen.queryByText("Connected")).toBeNull();
 
     delete window.__PASEO_INITIAL_DAEMON_CONNECTION__;
   }, 20_000);

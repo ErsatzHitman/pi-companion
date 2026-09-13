@@ -41,12 +41,13 @@
  * "blocked" so the two triggers name two genuinely distinct moments
  * instead of firing together for the same transition.
  *
- * No settings surface exists yet for a haptics on/off toggle anywhere in
- * `apps/android` (searched; there is no `hapticsEnabled` source besides
- * this module and `platform/haptics/` itself) — both functions below
- * default `hapticsEnabled` to `true` at their call sites
- * (`use-approvals-queue.ts`) rather than inventing a private toggle. A
- * future settings task owns adding a real one and threading it through.
+ * The haptics on/off toggle lives in `features/settings/SettingsScreen.tsx`
+ * (its "Haptics" toggle, persisted by `settings-model.ts`'s controller),
+ * and call sites thread that snapshot's `hapticsEnabled` through — both
+ * functions below still take `hapticsEnabled` as a plain parameter
+ * (defaulting to `true` at `use-approvals-queue.ts`'s own call sites)
+ * rather than reading the setting themselves, so this module stays a
+ * pure, settings-controller-free function of its arguments.
  */
 import { fireHaptic, type VibrationPlatform } from "../../platform/haptics/haptic.js";
 

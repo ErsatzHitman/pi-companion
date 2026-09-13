@@ -35,7 +35,7 @@ import { useEffect, useRef, useState } from "react";
 import { mergeSessionList } from "./merge-sessions.js";
 import type { SessionSummary } from "./types.js";
 
-/** Mirrors `features/connection/fake-core-adapter.ts`'s `DaemonConnectionState` without importing it (see module doc). */
+/** Mirrors `features/connection/real-core-adapter.ts`'s `DaemonConnectionState` without importing it (see module doc). */
 export type SessionListConnectionState = "connecting" | "connected" | "disconnected";
 
 export interface SessionListSyncClient {

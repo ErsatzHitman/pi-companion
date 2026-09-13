@@ -4,10 +4,14 @@
  *
  * Before this module, nothing in `apps/web` ever constructed a real
  * `@picompanion/client` `DaemonClient`: `core-context.tsx`'s
- * `CoreProvider` only builds `features/connection/fake-core-adapter.ts`'s
+ * `CoreProvider` only built `features/connection/fake-core-adapter.ts`'s
  * stand-in (a status badge simulator, not a socket), so every feature
  * container's `client`/`daemon` prop defaulted to `undefined` and every
- * screen ran against fixtures only.
+ * screen ran against fixtures only. That stand-in is gone:
+ * `CoreProvider` now builds `features/connection/real-core-adapter.ts`'s
+ * live bridge, and this provider publishes its `HostController` snapshot
+ * into it (see the publish effect below), so the shell badge reads this
+ * same real lifecycle.
  *
  * This module is the "frontend-core `HostController` -> `DaemonClient`"
  * half of plan.md §12.1's connection-startup diagram:
@@ -310,7 +314,7 @@ function useDaemonClientSnapshot(controller: hosts.HostController | null): Daemo
  * no route ever waits on it to render.
  */
 export function DaemonClientProvider({ children }: { children: React.ReactNode }) {
-  const { platform } = useCore();
+  const { platform, connection } = useCore();
   const [hostController, setHostController] = useState<hosts.HostController | null>(null);
 
   useEffect(() => {
@@ -398,6 +402,21 @@ export function DaemonClientProvider({ children }: { children: React.ReactNode }
   }, [platform]);
 
   const snapshot = useDaemonClientSnapshot(hostController);
+
+  // Feeds the shell badge's live adapter from this provider's own
+  // snapshot — the same `info` every live screen reads via
+  // `useDaemonClientContext()`, republished rather than resubscribed,
+  // so the badge adds no second `HostController` subscription.
+  // `getCurrentProfile()` is read fresh here (it changes exactly when
+  // `info.profileId`/`info.kind` do, the same dependency choice
+  // `host-session-screen.tsx` makes), and the bridge itself skips
+  // notifying when nothing actually changed.
+  useEffect(() => {
+    connection.publishHostConnection(
+      snapshot.info,
+      hostController?.getCurrentProfile()?.label ?? null,
+    );
+  }, [connection, snapshot.info, hostController]);
 
   const value = useMemo<DaemonClientContextValue>(
     () => ({ ...snapshot, hostController }),
