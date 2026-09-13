@@ -97,7 +97,13 @@
 // (rewind.test.ts), ParsedToolReadInput keys (tool-call-read-gutter),
 // and unknown-first PiChild fake (cli-runtime.test.ts). No production
 // source semantics changed.
-export const TYPECHECK_ERROR_CEILING = 554;
+export const TYPECHECK_ERROR_CEILING = 278;
+
+// Merged batches E+F (partial) lowered this from 554 to 278 (276 errors):
+// workspace/hub/terminal/loop/config suites plus the long tail
+// (agent-storage, browser-tools, daemon-e2e, file-explorer, push,
+// schedule leftovers, session subtrees, worktree posix). Resolved file
+// count unchanged — pure fixes.
 
 // Merged batches C+D (partial) lowered this from 854 to 554 (300 errors):
 // session/session.workspaces/workspace-archive/worktree suites plus
