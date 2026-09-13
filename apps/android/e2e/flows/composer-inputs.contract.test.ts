@@ -149,7 +149,10 @@ describe("composer-inputs.yaml anchors exist in source", () => {
 
     it('no testId prop is passed to Composer, so it falls back to its own "composer" default', () => {
       const code = readComponentCode(SESSION_ROUTE_TSX, "SessionRoute");
-      expect(code).not.toMatch(/<Composer[\s\S]*?testId=/);
+      // Scoped to the Composer element itself (tempered: never crosses its
+      // closing `/>`): sibling mounts below it, like the session-tree
+      // sheet's own testIds, must not trip this pin.
+      expect(code).not.toMatch(/<Composer(?:(?!\/>)[\s\S])*testId=/);
     });
   });
 

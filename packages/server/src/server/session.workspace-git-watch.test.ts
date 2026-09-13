@@ -717,7 +717,9 @@ describe("workspace git watch targets", () => {
         },
       },
       forge: "github",
-      authState: undefined,
+      // Mirrors the createWorkspaceRuntimeSnapshot fixture above, whose
+      // forge snapshot carries authState "unauthenticated".
+      authState: "unauthenticated",
       githubFeaturesEnabled: true,
       error: null,
       requestId: REPO_SUBSCRIPTION_REQUEST_ID,
@@ -774,7 +776,8 @@ describe("workspace git watch targets", () => {
         reviewDecision: undefined,
       },
       forge: "github",
-      authState: undefined,
+      // Same fixture mirror as above.
+      authState: "unauthenticated",
       githubFeaturesEnabled: true,
       error: null,
       requestId: "req-pr-status",
