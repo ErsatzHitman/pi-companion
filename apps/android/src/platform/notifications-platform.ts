@@ -101,7 +101,7 @@ import { createUnavailablePushRegistrationPort } from "../features/notifications
  *
  * ---------------------------------------------------------------------
  * The notification dependency is installed; this port's general half is
- * not yet implemented
+ * implemented below
  * ---------------------------------------------------------------------
  * `expo-notifications` and `expo-device` are in
  * `apps/android/package.json` since T391 (versions pinned by *this
@@ -113,14 +113,18 @@ import { createUnavailablePushRegistrationPort } from "../features/notifications
  * `app/h/[serverId]/devices.tsx` use. This module's own
  * `AndroidNotificationsPort` adds the general-purpose
  * `showNotification`/`onNotificationResponse` half on top of the same
- * port, and THAT half has no real implementation yet: it would back
+ * port, backed by `createExpoAndroidNotificationsPort` below:
  * `showNotification` with `expo-notifications`'s
  * `scheduleNotificationAsync`, `onNotificationResponse` with
- * `addNotificationResponseReceivedListener`, and reuse the real
+ * `addNotificationResponseReceivedListener`, spreading the real
  * `createExpoPushRegistrationPort()` for `getPermissionStatus`/
- * `requestPermission`. Until it exists,
- * `createUnavailableAndroidNotificationsPlatform` below is the only
- * production value. **No permission dialog is shown or claimed shown
+ * `requestPermission` and the rest of the push half.
+ * `createUnavailableAndroidNotificationsPlatform` below remains the
+ * honestly-degraded fallback a caller with no native module uses — the
+ * real port itself degrades per-method (silent drop / never-delivered
+ * tap) when its dynamic `import("expo-notifications")` throws, so
+ * "unsupported" only ever surfaces where the native module is
+ * genuinely absent. **No permission dialog is shown or claimed shown
  * anywhere in this file or its tests** — every proof here is against a
  * scripted fake.
  *
@@ -142,12 +146,11 @@ import { createUnavailablePushRegistrationPort } from "../features/notifications
  * Construction — the seam T32S12 closed
  * ---------------------------------------------------------------------
  * `app-shell/core.ts`'s `AppCore.notifications` is this platform's one
- * production construction site (T32S12), still built with
- * `createUnavailableAndroidNotificationsPlatform()` for the reason
- * above — this module's general `showNotification`/
- * `onNotificationResponse` half is unimplemented — while the
- * push-registration half is real through
- * `../features/notifications/expo-push-registration-port.ts`.
+ * production construction site (T32S12), built with
+ * `createAndroidNotificationsPlatform(createExpoAndroidNotificationsPort(
+ * createExpoPushRegistrationPort()))` — the general `showNotification`/
+ * `onNotificationResponse` half below over the real push-registration
+ * port from `../features/notifications/expo-push-registration-port.ts`.
  */
 
 /**
@@ -247,6 +250,179 @@ export function createAndroidNotificationsPlatform(
  */
 export function getNativePermissionState(port: AndroidNotificationsPort): Promise<PermissionState> {
   return port.getPermissionStatus();
+}
+
+/** The Android channel every general notification is posted on — created lazily, mirroring `../features/notifications/expo-push-registration-port.ts`'s permission channel. */
+export const GENERAL_NOTIFICATION_CHANNEL = "picompanion-general";
+
+/**
+ * One user interaction with a general notification, narrowed to the fields this port reads — no static `expo-notifications` import, so a test supplies a plain object.
+ */
+export interface ExpoLocalNotificationResponse {
+  notification: {
+    request: {
+      identifier: string;
+      content: {
+        title?: unknown;
+        body?: unknown;
+        data?: unknown;
+      };
+    };
+  };
+}
+
+/** The exact request shape this port schedules on the general channel. */
+export interface ExpoLocalNotificationRequest {
+  identifier: string;
+  title: string;
+  body?: string;
+  data: Record<string, string>;
+  channelId: string;
+}
+
+/** `expo-modules-core`'s `EventSubscription`, narrowed to what this port calls. */
+export interface ExpoLocalNotificationSubscription {
+  remove(): void;
+}
+
+/**
+ * Everything the general half needs from `expo-notifications`, injectable so the new test proves this adapter's logic against plain fakes with no native module present — the same shape `../features/notifications/expo-push-registration-port.ts`'s `ExpoNotificationsBindings` uses.
+ */
+export interface ExpoLocalNotificationsBindings {
+  setNotificationChannelAsync(channelId: string): Promise<void>;
+  scheduleNotificationAsync(request: ExpoLocalNotificationRequest): Promise<void>;
+  addNotificationResponseReceivedListener(
+    listener: (response: ExpoLocalNotificationResponse) => void,
+  ): Promise<ExpoLocalNotificationSubscription>;
+}
+
+const DEFAULT_LOCAL_BINDINGS: ExpoLocalNotificationsBindings = {
+  async setNotificationChannelAsync(channelId) {
+    const Notifications = await import("expo-notifications");
+    await Notifications.setNotificationChannelAsync(channelId, {
+      name: "General",
+      importance: Notifications.AndroidImportance.HIGH,
+      // Same posture as the permission channel: private content stays
+      // off a secure lock screen; the tray still shows it unlocked.
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    });
+  },
+  async scheduleNotificationAsync(request) {
+    const Notifications = await import("expo-notifications");
+    await Notifications.scheduleNotificationAsync({
+      identifier: request.identifier,
+      content: {
+        title: request.title,
+        ...(request.body === undefined ? {} : { body: request.body }),
+        data: request.data,
+      },
+      // A channel-aware trigger with no schedule fields delivers
+      // immediately, on the named channel.
+      trigger: { channelId: request.channelId },
+    });
+  },
+  async addNotificationResponseReceivedListener(listener) {
+    const Notifications = await import("expo-notifications");
+    return Notifications.addNotificationResponseReceivedListener(listener);
+  },
+};
+
+/**
+ * Maps one `expo-notifications` tap response onto the `NotificationPayload` the `onResponse` subscriber receives — the scheduled `identifier` round-trips as `id`, title/body/data come from the notification's own content. Non-string data values are dropped (that map only carries strings); a missing title falls back to `""` since the payload requires one.
+ */
+export function toLocalNotificationPayload(
+  response: ExpoLocalNotificationResponse,
+): NotificationPayload {
+  const request = response.notification.request;
+  const content = request.content;
+  const title = typeof content.title === "string" ? content.title : "";
+  const body = typeof content.body === "string" ? content.body : undefined;
+  let data: Record<string, string> | undefined;
+  if (content.data !== null && typeof content.data === "object" && !Array.isArray(content.data)) {
+    const entries: Record<string, string> = {};
+    for (const [key, value] of Object.entries(content.data as Record<string, unknown>)) {
+      if (typeof value === "string") {
+        entries[key] = value;
+      }
+    }
+    if (Object.keys(entries).length > 0) {
+      data = entries;
+    }
+  }
+  return {
+    id: request.identifier,
+    title,
+    ...(body === undefined ? {} : { body }),
+    ...(data === undefined ? {} : { data }),
+  };
+}
+
+/**
+ * This build's real `AndroidNotificationsPort` — spreads the given push port (production: `createExpoPushRegistrationPort()`) for the permission/registration half and backs the general `showNotification`/`onNotificationResponse` half with `expo-notifications`' `scheduleNotificationAsync` / `addNotificationResponseReceivedListener` through injectable `localBindings`. A genuinely absent native module surfaces as the same honest degraded behaviour the unavailable port had — `showNotification` drops silently, tap-responses are simply never delivered — never as a throw.
+ */
+export function createExpoAndroidNotificationsPort(
+  pushPort: PushRegistrationPort,
+  localBindings: ExpoLocalNotificationsBindings = DEFAULT_LOCAL_BINDINGS,
+): AndroidNotificationsPort {
+  const responseHandlers = new Set<(payload: NotificationPayload) => void>();
+
+  let channelPromise: Promise<void> | null = null;
+  function ensureGeneralChannel(): Promise<void> {
+    channelPromise ??= localBindings
+      .setNotificationChannelAsync(GENERAL_NOTIFICATION_CHANNEL)
+      .catch(() => undefined);
+    return channelPromise;
+  }
+
+  let listenerPromise: Promise<void> | null = null;
+  function ensureResponseListener(): Promise<void> {
+    listenerPromise ??= (async () => {
+      try {
+        await localBindings.addNotificationResponseReceivedListener((response) => {
+          let payload: NotificationPayload;
+          try {
+            payload = toLocalNotificationPayload(response);
+          } catch {
+            return;
+          }
+          for (const handler of Array.from(responseHandlers)) {
+            handler(payload);
+          }
+        });
+      } catch {
+        // Native module unavailable: the subscription is simply never
+        // attached, so no tap is ever delivered — the same observable
+        // behaviour the unavailable port had.
+      }
+    })();
+    return listenerPromise;
+  }
+
+  return {
+    ...pushPort,
+    async showNotification(payload: NotificationPayload): Promise<void> {
+      try {
+        await ensureGeneralChannel();
+        await localBindings.scheduleNotificationAsync({
+          identifier: payload.id,
+          title: payload.title,
+          ...(payload.body === undefined ? {} : { body: payload.body }),
+          data: payload.data ?? {},
+          channelId: GENERAL_NOTIFICATION_CHANNEL,
+        });
+      } catch {
+        // Native module unavailable: drop silently, matching the
+        // unavailable port's "defined, awaitable no-op" convention.
+      }
+    },
+    onNotificationResponse(listener: (payload: NotificationPayload) => void): () => void {
+      responseHandlers.add(listener);
+      void ensureResponseListener();
+      return () => {
+        responseHandlers.delete(listener);
+      };
+    },
+  };
 }
 
 /**
