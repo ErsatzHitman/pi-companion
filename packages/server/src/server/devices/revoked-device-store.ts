@@ -45,17 +45,24 @@ export interface RevokedDeviceEntry {
  * schema is never a dead end — CLAUDE.md's own T300 brief warns that
  * "adding one later is a schema change," and this store's on-disk shape
  * (`{ revoked: [{ clientId, revokedAt }] }`) already supports removing an
- * entry without changing shape. **What this task does NOT ship: a way for
- * the owner to trigger `unrevoke()` from the app.** That needs two things
- * outside this task's `Owns` grant: a new `trusted_device.unrevoke`
- * wire-message pair (a protocol addition beyond the hello-rejection one
- * this task's brief explicitly grants), and a place in the Android UI to
- * list *revoked* devices and act on one — `DevicesScreen.tsx` today lists
- * only currently-trusted devices, so there is nowhere to put an "undo"
- * control yet. Building either half without the other would be exactly
- * the "exported but not called" shape this repository's own review notes
- * warn about, so neither is built here. Filed as a follow-up for whoever
- * next touches `trusted_device` messages or `DevicesScreen.tsx`.
+ * entry without changing shape.
+ *
+ * CORRECTED (device-unrevoke): the "no way for the owner to trigger
+ * `unrevoke()` from the app" follow-up this section used to file below
+ * has now landed, with no on-disk change — the shape above needed none.
+ * The wire half is `trusted_device.unrevoke.request` /
+ * `trusted_device.unrevoke.response` (`packages/protocol`'s
+ * `TrustedDeviceUnrevokeRequestSchema` /
+ * `TrustedDeviceUnrevokeResponseSchema`, mirroring the revoke pair),
+ * served by `websocket-server.ts`'s `handleTrustedDeviceUnrevokeRequest`
+ * (which calls this store's `unrevoke(clientId)` and reports every
+ * failure as a `success: false` envelope, never a throw), and the UI half
+ * is the Android devices screen's "Recently revoked" section (see
+ * `apps/android/src/features/devices/unrevoke-device-model.ts`). The one
+ * residual this section still discloses: there is no list-revoked wire
+ * message, so that section only remembers devices revoked in-session —
+ * after an app restart the owner must re-establish which `clientId` to
+ * un-revoke some other way.
  */
 export class RevokedDeviceStore {
   private readonly logger: pino.Logger;

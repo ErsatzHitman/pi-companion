@@ -20,7 +20,9 @@
  * directly rather than re-declared here, so a real `DaemonClient`
  * instance satisfies it as-is (width subtyping), exactly like
  * `../composer/slash-command-model.ts`'s narrow `listCommands?` client
- * shape.
+ * shape. `unrevokeTrustedDevice(clientId, options?)` (device-unrevoke)
+ * joined that same real client later; it is declared on this same shared
+ * interface for the same reason — see `unrevoke-device-model.ts`'s header.
  *
  * `revokeTrustedDevice` (T42A2) is declared here, on the one client
  * interface both listing and revoking share, rather than on a second,
@@ -76,14 +78,22 @@ export interface TrustedDeviceRevokeResult {
   readonly error: string | null;
 }
 
+export interface TrustedDeviceUnrevokeResult {
+  readonly requestId: string;
+  readonly clientId: string;
+  readonly success: boolean;
+  readonly error: string | null;
+}
+
 /**
- * Structural subset of `DaemonClient.listTrustedDevices` and
- * `DaemonClient.revokeTrustedDevice`
- * (`packages/client/src/daemon-client.ts`). Both optional so a client
- * build (or test fake) that omits either — or both — is still a valid
+ * Structural subset of `DaemonClient.listTrustedDevices`,
+ * `DaemonClient.revokeTrustedDevice`, and `DaemonClient.unrevokeTrustedDevice`
+ * (`packages/client/src/daemon-client.ts`). All optional so a client
+ * build (or test fake) that omits any — or all — of them is still a valid
  * `TrustedDevicesClient` — see this module's header "Degrading, never
- * throwing" section, and `revoke-device-model.ts`'s own copy of that
- * section for the revoke side.
+ * throwing" section, and `revoke-device-model.ts`'s and
+ * `unrevoke-device-model.ts`'s own copies of that section for the
+ * revoke/un-revoke sides.
  */
 export interface TrustedDevicesClient {
   listTrustedDevices?(options?: { requestId?: string }): Promise<TrustedDeviceListResult>;
@@ -91,6 +101,10 @@ export interface TrustedDevicesClient {
     clientId: string,
     options?: { requestId?: string },
   ): Promise<TrustedDeviceRevokeResult>;
+  unrevokeTrustedDevice?(
+    clientId: string,
+    options?: { requestId?: string },
+  ): Promise<TrustedDeviceUnrevokeResult>;
 }
 
 export type TrustedDevicesLoadStatus = "loading" | "loaded" | "error" | "unavailable";

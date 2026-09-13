@@ -5454,6 +5454,19 @@ export class DaemonClient {
     });
   }
 
+  async unrevokeTrustedDevice(
+    clientId: string,
+    options?: { requestId?: string },
+  ): Promise<{ requestId: string; clientId: string; success: boolean; error: string | null }> {
+    return this.sendNamespacedCorrelatedSessionRequest<"trusted_device.unrevoke.response">({
+      requestId: options?.requestId,
+      message: {
+        type: "trusted_device.unrevoke.request",
+        clientId,
+      },
+    });
+  }
+
   async patchDaemonConfig(
     config: MutableDaemonConfigPatch,
     requestId?: string,

@@ -3075,12 +3075,20 @@ export const TrustedDeviceRevokeRequestSchema = z.object({
   clientId: z.string().min(1),
 });
 
+export const TrustedDeviceUnrevokeRequestSchema = z.object({
+  type: z.literal("trusted_device.unrevoke.request"),
+  requestId: z.string().min(1),
+  clientId: z.string().min(1),
+});
+
 export type TrustedDeviceListRequest = z.infer<typeof TrustedDeviceListRequestSchema>;
 export type TrustedDeviceRevokeRequest = z.infer<typeof TrustedDeviceRevokeRequestSchema>;
+export type TrustedDeviceUnrevokeRequest = z.infer<typeof TrustedDeviceUnrevokeRequestSchema>;
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   TrustedDeviceListRequestSchema,
   TrustedDeviceRevokeRequestSchema,
+  TrustedDeviceUnrevokeRequestSchema,
   HubExecutionAgentCreateRequestSchema,
   HubExecutionControlRequestSchema,
   BrowserAutomationExecuteResponseSchema,
@@ -6079,12 +6087,24 @@ export const TrustedDeviceRevokeResponseSchema = z.object({
   }),
 });
 
+export const TrustedDeviceUnrevokeResponseSchema = z.object({
+  type: z.literal("trusted_device.unrevoke.response"),
+  payload: z.object({
+    requestId: z.string(),
+    clientId: z.string(),
+    success: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
 export type TrustedDeviceListResponse = z.infer<typeof TrustedDeviceListResponseSchema>;
 export type TrustedDeviceRevokeResponse = z.infer<typeof TrustedDeviceRevokeResponseSchema>;
+export type TrustedDeviceUnrevokeResponse = z.infer<typeof TrustedDeviceUnrevokeResponseSchema>;
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   TrustedDeviceListResponseSchema,
   TrustedDeviceRevokeResponseSchema,
+  TrustedDeviceUnrevokeResponseSchema,
   HubExecutionAgentCreateResponseSchema,
   HubExecutionControlResponseSchema,
   HubExecutionAgentUpdateSchema,
