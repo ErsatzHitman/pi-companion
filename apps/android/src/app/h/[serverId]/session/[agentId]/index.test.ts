@@ -375,7 +375,7 @@ describe("SessionRoute source", () => {
     // (It also takes `onTodoEntryChange`, which reports the pinned .ov
     // widget's data upward — that does not change this contract.)
     expect(code).toMatch(
-      /function SessionTranscript\(\{\s*status,\s*agentId,\s*onTodoEntryChange,?\s*\}: \{[\s\S]*?status: TranscriptStatus;[\s\S]*?agentId: string;/,
+      /function SessionTranscript\(\{\s*status,\s*agentId,\s*onTodoEntryChange,\s*onHeadEntryChange,?\s*\}: \{[\s\S]*?status: TranscriptStatus;[\s\S]*?agentId: string;/,
     );
     expect(code).toMatch(
       /transcript=\{\s*<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}/,
@@ -511,9 +511,9 @@ describe("SessionRoute source", () => {
   // that SessionRoute actually calls it and actually passes the result
   // to Composer, never a fixed `undefined`. ------------------------------
 
-  it("T132/T282/T284/T292/T293/T351/T352/T353/T354: imports all ten resolvers from ../../../../../app-shell/session-route-daemon-clients", () => {
+  it("T132/T282/T284/T292/T293/T351/T352/T353/T354/session-tree: imports all eleven resolvers from ../../../../../app-shell/session-route-daemon-clients", () => {
     expect(readCode()).toMatch(
-      /import \{\s*resolveAgentSnapshotClient,\s*resolveAgentUsageClient,\s*resolveAttachmentDownloadClient,\s*resolveEditorTextClient,\s*resolveModelThinkingClient,\s*resolveQueueModeClient,\s*resolveSessionControlsClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
+      /import \{\s*resolveAgentSnapshotClient,\s*resolveAgentUsageClient,\s*resolveAttachmentDownloadClient,\s*resolveEditorTextClient,\s*resolveModelThinkingClient,\s*resolveQueueModeClient,\s*resolveSessionControlsClient,\s*resolveSessionTreeForkClient,\s*resolveSlashCommandsClient,\s*resolveTranscribeClient,\s*resolveTurnStatusClient,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/app-shell\/session-route-daemon-clients";/,
     );
   });
 
@@ -916,7 +916,7 @@ describe("session route: the todo widget lives in the pinned slot (T360)", () =>
     );
     expect(code).toMatch(/onTodoEntryChange\?:\s*\(entry: TodoTranscriptEntry \| null\) => void;/);
     expect(code).toMatch(
-      /<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}\s+onTodoEntryChange=\{setLatestTodo\}\s*\/>/,
+      /<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}\s+onTodoEntryChange=\{setLatestTodo\}\s+onHeadEntryChange=\{setTreeHeadEntryId\}\s*\/>/,
     );
   });
 
@@ -953,5 +953,75 @@ describe("session route: the S7 pill's session activity", () => {
 
   it("passes the activity straight through to TranscriptHeader, so the pill answers what the session is doing", () => {
     expect(readCode()).toMatch(/<TranscriptHeader[\s\S]*?activity=\{activity\}/);
+  });
+});
+
+// --- session tree mount: SessionTreeSheet ships with a working fork
+// adapter (adaptSessionTreeForkClient/resolveSessionTreeForkClient) and
+// no route mount — only the dev lab renders it. This route mounts it as
+// a sibling of SessionApprovals/SessionSheetExtensions (a Sheet renders
+// through the Portal path, so it needs no shell slot), following the
+// rewind sheet's prop shape: nodes, the action client, result/error
+// callbacks, and its own testId. --------------------------------------
+describe("session route: the session tree sheet mount", () => {
+  it("imports SessionTreeSheet from the features/sessions barrel, like every other feature view this route mounts", () => {
+    expect(readCode()).toMatch(
+      /import \{\s*SessionTreeSheet,\s*type SessionTreeActionKind,\s*type SessionTreeActionResult,?\s*\} from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/sessions";/,
+    );
+  });
+
+  it("opens the sheet from a Session tree button beside TranscriptHeader in the header slot — ordinary header content, not a new shell slot", () => {
+    const code = readCode();
+    expect(code).toMatch(/label="Session tree"/);
+    expect(code).toMatch(/onPress=\{openSessionTree\}/);
+    expect(code).toMatch(/testId="session-tree-open"/);
+  });
+
+  it("mounts SessionTreeSheet as a sibling of the shell with open/nodes/selectedAgentId/client/callbacks/testId — deleting any prop must fail", () => {
+    const code = readCode();
+    expect(code).toMatch(/<SessionTreeSheet/);
+    expect(code).toMatch(/open=\{treeOpen\}/);
+    expect(code).toMatch(/onClose=\{closeSessionTree\}/);
+    expect(code).toMatch(/nodes=\{sessionTreeNodes\}/);
+    expect(code).toMatch(/selectedAgentId=\{agentId \?\? ""\}/);
+    expect(code).toMatch(/onSelectSession=\{handleSessionTreeSelect\}/);
+    expect(code).toMatch(/client=\{sessionTreeClient\}/);
+    expect(code).toMatch(/onActionResult=\{handleSessionTreeResult\}/);
+    expect(code).toMatch(/onActionError=\{handleSessionTreeError\}/);
+    expect(code).toMatch(/testId="session-tree-sheet"/);
+  });
+
+  it("derives sessionTreeClient from resolveSessionTreeForkClient over the live connection, resolving the head entry from this route's own live tip", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /const sessionTreeClient = resolveSessionTreeForkClient\(core\.connection,/,
+    );
+    expect(code).toMatch(/treeHeadEntryId !== null/);
+    expect(code).toMatch(/\? \{ entryId: treeHeadEntryId \}/);
+  });
+
+  it("reports the live transcript tip upward for the fork adapter, off the full pre-collapse list", () => {
+    const code = readCode();
+    expect(code).toMatch(/onHeadEntryChange\?:\s*\(entryId: string \| null\) => void;/);
+    expect(code).toMatch(
+      /const headEntryId = rawEntries\.length > 0 \? rawEntries\[rawEntries\.length - 1\]\.id : null;/,
+    );
+  });
+
+  it("builds the sheet's nodes from this session as its own root — never fabricated siblings", () => {
+    expect(readCode()).toMatch(/coreSessions\.createRootSession\(\{/);
+  });
+
+  it("navigates to the new branch when a fork succeeds, via navigationIntentToPath's session intent", () => {
+    const code = readCode();
+    expect(code).toMatch(/coreNavigation\.navigationIntentToPath\(\{/);
+    expect(code).toMatch(/agentId: result\.agentId/);
+  });
+
+  it("renders a fork failure as a danger Banner above the shell rather than vanishing it", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /<Banner tone="danger" message=\{treeError\} testId="session-tree-error" \/>/,
+    );
   });
 });

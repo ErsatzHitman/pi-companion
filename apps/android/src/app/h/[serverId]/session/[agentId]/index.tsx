@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, View, useWindowDimensions, Pressable } from "react-native";
 
-import { timeline as coreTimeline, rewind as coreRewind } from "@picompanion/frontend-core";
+import {
+  navigation as coreNavigation,
+  sessions as coreSessions,
+  timeline as coreTimeline,
+  rewind as coreRewind,
+} from "@picompanion/frontend-core";
 
 import { CompactSessionShell } from "../../../../../app-shell/compact-shell";
 import {
@@ -68,6 +73,11 @@ import {
   type SessionTranscriptEntry,
 } from "../../../../../app-shell/session-transcript-model";
 import {
+  SessionTreeSheet,
+  type SessionTreeActionKind,
+  type SessionTreeActionResult,
+} from "../../../../../features/sessions";
+import {
   createTurnRunningSignal,
   type ConnectionStatusSource,
   type DaemonTurnStreamSource,
@@ -76,7 +86,7 @@ import {
   describeTimelineStaleness,
   type StalenessAnnouncement,
 } from "../../../../../platform/offline";
-import { Banner } from "../../../../../ui/primitives";
+import { Banner, Button } from "../../../../../ui/primitives";
 import { useTheme } from "../../../../../ui/theme/theme-context";
 import { useAppCore } from "../../../../core-context";
 import {
@@ -87,6 +97,7 @@ import {
   resolveModelThinkingClient,
   resolveQueueModeClient,
   resolveSessionControlsClient,
+  resolveSessionTreeForkClient,
   resolveSlashCommandsClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
@@ -222,6 +233,7 @@ function SessionTranscript({
   status,
   agentId,
   onTodoEntryChange,
+  onHeadEntryChange,
 }: {
   status: TranscriptStatus;
   agentId: string;
@@ -237,6 +249,15 @@ function SessionTranscript({
    * reported value in `useState` and hands it to the pinned slot.
    */
   onTodoEntryChange?: (entry: TodoTranscriptEntry | null) => void;
+  /**
+   * Reports the tip entry's id on every batch — the last entry of the
+   * full (pre-collapse) list, `null` when the timeline is empty. The
+   * session tree sheet's fork adapter needs a head entry per agent
+   * (`adaptSessionTreeForkClient`), and this batcher is the one place
+   * that knows the live tip; same "only the value travels" shape as
+   * `onTodoEntryChange` above, for the same reason.
+   */
+  onHeadEntryChange?: (entryId: string | null) => void;
 }) {
   const core = useAppCore();
   const batcher = useMemo(
@@ -437,6 +458,16 @@ function SessionTranscript({
   useEffect(() => {
     onTodoEntryChange?.(todoEntry);
   }, [todoEntry, onTodoEntryChange]);
+
+  // The live timeline tip, reported upward on every batch — see this
+  // component's `onHeadEntryChange` prop doc. The tip of the FULL list
+  // (`rawEntries`, not the collapse-filtered `entries` the window
+  // draws): a collapsed group's hidden tail is still the fork point a
+  // fork-from-tip means.
+  const headEntryId = rawEntries.length > 0 ? rawEntries[rawEntries.length - 1].id : null;
+  useEffect(() => {
+    onHeadEntryChange?.(headEntryId);
+  }, [headEntryId, onHeadEntryChange]);
 
   return (
     <>
@@ -1046,10 +1077,11 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * string. Reaching either route with no live connection is unchanged:
  * `FilesScreen`'s "Not connected" and `TerminalScreen`'s "Terminal
  * unavailable" states are that screen's own, already-shipped honest
- * fallbacks (the terminal one unconditional today — T80's, not this
- * task's, to fix per that task's own section in `docs/issues-from-
- * plan.md`) — this mount adds a way to arrive, not a second connection
- * check of its own.
+ * fallbacks (the terminal one conditional on the injected webview port
+ * — `terminal-screen.tsx` renders it only when no available port is
+ * passed, and that route passes the real `core.terminalWebview`, so it
+ * stays out of the way in production) — this mount adds a way to
+ * arrive, not a second connection check of its own.
  *
  * **T339 mount.** Every `agent_stream` consumer this route mounts —
  * `SessionTranscript`'s batcher through `core.subscribeAgentStream`, the
@@ -1072,6 +1104,35 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * `[]` on cleanup — so leaving the route stops the feed, and a reconnect
  * (phase leaves and re-enters `"connected"`) re-registers against the
  * fresh socket, whose membership the daemon starts empty.
+ *
+ * **Session tree mount.** `SessionTreeSheet`
+ * (`features/sessions/session-tree-sheet.tsx`) shipped with a working
+ * fork adapter (`adaptSessionTreeForkClient`/
+ * `resolveSessionTreeForkClient`) and no route mount — only the dev lab
+ * rendered it. This route mounts it as a sibling of
+ * `SessionApprovals`/`SessionSheetExtensions` (a `Sheet` renders through
+ * the Portal path, so it needs no shell slot of its own — the same
+ * reasoning those two mounts document), opened by the "Session tree"
+ * `Button` beside `TranscriptHeader` in the `header` slot (ordinary
+ * header content, not a new slot — T79's own reasoning for the same
+ * placement). The sheet follows the rewind sheet's prop shape: nodes
+ * built at the mount (`sessionTreeNodes` below), the action client, the
+ * result/error callbacks, and its own `testId`.
+ *
+ * Three deliberate limits, all documented rather than hidden: the nodes
+ * are this session as its own root (the daemon's session list carries no
+ * fork/clone lineage, so assembling siblings here would fabricate
+ * structure); the fork adapter resolves its head `entryId` from this
+ * route's own live transcript tip (`SessionTranscript`'s
+ * `onHeadEntryChange`, the same "only the value travels" shape as its
+ * `onTodoEntryChange`), so forking this session reaches a real
+ * `DaemonClient.forkAgent` while any other session keeps Fork truthfully
+ * unavailable; and clone/rename stay unavailable (no wire methods for
+ * either — the sheet captions both truthfully). A fork that succeeds
+ * navigates to the new branch; a failure renders as a `danger` `Banner`
+ * above the shell (`session-tree-error` testId) rather than vanishing.
+ * No new native dependency: the sheet draws only on the shared `Sheet`/
+ * `Button`/`EmptyState`/`TextField` primitives every other sheet uses.
  */
 export default function SessionRoute() {
   const { serverId, agentId } = useLocalSearchParams<{ serverId: string; agentId: string }>();
@@ -1153,6 +1214,37 @@ export default function SessionRoute() {
   // `SessionTranscript` — see that component's `onTodoEntryChange` doc for
   // why the batcher stays there and only the value travels.
   const [latestTodo, setLatestTodo] = useState<TodoTranscriptEntry | null>(null);
+
+  // The session tree sheet's open/error/tip state — see this
+  // component's "session tree mount" doc comment. The tip travels up
+  // from `SessionTranscript` the same way `latestTodo` does.
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [treeHeadEntryId, setTreeHeadEntryId] = useState<string | null>(null);
+  const [treeError, setTreeError] = useState<string | null>(null);
+  // The tree this sheet renders: this session as its own root. The
+  // daemon's session list carries no fork/clone lineage, so assembling
+  // siblings here would fabricate structure — one honest root, with
+  // the live fork behind it, rather than a fuller tree nobody could
+  // stand behind.
+  const sessionTreeNodes = useMemo(
+    () => [
+      coreSessions.createRootSession({
+        agentId: agentId ?? "",
+        name: agentId ?? null,
+        createdAt: Date.now(),
+      }),
+    ],
+    [agentId],
+  );
+  // The eleventh `resolve*Client` narrowing, and the first that adapts
+  // rather than casts: the fork adapter supplies the head `entryId`
+  // from this route's own live tip, so forking THIS session reaches a
+  // real `DaemonClient.forkAgent`; any other session resolves to
+  // `undefined` (no tip known for it) and keeps Fork truthfully
+  // unavailable rather than offering a control that can only fail.
+  const sessionTreeClient = resolveSessionTreeForkClient(core.connection, (sessionId) =>
+    sessionId === agentId && treeHeadEntryId !== null ? { entryId: treeHeadEntryId } : undefined,
+  );
 
   // T339: mark this agent's timeline as viewed for as long as this route
   // is mounted and connected — see this component's "T339 mount" doc
@@ -1251,6 +1343,55 @@ export default function SessionRoute() {
     () => pressSessionLive(router, serverId ?? "", agentId ?? ""),
     [router, serverId, agentId],
   );
+  // The session tree sheet's controls — see this component's "session
+  // tree mount" doc comment. A fork that succeeds navigates to the new
+  // branch (the visible proof the fork happened); selecting a row
+  // navigates there the same way, or just dismisses when it is already
+  // this session. A failure stays on screen as `treeError` below — the
+  // sheet itself has no error slot — and any open/close clears it.
+  const openSessionTree = useCallback(() => {
+    setTreeError(null);
+    setTreeOpen(true);
+  }, []);
+  const closeSessionTree = useCallback(() => {
+    setTreeOpen(false);
+    setTreeError(null);
+  }, []);
+  const handleSessionTreeSelect = useCallback(
+    (selectedAgentId: string) => {
+      setTreeOpen(false);
+      setTreeError(null);
+      if (selectedAgentId !== agentId && serverId) {
+        router.push(
+          coreNavigation.navigationIntentToPath({
+            type: "session",
+            serverId,
+            agentId: selectedAgentId,
+          }),
+        );
+      }
+    },
+    [router, serverId, agentId],
+  );
+  const handleSessionTreeResult = useCallback(
+    (_kind: SessionTreeActionKind, result: SessionTreeActionResult) => {
+      setTreeOpen(false);
+      setTreeError(null);
+      if (serverId) {
+        router.push(
+          coreNavigation.navigationIntentToPath({
+            type: "session",
+            serverId,
+            agentId: result.agentId,
+          }),
+        );
+      }
+    },
+    [router, serverId],
+  );
+  const handleSessionTreeError = useCallback((kind: SessionTreeActionKind, message: string) => {
+    setTreeError(`${kind} failed: ${message}`);
+  }, []);
   const cwd = useAgentCwd(resolveAgentSnapshotClient(core.connection), agentId ?? "");
   // Pi UI `composer`-kind accept/undo fills and restores the live draft
   // through the session's own action controller and store. Bound methods
@@ -1291,19 +1432,28 @@ export default function SessionRoute() {
 
   return (
     <>
+      {treeError ? <Banner tone="danger" message={treeError} testId="session-tree-error" /> : null}
       <CompactSessionShell
         composerContentMinHeight={composerContentMinHeight}
         composerMaxHeight={composerMaxHeight}
         header={
-          <TranscriptHeader
-            hostLabel={serverId ?? ""}
-            sessionTitle={agentId ?? ""}
-            cwd={cwd}
-            status={status}
-            activity={activity}
-            onOpenSessions={openSessions}
-            onOpenLive={openLive}
-          />
+          <>
+            <TranscriptHeader
+              hostLabel={serverId ?? ""}
+              sessionTitle={agentId ?? ""}
+              cwd={cwd}
+              status={status}
+              activity={activity}
+              onOpenSessions={openSessions}
+              onOpenLive={openLive}
+            />
+            <Button
+              kind="secondary"
+              label="Session tree"
+              onPress={openSessionTree}
+              testId="session-tree-open"
+            />
+          </>
         }
         statusStrip={
           <>
@@ -1316,6 +1466,7 @@ export default function SessionRoute() {
             status={status}
             agentId={agentId ?? ""}
             onTodoEntryChange={setLatestTodo}
+            onHeadEntryChange={setTreeHeadEntryId}
           />
         }
         liveExtension={<SessionLiveExtension agentId={agentId ?? ""} todoEntry={latestTodo} />}
@@ -1346,6 +1497,17 @@ export default function SessionRoute() {
       />
       <SessionApprovals sessionId={agentId ?? ""} />
       <SessionSheetExtensions agentId={agentId ?? ""} />
+      <SessionTreeSheet
+        open={treeOpen}
+        onClose={closeSessionTree}
+        nodes={sessionTreeNodes}
+        selectedAgentId={agentId ?? ""}
+        onSelectSession={handleSessionTreeSelect}
+        client={sessionTreeClient}
+        onActionResult={handleSessionTreeResult}
+        onActionError={handleSessionTreeError}
+        testId="session-tree-sheet"
+      />
     </>
   );
 }

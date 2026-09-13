@@ -27,14 +27,17 @@
  * `set_steering_mode`/`set_follow_up_mode` RPC commands and T38B0c added
  * the three `Session` handlers plus `streamingBehavior` forwarding
  * (`packages/server/src/server/session.ts`), so the daemon DOES read all
- * four today. What is still missing is the CLIENT half:
- * `@picompanion/client`'s `DaemonClient` has no method that sends any of
- * the three new request types and its `sendAgentMessage` accepts no
- * `streamingBehavior` option (verified: zero occurrences of
- * `set_steering_mode_request`/`get_queue_modes_request` anywhere under
- * `packages/client/src`), which is T38B1a's job. `pi_queue_update`
+ * four today. The CLIENT half has since landed as well: `DaemonClient`
+ * exposes `setSteeringMode`/`setFollowUpMode`/`getQueueModes` (T110)
+ * and `sendMessage`/`sendAgentMessage` accept a per-message
+ * `streamingBehavior` routing flag (T38B1b) — but neither covers THIS
+ * call. The session-wide modes are delivery settings (`"all"` vs
+ * `"one-at-a-time"`), a different setting from the per-message dispatch
+ * default `setMode` changes (see `queue-mode-model.ts`'s own doc
+ * comment), and the per-message flag routes one send without persisting
+ * a default. `pi_queue_update`
  * remains a read-only server->client push of `{ steering, followUp }`,
- * never a settable mode. So, until the client half lands:
+ * never a settable mode. So:
  *   - `steer` and `followUp` below both delegate to the same
  *     `sendMessage` call, matching the protocol exactly as it exists
  *     today (not a shortcut this module invented).
@@ -42,7 +45,9 @@
  *     rather than resolving as if it had done something — `Composer.tsx`
  *     already reverts its optimistic mode change on any rejection
  *     (`revertDispatchMode`), so this fails safely into the exact
- *     behavior that path was built for, never a silent no-op.
+ *     behavior that path was built for, never a silent no-op. The
+ *     error's own text carries the retry affordance (safe to re-pick
+ *     the mode at any time).
  *
  * Nothing here opens a socket or talks to port 6767/6768 — this module
  * only shapes calls onto whatever `DaemonTurnTransport` it is handed.
@@ -68,22 +73,25 @@ export interface DaemonTurnTransport {
  * `TurnService.setMode` is declared `Promise<void>`) when `setMode` is
  * called. Named so a caller/log can tell this apart from a genuine
  * transport failure — see this module's doc comment for why no wire
- * call is even attempted.
+ * call is even attempted, and the message's own closing sentences for
+ * the retry affordance (safe to re-pick the mode at any time).
  */
 export class UnsupportedDispatchModeChangeError extends Error {
   readonly mode: QueueDispatchMode;
 
   constructor(mode: QueueDispatchMode) {
     super(
-      `setMode("${mode}") is not supported: no client method sends a ` +
-        "per-message steer/follow-up choice yet. T38B0a added the wire types " +
-        "(packages/protocol/src/messages.ts: send_agent_message's optional " +
-        "streamingBehavior, plus set_steering_mode/set_follow_up_mode), and " +
-        "T38B0b/T38B0c wired the daemon side (packages/server's Session now " +
-        "handles all three requests and forwards streamingBehavior), but " +
-        "@picompanion/client's DaemonClient still exposes no method that " +
-        "sends any of them — T38B1a. Until then this rejects rather than " +
-        "silently succeeding (T63's original seam).",
+      `setMode("${mode}") is not supported: the dispatch default has ` +
+        "no wire representation yet. The session-wide delivery modes " +
+        '(`DaemonClient.setSteeringMode`/`setFollowUpMode`, `"all"` vs ' +
+        '`"one-at-a-time"`) are a different setting from this per-message ' +
+        "default (see `queue-mode-model.ts`), and the per-message " +
+        "`streamingBehavior` flag on `sendMessage` routes one send without " +
+        "persisting a default — so neither gives this call anything to " +
+        "send. This rejects rather than silently succeeding (T63's original " +
+        "seam). Safe to retry at any time: the composer already reverted " +
+        "to the previous mode, neither queue was disturbed, and explicit " +
+        "steer / follow-up sends still work — re-pick the mode to try again.",
     );
     this.name = "UnsupportedDispatchModeChangeError";
     this.mode = mode;

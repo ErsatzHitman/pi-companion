@@ -280,6 +280,24 @@ describe("createDaemonTurnService", () => {
     await expect(service.setMode("steer")).rejects.toThrow(/setMode\("steer"\) is not supported/);
   });
 
+  it("setMode's error names the retry affordance and steers clear of the session-wide delivery modes", async () => {
+    const { transport } = fakeTransport();
+    const service = createDaemonTurnService("agt_1", transport);
+
+    const error = await service.setMode("follow-up").catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(UnsupportedDispatchModeChangeError);
+    const message = (error as Error).message;
+    // Retry affordance: safe to re-pick, nothing was disturbed.
+    expect(message).toMatch(/safe to retry/i);
+    expect(message).toMatch(/already reverted/);
+    expect(message).toMatch(/neither queue was disturbed/);
+    // Not confusable with T110's session-wide delivery modes: the
+    // dispatch default is a different setting, so wiring this call to
+    // setSteeringMode/setFollowUpMode would corrupt those — the message
+    // says so rather than merely refusing.
+    expect(message).toMatch(/different setting/);
+  });
+
   it("a transport rejection propagates through steer rather than being swallowed", async () => {
     const transport: DaemonTurnTransport = {
       sendMessage: async () => {

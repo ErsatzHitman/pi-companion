@@ -99,6 +99,35 @@ vi.mock("expo-audio", () => ({
   },
 }));
 
+// `expo-file-system/legacy` reaches `react-native` at its top level
+// (see `expo-audio-voice-capture-port.ts`'s own header), so it is
+// replaced with a controllable fixture the same way `expo-audio` is
+// above — the module under test only ever reaches it through a lazy
+// dynamic import inside the default `deleteClipFile`, which vitest
+// resolves to this mock.
+const fileSystemFixture = vi.hoisted(() => {
+  const state: {
+    deleteCalls: { uri: string; options: unknown }[];
+    deleteError: Error | null;
+  } = { deleteCalls: [], deleteError: null };
+  return {
+    state,
+    reset() {
+      state.deleteCalls = [];
+      state.deleteError = null;
+    },
+  };
+});
+
+vi.mock("expo-file-system/legacy", () => ({
+  async deleteAsync(uri: string, options: unknown) {
+    fileSystemFixture.state.deleteCalls.push({ uri, options });
+    if (fileSystemFixture.state.deleteError) {
+      throw fileSystemFixture.state.deleteError;
+    }
+  },
+}));
+
 const { createExpoAudioVoiceCapturePort, readClipAsBase64 } =
   await import("./expo-audio-voice-capture-port.js");
 
@@ -136,12 +165,17 @@ function createFakeBindings(overrides?: {
   permission?: ExpoPermissionResponse;
   recorder?: ReturnType<typeof createFakeRecorder>;
   audioBase64?: string;
+  /** When true, the bindings carry no `deleteClipFile` at all — the graceful-without-it path. */
+  omitDelete?: boolean;
+  /** When set, the fake `deleteClipFile` rejects with this error. */
+  deleteError?: Error;
 }): VoiceCaptureBindings & {
   calls: {
     getRecordingPermissionsAsync: number;
     requestRecordingPermissionsAsync: number;
     createRecorder: number;
     readClipAsBase64: string[];
+    deleteClipFile: string[];
   };
 } {
   const perm = overrides?.permission ?? permission(true, "granted", true);
@@ -151,8 +185,9 @@ function createFakeBindings(overrides?: {
     requestRecordingPermissionsAsync: 0,
     createRecorder: 0,
     readClipAsBase64: [] as string[],
+    deleteClipFile: [] as string[],
   };
-  return {
+  const bindings: VoiceCaptureBindings & { calls: typeof calls } = {
     calls,
     async getRecordingPermissionsAsync() {
       calls.getRecordingPermissionsAsync += 1;
@@ -170,7 +205,17 @@ function createFakeBindings(overrides?: {
       calls.readClipAsBase64.push(uri);
       return overrides?.audioBase64 ?? "ZmFrZS1hdWRpby1ieXRlcw==";
     },
+    async deleteClipFile(uri: string) {
+      calls.deleteClipFile.push(uri);
+      if (overrides?.deleteError) {
+        throw overrides.deleteError;
+      }
+    },
   };
+  if (overrides?.omitDelete) {
+    delete bindings.deleteClipFile;
+  }
+  return bindings;
 }
 
 describe("createExpoAudioVoiceCapturePort — permission mapping", () => {
@@ -281,6 +326,58 @@ describe("createExpoAudioVoiceCapturePort — start()/stop()/cancel() wiring", (
     expect(bindings.calls.readClipAsBase64).toEqual([]);
   });
 
+  it("cancel() deletes the cancelled clip's file through the injected deleteClipFile", async () => {
+    const recorder = createFakeRecorder("file:///clip.m4a");
+    const bindings = createFakeBindings({ recorder });
+    const port = createExpoAudioVoiceCapturePort(bindings);
+
+    await port.start();
+    await port.cancel();
+
+    expect(bindings.calls.deleteClipFile).toEqual(["file:///clip.m4a"]);
+  });
+
+  it("cancel() with no deleteClipFile on the bindings still stops and releases, resolving fine — graceful without it", async () => {
+    const recorder = createFakeRecorder("file:///clip.m4a");
+    const bindings = createFakeBindings({ recorder, omitDelete: true });
+    const port = createExpoAudioVoiceCapturePort(bindings);
+
+    await port.start();
+    await expect(port.cancel()).resolves.toBeUndefined();
+
+    expect(recorder.calls.stop).toBe(1);
+    expect(recorder.calls.release).toBe(1);
+    expect(bindings.calls.readClipAsBase64).toEqual([]);
+  });
+
+  it("cancel() swallows a delete rejection — the microphone is still released and cancel still resolves", async () => {
+    const recorder = createFakeRecorder("file:///clip.m4a");
+    const bindings = createFakeBindings({
+      recorder,
+      deleteError: new Error("native filesystem unavailable"),
+    });
+    const port = createExpoAudioVoiceCapturePort(bindings);
+
+    await port.start();
+    await expect(port.cancel()).resolves.toBeUndefined();
+
+    expect(recorder.calls.stop).toBe(1);
+    expect(recorder.calls.release).toBe(1);
+    expect(bindings.calls.deleteClipFile).toEqual(["file:///clip.m4a"]);
+  });
+
+  it("stop() never deletes: a finished clip is read and handed out, its file lifecycle belongs to the caller", async () => {
+    const recorder = createFakeRecorder("file:///clip.m4a");
+    const bindings = createFakeBindings({ recorder });
+    const port = createExpoAudioVoiceCapturePort(bindings);
+
+    await port.start();
+    await port.stop();
+
+    expect(bindings.calls.readClipAsBase64).toEqual(["file:///clip.m4a"]);
+    expect(bindings.calls.deleteClipFile).toEqual([]);
+  });
+
   it("cancel() with nothing recording is a safe no-op", async () => {
     const bindings = createFakeBindings();
     const port = createExpoAudioVoiceCapturePort(bindings);
@@ -344,6 +441,31 @@ describe("createExpoAudioVoiceCapturePort() with no arguments — the real DEFAU
     });
     expect(recorder?.calls.prepareToRecordAsync).toBe(1);
     expect(recorder?.calls.record).toBe(1);
+  });
+
+  it("cancel() on the default bindings deletes the recorder's file through expo-file-system/legacy, idempotently", async () => {
+    audioFixture.reset();
+    fileSystemFixture.reset();
+    const port = createExpoAudioVoiceCapturePort();
+
+    await port.start();
+    await port.cancel();
+
+    expect(fileSystemFixture.state.deleteCalls).toEqual([
+      { uri: "file:///default-clip.m4a", options: { idempotent: true } },
+    ]);
+  });
+
+  it("cancel() on the default bindings still resolves when the filesystem delete rejects — graceful without it", async () => {
+    audioFixture.reset();
+    fileSystemFixture.reset();
+    fileSystemFixture.state.deleteError = new Error("no native module on this build");
+    const port = createExpoAudioVoiceCapturePort();
+
+    await port.start();
+    await expect(port.cancel()).resolves.toBeUndefined();
+
+    expect(fileSystemFixture.state.deleteCalls).toHaveLength(1);
   });
 });
 

@@ -632,13 +632,13 @@ export interface AppCore {
    * optimistic-revert-on-rejection handling already covers that path.
    *
    * `TurnService.setMode` always rejects with T63's
-   * `UnsupportedDispatchModeChangeError` — a real, disclosed gap. As of
-   * P6-W3 the DAEMON half is wired (T38B0b/T38B0c: `packages/server`'s
-   * `Session` handles `set_steering_mode_request`/
-   * `set_follow_up_mode_request`/`get_queue_modes_request` and forwards
-   * `send_agent_message`'s `streamingBehavior`); what is still missing is
-   * a `@picompanion/client` `DaemonClient` method that sends any of them
-   * (T38B1a) — see `turn-service.ts`. Not a defect this field
+   * `UnsupportedDispatchModeChangeError` — a real, disclosed gap (see
+   * `turn-service.ts`, which owns the current account: the client half
+   * has since landed for the session-wide delivery modes and the
+   * per-message routing flag, but the dispatch default itself still has
+   * no wire representation, so there is still nothing correct to send).
+   * The rejection is retry-safe — the composer already reverted, so
+   * re-picking the mode simply tries again. Not a defect this field
    * introduces.
    */
   createTurnService: (agentId: string) => TurnService;

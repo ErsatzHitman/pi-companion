@@ -115,24 +115,32 @@
  * introduce that the generic counting-fake in `mic-press-model.test.ts`
  * cannot see (it fakes the whole port; this proves the concrete one).
  *
- * ## The one disclosed gap: a cancelled recording's file is not deleted
+ * ## The cancelled-file gap is closed: `cancel()` deletes the file it stopped
  *
  * `cancel()` stops the native recorder and releases the microphone
  * immediately (the urgent half of `voice-model.ts`'s own
  * "a background app should not go on holding an open microphone
  * unattended" contract) and never reads the cancelled clip's bytes into
  * memory, so nothing captured on a cancelled recording ever reaches the
- * outbox, the network, or this port's own caller. It does NOT delete
- * the finished file from the device's private cache/document directory
- * — doing that needs a real filesystem-delete call, which is exactly
- * the `expo-file-system` capability this module deliberately does not
- * depend on (see above). The file sits in this app's own private
- * storage (never a shared/public directory), inaccessible to any other
- * app, until the OS or this app's own cache-clearing reclaims it — a
- * real but bounded exposure, not a silent one. Closing it needs either
- * `expo-file-system` (with the dependency question above resolved
- * first) or a different native deletion primitive; filed here by name
- * for whichever task picks it up next.
+ * outbox, the network, or this port's own caller. It ALSO deletes the
+ * finished file from the device's private cache/document directory, via
+ * the injected `VoiceCaptureBindings.deleteClipFile` — real by default
+ * (`expo-file-system/legacy`'s `deleteAsync` with `idempotent: true`,
+ * resolved through a lazy dynamic import inside the default binding so
+ * this module's top level stays `react-native`-free; the top-level
+ * `expo-file-system` index re-exports a throwing deprecated stub for
+ * this name, so `/legacy` is the only correct source). The dependency
+ * question this header used to disclose is resolved:
+ * `apps/android/package.json` declares `expo-file-system@~19.0.24` (the
+ * pin this app's own `expo`'s `bundledNativeModules.json` gives), so no
+ * install was needed. Two graceful fallbacks, both silent by design
+ * (`cancel()` must never throw): with no `deleteClipFile` on the
+ * bindings (an older fake), or when the delete itself rejects (no
+ * native module on the build, a delete that fails), the file is left in
+ * this app's own private storage (never a shared/public directory),
+ * inaccessible to any other app, until the OS or this app's own
+ * cache-clearing reclaims it — the previous behavior, kept as the
+ * fallback rather than removed.
  */
 import {
   AudioModule,
@@ -197,6 +205,14 @@ export interface VoiceCaptureBindings {
   createRecorder(): RecorderHandle;
   /** Reads a finished recording's own file (`recorder.uri`) and returns its bytes as base64 — no data-URI prefix. */
   readClipAsBase64(uri: string): Promise<string>;
+  /**
+   * Deletes a finished recording's file — `cancel()`'s cleanup half.
+   * Optional so older fakes keep compiling: when absent, `cancel()`
+   * keeps its previous stop-and-release behavior and the file is left
+   * for OS reclaim (see this module's header). A rejection is swallowed
+   * by `cancel()` the same way — cancelling must never throw.
+   */
+  deleteClipFile?(uri: string): Promise<void>;
 }
 
 /**
@@ -252,6 +268,20 @@ const DEFAULT_BINDINGS: VoiceCaptureBindings = {
     );
   },
   readClipAsBase64,
+  // Real file deletion for `cancel()` — see this module's header. A
+  // dynamic import, never a top-level one: `expo-file-system/legacy`
+  // reaches `react-native` (`Platform` in its legacy `FileSystem.ts`),
+  // and a top-level import here would drag it into every test that
+  // imports this module (the RN-in-vitest limitation this file's own
+  // header describes) — the same reason `DEFAULT_BINDINGS` above never
+  // imports `expo-audio` values directly either. Resolved lazily, only
+  // on a real cancel with a real file to delete; a missing package or
+  // a missing native module rejects, and `cancel()` swallows that the
+  // same way it swallows a failed delete — graceful without it.
+  async deleteClipFile(uri: string) {
+    const FileSystem = await import("expo-file-system/legacy");
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  },
 };
 
 /** Maps `expo-audio`'s `PermissionResponse` onto this app's own five-state `PermissionState` — same shape `qr-scanner-port.ts`'s header describes for a future real camera port. */
@@ -269,8 +299,8 @@ function mapExpoPermission(response: ExpoPermissionResponse): PermissionState {
  * This build's real `VoiceCapturePort` (T276) — `Composer.tsx`'s own
  * default as of this task. See this module's header for the dependency
  * decision, the format disclosure, the preserved one-resolution
- * invariant, and the one disclosed gap (a cancelled clip's file is not
- * deleted).
+ * invariant, and the cancelled-file cleanup (deleted through
+ * `deleteClipFile` by default, graceful fallbacks without it).
  */
 export function createExpoAudioVoiceCapturePort(
   bindings: VoiceCaptureBindings = DEFAULT_BINDINGS,
@@ -326,10 +356,25 @@ export function createExpoAudioVoiceCapturePort(
         return;
       }
       // Release the microphone immediately; never read the cancelled
-      // clip's bytes (see this module's header for the one gap this
-      // still leaves: the file itself is not deleted).
+      // clip's bytes (see this module's header). The finished file IS
+      // deleted when this port knows how: `uri` is read before
+      // `release()` (a released recorder no longer reports one), then
+      // handed to the injected `deleteClipFile` — the real
+      // `expo-file-system/legacy` delete by default. Both the absent
+      // case (an older fake with no `deleteClipFile`) and a rejection
+      // (no native module on the build, a delete that fails) settle
+      // silently: cancelling must never throw, and a leftover file sits
+      // in this app's own private storage until the OS reclaims it.
       await recorder.stop().catch(() => undefined);
+      const uri = recorder.uri;
       recorder.release();
+      if (uri !== null) {
+        try {
+          await bindings.deleteClipFile?.(uri);
+        } catch {
+          // Graceful without it — see above.
+        }
+      }
     },
   };
 }
