@@ -111,11 +111,12 @@ describe("§11.1 command parity: disclosed gaps named individually", () => {
     // vice versa) fails this test — it is not decorative.
     // CORRECTED (fork-agent-ui): `fork` was a gap until the fork wire landed;
     // it is now covered (see the registry's `fork` note).
+    // CORRECTED (wire-apps-followup): `clone`, `set_session_name` and
+    // `set_auto_retry` were gaps until their wires landed; all three are now
+    // covered (see each command's registry note).
     expect(gaps.sort()).toEqual(
       [
-        "clone",
         "get_fork_messages",
-        "set_session_name",
         "get_state",
         "get_tree",
         "get_last_assistant_text",
@@ -124,7 +125,6 @@ describe("§11.1 command parity: disclosed gaps named individually", () => {
         "cycle_thinking_level",
         "set_steering_mode",
         "set_follow_up_mode",
-        "set_auto_retry",
         "abort_retry",
         "compact",
         "export_html",
@@ -148,6 +148,8 @@ describe("§11.1 command parity: disclosed gaps named individually", () => {
         "new_session",
         "switch_session",
         "fork",
+        "clone",
+        "set_session_name",
         "get_messages",
         "get_entries",
         "set_model",
@@ -156,6 +158,7 @@ describe("§11.1 command parity: disclosed gaps named individually", () => {
         "get_available_thinking_levels",
         "get_commands",
         "set_auto_compaction",
+        "set_auto_retry",
       ].sort(),
     );
   });

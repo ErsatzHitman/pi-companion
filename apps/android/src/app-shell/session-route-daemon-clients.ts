@@ -78,11 +78,15 @@
  * adapted through `adaptSessionTreeForkClient` (which supplies the head
  * `entryId` per agent id from `resolveHeadEntry` and maps the wire's
  * `{ agent: { id, title } }` to the port's `{ agentId, name }`) instead
- * of being handed over unchanged. `undefined` (never `null`) with no
- * active lifecycle, no live client, or a client with no `forkAgent` —
- * matching every sibling resolver above — and the adapted port exposes
- * fork only (clone stays out of scope), so the sheet keeps rendering
- * Clone/Rename disabled with their truthful unavailable text.
+ * of being handed over unchanged. CORRECTED (wire-apps-followup): this
+ * previously said the adapted port "exposes fork only (clone stays out of
+ * scope)". That was true when written and is false now — the resolver
+ * below merges the fork, clone (`adaptSessionTreeCloneClient`) and rename
+ * (`adaptSessionTreeRenameClient`) adapters into one port, so the sheet's
+ * Clone and Rename actions resolve against the same live `DaemonClient`.
+ * `undefined` (never `null`) with no active lifecycle, no live client, or
+ * a client with none of the three methods — matching every sibling resolver
+ * above.
  *
  * **T352 adds `resolveAgentUsageClient` below**, the same pattern an
  * eighth time: the Live screen's Context card needs this session's
@@ -152,7 +156,9 @@ import type {
 } from "../features/composer";
 import type { AgentSnapshotSource, AttachmentDownloadTokenClient } from "../features/transcript";
 import {
+  adaptSessionTreeCloneClient,
   adaptSessionTreeForkClient,
+  adaptSessionTreeRenameClient,
   type SessionTreeClientPort,
   type SessionTreeHeadEntryResolver,
 } from "../features/sessions/session-tree-sheet-model";
@@ -404,19 +410,30 @@ export function resolveSessionControlsClient(
  * fork-agent-android: the eleventh narrow port — see this file's module
  * doc for why this one adapts instead of casting. `resolveHeadEntry`
  * supplies the head entry per agent id (e.g. the route's last known head
- * entry); the adapted port then forks any session at its own entry id.
+ * entry); the adapted port then forks any session at its own entry id, and
+ * clones/renames it through the same live client. CORRECTED
+ * (wire-apps-followup): this previously resolved fork only, leaving
+ * Clone/Rename disabled. It now merges all three adapters, so a current
+ * live `DaemonClient` backs every action the sheet offers.
  * `undefined` (never `null`) with no active lifecycle, no live client
- * yet, or a live client with no `forkAgent` — matching every sibling
- * resolver above — so `SessionTreeSheet` keeps its Fork action disabled
- * with the truthful unavailable text instead of offering a control that
- * can only fail.
+ * yet, or a live client with none of the three methods — matching every
+ * sibling resolver above — so `SessionTreeSheet` keeps an action disabled
+ * with the truthful unavailable text only when its wire is truly absent.
  */
 export function resolveSessionTreeForkClient(
   connection: SessionRouteConnectionSource,
   resolveHeadEntry: SessionTreeHeadEntryResolver,
 ): SessionTreeClientPort | undefined {
-  return adaptSessionTreeForkClient(
-    connection.getActiveLifecycle()?.getDaemonClient(),
-    resolveHeadEntry,
-  );
+  const liveClient = connection.getActiveLifecycle()?.getDaemonClient();
+  const forkPort = adaptSessionTreeForkClient(liveClient, resolveHeadEntry);
+  const clonePort = adaptSessionTreeCloneClient(liveClient);
+  const renamePort = adaptSessionTreeRenameClient(liveClient);
+  if (!forkPort && !clonePort && !renamePort) {
+    return undefined;
+  }
+  return {
+    ...forkPort,
+    ...clonePort,
+    ...renamePort,
+  };
 }

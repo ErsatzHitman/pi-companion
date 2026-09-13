@@ -24,15 +24,16 @@
  *    (`sessionTreeLabPort` below) and Fork/Clone become available and,
  *    once tapped, their result reaches this lab's status text too.
  *
- * **What this does NOT prove** — CORRECTED (fork-agent-ui): this previously
- * said there was no real `DaemonClient.forkAgent`/`cloneAgent`/rename method
- * to inject. The fork half has since landed (`agent.fork.request`/
- * `agent.fork.response`, `DaemonClient.forkAgent`); clone/rename still have
- * none. This lab's `sessionTreeLabPort` is still a plain recording fake, not
- * a real client — proving the sheet's OWN wiring is correct, never that a
- * real `DaemonClient` is reachable from it today (fork-agent-android's
- * `adaptSessionTreeForkClient`/`resolveSessionTreeForkClient` is that real
- * path; this lab still exercises only the fake, on purpose).
+ * **What this does NOT prove** — CORRECTED (wire-apps-followup): this
+ * previously said (via fork-agent-ui's correction) that "clone/rename still
+ * have none" and that "this lab's `sessionTreeLabPort` is still a plain
+ * recording fake, not a real client". All three wires have since landed
+ * (`agent.clone.request`/`agent.rename.request` plus
+ * `DaemonClient.cloneAgent`/`renameAgent`); this lab's port is still a plain
+ * recording fake on purpose — proving the sheet's OWN wiring is correct,
+ * never that a real `DaemonClient` is reachable from it today
+ * (fork-agent-android's adapters plus `resolveSessionTreeForkClient` are that
+ * real path; this lab still exercises only the fake).
  */
 import { useMemo, useState } from "react";
 import { ScrollView, Text } from "react-native";
@@ -76,11 +77,11 @@ const FIXTURE_NODES = buildFixtureTree();
 
 /**
  * A plain recording fake — never a real `DaemonClient` (CORRECTED
- * fork-agent-ui: this previously said T110's real `forkAgent`/`cloneAgent`/
- * rename method did not exist yet; the fork half has since landed, clone/rename
- * still have none — see this file's own module doc). Every call resolves
- * immediately with a synthesized result derived from the call's own arguments,
- * so the lab's status text can show the exact value that arrived here.
+ * wire-apps-followup: this previously said clone/rename still had no real
+ * method; all three have since landed — see this file's own module doc).
+ * Every call resolves immediately with a synthesized result derived from the
+ * call's own arguments, so the lab's status text can show the exact value
+ * that arrived here.
  */
 const sessionTreeLabPort: SessionTreeClientPort = {
   async forkAgent(agentId, options) {

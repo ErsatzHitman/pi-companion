@@ -205,11 +205,12 @@ export function useAgentPicker(client: DaemonClient | null): AgentPickerState & 
  *
  * `AgentSettingsPanel` (auto-compaction / auto-retry toggles) is wired to
  * `useDaemonClientContext()`'s live client (T53A1) through
- * `createDaemonSettingsClient` — see that adapter's doc comment for which
- * of the two settings has a real wire today (auto-compaction, since T131;
- * auto-retry remains `"unsupported"`, disclosed and gated, never an
- * enabled control whose value silently dies — the P6-W7 defect this
- * repository's rules name explicitly). `useAgentPicker` above resolves
+ * `createDaemonSettingsClient` — both settings now have a real wire (auto-
+ * compaction since T131, auto-retry since wire-apps-followup), so a current
+ * client resolves both to real controls. CORRECTED (wire-apps-followup):
+ * this previously said "(auto-compaction, since T131; auto-retry remains
+ * `\"unsupported\"`, disclosed and gated". That was true when written
+ * and is false now. `useAgentPicker` above resolves
  * which agent those settings target (defaulting to the most recent, the
  * same value `useCurrentAgentId` resolves, but changeable through the
  * picker); while there is no client, or no agent yet, the panel still

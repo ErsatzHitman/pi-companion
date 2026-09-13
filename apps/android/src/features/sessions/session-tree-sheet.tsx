@@ -35,14 +35,16 @@
  * ## Fork/clone/rename: always a truthful state, never a silent no-op
  *
  * `client` is an optional `SessionTreeClientPort`
- * (`./session-tree-sheet-model.ts`) — deliberately absent on every real
- * build today. CORRECTED (fork-agent-ui): this previously said that was
- * because `packages/client/src` sent none of `forkAgent`, `cloneAgent`, or a
- * rename request yet. The fork half has since landed, but this sheet still
- * takes no `entryId` itself — that file's `adaptSessionTreeForkClient`
- * (plus `session-route-daemon-clients.ts`'s `resolveSessionTreeForkClient`)
- * now supplies the head `entryId` per agent, so `client` CAN be a real
- * adapted `DaemonClient.forkAgent`; it stays absent on real builds only
+ * (`./session-tree-sheet-model.ts`) — deliberately absent when no live
+ * client is connected. CORRECTED (wire-apps-followup): this previously said
+ * that was "today's only real shape" because "`packages/client/src` sent
+ * none of `forkAgent`, `cloneAgent`, or a rename request yet" and that "the
+ * fork half has since landed, but this sheet still takes no `entryId`
+ * itself". All three wires have since landed, so `client` CAN be a real
+ * adapted `DaemonClient` for fork, clone AND rename (via
+ * `adaptSessionTreeForkClient`/`adaptSessionTreeCloneClient`/
+ * `adaptSessionTreeRenameClient` plus `session-route-daemon-clients.ts`'s
+ * `resolveSessionTreeForkClient`); it stays absent on real builds only
  * until a route passes one. When the selected session's action row
  * renders, each of Fork/Clone/Rename is disabled and captioned with
  * `describeSessionTreeActionUnavailable`'s truthful sentence whenever

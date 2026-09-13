@@ -29,7 +29,7 @@ function Harness({
 }
 
 describe("AgentSettingsPanel", () => {
-  it("renders the unsupported state truthfully — disabled switches plus a visible explanation — for a client that omits both settings (today's real DaemonClient shape)", async () => {
+  it('renders the unsupported state truthfully — disabled switches plus a visible explanation — for a client that omits both settings (a partial/stale client shape; CORRECTED wire-apps-followup: this previously said "today\'s real DaemonClient shape", true when written and false now that a current real DaemonClient implements both pairs)', async () => {
     render(
       <Harness agentId="agent-1" client={new UnsupportedSettingsClient()} testId="settings" />,
     );

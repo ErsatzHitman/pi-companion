@@ -5,7 +5,9 @@ import { sessions as coreSessions } from "@picompanion/frontend-core";
 import {
   MAX_INDENT_DEPTH,
   SessionTreeActionUnavailableError,
+  adaptSessionTreeCloneClient,
   adaptSessionTreeForkClient,
+  adaptSessionTreeRenameClient,
   cloneSessionTreeNode,
   describeSessionTreeActionUnavailable,
   flattenVisibleSessionTreeRows,
@@ -259,7 +261,7 @@ describe("adaptSessionTreeForkClient: the entryId adapter", () => {
     expect(fake.forkAgent).not.toHaveBeenCalled();
   });
 
-  it("exposes fork only — no cloneAgent/renameAgent on the adapted port", () => {
+  it("fork adapter exposes fork only — clone/rename arrive via their own adapters (CORRECTED wire-apps-followup: this previously asserted the fork adapter was the whole story; clone/rename now have parallel adapters below)", () => {
     const adapted = adaptSessionTreeForkClient(forkCapableFake(), resolveHeadEntry)!;
     expect(typeof adapted.forkAgent).toBe("function");
     expect("cloneAgent" in adapted).toBe(false);
@@ -282,5 +284,122 @@ describe("adaptSessionTreeForkClient: the entryId adapter", () => {
       name: "Branched",
     });
     expect(result).toEqual({ agentId: "r1-fork", name: "Branched" });
+  });
+});
+
+describe("adaptSessionTreeCloneClient: the null-mapping clone adapter (wire-apps-followup)", () => {
+  function cloneCapableFake(
+    agent: { id: string; title?: string | null } | null = { id: "r1-clone", title: "Copy" },
+  ) {
+    return {
+      cloneAgent: vi.fn(async (_agentId: string, _options: unknown) => ({ agent })),
+    };
+  }
+
+  it("returns undefined for a client without cloneAgent (null / undefined / clone-less fake)", () => {
+    expect(adaptSessionTreeCloneClient(null)).toBeUndefined();
+    expect(adaptSessionTreeCloneClient(undefined)).toBeUndefined();
+    expect(adaptSessionTreeCloneClient({})).toBeUndefined();
+    expect(adaptSessionTreeCloneClient({ forkAgent: vi.fn() })).toBeUndefined();
+  });
+
+  it("passes the name through and unwraps agent.id/agent.title", async () => {
+    const fake = cloneCapableFake();
+    const adapted = adaptSessionTreeCloneClient(fake);
+    expect(adapted).toBeDefined();
+
+    const result = await adapted!.cloneAgent!("r1", { name: "Copy" });
+
+    expect(fake.cloneAgent).toHaveBeenCalledTimes(1);
+    expect(fake.cloneAgent).toHaveBeenCalledWith("r1", { name: "Copy" });
+    expect(result).toEqual({ agentId: "r1-clone", name: "Copy" });
+  });
+
+  it("omits a null name (the wire takes string-or-absent, never null)", async () => {
+    const fake = cloneCapableFake({ id: "r1-clone", title: null });
+    const adapted = adaptSessionTreeCloneClient(fake);
+
+    const result = await adapted!.cloneAgent!("r1", { name: null });
+
+    expect(fake.cloneAgent).toHaveBeenCalledWith("r1", {});
+    expect(result).toEqual({ agentId: "r1-clone", name: null });
+  });
+
+  it("rejects rather than mapping a null-agent resolution (the wire's failure shape)", async () => {
+    const adapted = adaptSessionTreeCloneClient(cloneCapableFake(null));
+    await expect(adapted!.cloneAgent!("r1", { name: "Copy" })).rejects.toThrow(
+      "did not return a new session",
+    );
+  });
+
+  it("propagates a daemon rejection unchanged, mapping nothing", async () => {
+    const cloneAgent = vi.fn(async () => {
+      throw new Error("host is full");
+    });
+    const adapted = adaptSessionTreeCloneClient({ cloneAgent });
+    await expect(adapted!.cloneAgent!("r1")).rejects.toThrow("host is full");
+  });
+
+  it("exposes clone only, and cloneSessionTreeNode dispatches through it end to end", async () => {
+    const { root } = buildFixture();
+    const fake = cloneCapableFake();
+    const adapted = adaptSessionTreeCloneClient(fake)!;
+    expect(typeof adapted.cloneAgent).toBe("function");
+    expect("forkAgent" in adapted).toBe(false);
+    expect(isSessionTreeActionAvailable(adapted, "clone")).toBe(true);
+    expect(isSessionTreeActionAvailable(adapted, "fork")).toBe(false);
+
+    const result = await cloneSessionTreeNode(adapted, root, { name: "Copy" });
+    expect(fake.cloneAgent).toHaveBeenCalledWith("r1", { name: "Copy" });
+    expect(result).toEqual({ agentId: "r1-clone", name: "Copy" });
+  });
+});
+
+describe("adaptSessionTreeRenameClient: the options-to-string rename adapter (wire-apps-followup)", () => {
+  function renameCapableFake(
+    agent: { id: string; title?: string | null } | null = { id: "r1", title: "Renamed" },
+  ) {
+    return {
+      renameAgent: vi.fn(async (_agentId: string, _name: string) => ({ agent })),
+    };
+  }
+
+  it("returns undefined for a client without renameAgent (null / undefined / rename-less fake)", () => {
+    expect(adaptSessionTreeRenameClient(null)).toBeUndefined();
+    expect(adaptSessionTreeRenameClient(undefined)).toBeUndefined();
+    expect(adaptSessionTreeRenameClient({})).toBeUndefined();
+    expect(adaptSessionTreeRenameClient({ forkAgent: vi.fn() })).toBeUndefined();
+  });
+
+  it("maps the port's { name } options onto the real (agentId, name) two-string shape", async () => {
+    const fake = renameCapableFake();
+    const adapted = adaptSessionTreeRenameClient(fake);
+    expect(adapted).toBeDefined();
+
+    const result = await adapted!.renameAgent!("r1", { name: "Renamed" });
+
+    expect(fake.renameAgent).toHaveBeenCalledTimes(1);
+    expect(fake.renameAgent).toHaveBeenCalledWith("r1", "Renamed");
+    expect(result).toEqual({ agentId: "r1", name: "Renamed" });
+  });
+
+  it("rejects rather than mapping a null-agent resolution (the wire's failure shape)", async () => {
+    const adapted = adaptSessionTreeRenameClient(renameCapableFake(null));
+    await expect(adapted!.renameAgent!("r1", { name: "Renamed" })).rejects.toThrow(
+      "did not return a session",
+    );
+  });
+
+  it("exposes rename only, and renameSessionTreeNode dispatches through it end to end", async () => {
+    const { root } = buildFixture();
+    const fake = renameCapableFake();
+    const adapted = adaptSessionTreeRenameClient(fake)!;
+    expect(typeof adapted.renameAgent).toBe("function");
+    expect("forkAgent" in adapted).toBe(false);
+    expect(isSessionTreeActionAvailable(adapted, "rename")).toBe(true);
+
+    const result = await renameSessionTreeNode(adapted, root, { name: "Renamed" });
+    expect(fake.renameAgent).toHaveBeenCalledWith("r1", "Renamed");
+    expect(result).toEqual({ agentId: "r1", name: "Renamed" });
   });
 });

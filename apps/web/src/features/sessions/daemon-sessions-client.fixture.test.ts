@@ -564,3 +564,177 @@ describe("createDaemonSessionsClient.forkSession (fork-agent-ui, real DaemonClie
     await daemonClient.close();
   });
 });
+
+describe("createDaemonSessionsClient.cloneSession (wire-apps-followup, real DaemonClient)", () => {
+  it("always exposes cloneSession on a real DaemonClient and round-trips a clone", async () => {
+    // No recorded `agent.clone` fixture exists yet in
+    // `@picompanion/protocol`'s fixtures directory; this constructs the
+    // `agent.clone.response` reply directly from
+    // `CloneAgentResponseMessageSchema` (`packages/protocol/src/messages.ts`),
+    // matching this file's existing `agent_deleted`/`fetch_agents_response`
+    // precedent for a response with no dedicated fixture file.
+    const { daemonClient, socket } = await connectFixtureDaemonClient(
+      "clid_fixture_web_sessions_clone_0001",
+    );
+    expect(typeof daemonClient.cloneAgent).toBe("function");
+
+    const client = createDaemonSessionsClient(daemonClient);
+    expect(typeof client.cloneSession).toBe("function");
+    const clonePromise = client.cloneSession?.("agt_fixture_0001", { name: "Copy" });
+    if (!clonePromise) throw new Error("expected cloneSession to be implemented");
+    await flushMicrotasks();
+
+    const requestMessage = findSentSessionMessage<{
+      type: string;
+      requestId: string;
+      agentId: string;
+      name?: string;
+    }>(socket, "agent.clone.request");
+    expect(requestMessage.agentId).toBe("agt_fixture_0001");
+    expect(requestMessage.name).toBe("Copy");
+
+    // Full `AgentSnapshotPayload` shape copied from the `forkSession`
+    // test above (proven schema-valid there) rather than hand-rolled.
+    const agentSnapshot = {
+      id: "agt_fixture_clone_0001",
+      provider: "pi",
+      cwd: "/synthetic/workspace/demo-repo",
+      workspaceId: "ws_fixture_0001",
+      model: "fixture-model-large",
+      thinkingOptionId: "medium",
+      effectiveThinkingOptionId: "medium",
+      createdAt: "2026-08-31T10:00:00.000Z",
+      updatedAt: "2026-08-31T11:30:00.000Z",
+      lastUserMessageAt: "2026-08-31T11:29:00.000Z",
+      status: "idle",
+      activeTurn: null,
+      capabilities: {
+        supportsStreaming: true,
+        supportsSessionPersistence: true,
+        supportsSessionListing: true,
+        supportsDynamicModes: true,
+        supportsMcpServers: true,
+        supportsReasoningStream: true,
+        supportsToolInvocations: true,
+        supportsRewindConversation: true,
+        supportsRewindFiles: true,
+        supportsRewindBoth: true,
+      },
+      currentModeId: "default",
+      availableModes: [
+        { id: "default", label: "Default" },
+        { id: "plan", label: "Plan" },
+      ],
+      pendingPermissions: [],
+      persistence: { provider: "pi", sessionId: "pi-sess-fixture-0001" },
+      title: "Copy",
+      labels: {},
+      archivedAt: null,
+    };
+
+    socket.receiveJson({
+      type: "session",
+      message: {
+        type: "agent.clone.response",
+        payload: {
+          requestId: requestMessage.requestId,
+          agentId: "agt_fixture_0001",
+          agent: agentSnapshot,
+          error: null,
+        },
+      },
+    });
+
+    const result = await clonePromise;
+    expect(result.session.id).toBe("agt_fixture_clone_0001");
+    expect(result.session.title).toBe("Copy");
+
+    await daemonClient.close();
+  });
+});
+
+describe("createDaemonSessionsClient.renameSession (wire-apps-followup, real DaemonClient)", () => {
+  it("always exposes renameSession on a real DaemonClient and round-trips a rename", async () => {
+    // Same no-fixture precedent as the clone test above, constructed from
+    // `RenameAgentResponseMessageSchema` (`packages/protocol/src/messages.ts`).
+    const { daemonClient, socket } = await connectFixtureDaemonClient(
+      "clid_fixture_web_sessions_rename_0001",
+    );
+    expect(typeof daemonClient.renameAgent).toBe("function");
+
+    const client = createDaemonSessionsClient(daemonClient);
+    expect(typeof client.renameSession).toBe("function");
+    const renamePromise = client.renameSession?.("agt_fixture_0001", {
+      name: "Renamed title",
+    });
+    if (!renamePromise) throw new Error("expected renameSession to be implemented");
+    await flushMicrotasks();
+
+    const requestMessage = findSentSessionMessage<{
+      type: string;
+      requestId: string;
+      agentId: string;
+      name: string;
+    }>(socket, "agent.rename.request");
+    expect(requestMessage.agentId).toBe("agt_fixture_0001");
+    expect(requestMessage.name).toBe("Renamed title");
+
+    // Full `AgentSnapshotPayload` shape copied from the clone test above
+    // (proven schema-valid there) rather than hand-rolled.
+    const agentSnapshot = {
+      id: "agt_fixture_0001",
+      provider: "pi",
+      cwd: "/synthetic/workspace/demo-repo",
+      workspaceId: "ws_fixture_0001",
+      model: "fixture-model-large",
+      thinkingOptionId: "medium",
+      effectiveThinkingOptionId: "medium",
+      createdAt: "2026-08-31T10:00:00.000Z",
+      updatedAt: "2026-08-31T11:30:00.000Z",
+      lastUserMessageAt: "2026-08-31T11:29:00.000Z",
+      status: "idle",
+      activeTurn: null,
+      capabilities: {
+        supportsStreaming: true,
+        supportsSessionPersistence: true,
+        supportsSessionListing: true,
+        supportsDynamicModes: true,
+        supportsMcpServers: true,
+        supportsReasoningStream: true,
+        supportsToolInvocations: true,
+        supportsRewindConversation: true,
+        supportsRewindFiles: true,
+        supportsRewindBoth: true,
+      },
+      currentModeId: "default",
+      availableModes: [
+        { id: "default", label: "Default" },
+        { id: "plan", label: "Plan" },
+      ],
+      pendingPermissions: [],
+      persistence: { provider: "pi", sessionId: "pi-sess-fixture-0001" },
+      title: "Renamed title",
+      labels: {},
+      archivedAt: null,
+    };
+
+    socket.receiveJson({
+      type: "session",
+      message: {
+        type: "agent.rename.response",
+        payload: {
+          requestId: requestMessage.requestId,
+          agentId: "agt_fixture_0001",
+          agent: agentSnapshot,
+          error: null,
+        },
+      },
+    });
+
+    const result = await renamePromise;
+    expect(result.session.id).toBe("agt_fixture_0001");
+    expect(result.session.title).toBe("Renamed title");
+
+    await daemonClient.close();
+  });
+});

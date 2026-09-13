@@ -124,6 +124,15 @@ function createCountingFakeDaemonClient() {
         };
       },
     ),
+    // wire-apps-followup: the real `DaemonClient.cloneAgent`/`renameAgent` shapes.
+    cloneAgent: vi.fn(async (agentId: string, options: { name?: string } = {}) => {
+      calls.push(["cloneAgent", agentId, options]);
+      return { agent: { id: `${agentId}-cloned`, title: options.name ?? null } };
+    }),
+    renameAgent: vi.fn(async (agentId: string, name: string) => {
+      calls.push(["renameAgent", agentId, name]);
+      return { agent: { id: agentId, title: name } };
+    }),
   };
 }
 
@@ -508,7 +517,7 @@ describe("resolveSessionControlsClient", () => {
   });
 });
 
-describe("resolveSessionTreeForkClient (fork-agent-android)", () => {
+describe("resolveSessionTreeForkClient (fork-agent-android, extended wire-apps-followup)", () => {
   const resolveHeadEntry = (agentId: string) =>
     agentId === "agt_fork_android" ? { entryId: "m9", entryIndex: 4 } : undefined;
 
@@ -524,7 +533,7 @@ describe("resolveSessionTreeForkClient (fork-agent-android)", () => {
     expect(resolveSessionTreeForkClient(connection, resolveHeadEntry)).toBeUndefined();
   });
 
-  it("returns undefined for a live client with no forkAgent (fork-less fake)", () => {
+  it("returns undefined for a live client with none of forkAgent/cloneAgent/renameAgent", () => {
     const connection = connectionWithClient({ fetchAgent: vi.fn() });
     expect(resolveSessionTreeForkClient(connection, resolveHeadEntry)).toBeUndefined();
   });
@@ -537,10 +546,11 @@ describe("resolveSessionTreeForkClient (fork-agent-android)", () => {
     );
 
     expect(resolved).toBeDefined();
-    // An adapter, not a cast: a new object exposing fork only.
+    // An adapter, not a cast: a new object exposing fork+clone+rename.
     expect(resolved).not.toBe(fakeClient as unknown as typeof resolved);
     expect(typeof resolved!.forkAgent).toBe("function");
-    expect("cloneAgent" in resolved!).toBe(false);
+    expect(typeof resolved!.cloneAgent).toBe("function");
+    expect(typeof resolved!.renameAgent).toBe("function");
 
     const result = await resolved!.forkAgent!("agt_fork_android", { name: "Branched" });
 
@@ -564,5 +574,33 @@ describe("resolveSessionTreeForkClient (fork-agent-android)", () => {
       "No timeline entry known for session agt_unknown",
     );
     expect(fakeClient.forkAgent).not.toHaveBeenCalled();
+  });
+
+  it("adapts a clone through the resolved port: null name sent as absent, result unwrapped", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionTreeForkClient(
+      connectionWithClient(fakeClient),
+      resolveHeadEntry,
+    );
+
+    const result = await resolved!.cloneAgent!("agt_fork_android", { name: "Copy" });
+
+    expect(fakeClient.cloneAgent).toHaveBeenCalledTimes(1);
+    expect(fakeClient.cloneAgent).toHaveBeenCalledWith("agt_fork_android", { name: "Copy" });
+    expect(result).toEqual({ agentId: "agt_fork_android-cloned", name: "Copy" });
+  });
+
+  it("adapts a rename through the resolved port: { name } mapped onto the (agentId, name) shape", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionTreeForkClient(
+      connectionWithClient(fakeClient),
+      resolveHeadEntry,
+    );
+
+    const result = await resolved!.renameAgent!("agt_fork_android", { name: "Renamed" });
+
+    expect(fakeClient.renameAgent).toHaveBeenCalledTimes(1);
+    expect(fakeClient.renameAgent).toHaveBeenCalledWith("agt_fork_android", "Renamed");
+    expect(result).toEqual({ agentId: "agt_fork_android", name: "Renamed" });
   });
 });

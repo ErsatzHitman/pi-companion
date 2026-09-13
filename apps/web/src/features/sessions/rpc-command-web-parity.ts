@@ -99,11 +99,14 @@ export const SECTION_111_COMMAND_WEB_COVERAGE: readonly CommandCoverageEntry[] =
   },
   {
     command: "clone",
-    status: "gap",
+    status: "covered",
     note:
-      "Same shape and same owner as `fork`'s gap (T110): zero `cloneAgent` method on DaemonClient, zero " +
-      "clone_agent_request/response wire message. Closing seam: clone_agent_request/clone_agent_response plus a " +
-      "DaemonClient.cloneAgent method matching DaemonAgentClient.cloneAgent.",
+      "wire-apps-followup: SessionsClient.cloneSession -> DaemonAgentClient.cloneAgent -> DaemonClient.cloneAgent " +
+      "(agent.clone.request/agent.clone.response in packages/protocol/src/messages.ts, handled by " +
+      "packages/server/src/server/session.ts). Proven against the real DaemonClient class over a fake " +
+      "WebSocket in daemon-sessions-client.fixture.test.ts ('always exposes cloneSession on a real " +
+      "DaemonClient and round-trips a clone'). CORRECTED (wire-apps-followup): this previously disclosed " +
+      "T110's gap (zero cloneAgent method, zero wire message).",
   },
   {
     command: "get_fork_messages",
@@ -116,15 +119,15 @@ export const SECTION_111_COMMAND_WEB_COVERAGE: readonly CommandCoverageEntry[] =
   },
   {
     command: "set_session_name",
-    status: "gap",
+    status: "covered",
     note:
-      "DISCLOSED GAP (T38A4, still open): zero `renameAgent` method on the real DaemonClient and zero " +
-      "rename_agent/set_session_name-shaped client wire message (daemon-sessions-client.ts's DaemonAgentClient.renameAgent " +
-      "doc names this precisely; T38A0's mirror of Pi's set_session_name RPC command in " +
-      "packages/server/.../pi/rpc-types.ts is daemon-internal only). RenameSessionDialog/useRenameSession are real UI " +
-      "wired to an optional client member a real DaemonClient never implements, so a rename submitted today reaches " +
-      "SESSIONS_ACTION_UNSUPPORTED, not the daemon. Natural owner named in that file's doc: T51A or a follow-up split " +
-      "from it.",
+      "wire-apps-followup: SessionsClient.renameSession -> DaemonAgentClient.renameAgent -> DaemonClient.renameAgent " +
+      "(agent.rename.request/agent.rename.response in packages/protocol/src/messages.ts, handled by " +
+      "packages/server/src/server/session.ts via the set_session_name path). Proven against the real DaemonClient " +
+      "class over a fake WebSocket in daemon-sessions-client.fixture.test.ts ('always exposes renameSession on a " +
+      "real DaemonClient and round-trips a rename'). CORRECTED (wire-apps-followup): this previously disclosed " +
+      "T38A4's gap (zero renameAgent method, zero client wire message; RenameSessionDialog/useRenameSession " +
+      "wired to an optional member a real DaemonClient never implemented).",
   },
 
   // --- state and history ---
@@ -258,10 +261,15 @@ export const SECTION_111_COMMAND_WEB_COVERAGE: readonly CommandCoverageEntry[] =
   },
   {
     command: "set_auto_retry",
-    status: "gap",
+    status: "covered",
     note:
-      "No wire message exists at all — grep for auto_retry/autoRetry/AutoRetry across the entire " +
-      "packages/protocol/src/messages.ts returns zero (only the observational `pi_retry` event type exists).",
+      "wire-apps-followup: DaemonClient.setAutoRetry/getAutoRetry -> set_auto_retry_request/get_auto_retry_request " +
+      "(packages/protocol/src/messages.ts), handled end-to-end by packages/server/src/server/session.ts -> " +
+      "AgentManager -> PiRpcAgentSession -> PiRuntimeSession.setAutoRetry. Proven against the real DaemonClient " +
+      "class in packages/client/src/daemon-client.test.ts, and mounted on web via " +
+      "apps/web/src/features/settings/daemon-settings-client.ts (createDaemonSettingsClient) through " +
+      "apps/web/src/features/settings/AgentSettingsPanel.tsx (routes/screens/host-settings-screen.tsx). CORRECTED " +
+      "(wire-apps-followup): this previously said no wire message exists at all.",
   },
   {
     command: "abort_retry",

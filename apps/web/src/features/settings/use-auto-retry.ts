@@ -12,16 +12,18 @@ import type { SettingsClient } from "./settings-client.js";
  * trip discipline and `agent-setting-state.ts` for what each
  * `availability` value means.
  *
- * **Auto-retry's `"unsupported"` explanation is not the same claim as
- * auto-compaction's.** Auto-compaction merely lacks the outer wire/client
- * layer over an already-real daemon-internal toggle
- * (`PiRuntimeSession.setAutoCompaction`). Auto-retry has NO
- * daemon-internal toggle of any kind — see `settings-client.ts`'s header
- * comment for the exact grep results — so today's daemon always retries;
- * there is no "off" state anywhere in this codebase for this control to
- * eventually reach even once a wire message exists. `DAEMON_AUTO_RETRY_ALWAYS_ON`
- * documents that, and the explanation text below says so plainly rather
- * than implying an on/off choice merely awaits a protocol change.
+ * **Auto-retry's `"unsupported"` explanation now covers only stale or
+ * partial clients.** CORRECTED (wire-apps-followup): this previously said
+ * "Auto-retry has NO daemon-internal toggle of any kind — see
+ * `settings-client.ts`'s header comment for the exact grep results — so
+ * today's daemon always retries; there is no \"off\" state anywhere in
+ * this codebase for this control to eventually reach even once a wire
+ * message exists." That was true when written and is false now: the daemon
+ * has a real toggle (`PiRuntimeSession.setAutoRetry` +
+ * `set_auto_retry_request`/`get_auto_retry_request`), so "off" is a real
+ * state. `DAEMON_AUTO_RETRY_ALWAYS_ON` now documents only the fallback
+ * text for connections that still omit the pair, not the daemon's real
+ * behaviour.
  */
 export interface UseAutoRetryOptions {
   /** Conversation target this control reads/changes (session or agent id). */

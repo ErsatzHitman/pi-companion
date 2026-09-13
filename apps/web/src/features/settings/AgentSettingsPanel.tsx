@@ -12,10 +12,13 @@ import type { AgentSettingState } from "./agent-setting-state.js";
  * treatment `QueueModePicker.tsx`/`ModelThinkingPicker.tsx` use.
  *
  * Each row is independent: a real daemon could plausibly support one
- * setting and not the other (auto-compaction's daemon-internal path
- * already exists; auto-retry's does not — see `use-auto-retry.ts`'s doc
- * comment), so `AgentSettingState` is read per-row rather than as one
- * combined availability.
+ * setting and not the other. CORRECTED (wire-apps-followup): this
+ * previously said "(auto-compaction's daemon-internal path already
+ * exists; auto-retry's does not — see `use-auto-retry.ts`'s doc comment)".
+ * That was true when written and is false now: both settings have a real
+ * daemon-internal path and wire pair, so `AgentSettingState` is read
+ * per-row for partial/stale clients, not because a current daemon omits
+ * either.
  */
 export interface AgentSettingsPanelProps {
   autoCompaction: AgentSettingState;
