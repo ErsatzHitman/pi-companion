@@ -35,8 +35,11 @@
  * that added the real wire-connected `DaemonClient.forkAgent` — this module
  * still cannot depend on a matching `cloneAgent`/rename method landing, and
  * must not ship an enabled Clone/Rename affordance whose only real-build
- * outcome is a failure banner. (Fork stays gated here too until the entryId
- * adapter below exists — see the DISCLOSED SHAPE GAP.)
+ * outcome is a failure banner. (Fork is served through
+ * `adaptSessionTreeForkClient` below — the entryId adapter the DISCLOSED
+ * SHAPE GAP called for — so a real `DaemonClient.forkAgent` can back this
+ * sheet's Fork action; Clone/Rename stay gated until their own wire
+ * methods land.)
  *
  * So every action below is expressed against `SessionTreeClientPort`, an
  * object whose three methods are all OPTIONAL — deliberately the
@@ -49,11 +52,13 @@
  * bare crash — when the corresponding method is absent, and
  * `describeSessionTreeActionUnavailable` gives the `.tsx` a truthful,
  * user-facing sentence to show instead of an enabled control that can
- * only fail. With no `client` prop supplied at all (today's only real
- * shape, per T110's disclosure above) every action reports unavailable.
+ * only fail. With no `client` prop supplied at all (still today's only real
+ * shape — no route passes one yet, see `session-route-daemon-clients.ts`'s
+ * `resolveSessionTreeForkClient`) every action reports unavailable.
  *
- * DISCLOSED SHAPE GAP: `SessionTreeClientPort.forkAgent` here takes only
- * `{ name? }` — "fork this session from its current tip" — not the
+ * DISCLOSED SHAPE GAP, fork half closed by `adaptSessionTreeForkClient`
+ * below: `SessionTreeClientPort.forkAgent` here takes only `{ name? }` —
+ * "fork this session from its current tip" — not the
  * `{ entryId, entryIndex?, name? }` a real `DaemonClient.forkAgent` requires
  * (see `daemon-sessions-client.ts`'s `DaemonAgentClient.forkAgent` on web,
  * required since the fork wire landed): this sheet has no message-level timeline to pick an `entryId`
@@ -61,10 +66,15 @@
  * `sessions/tree-edit-shortcut.ts` (T38A1b) already owns "fork from a
  * specific message" (the composer/transcript's "edit from here"
  * shortcut, `apps/web/src/features/transcript/use-edit-from-here.ts`).
- * Wiring this sheet's Fork button to a real `DaemonClient` will need an
- * adapter that supplies an `entryId` (e.g. the session's last known head
- * entry) — new work for whichever task first has both a real
- * `DaemonClient.forkAgent` (T110) and this sheet in hand, not built here.
+ * This sheet's Fork button reaches a real `DaemonClient` through
+ * `adaptSessionTreeForkClient`, which supplies the missing `entryId` from a
+ * caller-provided head-entry resolver (e.g. the session route's last known
+ * head entry per agent id) and maps the wire's `{ agent: { id, title } }`
+ * to this port's `{ agentId, name }`, following `host-session-screen.tsx`'s
+ * `adaptEditFromHereForkClient` mapping shape (a null name is sent as
+ * absent, a null agent rejects rather than mapping). Clone stays out of
+ * scope: no `cloneAgent` wire message or client method exists, so an
+ * adapted port exposes fork only.
  *
  * Repository invariant: this module must never import React, React
  * Native, Expo, DOM types, or browser globals.
@@ -165,6 +175,93 @@ export interface SessionTreeClientPort {
     agentId: string,
     options: SessionTreeRenameOptions,
   ): Promise<SessionTreeActionResult>;
+}
+
+/**
+ * The fork point `adaptSessionTreeForkClient` forks at: the head entry of
+ * the session being forked. `entryIndex` rides along only when the caller
+ * knows it, mirroring `DaemonClient.forkAgent`'s own optional
+ * `entryIndex` (omitted keys stay off the wire and the daemon applies its
+ * own default).
+ */
+export interface SessionTreeForkEntry {
+  readonly entryId: string;
+  readonly entryIndex?: number;
+}
+
+/**
+ * Supplies the head entry for a session about to be forked — e.g. the
+ * session route's last known head entry per agent id. Returns `undefined`
+ * when nothing is known for `agentId`; the adapted fork then throws a
+ * truthful error instead of sending a request the daemon can only reject.
+ */
+export type SessionTreeHeadEntryResolver = (agentId: string) => SessionTreeForkEntry | undefined;
+
+/**
+ * The narrow slice of a real `DaemonClient` the adapter needs — only
+ * `forkAgent`, duck-typed so this RN-free module never imports
+ * `@picompanion/client`. The `agent` nullability mirrors the wire's own
+ * failure shape (`agent.fork.response` carries a null agent on failure):
+ * a real `DaemonClient.forkAgent` rejects before resolving that null, but
+ * the structural contract admits it so the real class satisfies this
+ * interface as-is.
+ */
+interface SessionTreeForkDaemonClient {
+  forkAgent(
+    agentId: string,
+    options: { entryId: string; entryIndex?: number; name?: string | null },
+  ): Promise<{ agent: { id: string; title?: string | null } | null }>;
+}
+
+function hasSessionTreeForkAgent(client: unknown): client is SessionTreeForkDaemonClient {
+  return !!client && typeof (client as { forkAgent?: unknown }).forkAgent === "function";
+}
+
+/**
+ * Adapts a real fork-capable client to `SessionTreeClientPort` — the
+ * entryId adapter the module doc's shape gap calls for. Follows
+ * `apps/web/src/routes/screens/host-session-screen.tsx`'s
+ * `adaptEditFromHereForkClient` mapping shape rather than inventing one:
+ * a null `name` is sent as absent (the wire takes string-or-absent, never
+ * null), and a null-agent resolution rejects with "Fork did not return a
+ * new session." instead of mapping. The one Android-specific step is the
+ * `entryId` supply: this sheet has no timeline, so `resolveHeadEntry`
+ * provides the head entry per agent id and the adapter forwards it (plus
+ * its `entryIndex` when known) on every fork call.
+ *
+ * Returns `undefined` when `client` is absent or implements no
+ * `forkAgent` — the disconnected/fork-less case — so callers keep the
+ * same "`undefined` means unavailable" contract every
+ * `session-route-daemon-clients.ts` resolver already honours. The adapted
+ * port exposes fork only (clone stays out of scope: no `cloneAgent` wire
+ * message or client method exists), so `isSessionTreeActionAvailable`
+ * still reports clone/rename unavailable against it.
+ */
+export function adaptSessionTreeForkClient(
+  client: unknown,
+  resolveHeadEntry: SessionTreeHeadEntryResolver,
+): SessionTreeClientPort | undefined {
+  if (!hasSessionTreeForkAgent(client)) {
+    return undefined;
+  }
+  const forkCapableClient = client;
+  return {
+    async forkAgent(agentId, options) {
+      const entry = resolveHeadEntry(agentId);
+      if (!entry) {
+        throw new Error(`No timeline entry known for session ${agentId} — can't fork it yet.`);
+      }
+      const { agent } = await forkCapableClient.forkAgent(agentId, {
+        entryId: entry.entryId,
+        ...(entry.entryIndex !== undefined ? { entryIndex: entry.entryIndex } : {}),
+        ...(options?.name != null ? { name: options.name } : {}),
+      });
+      if (!agent) {
+        throw new Error("Fork did not return a new session.");
+      }
+      return { agentId: agent.id, name: agent.title ?? null };
+    },
+  };
 }
 
 /**

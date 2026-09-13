@@ -7,6 +7,7 @@ import {
   resolveEditorTextClient,
   resolveQueueModeClient,
   resolveSessionControlsClient,
+  resolveSessionTreeForkClient,
   resolveSlashCommandsClient,
   resolveTranscribeClient,
   resolveTurnStatusClient,
@@ -24,9 +25,13 @@ import {
  * adapter, or a value dropped along the way.
  *
  * This file imports no `react-native` (`./session-route-daemon-clients.ts`
- * pulls only *types* from `features/composer`, erased at compile time),
- * so it runs under plain `vitest` with no mocks at all, unlike every
- * test in this directory that touches `index.tsx` itself.
+ * pulls only *types* from `features/composer`, plus one value import —
+ * `adaptSessionTreeForkClient` — from the RN-free
+ * `features/sessions/session-tree-sheet-model.ts`, which itself imports
+ * nothing at runtime, so this file still never touches `react-native`
+ * even transitively), so it runs under plain `vitest` with no mocks at
+ * all, unlike every test in this directory that touches `index.tsx`
+ * itself.
  */
 
 /** A counting fake shaped like the slice of `DaemonClient` both `DaemonQueueModeSource` and `DaemonTurnStatusSource` need — one object standing in for the ONE live client both resolve functions read off the same connection. */
@@ -108,6 +113,17 @@ function createCountingFakeDaemonClient() {
       calls.push(["setAutoCompaction", agentId, enabled]);
       return null;
     }),
+    // fork-agent-android: the real `DaemonClient.forkAgent` shape —
+    // resolves the wire's `{ agent, forkPoint }`, rejects on daemon error.
+    forkAgent: vi.fn(
+      async (agentId: string, options: { entryId: string; entryIndex?: number; name?: string }) => {
+        calls.push(["forkAgent", agentId, options]);
+        return {
+          agent: { id: `${agentId}-forked`, title: options.name ?? null },
+          forkPoint: { messageId: options.entryId, index: options.entryIndex ?? 0 },
+        };
+      },
+    ),
   };
 }
 
@@ -489,5 +505,64 @@ describe("resolveSessionControlsClient", () => {
       getActiveLifecycle: () => ({ getDaemonClient: () => null }),
     };
     expect(resolveSessionControlsClient(connection)).toBeUndefined();
+  });
+});
+
+describe("resolveSessionTreeForkClient (fork-agent-android)", () => {
+  const resolveHeadEntry = (agentId: string) =>
+    agentId === "agt_fork_android" ? { entryId: "m9", entryIndex: 4 } : undefined;
+
+  it("returns undefined when there is no active lifecycle (disconnected) — never throws", () => {
+    const connection: SessionRouteConnectionSource = { getActiveLifecycle: () => null };
+    expect(resolveSessionTreeForkClient(connection, resolveHeadEntry)).toBeUndefined();
+  });
+
+  it("returns undefined when the active lifecycle has no live client yet", () => {
+    const connection: SessionRouteConnectionSource = {
+      getActiveLifecycle: () => ({ getDaemonClient: () => null }),
+    };
+    expect(resolveSessionTreeForkClient(connection, resolveHeadEntry)).toBeUndefined();
+  });
+
+  it("returns undefined for a live client with no forkAgent (fork-less fake)", () => {
+    const connection = connectionWithClient({ fetchAgent: vi.fn() });
+    expect(resolveSessionTreeForkClient(connection, resolveHeadEntry)).toBeUndefined();
+  });
+
+  it("adapts a fork-capable live client: a fork through the resolved port supplies the resolver's entry and unwraps the result", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionTreeForkClient(
+      connectionWithClient(fakeClient),
+      resolveHeadEntry,
+    );
+
+    expect(resolved).toBeDefined();
+    // An adapter, not a cast: a new object exposing fork only.
+    expect(resolved).not.toBe(fakeClient as unknown as typeof resolved);
+    expect(typeof resolved!.forkAgent).toBe("function");
+    expect("cloneAgent" in resolved!).toBe(false);
+
+    const result = await resolved!.forkAgent!("agt_fork_android", { name: "Branched" });
+
+    expect(fakeClient.forkAgent).toHaveBeenCalledTimes(1);
+    expect(fakeClient.forkAgent).toHaveBeenCalledWith("agt_fork_android", {
+      entryId: "m9",
+      entryIndex: 4,
+      name: "Branched",
+    });
+    expect(result).toEqual({ agentId: "agt_fork_android-forked", name: "Branched" });
+  });
+
+  it("throws the truthful missing-entry error without calling forkAgent when the resolver knows nothing", async () => {
+    const fakeClient = createCountingFakeDaemonClient();
+    const resolved = resolveSessionTreeForkClient(
+      connectionWithClient(fakeClient),
+      resolveHeadEntry,
+    );
+
+    await expect(resolved!.forkAgent!("agt_unknown")).rejects.toThrow(
+      "No timeline entry known for session agt_unknown",
+    );
+    expect(fakeClient.forkAgent).not.toHaveBeenCalled();
   });
 });
