@@ -2890,6 +2890,60 @@ export class AgentManager {
     return Object.assign({ ...forked }, { agent: { ...forked }, forkPoint });
   }
 
+  /**
+   * Duplicates an agent's config/cwd/workspace into a fresh agent via
+   * `createAgentInternal`. The optional `name` becomes the child's initial
+   * title and is applied via the mirrored `set_session_name` RPC on the
+   * child session, the same tail `forkAgent` uses.
+   */
+  async cloneAgent(agentId: string, name?: string): Promise<ManagedAgent> {
+    const agent = this.requireSessionAgent(agentId);
+    const trimmedName = typeof name === "string" && name.trim().length > 0 ? name : undefined;
+    const child = await this.createAgentInternal({ ...agent.config, cwd: agent.cwd }, undefined, {
+      workspaceId: agent.workspaceId,
+      ...(trimmedName ? { initialTitle: trimmedName } : {}),
+    });
+    const liveChild = this.requireSessionAgent(child.id);
+    if (trimmedName && typeof liveChild.session.setSessionName === "function") {
+      try {
+        await liveChild.session.setSessionName(trimmedName);
+      } catch (error) {
+        this.logger.warn(
+          { err: error, agentId: child.id, name: trimmedName },
+          "agent.clone.set_name_failed",
+        );
+      }
+    }
+    this.logger.info({ agentId, childId: child.id }, "agent.clone.complete");
+    return this.requireSessionAgent(child.id);
+  }
+
+  /**
+   * Renames an agent via the existing `set_session_name` path: the provider
+   * session is renamed first when it exposes `setSessionName` (best-effort,
+   * mirroring `forkAgent`'s tail), then the stored title is persisted via
+   * `setTitle` so listings stay in sync for every provider.
+   */
+  async renameAgent(agentId: string, name: string): Promise<ManagedAgent> {
+    const agent = this.requireSessionAgent(agentId);
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error("name must be a non-empty string");
+    }
+    if (typeof agent.session.setSessionName === "function") {
+      try {
+        await agent.session.setSessionName(trimmedName);
+      } catch (error) {
+        this.logger.warn(
+          { err: error, agentId, name: trimmedName },
+          "agent.rename.set_name_failed",
+        );
+      }
+    }
+    await this.setTitle(agentId, trimmedName);
+    return this.requireAgent(agentId);
+  }
+
   /** Returns the fork parent for a child created by `forkAgent`, if any. */
   getForkParent(childId: string): string | null {
     return this.forkParents.get(childId) ?? null;

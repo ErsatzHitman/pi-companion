@@ -2191,6 +2191,10 @@ export class Session {
     switch (msg.type) {
       case "agent.fork.request":
         return this.handleAgentForkRequest(msg);
+      case "agent.clone.request":
+        return this.handleAgentCloneRequest(msg);
+      case "agent.rename.request":
+        return this.handleAgentRenameRequest(msg);
       default:
         return undefined;
     }
@@ -4132,6 +4136,80 @@ export class Session {
           agentId: msg.agentId,
           agent: null,
           forkPoint: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleAgentCloneRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.clone.request" }>,
+  ): Promise<void> {
+    try {
+      await ensureAgentLoaded(msg.agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      const child = await this.agentManager.cloneAgent(msg.agentId, msg.name);
+      const agentPayload = await this.buildAgentPayload(child);
+      this.emit({
+        type: "agent.clone.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          agent: agentPayload,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, agentId: msg.agentId },
+        "Failed to handle agent.clone.request",
+      );
+      this.emit({
+        type: "agent.clone.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          agent: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleAgentRenameRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.rename.request" }>,
+  ): Promise<void> {
+    try {
+      await ensureAgentLoaded(msg.agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      const agent = await this.agentManager.renameAgent(msg.agentId, msg.name);
+      const agentPayload = await this.buildAgentPayload(agent);
+      this.emit({
+        type: "agent.rename.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          agent: agentPayload,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { err: error, agentId: msg.agentId },
+        "Failed to handle agent.rename.request",
+      );
+      this.emit({
+        type: "agent.rename.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          agent: null,
           error: error instanceof Error ? error.message : String(error),
         },
       });
