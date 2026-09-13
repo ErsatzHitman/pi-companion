@@ -152,7 +152,7 @@ describe("TodoDock", () => {
     );
   });
 
-  it("is the only place a todo renders — the scrolling transcript still skips it", () => {
+  it("renders inline in the scrolling transcript as well — the dock is the pinned latest, the scroll keeps the history", () => {
     const entry = todoEntry();
     render(
       <>
@@ -160,13 +160,18 @@ describe("TodoDock", () => {
         <TodoDock entry={entry} testId="dock" />
       </>,
     );
-    // The transcript's own empty state shows because `todo` is excluded
-    // from its renderable kinds; only the dock carries the words.
-    expect(screen.getByText("No messages yet")).toBeTruthy();
+    // The transcript no longer shows its empty state for a todo-only
+    // session: the list renders inline, in chronological order, through
+    // the same `TaskRows` treatment as the dock.
+    expect(screen.queryByText("No messages yet")).toBeNull();
+    expect(
+      within(screen.getByTestId("transcript")).getByText("Task list — 4 of 6 done"),
+    ).toBeTruthy();
     expect(within(screen.getByTestId("dock")).getByText("4 of 6")).toBeTruthy();
-    // Still only the dock's own two sites (head + list row); nothing in the
-    // transcript column duplicates them.
-    expect(screen.getAllByText("Pin the pane widths in a contract test")).toHaveLength(2);
+    // The dock's head names the current item once and its list row once;
+    // the inline row names it once more in its own list — three sites
+    // across two surfaces, each owning its own place.
+    expect(screen.getAllByText("Pin the pane widths in a contract test")).toHaveLength(3);
   });
 
   it("has no axe violations", async () => {

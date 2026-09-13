@@ -12,50 +12,22 @@ import type { StatusTone } from "../../ui/primitives/index.js";
  * `CoreMessageEntry`, `thinking-row.tsx`'s `ThinkingTranscriptEntry`, and
  * `tool-call-row.tsx`'s `ToolCallTranscriptEntry`.
  *
- * There is no matching row for a *retry* marker (auto-retry or
- * summarization-retry) in this file, and that omission is not an
- * oversight this task made — it is upstream of every file this task
- * owns, the same shape of gap `message-row.tsx`'s doc comment already
- * documents for image/attachment content:
- *
- *  - the daemon's retry signal is `AgentStreamEvent`'s `{ type:
- *    "pi_retry", phase, attempt, maxAttempts, delayMs?, error? }`
- *    variant (the `AgentStreamEvent` union's `"pi_retry"` member in
- *    `packages/protocol/src/agent-types.ts`), which is a
- *    **top-level stream event**, not an `AgentTimelineItem` — unlike
- *    `CompactionTimelineItem` above, there has never been a wire shape
- *    for "a retry, as a row in the conversation";
- *  - `ingestAgentStreamMessage`, the only path that turns a live
- *    `AgentStreamEvent` into transcript state, is explicit that "every
- *    other `AgentStreamEvent` variant (turn lifecycle, permissions, Pi UI
- *    state, ...) belongs to a different frontend-core domain
- *    (sessions/permissions/extensions) and is a no-op here", in
- *    `packages/frontend-core/src/timeline/reducer.ts` — a live
- *    `pi_retry` event reaching the reducer today is silently dropped
- *    before it ever becomes a `TimelineRow`, so it can never reach
- *    `buildTranscriptEntries`/`buildTranscriptView` either;
- *  - `transcript-view.ts`'s own module doc says the same thing from the
- *    projection side: "auto-retry, summarization retry, extension
- *    errors, and model/thinking changes are `AgentStreamEvent` variants
- *    outside `type: "timeline"` ... those belong to other, not-yet-built
- *    frontend-core domains (sessions/turn state, extensions)", in
- *    `packages/frontend-core/src/timeline/transcript-view.ts`.
- *
- * `TranscriptEntry`'s union (same file, `TranscriptEntry` type) therefore
- * has no `"retry"` member for this file to render — inventing one here,
- * scoped only to `apps/web/src/features/transcript/`, would mean forking
- * the shared core view model that every other row in this directory
- * reuses unchanged, and feeding it from nothing (no live data reaches
- * this feature for a retry event at all, by the citations above). That
- * is worse than an honest gap: a row that renders only for a
- * hand-written fixture and never for a real retry. This file renders
- * every retry-shaped entry `TranscriptEntry` can actually carry today —
- * which is none — and leaves the gap here, visible, rather than papering
- * over it. Closing it needs a small frontend-core change this task does
- * not own: a `pi_retry` branch in the sessions/turn-state domain (or a
- * new `AgentTimelineItem`/`TranscriptEntry` "retry" case, mirroring
- * `CompactionTimelineItem`) that this row can then render exactly like
- * `TranscriptCompactionRow` below. */
+ * The `"retry"` row lives next door in `retry-row.tsx`, not here: the
+ * daemon's retry signal is `AgentStreamEvent`'s `{ type: "pi_retry", ... }`
+ * variant (the `AgentStreamEvent` union's `"pi_retry"` member in
+ * `packages/protocol/src/agent-types.ts`), which is a **top-level stream
+ * event**, not an `AgentTimelineItem` — unlike `CompactionTimelineItem`
+ * above, there has never been a wire shape for "a retry, as a row in the
+ * conversation" — and `ingestAgentStreamMessage`, the only path that
+ * turns a live `AgentStreamEvent` into transcript state, is explicit that
+ * every other `AgentStreamEvent` variant belongs to a different
+ * frontend-core domain in `packages/frontend-core/src/timeline/
+ * reducer.ts`. `retry-row.tsx`'s web-local `RetryTranscriptEntry` (plus
+ * `retryEntryFromPiRetryEvent`, which bridges a genuine `pi_retry` event
+ * onto it with nothing inferred) is the renderer waiting on that data;
+ * what is still missing is only the upstream core projection that would
+ * carry live retries here on its own — see `transcript.tsx`'s own doc
+ * comment for the current state of that gap. */
 export type CompactionTranscriptEntry = Extract<timeline.TranscriptEntry, { kind: "compaction" }>;
 
 export function isCompactionEntry(

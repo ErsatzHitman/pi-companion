@@ -33,13 +33,13 @@ export interface PiExtensionInlineStackProps {
  * The web `inline`-placement destination (plan.md §11.5: "`inline` becomes
  * a transcript-adjacent card").
  *
- * `apps/web`'s transcript deliberately excludes extension entries from its
- * own scroll (`features/transcript/transcript.tsx`'s `isRenderableEntry`
- * renders only message/thinking/tool-call/compaction rows), so this stack
- * is mounted *beside* the transcript in the session screen's composition,
- * immediately above the composer — the same slot the session's todo dock
- * occupies — rather than by editing that exclusion. Each surviving element
- * renders through the shared per-element pipeline `PiUiElementView` (the
+ * `apps/web`'s transcript renders durable `extension-snapshot` timeline
+ * entries inline in its own scroll (`features/transcript/transcript.tsx`
+ * renders every known entry kind, including snapshots, through
+ * `extension-snapshot-row.tsx`), so this stack — mounted *beside* the
+ * transcript in the session screen's composition, immediately above the
+ * composer — carries only *live* `inline`-placed elements, not history:
+ * each surviving element renders through the shared per-element pipeline `PiUiElementView` (the
  * unknown-kind/oversized/invalid-payload fallback, a per-element error
  * boundary, the dev-mode revision badge, and the dangerous-action
  * confirmation gate), so an inline card gets exactly the fidelity a pinned

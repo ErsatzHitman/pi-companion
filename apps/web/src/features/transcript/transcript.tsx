@@ -13,44 +13,73 @@ import { canEditFromHere } from "./edit-from-here-target.js";
 import type { EditFromHereTargetIndex } from "./edit-from-here-target.js";
 import { isCoreMessageEntry, TranscriptMessageRow } from "./message-row.js";
 import type { ResolveImageSrc } from "./message-attachments.js";
+import { isErrorEntry, TranscriptErrorRow } from "./error-row.js";
+import {
+  isExtensionSnapshotEntry,
+  TranscriptExtensionSnapshotRow,
+} from "./extension-snapshot-row.js";
+import { isRetryEntry, TranscriptRetryRow } from "./retry-row.js";
+import type { RetryTranscriptEntry } from "./retry-row.js";
 import { isThinkingEntry, TranscriptThinkingRow } from "./thinking-row.js";
+import { isTodoEntry, TranscriptTodoRow } from "./todo-row.js";
 import { isToolCallEntry, TranscriptToolCallRow } from "./tool-call-row.js";
+import { isUnknownEntry, TranscriptUnknownRow } from "./unknown-row.js";
 import { TranscriptWorkGroupHead } from "./work-group-row.js";
 import "./transcript.css";
 
-type RenderableEntry = Extract<
-  timeline.TranscriptEntry,
-  | { kind: "user-message" }
-  | { kind: "assistant-message" }
-  | { kind: "thinking" }
-  | { kind: "tool-call" }
-  | { kind: "compaction" }
->;
+/**
+ * Every entry the web transcript renders inline: the full
+ * `timeline.TranscriptEntry` union plus this feature's own web-local
+ * `"retry"` entry (`retry-row.tsx`'s `RetryTranscriptEntry`, the renderer
+ * waiting on `pi_retry` data — see that file for the core gap it bridges).
+ * Widening, never narrowing: every `timeline.TranscriptEntry[]` a caller
+ * already holds is assignable here.
+ */
+export type WebTranscriptEntry = timeline.TranscriptEntry | RetryTranscriptEntry;
 
-function isRenderableEntry(entry: timeline.TranscriptEntry): entry is RenderableEntry {
+type RenderableEntry =
+  | Extract<
+      timeline.TranscriptEntry,
+      | { kind: "user-message" }
+      | { kind: "assistant-message" }
+      | { kind: "thinking" }
+      | { kind: "tool-call" }
+      | { kind: "compaction" }
+      | { kind: "todo" }
+      | { kind: "error" }
+      | { kind: "extension-snapshot" }
+      | { kind: "unknown" }
+    >
+  | RetryTranscriptEntry;
+
+/** Every known entry kind renders inline — nothing the daemon sends is
+ * silently dropped from this scroll. `todo` renders here *and* in the
+ * pinned dock (`todo-dock.tsx`, composed above the composer): the dock
+ * always shows the session's latest list, while this scroll keeps every
+ * list in history, in chronological order. */
+function isRenderableEntry(entry: WebTranscriptEntry): entry is RenderableEntry {
+  if (isRetryEntry(entry)) {
+    return true;
+  }
+  const core = entry as timeline.TranscriptEntry;
   return (
-    isCoreMessageEntry(entry) ||
-    isThinkingEntry(entry) ||
-    isToolCallEntry(entry) ||
-    isCompactionEntry(entry)
+    isCoreMessageEntry(core) ||
+    isThinkingEntry(core) ||
+    isToolCallEntry(core) ||
+    isCompactionEntry(core) ||
+    isTodoEntry(core) ||
+    isErrorEntry(core) ||
+    isExtensionSnapshotEntry(core) ||
+    isUnknownEntry(core)
   );
 }
 
-/**
- * `{ kind: "todo" }` stays deliberately excluded here, now with a real
- * reason rather than a scope gap: the mockup draws the session's task list
- * as a dock pinned *above the prompt bar* (`.dock-todo`), not as another
- * turn in the scrolling transcript. `todo-dock.tsx` (composed by
- * `routes/screens/host-session-screen.tsx` directly above the composer)
- * renders it from the same `entries` array via `selectLatestTodoEntry`, so
- * a session's todo is no longer unrendered on web — it is rendered once,
- * in the dock, and never duplicated into the scroll.
- */
-
 export interface TranscriptProps {
   /** The framework-neutral entries `buildTranscriptEntries`/`buildTranscriptView`
-   * (T28A1, `@picompanion/frontend-core`) project from `TimelineState`. */
-  entries: readonly timeline.TranscriptEntry[];
+   * (T28A1, `@picompanion/frontend-core`) project from `TimelineState`,
+   * plus any web-local `"retry"` entries (`retry-row.tsx`) a caller feeds
+   * in for `pi_retry` auto/summarization retries. */
+  entries: readonly WebTranscriptEntry[];
   /** `id` of the entry currently receiving live streaming deltas, or
    * `null`/omitted when no turn is in flight. See `TranscriptMessageRow`'s
    * doc comment for why this is an explicit prop rather than derived
@@ -241,24 +270,49 @@ function renderEntryRow(
   rewindToHereDisabled?: boolean,
 ) {
   const rowTestId = `transcript-row-${entry.id}`;
-  if (isThinkingEntry(entry)) {
+  // `isRetryEntry` narrows the web-local `"retry"` member first; every
+  // guard below takes a core `timeline.TranscriptEntry`, so the rest of
+  // the dispatch reads through one `core` alias (a retry row has already
+  // returned above, and `isRenderableEntry` guarantees what remains is a
+  // core member of `RenderableEntry`).
+  if (isRetryEntry(entry)) {
+    return <TranscriptRetryRow entry={entry} testId={rowTestId} />;
+  }
+  const core = entry as timeline.TranscriptEntry;
+  if (isThinkingEntry(core)) {
     return (
-      <TranscriptThinkingRow
-        entry={entry}
-        live={entry.id === streamingEntryId}
-        testId={rowTestId}
-      />
+      <TranscriptThinkingRow entry={core} live={core.id === streamingEntryId} testId={rowTestId} />
     );
   }
-  if (isToolCallEntry(entry)) {
-    return <TranscriptToolCallRow entry={entry} testId={rowTestId} />;
+  if (isToolCallEntry(core)) {
+    return <TranscriptToolCallRow entry={core} testId={rowTestId} />;
   }
-  if (isCompactionEntry(entry)) {
-    return <TranscriptCompactionRow entry={entry} testId={rowTestId} />;
+  if (isCompactionEntry(core)) {
+    return <TranscriptCompactionRow entry={core} testId={rowTestId} />;
+  }
+  if (isErrorEntry(core)) {
+    return <TranscriptErrorRow entry={core} testId={rowTestId} />;
+  }
+  if (isExtensionSnapshotEntry(core)) {
+    return <TranscriptExtensionSnapshotRow entry={core} testId={rowTestId} />;
+  }
+  if (isUnknownEntry(core)) {
+    return <TranscriptUnknownRow entry={core} testId={rowTestId} />;
+  }
+  if (isTodoEntry(core)) {
+    return <TranscriptTodoRow entry={core} testId={rowTestId} />;
+  }
+  // What remains of `RenderableEntry` after every dispatch above is
+  // exactly the two core message kinds — the `isCoreMessageEntry` check
+  // is the narrowing TypeScript needs to see that, not a runtime branch
+  // that can fail on a real entry (`isRenderableEntry` admits nothing
+  // else).
+  if (!isCoreMessageEntry(core)) {
+    return null;
   }
   return (
     <TranscriptMessageRow
-      entry={entry}
+      entry={core}
       streaming={entry.id === streamingEntryId}
       resolveImageSrc={resolveImageSrc}
       onEditFromHere={onEditFromHere}
@@ -284,27 +338,27 @@ interface TranscriptListItem {
 
 /**
  * Transcript feature (T28A2/T28A3/T28A4/T28A6/T28A7, plan.md §8.3
- * "center: transcript and composer"): renders the
- * `user-message`/`assistant-message`/`thinking`/`tool-call`/`compaction`
- * entries of a `TranscriptView` as a chronological, live, virtualized
- * transcript.
+ * "center: transcript and composer"): renders every entry of a
+ * `TranscriptView` as a chronological, live, virtualized transcript —
+ * nothing the daemon sends is silently dropped from this scroll.
  *
  * The two core message kinds (T28A2), collapsible `thinking` sections
  * (T28A3), `tool-call` rows (T28A4, extended by T28A5 with full
- * diff-line and image-result rendering), and `compaction` markers
- * (T28A7, `compaction-row.tsx`) are rendered here — the remaining
- * `TranscriptEntry` kinds (`error`, `extension-snapshot`, `unknown`) are
- * still out of this directory's built scope, with no further task
- * currently scheduled to add them (see `docs/issues-from-plan.md`'s T28A
- * family). `todo` is the one exception: it is excluded from this
- * scroll on purpose and rendered by `todo-dock.tsx` above the composer
- * instead, exactly where the mockup pins it (see `isRenderableEntry`'s
- * own doc comment). Silently skipping the rest here — rather than
- * rendering nothing meaningful or guessing at a shape — keeps this task's
- * surface exactly what it claims.
+ * diff-line and image-result rendering), `compaction` markers (T28A7,
+ * `compaction-row.tsx`), inline `todo` lists (`todo-row.tsx`, through the
+ * same `TaskRows` recipe the pinned dock uses), `error` markers
+ * (`error-row.tsx`), durable extension snapshots
+ * (`extension-snapshot-row.tsx`), and the `unknown` forward-compatibility
+ * fallback (`unknown-row.tsx`) are all rendered here, alongside the
+ * web-local `"retry"` row (`retry-row.tsx`) for `pi_retry` auto and
+ * summarization retries. `todo` is the one kind with a second surface:
+ * it renders inline here *and* in `todo-dock.tsx` above the composer —
+ * the dock always shows the session's latest list (see
+ * `isRenderableEntry`'s own doc comment), while this scroll keeps every
+ * list in history, in chronological order.
  *
- * **No `"retry"` row exists, and cannot yet exist here.** T28A7's other
- * half — "retry markers" — has no `TranscriptEntry` kind to render:
+ * **The `"retry"` row is web-local.** T28A7's other half — "retry
+ * markers" — has no `TranscriptEntry` kind to render:
  * `compaction-row.tsx`'s doc comment has the full citation trail
  * (`packages/protocol/src/agent-types.ts`'s `AgentStreamEvent` union's
  * `pi_retry` member is a
@@ -312,13 +366,17 @@ interface TranscriptListItem {
  * `AgentTimelineItem`, and `packages/frontend-core/src/timeline/
  * reducer.ts`'s `ingestAgentStreamMessage` drops every
  * non-`"timeline"` event as a documented no-op) — so no retry data ever
- * reaches this component's `entries` prop. This is a frontend-core gap
- * outside every file `apps/web/src/features/transcript/` owns, not a
- * choice made here; closing it needs a small core change (a `pi_retry`
+ * reaches this component through `buildTranscriptEntries` today. The
+ * renderer is still real and wired: `retry-row.tsx`'s
+ * `RetryTranscriptEntry` mirrors `TranscriptEntryBase`'s identity fields
+ * and `retryEntryFromPiRetryEvent` bridges a genuine `pi_retry` wire
+ * event onto it with nothing inferred, so the row renders a real retry
+ * the moment a caller feeds one through this component's `entries` prop.
+ * What is still missing is the upstream core projection (a `pi_retry`
  * branch in the sessions/turn-state domain, or a new
- * `AgentTimelineItem`/`TranscriptEntry` "retry" case) this task does not
- * own. The gap is left visible — no fabricated entry kind, no dead
- * component wired to nothing — rather than silently dropped.
+ * `AgentTimelineItem`/`TranscriptEntry` "retry" case) that would carry
+ * live retry data here on its own — a small frontend-core change this
+ * task does not own, and the only half of the gap left.
  *
  * There is no dedicated `TranscriptEntry` kind for "image" or
  * "attachment": a message's images live on the existing `user-message`/
@@ -400,10 +458,41 @@ export function Transcript({
 }: TranscriptProps) {
   const renderable = useMemo(() => entries.filter(isRenderableEntry), [entries]);
   /** T388: consecutive thinking/tool-call rows are one unit of work. The
-   * grouping is a pure projection of `renderable` (never of the raw
-   * `entries`, so a skipped kind can never be counted as a member and can
-   * never be hidden by a group). */
-  const grouping = useMemo(() => timeline.buildTranscriptWorkGroups(renderable), [renderable]);
+   * grouping is a pure projection of the core members of `renderable`
+   * (never of the raw `entries`, so a non-member kind can never be counted
+   * as a member and can never be hidden by a group) — computed per maximal
+   * core segment, so a web-local `"retry"` row always ends a run. The
+   * retry entry is not a `timeline.TranscriptEntry` the core model knows,
+   * so it cannot be passed through; dropping it from the input instead
+   * would wrongly fuse the runs on either side into one group. */
+  const grouping = useMemo(() => {
+    const groups: timeline.TranscriptWorkGroup[] = [];
+    const groupByMemberKey = new Map<string, timeline.TranscriptWorkGroup>();
+    const defaultCollapsedGroupIds = new Set<string>();
+    let segment: timeline.TranscriptEntry[] = [];
+    const flushSegment = () => {
+      if (segment.length > 0) {
+        const part = timeline.buildTranscriptWorkGroups(segment);
+        groups.push(...part.groups);
+        for (const [key, group] of part.groupByMemberKey) {
+          groupByMemberKey.set(key, group);
+        }
+        for (const id of part.defaultCollapsedGroupIds) {
+          defaultCollapsedGroupIds.add(id);
+        }
+      }
+      segment = [];
+    };
+    for (const entry of renderable) {
+      if (isRetryEntry(entry)) {
+        flushSegment();
+      } else {
+        segment.push(entry);
+      }
+    }
+    flushSegment();
+    return { groups, groupByMemberKey, defaultCollapsedGroupIds };
+  }, [renderable]);
   /** The reader's explicit collapse choices. The model stays pure: the
    * derived default (`defaultCollapsed`, three or more members) lives on the
    * group, and this map holds only overrides. */
