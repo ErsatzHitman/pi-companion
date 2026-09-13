@@ -352,14 +352,20 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
               id: "term-1",
               name: options.name ?? "Terminal",
               cwd: options.cwd,
+              workspaceId: options.workspaceId,
               send: () => {},
               subscribe: () => () => {},
               onExit: () => () => {},
               onCommandFinished: () => () => {},
               onTitleChange: () => () => {},
+              onActivityChange: () => () => {},
               getSize: () => ({ rows: 1, cols: 1 }),
               getTitle: () => undefined,
               getExitInfo: () => null,
+              getActivity: () => null,
+              setActivity: () => {},
+              clearActivityAttention: () => false,
+              setTitle: () => {},
               getState: () => ({
                 rows: 1,
                 cols: 1,
@@ -367,6 +373,17 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
                 scrollback: [],
                 cursor: { row: 0, col: 0 },
               }),
+              getStateSnapshot: () => ({
+                state: {
+                  rows: 1,
+                  cols: 1,
+                  grid: [[{ char: "$" }]],
+                  scrollback: [],
+                  cursor: { row: 0, col: 0 },
+                },
+                revision: 0,
+              }),
+              getReplayPreamble: () => "",
               kill: () => {},
               killAndWait: async () => {},
             };
@@ -385,6 +402,30 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
           killAll() {},
           subscribeTerminalsChanged() {
             return () => {};
+          },
+          subscribeTerminalActivity() {
+            return () => {};
+          },
+          subscribeTerminalWorkspaceContributionChanged() {
+            return () => {};
+          },
+          validateTerminalActivityToken() {
+            return "unknown" as const;
+          },
+          async getTerminalState() {
+            return null;
+          },
+          setTerminalTitle() {
+            return false;
+          },
+          async setTerminalActivity() {
+            return false;
+          },
+          async clearTerminalAttention() {
+            return false;
+          },
+          async captureTerminal() {
+            return { lines: [], totalLines: 0 };
           },
         },
         appendTimelineItem: async (item) => {

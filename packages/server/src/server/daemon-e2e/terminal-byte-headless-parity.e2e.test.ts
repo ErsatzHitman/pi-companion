@@ -8,9 +8,10 @@ import { expect, test } from "vitest";
 
 import type { TerminalCell, TerminalState } from "@picompanion/protocol/messages";
 import { renderTerminalSnapshotToAnsi } from "@picompanion/protocol/terminal-snapshot";
-import type { TerminalStreamEvent } from "@picompanion/client/internal/terminal-stream-router";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
+
+type TerminalStreamEvent = Parameters<Parameters<DaemonClient["onTerminalStreamEvent"]>[0]>[0];
 
 const BYTE_DONE_MARKER = "__PASEO_BYTE_PACKAGE_LOCK_DONE__";
 const BYTE_TEST_SIZE = { rows: 24, cols: 100 };

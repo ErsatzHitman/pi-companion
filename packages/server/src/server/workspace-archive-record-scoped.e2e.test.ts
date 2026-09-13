@@ -110,7 +110,7 @@ function collectWorkspaceTitles(client: DaemonClient): {
   const stop = client.on("workspace_update", (message) => {
     if (message.payload.kind === "upsert") {
       const { id, name, title } = message.payload.workspace;
-      workspaces.push({ id, name, title });
+      workspaces.push({ id, name, title: title ?? null });
     }
   });
   return { workspaces, stop };
@@ -124,14 +124,14 @@ test("archiving one of two workspaces sharing a cwd spares the sibling and the d
   expect(workspaceA).not.toBe(workspaceB);
 
   const agentA = await ctx.client.createAgent({
-    ...getFullAccessConfig("codex"),
+    ...getFullAccessConfig("pi"),
     cwd,
     workspaceId: workspaceA,
     title: "A agent",
     initialPrompt: "Say done.",
   });
   const agentB = await ctx.client.createAgent({
-    ...getFullAccessConfig("codex"),
+    ...getFullAccessConfig("pi"),
     cwd,
     workspaceId: workspaceB,
     title: "B agent",

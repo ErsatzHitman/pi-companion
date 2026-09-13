@@ -103,7 +103,7 @@ async function createAgentInBranchOffWorktree(options?: {
   const branchName = options?.branchName ?? `agent-lifecycle-${Date.now()}`;
   const created = await ctx.client.createAgent({
     config: {
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: repoDir,
     },
     worktree: {
@@ -129,7 +129,7 @@ test("create_agent_request creates a worktree and auto-archives both after the f
     autoArchive: true;
   } = {
     config: {
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: repoDir,
     },
     worktree,
@@ -164,7 +164,7 @@ test("create_agent_request auto-archives a nested workspace from an existing Pas
 
   const created = await ctx.client.createAgent({
     config: {
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: nestedCwd,
     },
     worktree: {
@@ -263,7 +263,7 @@ test("create_agent_request with autoArchive archives only the agent when no work
   const repoDir = createGitRepo();
   const created = await ctx.client.createAgent({
     config: {
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: repoDir,
     },
     autoArchive: true,
@@ -283,7 +283,7 @@ test("create_agent_request with autoArchive archives an agent whose first turn f
   const repoDir = createGitRepo();
   const created = await ctx.client.createAgent({
     config: {
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: repoDir,
     },
     autoArchive: true,
@@ -301,7 +301,7 @@ test("create_agent_request without autoArchive keeps today's active listing beha
   const repoDir = createGitRepo();
   const created = await ctx.client.createAgent({
     config: {
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: repoDir,
     },
     initialPrompt: "Say done.",
@@ -361,7 +361,7 @@ test("create_agent_request rejects legacy git options before creating a worktree
   await expect(
     ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd: repoDir,
       },
       git: {
@@ -387,7 +387,7 @@ test("create_agent_request fails cleanly when worktree creation cannot resolve t
   await expect(
     ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd: repoDir,
       },
       worktree: {

@@ -186,7 +186,7 @@ test("waitForFinish stays blocked when sendMessage transactionally replaces a ru
   const secondary = new DaemonClient({ url: `ws://127.0.0.1:${ctx.daemon.port}/ws` });
 
   const agent = await ctx.client.createAgent({
-    ...getFullAccessConfig("codex"),
+    ...getFullAccessConfig("pi"),
     cwd,
     title: "Transactional Replacement Wait",
   });

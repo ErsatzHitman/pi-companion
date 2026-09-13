@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { WebSocket } from "ws";
+import { WebSocket, type RawData } from "ws";
 import pino from "pino";
 import { Writable } from "node:stream";
 import net from "node:net";
@@ -24,6 +24,21 @@ import { WSOutboundMessageSchema } from "@picompanion/protocol/messages";
 
 const nodeMajor = Number((process.versions.node ?? "0").split(".")[0] ?? "0");
 const shouldRunRelayE2e = process.env.FORCE_RELAY_E2E === "1" || nodeMajor < 25;
+
+function wsMessageToTransportData(data: RawData, isBinary: boolean): string | ArrayBuffer {
+  const bytes = Array.isArray(data)
+    ? Buffer.concat(data)
+    : Buffer.isBuffer(data)
+      ? data
+      : Buffer.from(data);
+  if (!isBinary) {
+    return bytes.toString("utf8");
+  }
+  const view = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const out = new Uint8Array(view.byteLength);
+  out.set(view);
+  return out.buffer;
+}
 
 function createCapturingLogger() {
   const lines: string[] = [];
@@ -290,9 +305,7 @@ async function waitForRelayWebSocketReady(port: number, timeout = 60000): Promis
 
         ws.on("message", (data, isBinary) => {
           transport.onmessage?.({
-            data: isBinary
-              ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
-              : data.toString(),
+            data: wsMessageToTransportData(data, isBinary),
             isBinary,
           });
         });
@@ -438,9 +451,7 @@ async function waitForRelayWebSocketReady(port: number, timeout = 60000): Promis
 
         ws.on("message", (data, isBinary) => {
           transport.onmessage?.({
-            data: isBinary
-              ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
-              : data.toString(),
+            data: wsMessageToTransportData(data, isBinary),
             isBinary,
           });
         });

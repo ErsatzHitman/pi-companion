@@ -4,11 +4,7 @@ import path from "node:path";
 import pino from "pino";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 
-import type {
-  AgentProvider,
-  AgentSessionConfig,
-  AgentStreamEvent,
-} from "../agent/agent-sdk-types.js";
+import type { AgentStreamEvent, AgentTimelineItem } from "../agent/agent-sdk-types.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import {
@@ -16,16 +12,21 @@ import {
   createRealProviderClient,
   getRealProviderConfig,
   type RealProvider,
+  type RealProviderConfig,
 } from "./real-provider-test-config.js";
 import { fetchTimelineItems } from "./test-utils/rewind-helpers.js";
 
-type ContractProvider = Extract<AgentProvider, RealProvider>;
+type ContractProvider = RealProvider;
+
+type TimelineUserMessageEvent = Extract<AgentStreamEvent, { type: "timeline" }> & {
+  item: Extract<AgentTimelineItem, { type: "user_message" }>;
+};
 
 interface ProviderContractCase {
   provider: ContractProvider;
   title: string;
   timeoutMs: number;
-  createConfig: () => AgentSessionConfig;
+  createConfig: () => RealProviderConfig;
 }
 
 // Pi is the only provider shipped by this repository; the reference also ran
@@ -122,7 +123,8 @@ describe.each(CONTRACT_CASES)("daemon E2E (real $provider) - user_message contra
       expect(finish.final?.lastError).toBeUndefined();
 
       const liveUserMessages = liveUserEvents.filter(
-        (event) => event.type === "timeline" && event.item.type === "user_message",
+        (event): event is TimelineUserMessageEvent =>
+          event.type === "timeline" && event.item.type === "user_message",
       );
       expect(liveUserMessages).toHaveLength(1);
       const [liveUserMessage] = liveUserMessages;

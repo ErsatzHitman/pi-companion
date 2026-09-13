@@ -475,14 +475,7 @@ const routedToolCases: RoutedToolCase[] = [
     },
     content: [{ type: "text", text: `Closed browser tab ${BROWSER_ID}.` }],
   },
-] satisfies Array<{
-  name: string;
-  toolName: string;
-  input: Record<string, unknown>;
-  command: BrowserToolsExecuteInput["command"];
-  payload: Extract<BrowserToolsResponsePayload, { ok: true }>;
-  content: PaseoToolResult["content"];
-}>;
+] satisfies RoutedToolCase[];
 
 const brokerErrorCases = [
   {

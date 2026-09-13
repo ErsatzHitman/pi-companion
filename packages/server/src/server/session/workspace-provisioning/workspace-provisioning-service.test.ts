@@ -73,13 +73,24 @@ function gitService() {
           worktreeRoot = root;
         }
       }
+      if (worktreeRoot === null) {
+        return {
+          cwd,
+          isGit: false as const,
+          currentBranch: null,
+          remoteUrl: null,
+          worktreeRoot: null,
+          isPaseoOwnedWorktree: false as const,
+          mainRepoRoot: null,
+        };
+      }
       return {
         cwd,
-        isGit: worktreeRoot !== null,
-        currentBranch: worktreeRoot ? (gitBranches.get(worktreeRoot) ?? "main") : null,
+        isGit: true as const,
+        currentBranch: gitBranches.get(worktreeRoot) ?? "main",
         remoteUrl: null,
         worktreeRoot,
-        isPaseoOwnedWorktree: false,
+        isPaseoOwnedWorktree: false as const,
         mainRepoRoot: null,
       };
     },
@@ -199,6 +210,7 @@ test("persists manual worktree ownership separately from its workspace kind", as
         mainRepoRoot,
       }),
     }),
+    logger,
   });
 
   const workspace = await manualWorktreeProvisioning.findOrCreateWorkspaceForDirectory(cwd);
@@ -261,6 +273,7 @@ test("reopening archived exact-root records restores the fresh Git project", asy
         mainRepoRoot: null,
       }),
     }),
+    logger,
   });
 
   const reopened = await archivedProvisioning.ensureWorkspaceRecordUnarchived(workspace);
@@ -293,6 +306,7 @@ test("uses one workspace snapshot when reopening an archived workspace", async (
     list: async () => (reads++ === 0 ? archived : []),
     get: (workspaceId) => workspaceRegistry.get(workspaceId),
     upsert: (workspace) => workspaceRegistry.upsert(workspace),
+    update: (workspaceId, updater) => workspaceRegistry.update(workspaceId, updater),
     archive: (workspaceId, archivedAt) => workspaceRegistry.archive(workspaceId, archivedAt),
     remove: (workspaceId) => workspaceRegistry.remove(workspaceId),
   };
@@ -300,6 +314,7 @@ test("uses one workspace snapshot when reopening an archived workspace", async (
     workspaceRegistry: snapshotRegistry,
     projectRegistry,
     workspaceGitService: gitService(),
+    logger,
   });
 
   const reopened = await snapshotProvisioning.findOrCreateWorkspaceForDirectory(repo);
