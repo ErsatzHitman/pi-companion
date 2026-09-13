@@ -97,7 +97,12 @@
 // (rewind.test.ts), ParsedToolReadInput keys (tool-call-read-gutter),
 // and unknown-first PiChild fake (cli-runtime.test.ts). No production
 // source semantics changed.
-export const TYPECHECK_ERROR_CEILING = 854;
+export const TYPECHECK_ERROR_CEILING = 554;
+
+// Merged batches C+D (partial) lowered this from 854 to 554 (300 errors):
+// session/session.workspaces/workspace-archive/worktree suites plus
+// schedule, hub, checkout-git and daemon e2e fakes re-anchored to current
+// production types. Resolved file count unchanged — pure fixes.
 
 // Merged batches A+B lowered this from 1044 to 854 (190 errors): batch B
 // fixed 85 outside src/server/agent/**, batch A fixed 106 inside it.
