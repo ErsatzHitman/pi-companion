@@ -2625,6 +2625,30 @@ export const AttachmentDownloadTokenRequestSchema = z.object({
   requestId: z.string(),
 });
 
+/**
+ * Relay-pair file download chunk request, served fetch-and-forward INSIDE
+ * the existing E2EE channel — the relay only ever sees ciphertext. Each
+ * request reads at most one `length`-byte slice starting at `offset` and
+ * the client loops `offset` → `eof` to reassemble the file. `cwd` and
+ * `agentId` are both optional on the wire so a relay-paired caller without
+ * a workspace root can still name an agent-scoped attachment path; the
+ * daemon rejects a request that names neither usable scope with an error
+ * envelope (never a throw). Plaintext chunks are capped at 64KB
+ * (`MAX_FILE_DOWNLOAD_BYTES_LENGTH`) to leave Cloudflare WS frame margin
+ * after E2EE + base64 expansion.
+ */
+export const MAX_FILE_DOWNLOAD_BYTES_LENGTH = 65536;
+
+export const FileDownloadBytesRequestSchema = z.object({
+  type: z.literal("file_download_bytes_request"),
+  cwd: z.string().optional(),
+  agentId: z.string().optional(),
+  path: z.string(),
+  offset: z.number().int().min(0),
+  length: z.number().int().min(1).max(MAX_FILE_DOWNLOAD_BYTES_LENGTH),
+  requestId: z.string(),
+});
+
 export const FileUploadRequestSchema = z.object({
   type: z.literal("file.upload.request"),
   fileName: z.string().min(1),
@@ -3085,6 +3109,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProjectIconGetRequestSchema,
   FileDownloadTokenRequestSchema,
   AttachmentDownloadTokenRequestSchema,
+  FileDownloadBytesRequestSchema,
   FileUploadRequestSchema,
   FileUploadCancelRequestSchema,
   TranscribeVoiceClipRequestSchema,
@@ -5459,6 +5484,20 @@ export const AttachmentDownloadTokenResponseSchema = z.object({
   }),
 });
 
+export const FileDownloadBytesResponseSchema = z.object({
+  type: z.literal("file_download_bytes_response"),
+  payload: z.object({
+    requestId: z.string(),
+    offset: z.number().int().min(0),
+    dataBase64: z.string(),
+    eof: z.boolean(),
+    size: z.number().int().nonnegative().optional(),
+    mimeType: z.string().optional(),
+    fileName: z.string().optional(),
+    error: z.string().nullable().optional(),
+  }),
+});
+
 export const FileUploadResponseSchema = z.object({
   type: z.literal("file.upload.response"),
   payload: z.object({
@@ -6078,6 +6117,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProjectIconGetResponseSchema,
   FileDownloadTokenResponseSchema,
   AttachmentDownloadTokenResponseSchema,
+  FileDownloadBytesResponseSchema,
   FileUploadResponseSchema,
   FileUploadCancelResponseSchema,
   TranscribeVoiceClipResponseSchema,
@@ -6548,6 +6588,8 @@ export type FileDownloadTokenRequest = z.infer<typeof FileDownloadTokenRequestSc
 export type FileDownloadTokenResponse = z.infer<typeof FileDownloadTokenResponseSchema>;
 export type AttachmentDownloadTokenRequest = z.infer<typeof AttachmentDownloadTokenRequestSchema>;
 export type AttachmentDownloadTokenResponse = z.infer<typeof AttachmentDownloadTokenResponseSchema>;
+export type FileDownloadBytesRequest = z.infer<typeof FileDownloadBytesRequestSchema>;
+export type FileDownloadBytesResponse = z.infer<typeof FileDownloadBytesResponseSchema>;
 export type FileUploadRequest = z.infer<typeof FileUploadRequestSchema>;
 export type FileUploadResponse = z.infer<typeof FileUploadResponseSchema>;
 export type FileUploadCancelRequest = z.infer<typeof FileUploadCancelRequestSchema>;

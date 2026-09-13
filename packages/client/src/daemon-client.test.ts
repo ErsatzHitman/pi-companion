@@ -2133,6 +2133,187 @@ test("cancelUpload reports cancelled: false when the daemon has nothing pending 
   });
 });
 
+test("requestFileDownloadBytes sends a bounded chunk request", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const responsePromise = client.requestFileDownloadBytes({
+    cwd: "/repo/app",
+    path: "report.txt",
+    offset: 5,
+    length: 16,
+    requestId: "req-bytes",
+  });
+
+  expect(JSON.parse(assertStr(mock.sent[0]))).toEqual({
+    type: "session",
+    message: {
+      type: "file_download_bytes_request",
+      cwd: "/repo/app",
+      path: "report.txt",
+      offset: 5,
+      length: 16,
+      requestId: "req-bytes",
+    },
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "file_download_bytes_response",
+      payload: {
+        requestId: "req-bytes",
+        offset: 5,
+        dataBase64: Buffer.from(" worl").toString("base64"),
+        eof: false,
+        size: 11,
+        mimeType: "text/plain",
+        fileName: "report.txt",
+        error: null,
+      },
+    }),
+  );
+
+  await expect(responsePromise).resolves.toMatchObject({
+    requestId: "req-bytes",
+    offset: 5,
+    eof: false,
+  });
+});
+
+test("downloadFileBytes assembles offset-to-eof chunks into bytes", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const full = new TextEncoder().encode("hello world");
+  const resultPromise = client.downloadFileBytes({
+    cwd: "/repo/app",
+    path: "report.txt",
+    chunkLength: 5,
+  });
+
+  for (let chunkIndex = 0; chunkIndex < 3; chunkIndex += 1) {
+    await vi.waitFor(() => expect(mock.sent).toHaveLength(chunkIndex + 1));
+    const request = parseSentFrame(mock.sent[chunkIndex]);
+    expect(request).toMatchObject({
+      type: "file_download_bytes_request",
+      path: "report.txt",
+      length: 5,
+    });
+    const offset = request.offset as number;
+    const slice = full.slice(offset, offset + 5);
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "file_download_bytes_response",
+        payload: {
+          requestId: request.requestId,
+          offset,
+          dataBase64: Buffer.from(slice).toString("base64"),
+          eof: offset + slice.length >= full.length,
+          size: full.length,
+          mimeType: "text/plain",
+          fileName: "report.txt",
+          error: null,
+        },
+      }),
+    );
+  }
+
+  const result = await resultPromise;
+  expect(new TextDecoder().decode(result.bytes)).toBe("hello world");
+  expect(result.size).toBe(11);
+  expect(result.mimeType).toBe("text/plain");
+  expect(result.fileName).toBe("report.txt");
+  expect(mock.sent).toHaveLength(3);
+  expect(parseSentFrame(mock.sent[0])).toMatchObject({ offset: 0 });
+  expect(parseSentFrame(mock.sent[1])).toMatchObject({ offset: 5 });
+  expect(parseSentFrame(mock.sent[2])).toMatchObject({ offset: 10 });
+});
+
+test("downloadFileBytes rejects a chunkLength above the 64KB frame margin without sending", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  await expect(
+    client.downloadFileBytes({ cwd: "/repo/app", path: "a.txt", chunkLength: 65537 }),
+  ).rejects.toThrow("64KB");
+  expect(mock.sent).toHaveLength(0);
+});
+
+test("downloadFileBytes surfaces a daemon error envelope", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const resultPromise = client.downloadFileBytes({ cwd: "/repo/app", path: "nope.txt" });
+  await vi.waitFor(() => expect(mock.sent).toHaveLength(1));
+  const request = parseSentFrame(mock.sent[0]);
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "file_download_bytes_response",
+      payload: {
+        requestId: request.requestId,
+        offset: 0,
+        dataBase64: "",
+        eof: true,
+        error: "Requested path does not exist",
+      },
+    }),
+  );
+
+  await expect(resultPromise).rejects.toThrow("Requested path does not exist");
+});
+
 test("normalizes workspace_setup_progress into a workspace-scoped daemon event", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

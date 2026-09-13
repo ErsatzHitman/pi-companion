@@ -572,6 +572,97 @@ export async function getDownloadableFileInfo({ root, relativePath }: ReadFilePa
   }
 }
 
+export interface ReadDownloadableChunkParams {
+  root: string;
+  relativePath: string;
+  offset: number;
+  length: number;
+}
+
+export interface DownloadableFileChunk {
+  path: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  offset: number;
+  bytes: Buffer;
+  eof: boolean;
+}
+
+/** Plaintext ceiling for one `file_download_bytes` chunk (Cloudflare WS
+ * frame margin after E2EE + base64 expansion). Mirrors
+ * `MAX_FILE_DOWNLOAD_BYTES_LENGTH` in `@picompanion/protocol/messages`.
+ */
+export const MAX_DOWNLOADABLE_CHUNK_BYTES = 65536;
+
+/**
+ * Reads one `length`-byte slice of a downloadable file starting at
+ * `offset`. Reuses `getDownloadableFileInfo` for the scoped-root jail,
+ * the is-file gate, and the mime/size attribution, then opens the same
+ * absolute path a second time for a positional read — the file may have
+ * changed between the two opens, so the returned `size`/`eof` come from
+ * the second open's fresh stat, not the info call.
+ */
+export async function readDownloadableFileChunk({
+  root,
+  relativePath,
+  offset,
+  length,
+}: ReadDownloadableChunkParams): Promise<DownloadableFileChunk> {
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error("Invalid offset");
+  }
+  if (!Number.isInteger(length) || length < 1 || length > MAX_DOWNLOADABLE_CHUNK_BYTES) {
+    throw new Error("Invalid length");
+  }
+  const info = await getDownloadableFileInfo({ root, relativePath });
+  if (offset >= info.size) {
+    return {
+      path: info.path,
+      fileName: info.fileName,
+      mimeType: info.mimeType,
+      size: info.size,
+      offset,
+      bytes: Buffer.alloc(0),
+      eof: true,
+    };
+  }
+  const handle = await openFileForRead(info.absolutePath);
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile()) {
+      throw new Error("Requested path is not a file");
+    }
+    const size = stats.size;
+    if (offset >= size) {
+      return {
+        path: info.path,
+        fileName: info.fileName,
+        mimeType: info.mimeType,
+        size,
+        offset,
+        bytes: Buffer.alloc(0),
+        eof: true,
+      };
+    }
+    const toRead = Math.min(length, size - offset);
+    const buffer = Buffer.alloc(toRead);
+    const { bytesRead } = await handle.read(buffer, 0, toRead, offset);
+    const bytes = bytesRead < toRead ? buffer.subarray(0, bytesRead) : buffer;
+    return {
+      path: info.path,
+      fileName: info.fileName,
+      mimeType: info.mimeType,
+      size,
+      offset,
+      bytes,
+      eof: offset + bytesRead >= size,
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
 export interface CreateDirectoryParams {
   root: string;
   relativePath: string;

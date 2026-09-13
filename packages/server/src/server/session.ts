@@ -2476,6 +2476,8 @@ export class Session {
         return this.handleProjectIconGetRequest(msg.projectId, msg.requestId);
       case "file_download_token_request":
         return this.workspaceFilesSession.handleFileDownloadTokenRequest(msg);
+      case "file_download_bytes_request":
+        return this.workspaceFilesSession.handleFileDownloadBytesRequest(msg);
       case "attachment_download_token_request":
         return this.handleAttachmentDownloadTokenRequest(msg);
       case "file.upload.request":

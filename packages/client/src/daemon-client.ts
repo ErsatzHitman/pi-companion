@@ -25,6 +25,7 @@ import type {
   CreatePaseoWorktreeRequest,
   FileDownloadTokenResponse,
   AttachmentDownloadTokenResponse,
+  FileDownloadBytesResponse,
   FileUploadResponse,
   FileUploadCancelResponse,
   FileExplorerResponse,
@@ -475,6 +476,31 @@ export type FileUploadResult = FileUploadResponse["payload"];
 export type FileUploadCancelResult = FileUploadCancelResponse["payload"];
 type FileDownloadTokenPayload = FileDownloadTokenResponse["payload"];
 type AttachmentDownloadTokenPayload = AttachmentDownloadTokenResponse["payload"];
+type FileDownloadBytesPayload = FileDownloadBytesResponse["payload"];
+export interface FileDownloadBytesOptions {
+  cwd?: string;
+  agentId?: string;
+  path: string;
+  offset: number;
+  length: number;
+  requestId?: string;
+  timeout?: number;
+}
+export interface DownloadFileBytesOptions {
+  cwd?: string;
+  agentId?: string;
+  path: string;
+  chunkLength?: number;
+  requestId?: string;
+  timeout?: number;
+}
+export interface DownloadedFileBytes {
+  bytes: Uint8Array;
+  size?: number;
+  mimeType?: string;
+  fileName?: string;
+}
+export const MAX_FILE_DOWNLOAD_CHUNK_BYTES = 65536;
 type ListProviderFeaturesPayload = ListProviderFeaturesResponseMessage["payload"];
 type ListProviderModelsPayload = ListProviderModelsResponseMessage["payload"];
 type ListProviderModesPayload = ListProviderModesResponseMessage["payload"];
@@ -4938,6 +4964,103 @@ export class DaemonClient {
       },
       responseType: "attachment_download_token_response",
     });
+  }
+
+  /**
+   * Requests one `length`-byte slice of a file starting at `offset`.
+   * Served fetch-and-forward INSIDE the existing E2EE channel (mirrors
+   * `requestDownloadToken`'s `sendCorrelatedSessionRequest` shape), so a
+   * relay-paired caller gets ciphertext-only relay bytes and plaintext
+   * only after the session decrypts the response. `length` is capped at
+   * 64KB (`MAX_FILE_DOWNLOAD_CHUNK_BYTES`) to leave Cloudflare WS frame
+   * margin after E2EE + base64 expansion — the schema rejects larger
+   * values before anything is sent.
+   */
+  async requestFileDownloadBytes(
+    options: FileDownloadBytesOptions,
+  ): Promise<FileDownloadBytesPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "file_download_bytes_request",
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options.agentId !== undefined ? { agentId: options.agentId } : {}),
+        path: options.path,
+        offset: options.offset,
+        length: options.length,
+      },
+      responseType: "file_download_bytes_response",
+      ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+    });
+  }
+
+  /**
+   * Loops `requestFileDownloadBytes` from `offset` 0 to `eof`, assembling
+   * the decoded chunks into one contiguous byte array. Each wire request
+   * carries at most `chunkLength` plaintext bytes (default 64KB); the
+   * loop advances by the DECODED bytes of each response, not the
+   * requested length, so a short final chunk terminates exactly at `eof`.
+   * Rejects on the first error envelope — callers must not treat partial
+   * chunks as a file.
+   */
+  async downloadFileBytes(options: DownloadFileBytesOptions): Promise<DownloadedFileBytes> {
+    const chunkLength = options.chunkLength ?? MAX_FILE_DOWNLOAD_CHUNK_BYTES;
+    if (!Number.isInteger(chunkLength) || chunkLength < 1) {
+      throw new Error("chunkLength must be a positive integer");
+    }
+    if (chunkLength > MAX_FILE_DOWNLOAD_CHUNK_BYTES) {
+      throw new Error(
+        `chunkLength must be <= ${MAX_FILE_DOWNLOAD_CHUNK_BYTES} (64KB Cloudflare WS frame margin)`,
+      );
+    }
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    let offset = 0;
+    let size: number | undefined;
+    let mimeType: string | undefined;
+    let fileName: string | undefined;
+    for (;;) {
+      const response = await this.requestFileDownloadBytes({
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options.agentId !== undefined ? { agentId: options.agentId } : {}),
+        path: options.path,
+        offset,
+        length: chunkLength,
+        ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+      });
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      if (size === undefined && response.size !== undefined) {
+        size = response.size;
+      }
+      if (mimeType === undefined && response.mimeType !== undefined) {
+        mimeType = response.mimeType;
+      }
+      if (fileName === undefined && response.fileName !== undefined) {
+        fileName = response.fileName;
+      }
+      const bytes = response.dataBase64
+        ? decodeBase64ToBytes(response.dataBase64)
+        : new Uint8Array();
+      if (bytes.byteLength > 0) {
+        chunks.push(bytes);
+        totalBytes += bytes.byteLength;
+      }
+      if (response.eof) {
+        break;
+      }
+      if (bytes.byteLength === 0) {
+        break;
+      }
+      offset += bytes.byteLength;
+    }
+    return {
+      bytes: concatByteChunks(chunks, totalBytes),
+      ...(size !== undefined ? { size } : {}),
+      ...(mimeType !== undefined ? { mimeType } : {}),
+      ...(fileName !== undefined ? { fileName } : {}),
+    };
   }
 
   async requestProjectIcon(
