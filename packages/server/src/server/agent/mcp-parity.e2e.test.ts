@@ -71,7 +71,7 @@ function getStructuredContent(result: McpToolResult): StructuredContent | null {
   const content = result.content?.[0];
   if (content && typeof content === "object" && "structuredContent" in content) {
     if (content.structuredContent) {
-      return content.structuredContent;
+      return content.structuredContent as unknown as StructuredContent;
     }
   }
   if (content && typeof content === "object") {
@@ -356,6 +356,9 @@ describe("Suite A: Core Fixes", () => {
     try {
       const listenTarget = daemonHandle.daemon.getListenTarget();
       expect(listenTarget?.type).toBe("tcp");
+      if (listenTarget?.type !== "tcp") {
+        throw new Error("Expected TCP listen target for agent MCP parity test");
+      }
       const cwd = await makeCwd("manager-direct-agent-cwd");
 
       const snapshot = await daemonHandle.daemon.agentManager.createAgent(
@@ -371,8 +374,8 @@ describe("Suite A: Core Fixes", () => {
       agentId = snapshot.id;
 
       const expectedUrl = buildExpectedAgentMcpUrl({
-        host: listenTarget!.host,
-        port: listenTarget!.port,
+        host: listenTarget.host,
+        port: listenTarget.port,
         agentId,
       });
 

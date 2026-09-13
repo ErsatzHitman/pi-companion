@@ -10,7 +10,7 @@ import type {
 import { AgentStorage, type StoredAgentRecord } from "./agent-storage.js";
 import type { FetchRecentProviderSessionsRequestMessage } from "@picompanion/protocol/messages";
 import { PARENT_AGENT_ID_LABEL } from "@picompanion/protocol/agent-labels";
-import type { AgentTimelineItem } from "./agent-sdk-types.js";
+import type { AgentTimelineItem, AgentProvider } from "./agent-sdk-types.js";
 import { createPersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { WorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 import { createTestLogger } from "../../test-utils/test-logger.js";
@@ -69,7 +69,7 @@ function makeImportableSession(args: {
 
 function makeManagedAgent(args: {
   id?: string;
-  provider?: string;
+  provider?: AgentProvider;
   cwd: string;
   sessionId: string;
   nativeHandle?: string;
@@ -107,6 +107,8 @@ function makeManagedAgent(args: {
     lifecycle: "closed",
     session: null,
     activeForegroundTurnId: null,
+    activeTurnId: null,
+    activeTurnStartedAt: null,
   } satisfies ManagedAgent;
 }
 
@@ -535,7 +537,8 @@ function makeStoredProviderSession(input: {
     lastActivityAt: "2026-04-30T10:30:00.000Z",
     lastUserMessageAt: null,
     labels: input.labels ?? {},
-    config: { provider: "codex", cwd: input.cwd },
+    lastStatus: "closed",
+    config: {},
     persistence: {
       provider: "codex",
       sessionId: input.sessionId,

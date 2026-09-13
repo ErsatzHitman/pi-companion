@@ -30,7 +30,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     modeId: "plan",
     model: "claude-3.5-sonnet",
     extra: {
-      claude: { tone: "friendly" },
+      claude: { model: "claude-3-5-sonnet" },
     },
   };
 
@@ -55,12 +55,11 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
   const lastErrorValue =
     restOverrides.lastError ?? (lifecycle === "error" ? "encountered error" : undefined);
 
-  const agent: ManagedAgent = {
+  const agent = {
     id: "agent-123",
     provider: "claude",
     cwd: "/tmp/project",
     session: sessionValue,
-    sessionId: "session-123",
     capabilities: {
       supportsStreaming: true,
       supportsSessionPersistence: true,
@@ -84,7 +83,11 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     activeTurnStartedAt: lifecycle === "running" ? new Date("2025-01-01T00:00:01.000Z") : null,
     foregroundTurnWaiters: new Set(),
     unsubscribeSession: null,
-    timeline: [],
+    bufferedPermissionResolutions: new Map(),
+    inFlightPermissionResponses: new Set<string>(),
+    pendingReplacement: false,
+    finalizedForegroundTurnIds: new Set<string>(),
+    labels: {},
     runtimeInfo: {
       provider: "claude",
       sessionId: "session-123",
@@ -97,7 +100,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     historyPrimed: true,
     lastUserMessageAt: now,
     attention: { requiresAttention: false },
-  };
+  } as unknown as ManagedAgent;
 
   return {
     ...agent,
@@ -105,7 +108,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     lifecycle,
     config: agent.config,
     pendingPermissions: agent.pendingPermissions,
-  };
+  } as unknown as ManagedAgent;
 }
 
 it("projects the daemon-owned active turn identity", () => {
@@ -137,7 +140,7 @@ function createFeature(overrides: Partial<AgentFeature> = {}): AgentFeature {
     label: "Fast mode",
     value: true,
     ...overrides,
-  };
+  } as AgentFeature;
 }
 
 describe("toStoredAgentRecord", () => {
@@ -182,11 +185,11 @@ describe("toStoredAgentRecord", () => {
     expect(record.config).toEqual({
       modeId: agent.config.modeId,
       model: agent.config.model,
-      extra: { claude: { tone: "friendly" } },
+      extra: { claude: { model: "claude-3-5-sonnet" } },
     });
 
-    record.config!.extra!.claude!.tone = "serious";
-    expect(agent.config.extra!.claude!.tone).toBe("friendly");
+    record.config!.extra!.claude!.model = "overridden";
+    expect(agent.config.extra!.claude!.model).toBe("claude-3-5-sonnet");
     record.persistence!.sessionId = "mutated";
     expect(agent.persistence!.sessionId).toBe("persist-2");
   });
@@ -328,7 +331,7 @@ describe("toAgentPayload", () => {
       persistence: {
         provider: "codex",
         sessionId: "persist-99",
-        nativeHandle: { id: "native" } as unknown,
+        nativeHandle: "native-handle",
         metadata: {
           restored: new Date("2025-03-01T00:00:00.000Z"),
           empty: {},
@@ -345,7 +348,7 @@ describe("toAgentPayload", () => {
     expect(payload.persistence).toEqual({
       provider: "codex",
       sessionId: "persist-99",
-      nativeHandle: { id: "native" },
+      nativeHandle: "native-handle",
       metadata: { restored: "2025-03-01T00:00:00.000Z" },
     });
     (payload.persistence as AgentPersistenceHandle).sessionId = "mutated";

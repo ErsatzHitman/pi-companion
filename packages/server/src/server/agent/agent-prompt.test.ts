@@ -312,13 +312,13 @@ it("does not notify archived callers", async () => {
   expect(subscriber).not.toBeNull();
 
   childAgent.lifecycle = "running";
-  subscriber?.({
+  subscriber!({
     type: "agent_state",
     agent: childAgent,
   });
 
   childAgent.lifecycle = "idle";
-  subscriber?.({
+  subscriber!({
     type: "agent_state",
     agent: childAgent,
   });

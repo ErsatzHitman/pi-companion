@@ -22,6 +22,7 @@ function createRecord(overrides?: Partial<StoredAgentRecord>): StoredAgentRecord
       provider: "claude",
       sessionId: "session-123",
     },
+    labels: {},
     ...overrides,
   };
 }

@@ -31,7 +31,7 @@ const ALL_OPENAI: RequestedSpeechProviders = {
 
 describe("resolveOpenAiSpeechConfig", () => {
   test("treats empty OPENAI_API_KEY as unset", () => {
-    const persisted = PersistedConfigSchema.parse({});
+    const persisted = parsePersisted({});
     const env = {
       OPENAI_API_KEY: "",
     } as NodeJS.ProcessEnv;
@@ -51,7 +51,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("applies trimmed OPENAI_API_KEY to both STT and TTS", () => {
-    const persisted = PersistedConfigSchema.parse({});
+    const persisted = parsePersisted({});
     const env = {
       OPENAI_API_KEY: "  sk-test  ",
     } as NodeJS.ProcessEnv;
@@ -63,7 +63,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("resolves distinct endpoints for STT and TTS", () => {
-    const persisted = PersistedConfigSchema.parse({
+    const persisted = parsePersisted({
       providers: {
         openai: {
           stt: {
@@ -91,7 +91,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("prefers nested STT/TTS config over env and global fallbacks", () => {
-    const persisted = PersistedConfigSchema.parse({
+    const persisted = parsePersisted({
       providers: {
         openai: {
           apiKey: "fallback-config-key",
@@ -119,7 +119,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("uses STT/TTS env config when nested config is unset", () => {
-    const persisted = PersistedConfigSchema.parse({});
+    const persisted = parsePersisted({});
     const env = {
       OPENAI_API_KEY: "sk-test",
       OPENAI_STT_API_KEY: "stt-env-key",
@@ -138,7 +138,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("falls back to global OpenAI config for both STT and TTS", () => {
-    const persisted = PersistedConfigSchema.parse({
+    const persisted = parsePersisted({
       providers: {
         openai: {
           apiKey: "fallback-config-key",
@@ -157,7 +157,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("falls back to global OpenAI env config when feature inputs are unset", () => {
-    const persisted = PersistedConfigSchema.parse({});
+    const persisted = parsePersisted({});
     const env = {
       OPENAI_API_KEY: "env-key",
       OPENAI_BASE_URL: " https://env.example.com/v1 ",
@@ -172,7 +172,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("ignores empty endpoint env vars and falls back to OPENAI_API_KEY", () => {
-    const persisted = PersistedConfigSchema.parse({});
+    const persisted = parsePersisted({});
     const env = {
       OPENAI_API_KEY: "global-key",
       OPENAI_STT_API_KEY: "",
@@ -188,7 +188,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("omits TTS when only an STT key is configured", () => {
-    const persisted = PersistedConfigSchema.parse({
+    const persisted = parsePersisted({
       providers: {
         openai: {
           stt: { apiKey: "stt-only-key" },
@@ -207,7 +207,7 @@ describe("resolveOpenAiSpeechConfig", () => {
   });
 
   test("resolves STT even when an unused TTS env var is invalid", () => {
-    const persisted = PersistedConfigSchema.parse({
+    const persisted = parsePersisted({
       providers: {
         openai: {
           stt: { apiKey: "stt-only-key" },

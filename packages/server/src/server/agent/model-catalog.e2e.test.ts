@@ -29,10 +29,10 @@ describe("provider model catalogs (e2e)", () => {
       const result = await ctx.client.listProviderModels("pi");
 
       expect(result.error).toBeNull();
-      expect(result.models.length).toBeGreaterThan(0);
+      expect(result.models?.length).toBeGreaterThan(0);
 
-      expect(result.models.some((model) => modelMatchesFamily(model, "sonnet"))).toBe(true);
-      expect(result.models.some((model) => modelMatchesFamily(model, "haiku"))).toBe(true);
+      expect((result.models ?? []).some((model) => modelMatchesFamily(model, "sonnet"))).toBe(true);
+      expect((result.models ?? []).some((model) => modelMatchesFamily(model, "haiku"))).toBe(true);
     } finally {
       await ctx.cleanup();
     }

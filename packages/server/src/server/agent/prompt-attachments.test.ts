@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { AgentAttachment } from "@picompanion/protocol/messages";
 import {
   buildAgentBranchNameSeed,
   buildAgentPrompt,
@@ -8,15 +9,15 @@ import {
 
 describe("prompt attachments", () => {
   it("places fork history before the new user prompt", () => {
-    const chatHistory = {
-      type: "text" as const,
+    const chatHistory: AgentAttachment = {
+      type: "text",
       mimeType: "text/plain",
-      contextKind: "chat_history" as const,
+      contextKind: "chat_history",
       title: "Chat history",
       text: "<chat-history-summary>\nPrevious work\n</chat-history-summary>",
     };
-    const issue = {
-      type: "github_issue" as const,
+    const issue: AgentAttachment = {
+      type: "github_issue",
       mimeType: "application/github-issue",
       number: 55,
       title: "Issue",

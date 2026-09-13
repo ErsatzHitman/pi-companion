@@ -17,6 +17,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
       parent: null,
       unattended: false,
       availableModes: OPENCODE_MODES,
+      targetUnattendedMode: undefined,
     });
     expect(resolved).toBe("plan");
   });
@@ -29,6 +30,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
         parent: null,
         unattended: false,
         availableModes: OPENCODE_MODES,
+        targetUnattendedMode: undefined,
       }),
     ).toThrow(
       "Invalid mode 'bypassPermissions' for provider 'opencode'. Available modes: build, plan",
@@ -42,6 +44,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
       parent: null,
       unattended: false,
       availableModes: CLAUDE_MODES,
+      targetUnattendedMode: undefined,
     });
     expect(resolved).toBeUndefined();
   });
@@ -53,6 +56,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
       parent: agentParent("claude", "bypassPermissions"),
       unattended: false,
       availableModes: CLAUDE_MODES,
+      targetUnattendedMode: undefined,
     });
     expect(resolved).toBe("bypassPermissions");
   });
@@ -64,6 +68,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
       parent: agentParent("claude", null),
       unattended: false,
       availableModes: CLAUDE_MODES,
+      targetUnattendedMode: undefined,
     });
     expect(resolved).toBeUndefined();
   });
@@ -76,6 +81,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
         parent: agentParent("claude", "bypassPermissions"),
         unattended: false,
         availableModes: OPENCODE_MODES,
+        targetUnattendedMode: undefined,
       }),
     ).toThrow(
       "cannot inherit mode 'bypassPermissions' from caller (provider 'claude') for new agent (provider 'opencode'). Pass an explicit mode. Available modes for 'opencode': build, plan",
@@ -90,6 +96,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
         parent: agentParent("opencode", null),
         unattended: false,
         availableModes: CODEX_MODES,
+        targetUnattendedMode: undefined,
       }),
     ).toThrow(
       "cannot inherit mode '<none>' from caller (provider 'opencode') for new agent (provider 'codex'). Pass an explicit mode. Available modes for 'codex': auto, full-access",
@@ -129,6 +136,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
       parent: null,
       unattended: false,
       availableModes: undefined,
+      targetUnattendedMode: undefined,
     });
     expect(resolved).toBe("default");
   });
@@ -141,6 +149,7 @@ describe("resolveAndValidateCreateAgentMode", () => {
         parent: agentParent("claude", "default"),
         unattended: false,
         availableModes: undefined,
+        targetUnattendedMode: undefined,
       }),
     ).toThrow("Available modes for 'zai-custom': unknown");
   });
