@@ -1020,3 +1020,17 @@ per-commit format guard judges each commit's own content, so a red commit is
 repaired by rebase+force-push ONLY when that is unavoidable (as with
 `960bcf9`'s two unformatted files); prefer getting the format right before
 the first push.
+
+### beUI adoption proposal (2026-09-13): investigated, declined by owner
+
+A goal proposed replacing the UI on `D:\ui-components` (beUI v2, MIT (c)
+2026 Saurabh Chauhan, copy-source shadcn registry, React 19 + Tailwind v4 +
+motion). Three read-only surveys killed it: (1) beUI is DOM-only with ZERO
+React Native/Expo support, so it can only ever serve `apps/web`, never
+Android; its library sources are Next-free and Vite-portable. (2) The repo
+contains NO Beautiful UI code to remove — only extracted token values, all
+components hand-written (`D:\beautiful-ui` is the beautifului.dev site
+source, MIT (c) 2026 Shane Levine). (3) A full swap is ~220 files across two
+platforms, invalidates the token output shapes, P3/P3.5 conformance work and
+~12 guard/test contracts, with no ledger task proposing it. Owner chose
+"stop, keep Beautiful UI" — plan §10 and the near-exact-match rule stand.
