@@ -98,6 +98,31 @@ describe("wire schema compatibility", () => {
     });
   });
 
+  test("server info keeps the agentFork gate while stripping unknown features", () => {
+    const legacy = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "legacy-server",
+    });
+    expect(legacy.features).toBeUndefined();
+
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "fork-capable-server",
+      features: {
+        agentFork: true,
+        someFutureFlag: true,
+      },
+    });
+
+    expect(parsed).toEqual({
+      status: "server_info",
+      serverId: "fork-capable-server",
+      hostname: null,
+      version: null,
+      features: { agentFork: true },
+    });
+  });
+
   test("assistant timeline message ids are optional on the wire", () => {
     expect(
       AgentTimelineItemPayloadSchema.parse({

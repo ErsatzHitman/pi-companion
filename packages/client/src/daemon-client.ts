@@ -90,6 +90,7 @@ import type {
   DiagnosticsResponse,
   AgentRewindResponseMessage,
   AgentRewindMode,
+  ForkAgentResponseMessage,
   ListTerminalsResponse,
   CreateTerminalResponse,
   SubscribeTerminalResponse,
@@ -368,6 +369,18 @@ export interface RewindAgentOptions {
   force?: boolean;
 }
 
+export interface ForkAgentOptions {
+  /** Timeline entry the fork point resolves from (required). */
+  entryId: string;
+  /**
+   * Positional disambiguator when several entries share an id. Omitted
+   * keys stay off the wire entirely and the daemon applies its own default.
+   */
+  entryIndex?: number;
+  /** Display name for the forked agent. Omitted stays off the wire. */
+  name?: string;
+}
+
 export interface AgentAttentionRequiredNotification {
   agentId: string;
   reason: "finished" | "error" | "permission";
@@ -616,6 +629,7 @@ type ScheduleUpdatePayload = Extract<
 >["payload"];
 export type FetchAgentTimelinePayload = FetchAgentTimelineResponseMessage["payload"];
 export type AgentForkContextPayload = AgentForkContextResponseMessage["payload"];
+export type ForkAgentResult = Pick<ForkAgentResponseMessage["payload"], "agent" | "forkPoint">;
 
 export type FetchAgentTimelineDirection = FetchAgentTimelinePayload["direction"];
 export type FetchAgentTimelineProjection = FetchAgentTimelinePayload["projection"];
@@ -3104,34 +3118,35 @@ export class DaemonClient {
   /**
    * `buildAgentForkContext` sends `agent.fork_context.request` and only
    * fetches the boundary/context payload a caller would need to *construct*
-   * a fork prompt — it performs no fork.
+   * a fork prompt — it performs no fork. To actually fork, see `forkAgent`
+   * below, which sends the `agent.fork.request` wire message
+   * (`ForkAgentRequestMessageSchema`/`ForkAgentResponseMessageSchema`:
+   * agentId, entryId, entryIndex?, name?, requestId -> agent snapshot +
+   * forkPoint).
    *
    * DISCLOSED GAP (T110, checked against `packages/protocol/src/messages.ts`
    * and `packages/server/src/server/session.ts` — both searched for
-   * `fork_agent`, `clone_agent`, `rename_agent`, `agent.fork.`, `agent.clone.`,
-   * `agent.rename.`, all zero hits): there is no `forkAgent`, `cloneAgent`, or
-   * `renameAgent` method on this class because the protocol defines no
-   * fork/clone/rename wire message for a client to send. T38A0's
-   * `packages/server/.../pi/rpc-types.ts` only mirrors Pi's `fork`/`clone`/
-   * `set_session_name` RPC commands for the daemon's own use against its
-   * local Pi process (see that file's module comment); nothing turns them
-   * into a client-reachable `*_request`/`*_response` pair. This is the exact
-   * seam `apps/web/src/features/sessions/daemon-sessions-client.ts` already
-   * disclosed (T38A3/T38A4) and it is unchanged by this task: adding it
-   * requires new protocol schemas —
-   * `ForkAgentRequestMessageSchema`/`ForkAgentResponseMessageSchema` (agentId,
-   * entryId, entryIndex?, name?, requestId -> agent snapshot + forkPoint),
+   * `clone_agent`, `rename_agent`, `agent.clone.`, `agent.rename.`, all zero
+   * hits): there is no `cloneAgent` or `renameAgent` method on this class
+   * because the protocol defines no clone/rename wire message for a client
+   * to send. T38A0's `packages/server/.../pi/rpc-types.ts` only mirrors Pi's
+   * `clone`/`set_session_name` RPC commands for the daemon's own use against
+   * its local Pi process (see that file's module comment); nothing turns
+   * them into a client-reachable `*_request`/`*_response` pair. This is the
+   * exact seam `apps/web/src/features/sessions/daemon-sessions-client.ts`
+   * already disclosed (T38A3/T38A4) and the clone/rename half is unchanged
+   * by this task: adding it requires new protocol schemas —
    * `CloneAgentRequestMessageSchema`/`CloneAgentResponseMessageSchema`
    * (agentId, name?, requestId -> agent snapshot), and
    * `RenameAgentRequestMessageSchema`/`RenameAgentResponseMessageSchema`
    * (agentId, name, requestId -> agent snapshot) — plus a
    * `packages/server/src/server/session.ts` dispatch turning each into the
-   * matching Pi `PiRpcCommand` (`"fork"`/`"clone"`/`"set_session_name"`).
+   * matching Pi `PiRpcCommand` (`"clone"`/`"set_session_name"`).
    * That is a protocol+server task (T110's Owns line is
-   * `packages/client/src/` only), not this one. Once those three pairs
-   * exist, the methods to add here are `forkAgent`/`cloneAgent`/
-   * `renameAgent`, matching this class's existing `send*`/`set*` shape and
-   * `DaemonAgentClient.forkAgent`/`cloneAgent`/`renameAgent`'s shape in
+   * `packages/client/src/` only), not this one. Once those two pairs
+   * exist, the methods to add here are `cloneAgent`/`renameAgent`,
+   * matching this class's existing `send*`/`set*` shape and
+   * `DaemonAgentClient.cloneAgent`/`renameAgent`'s shape in
    * `daemon-sessions-client.ts`.
    */
   async buildAgentForkContext(
@@ -3258,6 +3273,44 @@ export class DaemonClient {
       throw new Error(payload.error ?? "Agent rewind failed");
     }
     return payload;
+  }
+
+  /**
+   * Forks an agent's session at a timeline entry, returning the forked
+   * agent snapshot and the resolved fork point.
+   *
+   * Optional fields mirror the caller's intent: omitted `entryIndex`/`name`
+   * keys stay off the wire entirely and the daemon applies its own defaults.
+   */
+  async forkAgent(agentId: string, options: ForkAgentOptions): Promise<ForkAgentResult> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.fork.request",
+      requestId,
+      agentId,
+      entryId: options.entryId,
+      ...(options.entryIndex !== undefined ? { entryIndex: options.entryIndex } : {}),
+      ...(options.name !== undefined ? { name: options.name } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: 15000,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.fork.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    return { agent: payload.agent, forkPoint: payload.forkPoint };
   }
 
   async cancelAgent(agentId: string): Promise<void> {
