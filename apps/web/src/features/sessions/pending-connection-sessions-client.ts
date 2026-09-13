@@ -1,11 +1,9 @@
 /**
  * Placeholder `SessionsClient` (T27B2).
  *
- * `apps/web`'s daemon connection is not yet wired end to end (see
- * `features/connection/fake-core-adapter.ts` and
- * `features/files/pending-connection-file-browser-client.ts`, which
- * stand in for the real `DaemonClientLifecycle`/`DaemonClient` for the
- * same reason). Until a task wires a real, host-scoped `SessionsClient`
+ * This placeholder is used whenever no live `DaemonClient` exists yet
+ * (the shell badge's own live view over that same connection is
+ * `features/connection/real-core-adapter.ts`). Until a task wires a real, host-scoped `SessionsClient`
  * — a thin adapter over `DaemonClient.createAgent`, which
  * `daemon-sessions-client.ts` already builds — this placeholder is what
  * `SessionsScreen` uses by default. It always rejects with

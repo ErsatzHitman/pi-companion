@@ -42,6 +42,12 @@ export interface DaemonInjectedConnectionHint {
   label: string;
 }
 
+declare global {
+  interface Window {
+    __PASEO_INITIAL_DAEMON_CONNECTION__?: DaemonInjectedConnectionHint;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

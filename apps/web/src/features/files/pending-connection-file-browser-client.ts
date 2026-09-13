@@ -1,9 +1,9 @@
 /**
  * Placeholder `FileBrowserClient` (T30B1).
  *
- * `apps/web`'s daemon connection is not yet wired end to end (see
- * `features/connection/fake-core-adapter.ts`, which stands in for the
- * real `DaemonClientLifecycle`/`DaemonClient` for the same reason). Until
+ * This placeholder is used whenever no live `DaemonClient` exists yet
+ * (the shell badge's own live view over that same connection is
+ * `features/connection/real-core-adapter.ts`). Until
  * a task wires a real, session-scoped `FileBrowserClient` — a thin
  * adapter over `DaemonClient.listDirectory`, which already matches this
  * feature's `FileBrowserClient` shape — this placeholder is what
