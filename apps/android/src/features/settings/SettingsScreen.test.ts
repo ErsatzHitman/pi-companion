@@ -107,6 +107,19 @@ describe("SettingsScreen source", () => {
   });
 });
 
+describe("SettingsScreen source: voice vocabulary section entry", () => {
+  const code = readScreenCode();
+
+  it("mounts the voice-owned section with the shared storage, never a second store", () => {
+    expect(code).toMatch(/import \{ VoiceVocabularySection \} from "\.\.\/voice";/);
+    expect(code).toMatch(/<VoiceVocabularySection\s+storage=\{storage\}/);
+  });
+
+  it("scopes the section's testIDs under the screen's own testId", () => {
+    expect(code).toMatch(/testId=\{testId \? `\$\{testId\}-voice-vocabulary` : undefined\}/);
+  });
+});
+
 describe("SettingsScreen source: T366 A3's shape", () => {
   const code = readScreenCode();
 

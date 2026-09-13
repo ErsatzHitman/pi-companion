@@ -67,12 +67,14 @@ function makeController(opts?: {
   port?: ReturnType<typeof createFakePort>;
   transcribe?: VoiceTranscriptionClient;
   language?: string;
+  vocabulary?: readonly string[];
 }) {
   const port = opts?.port ?? createFakePort();
   const controller = createVoiceCaptureController({
     port,
     ...(opts?.transcribe ? { transcribe: opts.transcribe } : {}),
     ...(opts?.language ? { language: opts.language } : {}),
+    ...(opts?.vocabulary ? { vocabulary: opts.vocabulary } : {}),
   });
   return { controller, port };
 }
@@ -368,6 +370,96 @@ describe("a raw-audio port outcome (T277: transcribed, not discarded, when a cli
     const stop = await controller.requestStop();
 
     expect(stop).toEqual({ outcome: "empty-transcript" });
+  });
+});
+
+describe("voice vocabulary post-repair pass (custom-word correction)", () => {
+  it("rewrites a saved entry to its canonical spelling in the drafted text", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "transcript", text: "deploy to kubernetes" },
+    });
+    const { controller } = makeController({ port, vocabulary: ["Kubernetes"] });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({
+      outcome: "drafted",
+      text: "deploy to Kubernetes",
+      looksSecretShaped: false,
+    });
+  });
+
+  it("runs AFTER cleanup: a leading filler is dropped before the vocabulary pass", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "transcript", text: "  um, deploy to kubernetes  " },
+    });
+    const { controller } = makeController({ port, vocabulary: ["Kubernetes"] });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({
+      outcome: "drafted",
+      text: "deploy to Kubernetes",
+      looksSecretShaped: false,
+    });
+  });
+
+  it("applies to the audio-transcript path too, once the provider text returns", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "audio", audioBase64: "ZmFrZS1jbGlw", format: "audio/m4a" },
+    });
+    const transcribeVoiceClip = vi.fn(async () => ({
+      text: "restart the nginx server",
+      error: null,
+    }));
+    const { controller } = makeController({
+      port,
+      transcribe: { transcribeVoiceClip },
+      vocabulary: ["NGINX"],
+    });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(transcribeVoiceClip).toHaveBeenCalledWith({
+      audioBase64: "ZmFrZS1jbGlw",
+      format: "audio/m4a",
+    });
+    expect(stop).toEqual({
+      outcome: "drafted",
+      text: "restart the NGINX server",
+      looksSecretShaped: false,
+    });
+  });
+
+  it("an explicitly empty vocabulary leaves the cleaned transcript exactly as before", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "transcript", text: "  um,  add   tests  " },
+    });
+    const { controller } = makeController({ port, vocabulary: [] });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({ outcome: "drafted", text: "add tests", looksSecretShaped: false });
+  });
+
+  it("never invents: a near-miss the vocabulary does not contain is drafted unchanged", async () => {
+    const port = createFakePort({
+      stopResult: { kind: "transcript", text: "koobrenetes are down" },
+    });
+    const { controller } = makeController({ port, vocabulary: ["Kubernetes"] });
+
+    await controller.requestStart();
+    const stop = await controller.requestStop();
+
+    expect(stop).toEqual({
+      outcome: "drafted",
+      text: "koobrenetes are down",
+      looksSecretShaped: false,
+    });
   });
 });
 
