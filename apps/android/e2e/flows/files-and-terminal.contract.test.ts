@@ -202,8 +202,9 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
       // filePicker, THIS is the assertion that would catch it.
       const routeCode = readCode(FILES_ROUTE_TSX);
       expect(routeCode).toMatch(
-        /<FilesScreen[\s\S]*?client=\{core\.fileBrowserClient\}[\s\S]*?filePicker=\{core\.filePicker\}[\s\S]*?\/>/,
+        /<FilesScreen[\s\S]*?client=\{fileClient\}[\s\S]*?filePicker=\{core\.filePicker\}[\s\S]*?\/>/,
       );
+      expect(routeCode).toMatch(/withRelayFileDownload\(\s*core\.fileBrowserClient/);
 
       // And that prop is never optional at its source: AppCore's own
       // fields are typed `FileBrowserClient`/`FilePicker`, never
@@ -226,11 +227,12 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
     // pins an unfinished thing shut" once the thing stops being
     // unfinished; the positive regex below now includes both lines
     // instead.
-    it("passes FilesScreen a real client (core.fileBrowserClient), a real fetchImpl, and — since T78 (P5-W22) — a real filePicker/sharing from AppCore, never omitted or locally constructed", () => {
+    it("passes FilesScreen a real client (core.fileBrowserClient via the relay forwarder), a real fetchImpl, and — since T78 (P5-W22) — a real filePicker/sharing from AppCore, never omitted or locally constructed", () => {
       const code = readCode("../../src/app/h/[serverId]/session/[agentId]/files/[...path].tsx");
       expect(code).toMatch(
-        /<FilesScreen\s*\n\s*serverId=\{serverId\}\s*\n\s*agentId=\{agentId\}\s*\n\s*path=\{path \?\? \[\]\}\s*\n\s*workspaceRoot=\{cwd \?\? ""\}\s*\n\s*client=\{core\.fileBrowserClient\}\s*\n\s*filePicker=\{core\.filePicker\}\s*\n\s*sharing=\{core\.sharing\}\s*\n\s*downloadOrigin=\{downloadOrigin\}\s*\n\s*connectionPath=\{connectionPath\}\s*\n\s*fetchImpl=\{fetchImpl\}\s*\n\s*\/>/,
+        /<FilesScreen\s*\n\s*serverId=\{serverId\}\s*\n\s*agentId=\{agentId\}\s*\n\s*path=\{path \?\? \[\]\}\s*\n\s*workspaceRoot=\{cwd \?\? ""\}\s*\n\s*client=\{fileClient\}\s*\n\s*filePicker=\{core\.filePicker\}\s*\n\s*sharing=\{core\.sharing\}\s*\n\s*downloadOrigin=\{downloadOrigin\}\s*\n\s*connectionPath=\{connectionPath\}\s*\n\s*fetchImpl=\{fetchImpl\}\s*\n\s*\/>/,
       );
+      expect(code).toMatch(/withRelayFileDownload\(\s*core\.fileBrowserClient/);
     });
   });
 

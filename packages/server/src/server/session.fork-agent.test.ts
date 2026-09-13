@@ -13,7 +13,9 @@ import {
   asGitHubService,
   asLoopService,
   asPushTokenStore,
+  asProviderUsageService,
   asScheduleService,
+  asWorkspaceAutoName,
   asWorkspaceGitService,
   createProviderSnapshotManagerStub,
 } from "./test-utils/session-stubs.js";
@@ -102,6 +104,7 @@ function createSessionForForkTest(
       get: vi.fn(),
       getOrCreateActiveByRoot: vi.fn(),
       upsert: vi.fn(),
+      update: vi.fn(),
       archive: vi.fn(),
       remove: vi.fn(),
       initialize: vi.fn(),
@@ -110,6 +113,12 @@ function createSessionForForkTest(
     workspaceRegistry: {
       get: vi.fn(),
       list: vi.fn().mockResolvedValue([]),
+      initialize: vi.fn(),
+      existsOnDisk: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
+      archive: vi.fn(),
+      remove: vi.fn(),
     },
     chatService: asChatService(),
     scheduleService: asScheduleService(),
@@ -127,7 +136,6 @@ function createSessionForForkTest(
       hasLocalBranch: vi.fn(),
       resolveRepoRemoteUrl: vi.fn(),
       resolveRepoRoot: vi.fn(),
-      getWorkspaceGitMetadata: vi.fn(),
       resolveForge: vi.fn().mockResolvedValue({ forge: "github", service: github }),
       invalidateForge: vi.fn(),
       getProjectSlug: vi.fn(),
@@ -140,6 +148,8 @@ function createSessionForForkTest(
     tts: null,
     terminalManager: null,
     providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+    workspaceAutoName: asWorkspaceAutoName({}),
+    providerUsageService: asProviderUsageService({}),
     scopes: ["*"],
   };
   return { session: new Session(sessionOptions), messages };

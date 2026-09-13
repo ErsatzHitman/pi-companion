@@ -62,6 +62,18 @@ export function asLoopService(): SessionOptions["loopService"] {
   return createStub<SessionOptions["loopService"]>({});
 }
 
+export function asWorkspaceAutoName(stub: {
+  [K in keyof SessionOptions["workspaceAutoName"]]?: unknown;
+}): SessionOptions["workspaceAutoName"] {
+  return createStub<SessionOptions["workspaceAutoName"]>(stub);
+}
+
+export function asProviderUsageService(stub: {
+  [K in keyof SessionOptions["providerUsageService"]]?: unknown;
+}): SessionOptions["providerUsageService"] {
+  return createStub<SessionOptions["providerUsageService"]>(stub);
+}
+
 export function asCheckoutDiffManager(stub: {
   [K in keyof SessionOptions["checkoutDiffManager"]]?: unknown;
 }): SessionOptions["checkoutDiffManager"] {

@@ -23,7 +23,8 @@ describe("SessionFilesRoute source", () => {
   it("passes a real client from AppCore.fileBrowserClient, never a locally constructed one", () => {
     expect(source).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/core-context"/);
     expect(source).toMatch(/const core = useAppCore\(\)/);
-    expect(source).toMatch(/client=\{core\.fileBrowserClient\}/);
+    expect(source).toMatch(/client=\{fileClient\}/);
+    expect(source).toMatch(/withRelayFileDownload\(\s*core\.fileBrowserClient/);
   });
 
   it("resolves the session's real workspace root through useAgentCwd/resolveAgentSnapshotClient and passes it as workspaceRoot, never a hardcoded literal", () => {

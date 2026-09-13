@@ -364,14 +364,6 @@ export const AUDIT_BASELINE = [
     reason: NO_INSTALL_REASON,
   },
   {
-    package: "@react-native/metro-config",
-    severity: "high",
-    range:
-      "<=0.81.0-rc.5 || 0.82.0-nightly-20250710-586f5ba89 - 0.82.0-rc.5 || >=0.87.0-nightly-20260507-ba204faa7",
-    owner: ANDROID_TOOLCHAIN_OWNER,
-    reason: NO_INSTALL_REASON,
-  },
-  {
     package: "@react-navigation/bottom-tabs",
     severity: "moderate",
     range: "<=7.18.18",
@@ -516,23 +508,32 @@ export const AUDIT_BASELINE = [
     reason: NO_INSTALL_REASON,
   },
   {
+    // Range re-synced 2026-09-13: upstream narrowed the open `>=0.85.0`
+    // tail to `0.85.0 - 0.87.0` (same advisory, re-scoped). Installed
+    // 0.83.3 is inside `0.22.1 - 0.83.7`, so the finding still applies;
+    // only the recorded string changed. Reproduced with
+    // `npm audit --json --cache <empty dir>`.
     package: "metro",
     severity: "high",
-    range: "0.22.1 - 0.83.7 || 0.84.0 - 0.84.4 || >=0.85.0",
+    range: "0.22.1 - 0.83.7 || 0.84.0 - 0.84.4 || 0.85.0 - 0.87.0",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
   {
+    // Range re-synced 2026-09-13, same upstream re-scope as `metro` above.
+    // Installed 0.83.3 is inside `<=0.83.7`, so the finding still applies.
     package: "metro-config",
     severity: "high",
-    range: "<=0.83.7 || 0.84.0 - 0.84.4 || >=0.85.0",
+    range: "<=0.83.7 || 0.84.0 - 0.84.4 || 0.85.0 - 0.87.0",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
   {
+    // Range re-synced 2026-09-13, same upstream re-scope as `metro` above.
+    // Installed 0.83.3 is inside `0.60.0 - 0.83.7`, so the finding still applies.
     package: "metro-transform-worker",
     severity: "high",
-    range: "0.60.0 - 0.83.7 || 0.84.0 - 0.84.4 || >=0.85.0",
+    range: "0.60.0 - 0.83.7 || 0.84.0 - 0.84.4 || 0.85.0 - 0.87.0",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },

@@ -27,7 +27,7 @@ test("AUDIT_BASELINE has exactly 36 entries — the real npm audit --json count 
   // and surfaced `expo-audio` via the now-correct `expo-asset`, leaving 35;
   // wave 3 installed `expo-notifications` (T391), and its own advisory came
   // in with it, which is the 36th.
-  assert.equal(AUDIT_BASELINE.length, 36);
+  assert.equal(AUDIT_BASELINE.length, 35);
 });
 
 // --- findUnbaselinedAdvisories --------------------------------------------

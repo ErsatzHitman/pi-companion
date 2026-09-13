@@ -396,8 +396,11 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
     it("T78 (P5-W22) mounted filePicker/sharing at this exact route, on top of T32S14's fetchImpl — this positive prop-list match went stale in the ordinary, already-established way (see composer-inputs.contract.test.ts's own P5-W18/P5-W19 history) and is updated here, not pinned. SessionFilesRoute now passes a real filePicker, so files-screen.tsx's UploadPanel (T35A4's upload half) renders; the guard itself is unchanged and still short-circuits whenever filePicker is absent.", () => {
       const routeCode = readComponentCode(FILES_ROUTE_TSX, "SessionFilesRoute");
       expect(routeCode).toMatch(
-        /<FilesScreen\s+serverId=\{serverId\}\s+agentId=\{agentId\}\s+path=\{path \?\? \[\]\}\s+workspaceRoot=\{cwd \?\? ""\}\s+client=\{core\.fileBrowserClient\}\s+filePicker=\{core\.filePicker\}\s+sharing=\{core\.sharing\}\s+downloadOrigin=\{downloadOrigin\}\s+connectionPath=\{connectionPath\}\s+fetchImpl=\{fetchImpl\}\s*\/>/,
+        /<FilesScreen\s+serverId=\{serverId\}\s+agentId=\{agentId\}\s+path=\{path \?\? \[\]\}\s+workspaceRoot=\{cwd \?\? ""\}\s+client=\{fileClient\}\s+filePicker=\{core\.filePicker\}\s+sharing=\{core\.sharing\}\s+downloadOrigin=\{downloadOrigin\}\s+connectionPath=\{connectionPath\}\s+fetchImpl=\{fetchImpl\}\s*\/>/,
       );
+      // The relay download half: fileClient is core.fileBrowserClient run
+      // through the chunk-loop forwarder, never a second construction.
+      expect(routeCode).toMatch(/withRelayFileDownload\(\s*core\.fileBrowserClient/);
 
       const screenCode = readCode(FILES_SCREEN_TSX);
       expect(screenCode).toMatch(
