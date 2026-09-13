@@ -40,6 +40,12 @@
  * so `apps/web` and `apps/android` render the same clock rather than each
  * inventing one.
  *
+ * Transcript search adds `./transcript-search.ts`: the one shared
+ * plain-text find over `TranscriptEntry[]` (query, case-insensitive
+ * default, match positions, next/prev navigation, match counts) both
+ * apps' transcript search bars navigate — no regex, no filters, no
+ * persistence.
+ *
  * T388 ("timeline upgrade") adds three pure modules on top of all of the
  * above, with zero wire change:
  *
@@ -119,3 +125,15 @@ export { TimelineCoalescer } from "./coalescer.js";
 export type { TimelineCoalescerListener } from "./coalescer.js";
 export { formatMessageTimestamp } from "./message-timestamp.js";
 export type { MessageTimestampLabel, MessageTimestampOptions } from "./message-timestamp.js";
+export {
+  countTranscriptSearchMatchedEntries,
+  extractTranscriptSearchableText,
+  findTranscriptSearchMatches,
+  formatTranscriptSearchCount,
+  nextTranscriptSearchIndex,
+  previousTranscriptSearchIndex,
+} from "./transcript-search.js";
+export type {
+  TranscriptSearchMatch,
+  TranscriptSearchOptions,
+} from "./transcript-search.js";

@@ -1,5 +1,7 @@
 export { Transcript } from "./transcript.js";
 export type { TranscriptProps, WebTranscriptEntry } from "./transcript.js";
+export { TranscriptSearchBar } from "./transcript-search-bar.js";
+export type { TranscriptSearchBarProps } from "./transcript-search-bar.js";
 export { isCoreMessageEntry, TranscriptMessageRow } from "./message-row.js";
 export type { CoreMessageEntry, TranscriptMessageRowProps } from "./message-row.js";
 export { MessageAttachments } from "./message-attachments.js";

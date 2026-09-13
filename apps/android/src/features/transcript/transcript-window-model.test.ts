@@ -264,3 +264,67 @@ describe("expandOlder: the reachability affordance for anything windowed out", (
     expect(snapshot.windowedEntries[0]?.seq).toBe(0);
   });
 });
+
+describe("revealIndex: the find bar's scroll-to-match path", () => {
+  it("re-anchors the window around a windowed-out index without growing it", () => {
+    const window = createTranscriptWindow<FakeEntry>({
+      maxWindowRows: 20,
+      followTailThresholdPx: 96,
+    });
+    window.applyEntries(entriesUpTo(200));
+    const after = window.revealIndex(50);
+    expect(after.windowedEntries.length).toBeLessThanOrEqual(20);
+    expect(after.followTail).toBe(false);
+    const seqs = after.windowedEntries.map((entry) => entry.seq);
+    expect(seqs).toContain(50);
+  });
+
+  it("clamps an out-of-range index to the stream rather than failing", () => {
+    const window = createTranscriptWindow<FakeEntry>({
+      maxWindowRows: 20,
+      followTailThresholdPx: 96,
+    });
+    window.applyEntries(entriesUpTo(30));
+    expect(window.revealIndex(-5).windowedEntries[0]?.seq).toBe(0);
+    const tail = window.revealIndex(10_000);
+    expect(tail.followTail).toBe(true);
+    expect(tail.windowedEntries[tail.windowedEntries.length - 1]?.seq).toBe(29);
+  });
+
+  it("revealing the newest entry resumes the tail like returnToTail, without requesting a scroll", () => {
+    const window = createTranscriptWindow<FakeEntry>({
+      maxWindowRows: 20,
+      followTailThresholdPx: 96,
+    });
+    window.applyEntries(entriesUpTo(100));
+    window.onScroll(SCROLLED_UP);
+    window.applyEntries(entriesUpTo(105));
+    expect(window.getSnapshot().followTail).toBe(false);
+    const after = window.revealIndex(104);
+    expect(after.followTail).toBe(true);
+    expect(after.unreadCount).toBe(0);
+    // The caller scrolls imperatively to the match itself, so unlike
+    // `returnToTail` this never requests a scroll-to-tail of its own.
+    expect(after.shouldScrollToTail).toBe(false);
+  });
+
+  it("leaves the unread baseline untouched when revealing an older entry", () => {
+    const window = createTranscriptWindow<FakeEntry>({
+      maxWindowRows: 20,
+      followTailThresholdPx: 96,
+    });
+    window.applyEntries(entriesUpTo(100));
+    window.onScroll(SCROLLED_UP);
+    window.applyEntries(entriesUpTo(105));
+    expect(window.getSnapshot().unreadCount).toBe(5);
+    const after = window.revealIndex(40);
+    expect(after.unreadCount).toBe(5);
+    expect(after.windowedEntries.map((entry) => entry.seq)).toContain(40);
+  });
+
+  it("is a no-op bound on an empty window", () => {
+    const window = createTranscriptWindow<FakeEntry>();
+    const snapshot = window.revealIndex(0);
+    expect(snapshot.windowedEntries).toEqual([]);
+  });
+});

@@ -189,6 +189,15 @@ export interface TranscriptWindow<T extends TranscriptWindowEntry> {
    * (`followTail` becomes `false`) if it was `true`, since expanding
    * backward from the tail necessarily stops pinning to it. */
   expandOlder(count?: number): TranscriptWindowSnapshot<T>;
+  /** Re-anchors the window so the entry at `index` (into the full applied
+   * list, not the current window) is inside the returned slice — the
+   * transcript find bar's "scroll to this match" path. Centres the index
+   * with half a window of context on either side, clamped to both edges;
+   * revealing the newest entry resumes the tail instead (same state as
+   * `returnToTail`, minus the scroll request — the caller scrolls
+   * imperatively to the match itself). Never grows the window: the
+   * returned slice still holds at most `config.maxWindowRows` rows. */
+  revealIndex(index: number): TranscriptWindowSnapshot<T>;
   /** The most recently computed snapshot, without recomputation. */
   getSnapshot(): TranscriptWindowSnapshot<T>;
 }
@@ -308,6 +317,26 @@ export function createTranscriptWindow<T extends TranscriptWindowEntry>(
         leaveTailIfScrolledAway();
       }
       anchorStart = Math.max(0, (anchorStart ?? 0) - Math.max(0, count));
+      return recompute(false);
+    },
+
+    revealIndex(index) {
+      const len = entries.length;
+      if (len === 0) {
+        return recompute(false);
+      }
+      const clamped = Math.min(Math.max(0, index), len - 1);
+      if (clamped >= len - 1) {
+        resumeTail();
+        return recompute(false);
+      }
+      // Not the tail: pin a centred window around the index. anchorStart
+      // is the only thing that moves -- the unread baseline stays whatever
+      // it was, so jumping to an older match never silently clears the
+      // "N new messages" affordance for rows the reader still has not seen.
+      followTail = false;
+      const half = Math.floor(maxWindowRows / 2);
+      anchorStart = Math.min(Math.max(0, clamped - half), Math.max(0, len - maxWindowRows));
       return recompute(false);
     },
 
