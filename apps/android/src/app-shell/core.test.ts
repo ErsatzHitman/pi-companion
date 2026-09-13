@@ -1412,7 +1412,7 @@ describe("AppCore.offlineCache (T68/T32S14)", () => {
     expect(core.offlineCache.getCache()).toBeNull();
   });
 
-  it("dispose() actually works once invoked, even though nothing in production calls it yet (this task's own disclosed gap)", async () => {
+  it("dispose() works once invoked — and production does invoke it, through shutdown(): AppCoreProvider calls core.shutdown() on unmount (see core-context.test.ts), which disposes this owner", async () => {
     const core = createAppCore();
     await core.offlineCache.open();
     await core.offlineCache.dispose();
