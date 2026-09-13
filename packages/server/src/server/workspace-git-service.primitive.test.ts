@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
+import parcelWatcher from "@parcel/watcher";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createGitHubService } from "../services/github-service.js";
 import type { CurrentPullRequestStatus, ForgeService } from "../services/forge-service.js";
@@ -11,12 +12,23 @@ import {
   getCheckoutSnapshotFacts as getCheckoutSnapshotFactsUncached,
   getCheckoutStatus as getCheckoutStatusUncached,
   resolveAbsoluteGitDir as resolveAbsoluteGitDirReal,
+  type BranchCheckoutResolution,
+  type BranchSuggestion,
+  type CheckoutContext,
   type CheckoutDiffCompare,
   type CheckoutDiffResult,
+  type CheckoutShortstat,
   type CheckoutSnapshotFacts,
   type CheckoutStatusGit,
+  type CheckoutStatusResult,
+  type CheckoutWorktreeState,
   type PullRequestStatusResult,
 } from "../utils/checkout-git.js";
+import type {
+  GitCommandOptions,
+  GitCommandResult,
+} from "../utils/run-git-command.js";
+import type { PaseoWorktreeInfo } from "../utils/worktree.js";
 import { runGitCommand as runGitCommandReal } from "../utils/run-git-command.js";
 import {
   getWorkspaceFileWatcherBackend,
@@ -74,6 +86,7 @@ function createCheckoutFacts(
     comparisonBaseRef: null,
     branchRemoteName: null,
     branchMergeRef: null,
+    upstreamStatus: null,
     pullRequestLookupTarget: { headRef: "main" },
     ...overrides,
   };
@@ -81,7 +94,7 @@ function createCheckoutFacts(
 
 function createCheckoutStatus(
   cwd: string,
-  overrides?: Partial<CheckoutStatusGit>,
+  overrides?: Partial<Extract<CheckoutStatusGit, { isPaseoOwnedWorktree: false }>>,
 ): CheckoutStatusGit {
   return {
     isGit: true,
@@ -91,6 +104,7 @@ function createCheckoutStatus(
     isDirty: false,
     baseRef: "main",
     aheadBehind: { ahead: 0, behind: 0 },
+    upstreamRef: null,
     aheadOfOrigin: 0,
     behindOfOrigin: 0,
     hasRemote: true,
@@ -111,7 +125,6 @@ function createPullRequestStatusResult(title = "Update feature"): PullRequestSta
       isMerged: false,
     },
     authState: "authenticated",
-    featuresEnabled: true,
     githubFeaturesEnabled: true,
   };
 }
@@ -169,6 +182,7 @@ function createBaseSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {
       isDirty: false,
       baseRef: "main",
       aheadBehind: { ahead: 0, behind: 0 },
+      upstreamRef: null,
       aheadOfOrigin: 0,
       behindOfOrigin: 0,
       hasRemote: true,
@@ -176,6 +190,7 @@ function createBaseSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {
     },
     forge: {
       featuresEnabled: true,
+      authState: "authenticated",
       pullRequest: {
         url: "https://github.com/acme/repo/pull/123",
         title: "Update feature",
@@ -268,6 +283,7 @@ function createGitHubServiceStub(): ForgeService {
     searchIssuesAndPrs: vi.fn(async () => ({
       items: [],
       featuresEnabled: true,
+      authState: "authenticated" as const,
       githubFeaturesEnabled: true,
     })),
     getPullRequest: vi.fn(async () => ({
@@ -279,6 +295,7 @@ function createGitHubServiceStub(): ForgeService {
       baseRefName: "main",
       headRefName: "feature",
       labels: [],
+      updatedAt: "2026-04-12T00:00:00.000Z",
     })),
     getPullRequestHeadRef: vi.fn(async () => "feature"),
     getPullRequestCheckoutTarget: vi.fn(async ({ number }) => ({
@@ -296,36 +313,62 @@ function createGitHubServiceStub(): ForgeService {
     // to keep the resolver/poll path faithful.
     retainCurrentPullRequestStatusPoll: vi.fn(() => ({ unsubscribe: vi.fn() })),
     getPullRequestTimeline: vi.fn(async () => ({
-      pullRequest: null,
-      events: [],
+      prNumber: 1,
+      repoOwner: "acme",
+      repoName: "repo",
+      items: [],
+      truncated: false,
+      error: null,
     })),
     createPullRequest: vi.fn(async () => ({
       url: "https://github.com/acme/repo/pull/1",
       number: 1,
     })),
-    mergePullRequest: vi.fn(async () => ({ success: true })),
+    mergePullRequest: vi.fn(async () => ({ success: true as const })),
+    enablePullRequestAutoMerge: vi.fn(async () => ({ success: true as const })),
+    disablePullRequestAutoMerge: vi.fn(async () => ({ success: true as const })),
+    getCheckDetails: vi.fn(async () => ({
+      checkRunId: 0,
+      name: "ci",
+      annotations: [],
+      failedJobs: [],
+      truncated: false,
+    })),
     isAuthenticated: vi.fn(async () => true),
     invalidate: vi.fn(),
   };
 }
 
 interface CreateServiceOptions {
-  subscribe?: ReturnType<typeof vi.fn>;
-  getCheckoutSnapshotFacts?: ReturnType<typeof vi.fn>;
-  getCheckoutStatus?: ReturnType<typeof vi.fn>;
-  getCheckoutShortstat?: ReturnType<typeof vi.fn>;
-  getCheckoutWorktreeState?: ReturnType<typeof vi.fn>;
-  getPullRequestStatus?: ReturnType<typeof vi.fn>;
-  getCheckoutDiff?: ReturnType<typeof vi.fn>;
-  resolveBranchCheckout?: ReturnType<typeof vi.fn>;
-  resolveRepositoryDefaultBranch?: ReturnType<typeof vi.fn>;
-  listBranchSuggestions?: ReturnType<typeof vi.fn>;
-  listPaseoWorktrees?: ReturnType<typeof vi.fn>;
+  subscribe?: typeof parcelWatcher.subscribe;
+  getCheckoutSnapshotFacts?: (
+    cwd: string,
+    context?: CheckoutContext,
+  ) => Promise<CheckoutSnapshotFacts>;
+  getCheckoutStatus?: (
+    cwd: string,
+    context?: CheckoutContext,
+  ) => Promise<CheckoutStatusResult>;
+  getCheckoutShortstat?: (cwd: string) => Promise<CheckoutShortstat | null>;
+  getCheckoutWorktreeState?: (cwd: string) => Promise<CheckoutWorktreeState>;
+  getPullRequestStatus?: (cwd: string) => Promise<PullRequestStatusResult>;
+  getCheckoutDiff?: (cwd: string, compare: CheckoutDiffCompare) => Promise<CheckoutDiffResult>;
+  resolveBranchCheckout?: (cwd: string, name: string) => Promise<BranchCheckoutResolution>;
+  resolveRepositoryDefaultBranch?: (repoRoot: string) => Promise<string | null>;
+  listBranchSuggestions?: (
+    cwd: string,
+    options?: { query?: string; limit?: number },
+  ) => Promise<BranchSuggestion[]>;
+  listPaseoWorktrees?: (options: {
+    cwd: string;
+    paseoHome?: string;
+    worktreesRoot?: string;
+  }) => Promise<PaseoWorktreeInfo[]>;
   github?: ForgeService;
-  resolveAbsoluteGitDir?: ReturnType<typeof vi.fn>;
-  hasOriginRemote?: ReturnType<typeof vi.fn>;
-  runGitFetch?: ReturnType<typeof vi.fn>;
-  runGitCommand?: ReturnType<typeof vi.fn>;
+  resolveAbsoluteGitDir?: (cwd: string) => Promise<string | null>;
+  hasOriginRemote?: (cwd: string) => Promise<boolean>;
+  runGitFetch?: (cwd: string) => Promise<void>;
+  runGitCommand?: (args: string[], options: GitCommandOptions) => Promise<GitCommandResult>;
   now?: () => Date;
   getWorkspaceGitSelfHealPhaseMs?: (cwd: string) => number;
 }
@@ -339,10 +382,12 @@ function buildDefaultServiceDeps() {
       additions: 1,
       deletions: 0,
     })),
-    getCheckoutWorktreeState: vi.fn(),
+    getCheckoutWorktreeState: vi.fn(async (): Promise<CheckoutWorktreeState> => {
+      throw new Error("getCheckoutWorktreeState not stubbed");
+    }),
     getPullRequestStatus: vi.fn(async () => createPullRequestStatusResult()),
     getCheckoutDiff: vi.fn(async () => ({ diff: "", structured: [] })),
-    resolveBranchCheckout: vi.fn(async () => ({ kind: "not-found" })),
+    resolveBranchCheckout: vi.fn(async () => ({ kind: "not-found" as const })),
     resolveRepositoryDefaultBranch: vi.fn(async () => "main"),
     listBranchSuggestions: vi.fn(async () => []),
     listPaseoWorktrees: vi.fn(async () => []),
@@ -379,7 +424,7 @@ function buildServiceDeps(options?: CreateServiceOptions) {
       }
       return {
         isDirty: status.isDirty,
-        diffStat: await deps.getCheckoutShortstat(),
+        diffStat: await deps.getCheckoutShortstat(cwd),
       };
     });
   return deps;
@@ -1026,14 +1071,23 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
   });
 
   test("stale GitHub poll callbacks do not refresh after unsubscribe", async () => {
-    let pollStatus: (() => void) | null = null;
+    let pollStatus: ((status: CurrentPullRequestStatus | null) => void) | null = null;
+    const fireStalePollStatus = (): void => {
+      pollStatus?.(null);
+    };
     const pollUnsubscribe = vi.fn();
     const github = {
       ...createGitHubServiceStub(),
-      retainCurrentPullRequestStatusPoll: vi.fn((options: { onStatus: () => void }) => {
-        pollStatus = options.onStatus;
-        return { unsubscribe: pollUnsubscribe };
-      }),
+      retainCurrentPullRequestStatusPoll: vi.fn(
+        (options: {
+          cwd: string;
+          headRef: string;
+          onStatus?: (status: CurrentPullRequestStatus | null) => void;
+        }) => {
+          pollStatus = options.onStatus ?? null;
+          return { unsubscribe: pollUnsubscribe };
+        },
+      ),
     };
     const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
     const service = createService({
@@ -1050,7 +1104,7 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
     const callsBeforeStaleCallback = getCheckoutStatus.mock.calls.length;
 
     subscription.unsubscribe();
-    pollStatus?.();
+    fireStalePollStatus();
     await flushPromises();
 
     expect(pollUnsubscribe).toHaveBeenCalledTimes(1);
@@ -1305,7 +1359,7 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
     const pendingResult = createPullRequestStatusResult();
     if (pendingResult.status) {
       pendingResult.status.checksStatus = "pending";
-      pendingResult.status.checks = [{ name: "ci", status: "pending" }];
+      pendingResult.status.checks = [{ name: "ci", status: "pending", url: null }];
     }
     const service = createService({
       getCheckoutSnapshotFacts: vi.fn(async (cwd: string) =>

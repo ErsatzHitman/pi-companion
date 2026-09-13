@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "vitest";
+import type { HubExecutionAgentCreateResponse } from "../messages.js";
 import { HubRelationshipHarness } from "./test-utils/relationship-harness.js";
 
 let relationship: HubRelationshipHarness | null = null;
@@ -97,7 +98,9 @@ test("Hub reconnects without retaining trusted session state", async () => {
 test("Hub interrupts an owned running execution idempotently", async () => {
   const hub = await launchRelationship();
   hub.beginOwnedCreate("interrupt-create", "execution-interrupt", { prompt: "sleep 30" });
-  const created = await hub.ownedCreateResult("interrupt-create");
+  const created = (await hub.ownedCreateResult(
+    "interrupt-create",
+  )) as HubExecutionAgentCreateResponse;
   await hub.ownedRunningUpdate(created.payload.agentId!);
 
   const interrupted = await hub.interruptExecution("execution-interrupt", "interrupt-first");
@@ -130,7 +133,9 @@ test("Hub control waits for an in-flight create of the same execution", async ()
 
   hub.beginExecutionControl("pending-control-archive", "execution-pending-control", "archive");
   hub.finishAgentCreation();
-  const created = await hub.ownedCreateResult("pending-control-create");
+  const created = (await hub.ownedCreateResult(
+    "pending-control-create",
+  )) as HubExecutionAgentCreateResponse;
   const archived = await hub.executionControlResult("pending-control-archive");
 
   expect(created).toMatchObject({ payload: { success: true, agentId: expect.any(String) } });
@@ -141,7 +146,9 @@ test("Hub control waits for an in-flight create of the same execution", async ()
 test("Hub archives only the owned agent in a shared local checkout", async () => {
   const hub = await launchRelationship();
   hub.beginOwnedCreate("local-create", "execution-local", { prompt: "sleep 30" });
-  const created = await hub.ownedCreateResult("local-create");
+  const created = (await hub.ownedCreateResult(
+    "local-create",
+  )) as HubExecutionAgentCreateResponse;
   await hub.ownedRunningUpdate(created.payload.agentId!);
 
   const archived = await hub.archiveExecution("execution-local", "archive-local");
@@ -160,7 +167,9 @@ test("Hub archives a running execution's Paseo-created worktree", async () => {
     worktree: { mode: "branch-off", newBranch: "hub-created-worktree", base: "main" },
     prompt: "sleep 30",
   });
-  const worktreeCreated = await hub.ownedCreateResult("worktree-create");
+  const worktreeCreated = (await hub.ownedCreateResult(
+    "worktree-create",
+  )) as HubExecutionAgentCreateResponse;
   const worktreeCwd = hub.latestCreatedCwd();
   await hub.ownedRunningUpdate(worktreeCreated.payload.agentId!);
   const duringRun = await hub.worktreeState(worktreeCwd!);
@@ -189,7 +198,9 @@ test("a sibling workspace keeps an archived execution's worktree directory alive
     worktree: { mode: "branch-off", newBranch: "hub-sibling-worktree", base: "main" },
     prompt: "sleep 30",
   });
-  const created = await hub.ownedCreateResult("sibling-create");
+  const created = (await hub.ownedCreateResult(
+    "sibling-create",
+  )) as HubExecutionAgentCreateResponse;
   const worktreeCwd = hub.latestCreatedCwd()!;
   await hub.ownedRunningUpdate(created.payload.agentId!);
   await hub.createSiblingWorkspace(worktreeCwd);
@@ -212,7 +223,9 @@ test("archiving an execution in a reused worktree leaves the existing workspace 
     worktree,
     prompt: "respond with exactly: original complete",
   });
-  const original = await hub.ownedCreateResult("original-worktree-create");
+  const original = (await hub.ownedCreateResult(
+    "original-worktree-create",
+  )) as HubExecutionAgentCreateResponse;
   const worktreeCwd = hub.latestCreatedCwd()!;
   await hub.ownedTurnCompletion(original.payload.agentId!);
 
@@ -220,7 +233,9 @@ test("archiving an execution in a reused worktree leaves the existing workspace 
     worktree,
     prompt: "sleep 30",
   });
-  const reused = await hub.ownedCreateResult("reused-worktree-create");
+  const reused = (await hub.ownedCreateResult(
+    "reused-worktree-create",
+  )) as HubExecutionAgentCreateResponse;
   await hub.ownedRunningUpdate(reused.payload.agentId!);
 
   const response = await hub.archiveExecution(
@@ -241,7 +256,9 @@ test("Hub resolves persisted execution ownership after daemon restart", async ()
     worktree: { mode: "branch-off", newBranch: "hub-restart-worktree", base: "main" },
     prompt: "sleep 30",
   });
-  const created = await hub.ownedCreateResult("restart-create");
+  const created = (await hub.ownedCreateResult(
+    "restart-create",
+  )) as HubExecutionAgentCreateResponse;
   const worktreeCwd = hub.latestCreatedCwd()!;
   await hub.ownedRunningUpdate(created.payload.agentId!);
 
