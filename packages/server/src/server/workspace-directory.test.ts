@@ -15,7 +15,9 @@ class WorkspaceStatus {
     rootPath: "/workspace/project",
     kind: "git",
     displayName: "project",
+    projectKey: null,
     customName: null,
+    customIconRevision: null,
     createdAt: NOW,
     updatedAt: NOW,
     archivedAt: null,
@@ -27,9 +29,17 @@ class WorkspaceStatus {
     cwd: this.project.rootPath,
     kind: "local_checkout",
     displayName: "main",
+    title: null,
+    branch: null,
+    worktreeRoot: null,
+    baseBranch: null,
+    isPaseoOwnedWorktree: false,
+    mainRepoRoot: null,
     createdAt: NOW,
     updatedAt: NOW,
     archivedAt: null,
+    autoArchivedChangeRequestUrl: null,
+    pinnedAt: null,
   };
 
   private readonly worktreeWorkspace: PersistedWorkspaceRecord = {
@@ -38,9 +48,17 @@ class WorkspaceStatus {
     cwd: "/workspace/project/.paseo/worktrees/feature",
     kind: "worktree",
     displayName: "feature",
+    title: null,
+    branch: null,
+    worktreeRoot: null,
+    baseBranch: null,
+    isPaseoOwnedWorktree: false,
+    mainRepoRoot: null,
     createdAt: NOW,
     updatedAt: NOW,
     archivedAt: null,
+    autoArchivedChangeRequestUrl: null,
+    pinnedAt: null,
   };
 
   // Second workspace sharing the SAME cwd as `workspace`. Created later so the
@@ -51,9 +69,17 @@ class WorkspaceStatus {
     cwd: this.project.rootPath,
     kind: "local_checkout",
     displayName: "main-2",
+    title: null,
+    branch: null,
+    worktreeRoot: null,
+    baseBranch: null,
+    isPaseoOwnedWorktree: false,
+    mainRepoRoot: null,
     createdAt: "2026-03-02T12:00:00.000Z",
     updatedAt: "2026-03-02T12:00:00.000Z",
     archivedAt: null,
+    autoArchivedChangeRequestUrl: null,
+    pinnedAt: null,
   };
 
   private readonly workspaces = [this.workspace];
@@ -84,6 +110,7 @@ class WorkspaceStatus {
       name: workspace.displayName,
       archivingAt: null,
       status: "done",
+      statusEnteredAt: null,
       activityAt: null,
       diffStat: null,
       scripts: [],
@@ -572,26 +599,29 @@ describe("WorkspaceDirectory empty projects", () => {
         name: workspace.displayName,
         archivingAt: null,
         status: "done",
+        statusEnteredAt: null,
         activityAt: null,
         diffStat: null,
+        scripts: [],
         gitRuntime: null,
         githubRuntime: null,
       }),
     });
   }
 
-  function project(input: Partial<PersistedProjectRecord> & { projectId: string }) {
+  function project(input: { projectId: string; customName?: string | null }): PersistedProjectRecord {
     return {
+      projectId: input.projectId,
       rootPath: `/workspace/${input.projectId}`,
       kind: "non_git",
       displayName: input.projectId,
-      customName: null,
+      projectKey: null,
+      customName: input.customName ?? null,
+      customIconRevision: null,
       createdAt: NOW,
       updatedAt: NOW,
       archivedAt: null,
-      pinnedAt: null,
-      ...input,
-    } satisfies PersistedProjectRecord;
+    };
   }
 
   test("surfaces a project with no active workspaces through the compatibility projection", async () => {
@@ -628,9 +658,17 @@ describe("WorkspaceDirectory empty projects", () => {
           cwd: "/workspace/with-ws",
           kind: "directory",
           displayName: "main",
+          title: null,
+          branch: null,
+          worktreeRoot: null,
+          baseBranch: null,
+          isPaseoOwnedWorktree: false,
+          mainRepoRoot: null,
           createdAt: NOW,
           updatedAt: NOW,
           archivedAt: null,
+          autoArchivedChangeRequestUrl: null,
+          pinnedAt: null,
         },
       ],
     });

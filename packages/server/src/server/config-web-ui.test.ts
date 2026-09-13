@@ -31,8 +31,8 @@ describe("daemon web UI config", () => {
 
     const config = loadConfig(home, { env: {} });
 
-    expect(config.webUi.enabled).toBe(false);
-    expectBundledWebUiDistDir(config.webUi.distDir);
+    expect(config.webUi?.enabled).toBe(false);
+    expectBundledWebUiDistDir(config.webUi?.distDir ?? null);
   });
 
   test("enables web UI from persisted config", async () => {
@@ -43,8 +43,8 @@ describe("daemon web UI config", () => {
 
     const config = loadConfig(home, { env: {} });
 
-    expect(config.webUi.enabled).toBe(true);
-    expectBundledWebUiDistDir(config.webUi.distDir);
+    expect(config.webUi?.enabled).toBe(true);
+    expectBundledWebUiDistDir(config.webUi?.distDir ?? null);
   });
 
   test("PASEO_WEB_UI_ENABLED overrides persisted setting", async () => {
@@ -55,7 +55,7 @@ describe("daemon web UI config", () => {
 
     const config = loadConfig(home, { env: { PASEO_WEB_UI_ENABLED: "false" } });
 
-    expect(config.webUi.enabled).toBe(false);
+    expect(config.webUi?.enabled).toBe(false);
   });
 
   test("PASEO_WEB_UI_ENABLED=true enables web UI", async () => {
@@ -63,7 +63,7 @@ describe("daemon web UI config", () => {
 
     const config = loadConfig(home, { env: { PASEO_WEB_UI_ENABLED: "true" } });
 
-    expect(config.webUi.enabled).toBe(true);
+    expect(config.webUi?.enabled).toBe(true);
   });
 
   test("CLI web UI enable override wins over env and persisted config", async () => {
@@ -77,7 +77,7 @@ describe("daemon web UI config", () => {
       cli: { webUiEnabled: true },
     });
 
-    expect(config.webUi.enabled).toBe(true);
+    expect(config.webUi?.enabled).toBe(true);
   });
 
   test("CLI web UI disable override wins over env and persisted config", async () => {
@@ -91,7 +91,7 @@ describe("daemon web UI config", () => {
       cli: { webUiEnabled: false },
     });
 
-    expect(config.webUi.enabled).toBe(false);
+    expect(config.webUi?.enabled).toBe(false);
   });
 
   test("resolves PASEO_WEB_UI_DIST_DIR as absolute path", async () => {
@@ -100,7 +100,7 @@ describe("daemon web UI config", () => {
 
     const config = loadConfig(home, { env: { PASEO_WEB_UI_DIST_DIR: distDir } });
 
-    expect(config.webUi.distDir).toBe(path.resolve(distDir));
+    expect(config.webUi?.distDir).toBe(path.resolve(distDir));
   });
 
   test("resolves relative persisted distDir against PASEO_HOME", async () => {
@@ -111,7 +111,7 @@ describe("daemon web UI config", () => {
 
     const config = loadConfig(home, { env: {} });
 
-    expect(config.webUi.distDir).toBe(path.join(home, "web-ui-dist"));
+    expect(config.webUi?.distDir).toBe(path.join(home, "web-ui-dist"));
   });
 
   test("PASEO_WEB_UI_DIST_DIR overrides persisted distDir", async () => {
@@ -123,6 +123,6 @@ describe("daemon web UI config", () => {
 
     const config = loadConfig(home, { env: { PASEO_WEB_UI_DIST_DIR: envDir } });
 
-    expect(config.webUi.distDir).toBe(path.resolve(envDir));
+    expect(config.webUi?.distDir).toBe(path.resolve(envDir));
   });
 });

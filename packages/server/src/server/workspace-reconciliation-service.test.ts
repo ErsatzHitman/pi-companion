@@ -58,6 +58,13 @@ function createTestRegistries() {
     upsert: async (record: PersistedProjectRecord) => {
       projects.set(record.projectId, record);
     },
+    update: async (id: string, updater: (record: PersistedProjectRecord) => PersistedProjectRecord) => {
+      const existing = projects.get(id);
+      if (!existing) return null;
+      const next = updater(existing);
+      projects.set(id, next);
+      return next;
+    },
     archive: async (id: string, archivedAt: string) => {
       const existing = projects.get(id);
       if (existing) {
@@ -76,6 +83,16 @@ function createTestRegistries() {
     get: async (id: string) => workspaces.get(id) ?? null,
     upsert: async (record: PersistedWorkspaceRecord) => {
       workspaces.set(record.workspaceId, record);
+    },
+    update: async (
+      id: string,
+      updater: (record: PersistedWorkspaceRecord) => PersistedWorkspaceRecord,
+    ) => {
+      const existing = workspaces.get(id);
+      if (!existing) return null;
+      const next = updater(existing);
+      workspaces.set(id, next);
+      return next;
     },
     archive: async (id: string, archivedAt: string) => {
       const existing = workspaces.get(id);
@@ -136,26 +153,26 @@ function createWorkspaceGitServiceStub(
   >,
 ) {
   return {
-    getCheckout: async (cwd: string) => {
+    getCheckout: async (cwd: string): Promise<ProjectCheckoutLitePayload> => {
       const metadata = metadataByCwd[cwd];
-      if (!metadata) {
+      if (!metadata || metadata.projectKind !== "git") {
         return {
           cwd,
           isGit: false as const,
           currentBranch: null,
           remoteUrl: null,
           worktreeRoot: null,
-          isPaseoOwnedWorktree: false,
+          isPaseoOwnedWorktree: false as const,
           mainRepoRoot: null,
         };
       }
       return {
         cwd,
-        isGit: metadata.projectKind === "git",
+        isGit: true as const,
         currentBranch: metadata.currentBranch ?? metadata.workspaceDisplayName,
         remoteUrl: metadata.gitRemote ?? null,
-        worktreeRoot: null,
-        isPaseoOwnedWorktree: false,
+        worktreeRoot: cwd,
+        isPaseoOwnedWorktree: false as const,
         mainRepoRoot: null,
       };
     },
@@ -166,15 +183,40 @@ function createCheckout(
   cwd: string,
   overrides: Partial<ProjectCheckoutLitePayload> = {},
 ): ProjectCheckoutLitePayload {
+  // ProjectCheckoutLitePayload is a discriminated union (isGit / isPaseoOwnedWorktree),
+  // so a blind partial spread over a non-git base cannot satisfy it. Build one
+  // variant per discriminant instead; runtime values match the old spread for
+  // every current caller.
+  if (overrides.isPaseoOwnedWorktree === true) {
+    return {
+      cwd,
+      isGit: true as const,
+      currentBranch: overrides.currentBranch ?? null,
+      remoteUrl: overrides.remoteUrl ?? null,
+      worktreeRoot: overrides.worktreeRoot ?? cwd,
+      isPaseoOwnedWorktree: true as const,
+      mainRepoRoot: overrides.mainRepoRoot ?? cwd,
+    };
+  }
+  if (overrides.isGit === true) {
+    return {
+      cwd,
+      isGit: true as const,
+      currentBranch: overrides.currentBranch ?? null,
+      remoteUrl: overrides.remoteUrl ?? null,
+      worktreeRoot: overrides.worktreeRoot ?? cwd,
+      isPaseoOwnedWorktree: false as const,
+      mainRepoRoot: overrides.mainRepoRoot ?? null,
+    };
+  }
   return {
     cwd,
-    isGit: false,
+    isGit: false as const,
     currentBranch: null,
     remoteUrl: null,
     worktreeRoot: null,
-    isPaseoOwnedWorktree: false,
+    isPaseoOwnedWorktree: false as const,
     mainRepoRoot: null,
-    ...overrides,
   };
 }
 

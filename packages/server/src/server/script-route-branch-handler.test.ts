@@ -4,7 +4,27 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { ScriptRouteStore, ServiceProxyRouteCollisionError } from "./script-proxy.js";
+import type { ServiceProxySubsystem } from "./service-proxy.js";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
+
+// Wraps a real ScriptRouteStore as a full ServiceProxySubsystem.
+// createBranchChangeRouteHandler only exercises replaceWorkspaceBranchRoutes;
+// middleware/standalone are never called in these tests, so those stubs
+// throw if ever reached.
+function asServiceProxySubsystem(routeStore: ScriptRouteStore): ServiceProxySubsystem {
+  return Object.assign(routeStore, {
+    middleware: () => {
+      throw new Error("middleware not used in script-route-branch-handler tests");
+    },
+    upgradeHandler: () => {
+      throw new Error("upgradeHandler not used in script-route-branch-handler tests");
+    },
+    startStandalone: async () => {
+      throw new Error("startStandalone not used in script-route-branch-handler tests");
+    },
+    stopStandalone: async () => {},
+  });
+}
 
 function createWorkspaceRepo(options?: {
   branchName?: string;
@@ -83,7 +103,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -100,7 +120,7 @@ describe("script-route-branch-handler", () => {
     const routeStore = new ScriptRouteStore();
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -120,7 +140,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -148,7 +168,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -169,7 +189,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -215,7 +235,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -258,7 +278,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -288,7 +308,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -333,7 +353,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 
@@ -388,7 +408,7 @@ describe("script-route-branch-handler", () => {
 
     const onRoutesChanged = vi.fn();
     const handleBranchChange = createBranchChangeRouteHandler({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxySubsystem(routeStore),
       onRoutesChanged,
     });
 

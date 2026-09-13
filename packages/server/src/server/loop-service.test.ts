@@ -18,6 +18,7 @@ import type {
   AgentMode,
   AgentModelDefinition,
   AgentPersistenceHandle,
+  AgentPermissionRequest,
   AgentPromptInput,
   AgentRunOptions,
   AgentRunResult,
@@ -30,7 +31,7 @@ import type {
 } from "./agent/agent-sdk-types.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { AgentManager } from "./agent/agent-manager.js";
-import { createAgentCommand } from "./agent/create-agent/create.js";
+import { createAgentCommand, type EnsureWorkspaceForCreate } from "./agent/create-agent/create.js";
 import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
 import { createNoopWorkspaceGitService } from "./test-utils/workspace-git-service-stub.js";
@@ -64,10 +65,7 @@ interface TestLoopServiceOptions {
   agentStorage: AgentStorage;
   logger: ReturnType<typeof createTestLogger>;
   providerSnapshotManager?: Pick<ProviderSnapshotManager, "resolveCreateConfig">;
-  ensureWorkspaceForCreate?: (
-    cwd: string,
-    firstAgentContext?: { prompt: string },
-  ) => Promise<string>;
+  ensureWorkspaceForCreate?: EnsureWorkspaceForCreate;
 }
 
 function createLoopService(options: TestLoopServiceOptions): LoopService {
@@ -112,6 +110,7 @@ async function createRegistryBackedWorkspaceEnsure(rootDir: string): Promise<{
     projectRegistry,
     workspaceRegistry,
     workspaceGitService,
+    logger: createTestLogger(),
   });
   return {
     workspaceRegistry,
@@ -602,7 +601,7 @@ describe("LoopService", () => {
     const archiveAgent = manager.archiveAgent.bind(manager);
     manager.archiveAgent = async (agentId) => {
       archivedAgentIds.push(agentId);
-      await archiveAgent(agentId);
+      return archiveAgent(agentId);
     };
     const service = createLoopService({
       paseoHome,
@@ -975,7 +974,7 @@ describe("LoopService", () => {
   });
 
   test("stops a running loop and cancels the active worker", async () => {
-    let release: (() => void) | null = null;
+    let release!: () => void;
     const cancelledAgentIds: string[] = [];
     const blocker = new Promise<void>((resolve) => {
       release = resolve;
@@ -1023,7 +1022,7 @@ describe("LoopService", () => {
     } catch (error) {
       cancelWaitError = error;
     } finally {
-      release?.();
+      release();
     }
     const stopped = await stopPromise;
     if (cancelWaitError) {
@@ -1039,7 +1038,7 @@ describe("LoopService", () => {
   });
 
   test("force-closes a loop worker when graceful cancellation is refused", async () => {
-    let release: (() => void) | null = null;
+    let release!: () => void;
     const blocker = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -1093,7 +1092,7 @@ describe("LoopService", () => {
     } catch (error) {
       closeWaitError = error;
     } finally {
-      release?.();
+      release();
     }
 
     const stopped = await stopPromise;
@@ -1106,7 +1105,7 @@ describe("LoopService", () => {
   });
 
   test("tolerates a loop worker closing while graceful cancellation is refused", async () => {
-    let release: (() => void) | null = null;
+    let release!: () => void;
     const blocker = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -1150,13 +1149,13 @@ describe("LoopService", () => {
     const stopPromise = service.stopLoop(loop.id);
 
     await waitForCancelledAgent(cancelledAgentIds, workerAgentId);
-    release?.();
+    release();
 
     await expect(stopPromise).resolves.toMatchObject({ status: "stopped" });
   });
 
   test("reports unexpected loop worker cancellation errors", async () => {
-    let release: (() => void) | null = null;
+    let release!: () => void;
     const blocker = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -1200,13 +1199,13 @@ describe("LoopService", () => {
     try {
       await expect(service.stopLoop(loop.id)).rejects.toThrow("cancellation transport failed");
     } finally {
-      release?.();
+      release();
       await execution;
     }
   });
 
   test("stops while waiting for loop workspace provisioning without starting a worker", async () => {
-    let resolveWorkspace: ((workspaceId: string) => void) | null = null;
+    let resolveWorkspace!: (workspaceId: string) => void;
     const workspaceProvisioned = new Promise<string>((resolve) => {
       resolveWorkspace = resolve;
     });
@@ -1247,7 +1246,7 @@ describe("LoopService", () => {
 
     const stopPromise = service.stopLoop(loop.id);
     await waitForStopRequested(service, loop.id);
-    resolveWorkspace?.("workspace-created-after-stop");
+    resolveWorkspace("workspace-created-after-stop");
     const stopped = await stopPromise;
 
     expect(stopped.status).toBe("stopped");
@@ -1263,7 +1262,7 @@ describe("LoopService", () => {
   });
 
   test("treats externally canceled worker turns as failures", async () => {
-    let release: (() => void) | null = null;
+    let release!: () => void;
     const blocker = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -1300,7 +1299,7 @@ describe("LoopService", () => {
 
     const workerAgentId = await waitForActiveWorkerRun(service, manager, loop.id);
     await manager.cancelAgentRun(workerAgentId);
-    release?.();
+    release();
     await waitForLoopCompletion(service, loop.id);
 
     const finalLoop = await service.inspectLoop(loop.id);
