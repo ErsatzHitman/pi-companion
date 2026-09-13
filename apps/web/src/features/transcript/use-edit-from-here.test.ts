@@ -131,6 +131,10 @@ describe("useEditFromHere (T105)", () => {
   });
 
   it("reports 'not connected' and never throws when no client is wired yet", () => {
+    // Defense in depth (fork-agent-ui): the fork wire has landed, so in
+    // production `host-session-screen.tsx`'s adapter now hands this hook a
+    // defined client on every connected render — `undefined` is only the
+    // genuinely-disconnected case, never the connected one.
     const onForked = vi.fn();
     const { result } = renderHook(() =>
       useEditFromHere({
@@ -175,5 +179,45 @@ describe("useEditFromHere (T105)", () => {
     expect(onForked).not.toHaveBeenCalled();
     expect(result.current.error).toBe("daemon unreachable");
     expect(result.current.isForking).toBe(false);
+  });
+
+  it("live path (fork-agent-ui): reports isForking while the daemon round trip is in flight, then clears it", async () => {
+    let resolveFork!: (result: { agentId: string }) => void;
+    const forkAgent = vi.fn(
+      () =>
+        new Promise<{ agentId: string }>((resolve) => {
+          resolveFork = resolve;
+        }),
+    );
+    const client: EditFromHereForkClient = { forkAgent };
+    const onForked = vi.fn();
+
+    const { result } = renderHook(() =>
+      useEditFromHere({
+        sessionId: "source-session",
+        entries: ENTRIES,
+        clock: new FakeClock(5_000),
+        client,
+        onForked,
+      }),
+    );
+
+    act(() => {
+      result.current.editFromHere("u2");
+    });
+    expect(result.current.isForking).toBe(true);
+    expect(forkAgent).toHaveBeenCalledWith("source-session", {
+      entryId: "a1",
+      entryIndex: 1,
+    });
+
+    await act(async () => {
+      resolveFork({ agentId: "edit-branch-live" });
+      await Promise.resolve();
+    });
+    expect(result.current.isForking).toBe(false);
+    expect(onForked).toHaveBeenCalledTimes(1);
+    expect(onForked.mock.calls[0]?.[0].newSessionId).toBe("edit-branch-live");
+    expect(result.current.error).toBeNull();
   });
 });

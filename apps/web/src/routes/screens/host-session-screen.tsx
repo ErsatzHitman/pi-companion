@@ -47,51 +47,40 @@ const routeApi = getRouteApi("/h/$serverId/session/$agentId");
  * T105 (plan.md §11.1): adapts a real `DaemonClient` to
  * `features/transcript/use-edit-from-here.ts`'s narrow
  * `EditFromHereForkClient`. Mirrors `features/sessions/daemon-sessions-
- * client.ts`'s own `DaemonAgentClient.forkAgent` disclosed-gap pattern —
- * see that file's module doc — rather than importing it directly, since
+ * client.ts`'s own `DaemonAgentClient.forkAgent` shape — see that file's
+ * module doc — rather than importing it directly, since
  * `features/sessions/` is a different task's owned directory this task
  * does not edit. Declared as a duck-typed structural interface, tested
- * with a plain fake object cast, so this adapter is provably correct
- * today and needs no change the day a real `DaemonClient` grows a
- * compatible `forkAgent` (the disclosed gap `use-edit-from-here.ts`'s
- * own module doc names).
+ * with a plain fake object cast and against the real `DaemonClient` class
+ * (which now implements a compatible `forkAgent`), so this adapter is
+ * provably correct on the live path.
  *
- * WHAT THIS MEANS IN PRODUCTION TODAY (recorded at the P6-W4 merge gate,
- * where T105's commit message read as if this ran): `packages/client/src`
- * contains zero `forkAgent`/`cloneAgent` occurrences, so `hasForkAgent`
- * is false for every real `DaemonClient` and this function returns
- * `undefined` on every production render. Consequences, all verified:
+ * CORRECTED (fork-agent-ui): the paragraph below previously recorded that
+ * `packages/client/src` contained zero `forkAgent`/`cloneAgent` occurrences,
+ * so `hasForkAgent` was false for every real `DaemonClient` and this
+ * function returned `undefined` on every production render. The fork half
+ * of that seam has since landed (`agent.fork.request`/`agent.fork.response`
+ * in `@picompanion/protocol`, `DaemonClient.forkAgent` in
+ * `@picompanion/client`, a `session.ts` dispatch for it): `hasForkAgent` is
+ * now true for every real `DaemonClient` and this returns a defined fork
+ * client on every connected render. The clone half (`cloneAgent`) is still
+ * absent and plays no role here.
  *
- * - GATING DECISION SETTLED (T114, correcting the P6-W6 premise that this
- *   was waiting on T110 — T110 landed at `5806cff` and never could have
- *   unblocked this: `grep -ciE "fork_agent|clone_agent|rename_agent"` over
- *   `packages/protocol/src/messages.ts` and
- *   `packages/server/src/server/session.ts` both return `0`, no task owns
- *   adding the six schemas T110 itself named, and none is filed). Rather
- *   than ship an ENABLED "Edit from here" button whose only possible
- *   outcome is `use-edit-from-here.ts`'s "Not connected — can't branch
- *   this conversation yet." banner, `EditFromHereSurface` now disables
- *   (never hides) the button on every message whenever its `client` prop
- *   here is `undefined` — see that component's own "Gating decision
- *   (T114)" doc for the full rationale and its test proving the ungated
- *   path (a real `client`) stays fully reachable for the day this
- *   adapter starts returning one.
- * - `openForkedSession`/`useNavigate` below is unreachable until the wire
- *   gap closes: nothing can resolve a fork, so no banner action can fire.
- * - Neither wiring is covered end to end. Re-run at the P6-W4 review
- *   against the committed tree, over the WHOLE apps/web suite rather than
- *   a scoped subset: baseline 134 files / 1201 tests passed; deleting
- *   `client={editFromHereClient}` from the mount below -> 134 / 1201
- *   passed (identical); restoring it and deleting
- *   `onOpenSession={openForkedSession}` -> 134 / 1201 passed (identical
- *   again). The unit tests below prove the adapter's SHAPE, not that the
- *   route ever supplies it a usable client.
+ * GATING (T114, still in force): `EditFromHereSurface` disables (never
+ * hides) the button whenever its `client` prop here is `undefined` — now
+ * only the genuinely-disconnected case (`client` itself is `null`), never
+ * the connected one. See that component's own "Gating decision (T114)" doc
+ * for the rationale; its tests prove both the gated (no client) and the
+ * live (real `client`) paths.
  */
 interface DaemonClientWithForkAgent {
   forkAgent(
     agentId: string,
     options: { entryId: string; entryIndex?: number; name?: string | null },
-  ): Promise<{ agent: { id: string } }>;
+    // Nullable `agent` mirrors the wire's own failure shape (see
+    // `DaemonAgentClient.forkAgent`'s doc): a real `DaemonClient.forkAgent`
+    // rejects before resolving null, but the structural contract admits it.
+  ): Promise<{ agent: { id: string } | null }>;
 }
 
 function hasForkAgent(client: unknown): client is DaemonClientWithForkAgent {
@@ -107,7 +96,16 @@ export function adaptEditFromHereForkClient(
   const forkCapableClient = client;
   return {
     async forkAgent(sessionId, options) {
-      const { agent } = await forkCapableClient.forkAgent(sessionId, options);
+      // The real wire's `name` is `string`-optional; a `null` name from the
+      // narrow hook interface is sent as absent, never as a literal null.
+      const { agent } = await forkCapableClient.forkAgent(sessionId, {
+        entryId: options.entryId,
+        entryIndex: options.entryIndex,
+        ...(options.name != null ? { name: options.name } : {}),
+      });
+      if (!agent) {
+        throw new Error("Fork did not return a new session.");
+      }
       return { agentId: agent.id };
     },
   };

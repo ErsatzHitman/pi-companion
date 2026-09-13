@@ -3,12 +3,13 @@
  * (T27B2, plan.md §7.1/§12.3).
  *
  * `DaemonAgentClient` is deliberately the narrowest possible slice of
- * `@picompanion/client`'s `DaemonClient` this feature needs — just
- * `createAgent` — so this module (like `features/files/file-browser-
- * client.ts`) never has to import `@picompanion/client` to stay
- * structurally compatible with it. A real `DaemonClient` satisfies
- * `DaemonAgentClient` as-is; `daemon-sessions-client.fixture.test.ts`
- * proves that against the real class and a recorded wire fixture.
+ * `@picompanion/client`'s `DaemonClient` this feature needs — `createAgent`,
+ * `archiveAgent`, `deleteAgent`, `fetchAgents`, and `forkAgent` — so this
+ * module (like `features/files/file-browser-client.ts`) never has to import
+ * `@picompanion/client` to stay structurally compatible with it. A real
+ * `DaemonClient` satisfies `DaemonAgentClient` as-is;
+ * `daemon-sessions-client.fixture.test.ts` proves that against the real
+ * class and a recorded wire fixture.
  */
 import type {
   CloneSessionInput,
@@ -67,56 +68,51 @@ export interface DaemonAgentClient {
     filter?: { includeArchived?: boolean };
   }): Promise<{ entries: readonly { agent: DaemonAgentSnapshot }[] }>;
   /**
-   * DISCLOSED GAP (T38A3): no such method exists on `@picompanion/client`'s
-   * real `DaemonClient` today, and no browser-facing wire message backs
-   * it either — verified: zero `fork_agent`/`clone_agent`/`agent.fork.`/
-   * `agent.clone.` occurrences in `packages/protocol/src/messages.ts`,
-   * and no `forkAgent`/`cloneAgent` method anywhere in
-   * `packages/client/src/daemon-client.ts`.
+   * Matches `DaemonClient.forkAgent` (`agent.fork.request`/
+   * `agent.fork.response` in `@picompanion/protocol`'s `messages.ts`,
+   * handled by `packages/server/src/server/session.ts`).
    *
-   * T38A0 (`packages/server/.../pi/rpc-types.ts`) only mirrored Pi's
-   * `fork`/`clone`/`set_session_name` RPC commands for the *daemon's own*
-   * use against its local Pi process (see that file's module comment) —
-   * its Owns line scoped it to that one file, not to adding a
-   * client-reachable wire message. T38A3's Owns line is
-   * `apps/web/src/features/sessions/` only, so it cannot add one either.
-   * Exactly this seam — a `fork_agent_request`/`fork_agent_response` (and
-   * `clone_agent_request`/`clone_agent_response`) pair in
-   * `packages/protocol/src/messages.ts`, a handler in
-   * `packages/server/src/server/session.ts` that turns it into the Pi
-   * provider's `PiRpcCommand` `"fork"`/`"clone"`, and a
-   * `forkAgent`/`cloneAgent` method on `packages/client`'s `DaemonClient`
-   * matching the shape below — is new work for a protocol+client task; a
-   * natural owner is T51A (already auditing "what to carry" from the Pi
-   * RPC mirror through to a real client-callable surface) or a follow-up
-   * split from it, not a task scoped to `apps/web` alone.
+   * CORRECTED (fork-agent-ui): this previously disclosed T38A3's gap — no
+   * `forkAgent`/`cloneAgent` method on the real `DaemonClient` and no
+   * `fork_agent`/`clone_agent`/`agent.fork.`/`agent.clone.` wire message —
+   * with both members optional so a real `DaemonClient` still satisfied
+   * this interface. The fork half of that seam has since landed, so
+   * `forkAgent` is REQUIRED here: every real `DaemonClient` implements it
+   * and `createDaemonSessionsClient` below always exposes `forkSession`.
+   * `cloneAgent` below stays optional until its own wire message lands.
    *
-   * `forkAgent`/`cloneAgent` are declared OPTIONAL here (unlike
-   * `archiveAgent`/`deleteAgent`/`fetchAgents` above, which the real
-   * `DaemonClient` already implements) so that fact stays true after
-   * this change: an object lacking these two methods — including a real
-   * `DaemonClient` instance — still satisfies `DaemonAgentClient`
-   * structurally, so `daemon-sessions-client.fixture.test.ts`'s "the
-   * real `DaemonClient` satisfies this interface" claim keeps holding.
-   * `createDaemonSessionsClient` below only exposes `forkSession`/
-   * `cloneSession` when the injected `daemon` actually implements these
-   * — until the wire message lands, that is never true for a real
-   * `DaemonClient`, and callers see the same "not supported" path
-   * `SESSIONS_ACTION_UNSUPPORTED` already gives archive/delete when a
-   * client doesn't implement them.
+   * The `agent`/`forkPoint` nullability mirrors the wire's own failure shape
+   * (`ForkAgentResponseMessageSchema` carries a null agent and forkPoint on
+   * failure): a real `DaemonClient.forkAgent` rejects with the daemon's error
+   * before ever resolving those nulls, but the structural contract admits them
+   * so the real class satisfies this interface as-is — `forkSession` below
+   * turns a null resolution into a rejected promise rather than mapping it.
    */
-  forkAgent?(
+  forkAgent(
     agentId: string,
     options: { entryId: string; entryIndex?: number; name?: string | null },
-  ): Promise<{ agent: DaemonAgentSnapshot; forkPoint: { messageId: string; index: number } }>;
-  /** See `forkAgent`'s doc — same disclosed gap, same optionality reasoning. */
+  ): Promise<{
+    agent: DaemonAgentSnapshot | null;
+    forkPoint: { messageId: string; index: number } | null;
+  }>;
+  /**
+   * DISCLOSED GAP (T38A3, clone half — still open): no `cloneAgent` method
+   * exists on `@picompanion/client`'s real `DaemonClient` today, and no
+   * `clone_agent_request`/`clone_agent_response` wire message backs it —
+   * the fork half of T38A3's original gap has landed (`forkAgent` above is
+   * now required), the clone half has not. Declared OPTIONAL so a real
+   * `DaemonClient` (which implements everything above plus `forkAgent`,
+   * but not this) still satisfies `DaemonAgentClient` structurally.
+   * `createDaemonSessionsClient` below only exposes `cloneSession` when the
+   * injected `daemon` actually implements this.
+   */
   cloneAgent?(
     agentId: string,
     options?: { name?: string | null },
   ): Promise<{ agent: DaemonAgentSnapshot }>;
   /**
-   * DISCLOSED GAP (T38A4): the same shape of gap as `forkAgent`/
-   * `cloneAgent` above, checked the same way — zero
+   * DISCLOSED GAP (T38A4): the same shape of gap as `cloneAgent` above,
+   * checked the same way — zero
    * `rename_agent`/`set_session_name`/`agent.rename.`/`agent.title.set.`
    * occurrences in `packages/protocol/src/messages.ts` reachable from a
    * client, and no `renameAgent`/`setAgentTitle` method anywhere in
@@ -126,17 +122,20 @@ export interface DaemonAgentClient {
    * use against its local Pi process; nothing turns it into a
    * client-reachable wire message yet, and this task's Owns line
    * (`apps/web/src/features/sessions/` only) cannot add one. Same
-   * natural owner as `forkAgent`/`cloneAgent`'s gap: T51A or a
-   * follow-up split from it.
+   * natural owner as `cloneAgent`'s gap: T51A or a
+   * follow-up split from it. (CORRECTED fork-agent-ui: this previously
+   * named `forkAgent`/`cloneAgent` together as the gap's shape; the fork
+   * half has since landed and `forkAgent` above is now required.)
    *
-   * Declared OPTIONAL for the same reason as `forkAgent`/`cloneAgent`:
-   * a real `DaemonClient` (which implements none of these three) must
+   * Declared OPTIONAL for the same reason as `cloneAgent`:
+   * a real `DaemonClient` (which implements everything above including
+   * `forkAgent`, but neither of these two) must
    * keep satisfying `DaemonAgentClient` structurally.
    * `createDaemonSessionsClient` below only exposes `renameSession`
    * when the injected `daemon` actually implements this — never true
    * for a real `DaemonClient` today, so callers see the same
    * "not supported" path `SESSIONS_ACTION_UNSUPPORTED` already gives
-   * archive/delete/fork/clone when a client doesn't implement them.
+   * clone/rename when a client doesn't implement them.
    */
   renameAgent?(agentId: string, options: { name: string }): Promise<{ agent: DaemonAgentSnapshot }>;
 }
@@ -185,27 +184,27 @@ export function createDaemonSessionsClient(daemon: DaemonAgentClient): SessionsC
       const { entries } = await daemon.fetchAgents({ filter: { includeArchived: true } });
       return entries.map((entry) => toSessionSummary(entry.agent));
     },
-    // T38A3: only exposed when `daemon` actually implements the
-    // corresponding optional method — see `DaemonAgentClient.forkAgent`'s
-    // doc above for why that is never true against a real `DaemonClient`
-    // yet. `useForkCloneSession`/`SessionsScreen` fall back to
-    // `SESSIONS_ACTION_UNSUPPORTED` when this member is absent, the same
-    // way they already do for `archiveSession`/`deleteSession`.
-    ...(daemon.forkAgent
-      ? {
-          async forkSession(
-            sessionId: string,
-            input: ForkSessionInput,
-          ): Promise<ForkSessionResult> {
-            const { agent, forkPoint } = await daemon.forkAgent!(sessionId, {
-              entryId: input.entryId,
-              entryIndex: input.entryIndex,
-              name: input.name,
-            });
-            return { session: toSessionSummary(agent), forkPoint };
-          },
-        }
-      : {}),
+    // `forkSession` is always exposed: `DaemonAgentClient.forkAgent` is
+    // REQUIRED (the fork wire has landed), so every injected `daemon` —
+    // including a real `DaemonClient` — implements it. `cloneSession` below
+    // stays conditional on the still-optional `cloneAgent`.
+    // `useForkCloneSession`/`SessionsScreen` still fall back to
+    // `SESSIONS_ACTION_UNSUPPORTED` for the clone path when that member is
+    // absent, the same way they already do for `renameSession`.
+    async forkSession(sessionId: string, input: ForkSessionInput): Promise<ForkSessionResult> {
+      const { agent, forkPoint } = await daemon.forkAgent(sessionId, {
+        entryId: input.entryId,
+        entryIndex: input.entryIndex,
+        // The wire's `name` is `string`-optional (absent means "no name");
+        // a `null` name from `ForkSessionInput` is sent as absent, never as
+        // a literal null the schema would reject.
+        ...(input.name != null ? { name: input.name } : {}),
+      });
+      if (!agent || !forkPoint) {
+        throw new Error("Fork did not return a new session.");
+      }
+      return { session: toSessionSummary(agent), forkPoint };
+    },
     ...(daemon.cloneAgent
       ? {
           async cloneSession(

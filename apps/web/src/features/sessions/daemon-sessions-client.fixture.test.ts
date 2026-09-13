@@ -466,3 +466,101 @@ describe("createDaemonSessionsClient.deleteSession (T27B4)", () => {
     await daemonClient.close();
   });
 });
+
+describe("createDaemonSessionsClient.forkSession (fork-agent-ui, real DaemonClient)", () => {
+  it("always exposes forkSession on a real DaemonClient and round-trips a fork", async () => {
+    // No recorded `agent.fork` fixture exists yet in
+    // `@picompanion/protocol`'s fixtures directory; this constructs the
+    // `agent.fork.response` reply directly from
+    // `ForkAgentResponseMessageSchema` (`packages/protocol/src/messages.ts`),
+    // matching this file's existing `agent_deleted`/`fetch_agents_response`
+    // precedent for a response with no dedicated fixture file.
+    const { daemonClient, socket } = await connectFixtureDaemonClient(
+      "clid_fixture_web_sessions_fork_0001",
+    );
+    expect(typeof daemonClient.forkAgent).toBe("function");
+
+    const client = createDaemonSessionsClient(daemonClient);
+    expect(typeof client.forkSession).toBe("function");
+    const forkPromise = client.forkSession?.("agt_fixture_0001", {
+      entryId: "entry-42",
+      entryIndex: 3,
+      name: "Branch A",
+    });
+    if (!forkPromise) throw new Error("expected forkSession to be implemented");
+    await flushMicrotasks();
+
+    const requestMessage = findSentSessionMessage<{
+      type: string;
+      requestId: string;
+      agentId: string;
+      entryId: string;
+      entryIndex?: number;
+      name?: string;
+    }>(socket, "agent.fork.request");
+    expect(requestMessage.agentId).toBe("agt_fixture_0001");
+    expect(requestMessage.entryId).toBe("entry-42");
+    expect(requestMessage.entryIndex).toBe(3);
+    expect(requestMessage.name).toBe("Branch A");
+
+    // Full `AgentSnapshotPayload` shape copied from the `fetchSessions`
+    // test above (proven schema-valid there) rather than hand-rolled.
+    const agentSnapshot = {
+      id: "agt_fixture_fork_0001",
+      provider: "pi",
+      cwd: "/synthetic/workspace/demo-repo",
+      workspaceId: "ws_fixture_0001",
+      model: "fixture-model-large",
+      thinkingOptionId: "medium",
+      effectiveThinkingOptionId: "medium",
+      createdAt: "2026-08-31T10:00:00.000Z",
+      updatedAt: "2026-08-31T11:30:00.000Z",
+      lastUserMessageAt: "2026-08-31T11:29:00.000Z",
+      status: "idle",
+      activeTurn: null,
+      capabilities: {
+        supportsStreaming: true,
+        supportsSessionPersistence: true,
+        supportsSessionListing: true,
+        supportsDynamicModes: true,
+        supportsMcpServers: true,
+        supportsReasoningStream: true,
+        supportsToolInvocations: true,
+        supportsRewindConversation: true,
+        supportsRewindFiles: true,
+        supportsRewindBoth: true,
+      },
+      currentModeId: "default",
+      availableModes: [
+        { id: "default", label: "Default" },
+        { id: "plan", label: "Plan" },
+      ],
+      pendingPermissions: [],
+      persistence: { provider: "pi", sessionId: "pi-sess-fixture-0001" },
+      title: "Branch A",
+      labels: {},
+      archivedAt: null,
+    };
+
+    socket.receiveJson({
+      type: "session",
+      message: {
+        type: "agent.fork.response",
+        payload: {
+          requestId: requestMessage.requestId,
+          agentId: "agt_fixture_0001",
+          agent: agentSnapshot,
+          forkPoint: { messageId: "entry-42", index: 3 },
+          error: null,
+        },
+      },
+    });
+
+    const result = await forkPromise;
+    expect(result.session.id).toBe("agt_fixture_fork_0001");
+    expect(result.session.title).toBe("Branch A");
+    expect(result.forkPoint).toEqual({ messageId: "entry-42", index: 3 });
+
+    await daemonClient.close();
+  });
+});

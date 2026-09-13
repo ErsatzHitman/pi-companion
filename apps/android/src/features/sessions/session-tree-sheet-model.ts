@@ -25,15 +25,18 @@
  * ## Fork/clone/rename: an injected port, never a bare, unconditionally
  * enabled affordance
  *
- * `packages/client/src` sends none of `forkAgent`, `cloneAgent`, or a
- * rename request today — confirmed at T39A's own review the same way
- * T110 (`docs/issues-from-plan.md`, same wave, running in parallel)
- * confirmed it: `grep -rn "forkAgent|cloneAgent" packages/client/src`
- * returns 0, and no rename request exists either. T110 is the task
- * adding a real wire-connected `DaemonClient.forkAgent`/`cloneAgent`/
- * rename method IN THIS WAVE — this module cannot depend on its output
- * landing first, and must not ship an enabled Fork/Clone/Rename
- * affordance whose only real-build outcome is a failure banner.
+ * `packages/client/src` still sends no `cloneAgent` or rename request —
+ * confirmed at T39A's own review the same way T110 confirmed the fork half:
+ * `grep -rn "forkAgent|cloneAgent" packages/client/src` returned 0 then.
+ * CORRECTED (fork-agent-ui): this previously said it sent none of `forkAgent`,
+ * `cloneAgent`, or rename either. The fork half has since landed
+ * (`agent.fork.request`/`agent.fork.response`, `DaemonClient.forkAgent`), so
+ * only the clone/rename half of that sentence is still true. T110 is the task
+ * that added the real wire-connected `DaemonClient.forkAgent` — this module
+ * still cannot depend on a matching `cloneAgent`/rename method landing, and
+ * must not ship an enabled Clone/Rename affordance whose only real-build
+ * outcome is a failure banner. (Fork stays gated here too until the entryId
+ * adapter below exists — see the DISCLOSED SHAPE GAP.)
  *
  * So every action below is expressed against `SessionTreeClientPort`, an
  * object whose three methods are all OPTIONAL — deliberately the
@@ -51,9 +54,9 @@
  *
  * DISCLOSED SHAPE GAP: `SessionTreeClientPort.forkAgent` here takes only
  * `{ name? }` — "fork this session from its current tip" — not the
- * `{ entryId, entryIndex?, name? }` a real `DaemonClient.forkAgent` will
- * require (see `daemon-sessions-client.ts`'s `DaemonAgentClient.forkAgent`
- * on web): this sheet has no message-level timeline to pick an `entryId`
+ * `{ entryId, entryIndex?, name? }` a real `DaemonClient.forkAgent` requires
+ * (see `daemon-sessions-client.ts`'s `DaemonAgentClient.forkAgent` on web,
+ * required since the fork wire landed): this sheet has no message-level timeline to pick an `entryId`
  * from, only a list of whole sessions. `packages/frontend-core`'s
  * `sessions/tree-edit-shortcut.ts` (T38A1b) already owns "fork from a
  * specific message" (the composer/transcript's "edit from here"

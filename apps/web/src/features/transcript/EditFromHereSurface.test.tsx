@@ -95,8 +95,9 @@ describe("EditFromHereSurface (T105)", () => {
 
   /**
    * T114 — settles the gating decision `host-session-screen.tsx`'s
-   * adapter doc left open: with no fork-capable `client` wired (every
-   * production render today, per that file's own record), the button is
+   * adapter doc left open: with no fork-capable `client` wired (now only the
+   * genuinely-disconnected case — CORRECTED fork-agent-ui: this previously
+   * said every production render, before the fork wire landed), the button is
    * disabled rather than shipped enabled with a guaranteed-failure
    * outcome. Disabled, not hidden — the same "reasoned rejection"
    * treatment `message-row.tsx` already gives an invalid fork target, so

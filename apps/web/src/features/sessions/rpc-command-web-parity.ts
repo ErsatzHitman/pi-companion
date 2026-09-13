@@ -87,15 +87,15 @@ export const SECTION_111_COMMAND_WEB_COVERAGE: readonly CommandCoverageEntry[] =
   },
   {
     command: "fork",
-    status: "gap",
+    status: "covered",
     note:
-      "DISCLOSED GAP (T38A3, still open): zero `forkAgent` method on the real @picompanion/client DaemonClient " +
-      "and zero fork_agent_request/response wire message in packages/protocol/src/messages.ts (grep confirms both). " +
-      "sessions-client.ts's ForkSessionInput/forkSession exist only as an optional client-interface member exercised " +
-      "against a fake in tests; a real DaemonClient never satisfies it. Filed as T110 (depends-on this task). Closing " +
-      "seam: fork_agent_request/fork_agent_response in packages/protocol/src/messages.ts, a session.ts handler that " +
-      "turns it into the Pi provider's `fork` PiRpcCommand, and a DaemonClient.forkAgent method matching " +
-      "daemon-sessions-client.ts's DaemonAgentClient.forkAgent shape.",
+      "SessionsClient.forkSession -> DaemonAgentClient.forkAgent -> DaemonClient.forkAgent " +
+      "(agent.fork.request/agent.fork.response in packages/protocol/src/messages.ts, handled by " +
+      "packages/server/src/server/session.ts). Proven against the real DaemonClient class over a fake " +
+      "WebSocket in daemon-sessions-client.fixture.test.ts ('always exposes forkSession on a real " +
+      "DaemonClient and round-trips a fork'). CORRECTED (fork-agent-ui): this previously disclosed T38A3's " +
+      "gap (zero forkAgent method, zero wire message); the fork half has since landed. The clone half below " +
+      "is still a gap.",
   },
   {
     command: "clone",

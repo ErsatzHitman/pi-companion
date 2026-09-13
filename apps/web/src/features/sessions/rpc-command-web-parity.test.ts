@@ -109,9 +109,10 @@ describe("§11.1 command parity: disclosed gaps named individually", () => {
     // This is the truthful gap list this task's report is built from.
     // Changing this array without also changing the registry above (or
     // vice versa) fails this test — it is not decorative.
+    // CORRECTED (fork-agent-ui): `fork` was a gap until the fork wire landed;
+    // it is now covered (see the registry's `fork` note).
     expect(gaps.sort()).toEqual(
       [
-        "fork",
         "clone",
         "get_fork_messages",
         "set_session_name",
@@ -146,6 +147,7 @@ describe("§11.1 command parity: disclosed gaps named individually", () => {
         "abort",
         "new_session",
         "switch_session",
+        "fork",
         "get_messages",
         "get_entries",
         "set_model",

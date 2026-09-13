@@ -36,10 +36,12 @@
  *
  * `client` is an optional `SessionTreeClientPort`
  * (`./session-tree-sheet-model.ts`) — deliberately absent on every real
- * build today, because `packages/client/src` sends none of `forkAgent`,
- * `cloneAgent`, or a rename request yet (T110, running in parallel this
- * same wave, is the task closing that wire gap; this file cannot depend
- * on its output landing first). When the selected session's action row
+ * build today. CORRECTED (fork-agent-ui): this previously said that was
+ * because `packages/client/src` sent none of `forkAgent`, `cloneAgent`, or a
+ * rename request yet. The fork half has since landed, but this sheet still
+ * takes no `entryId` (see that file's DISCLOSED SHAPE GAP), so no adapter
+ * wires a real `DaemonClient.forkAgent` here yet and `client` stays absent on
+ * real builds regardless. When the selected session's action row
  * renders, each of Fork/Clone/Rename is disabled and captioned with
  * `describeSessionTreeActionUnavailable`'s truthful sentence whenever
  * `client` lacks that method — never an enabled control whose only

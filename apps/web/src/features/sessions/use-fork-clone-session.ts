@@ -6,9 +6,10 @@
  * existing row the caller already renders*, so they can apply an
  * optimistic change and roll it back. Fork/clone *produce a session
  * that doesn't exist yet* — there is nothing to optimistically show
- * until the daemon (or, today, the fake client — see
- * `daemon-sessions-client.ts`'s module doc for the disclosed
- * protocol/client gap) actually assigns it an id, so `onForked`/
+ * until the daemon actually assigns it an id (fork round-trips for real;
+ * clone still resolves through a fake — see
+ * `daemon-sessions-client.ts`'s module doc for the disclosed clone gap), so
+ * `onForked`/
  * `onCloned` fire only once the round trip resolves. This also means a
  * failure never has anything to roll back: the source session's own
  * state is never touched by this hook, so "failure leaves the original
