@@ -9,7 +9,7 @@ import {
   useAutoCompaction,
   useAutoRetry,
 } from "../../features/settings/index.js";
-import { Section } from "../../ui/primitives/index.js";
+import { Section, Select } from "../../ui/primitives/index.js";
 
 /**
  * Resolved agent context for the settings panel: which agent these
@@ -93,6 +93,113 @@ export function useCurrentAgentId(client: DaemonClient | null): CurrentAgentStat
 }
 
 /**
+ * Available agents for the settings picker (per-agent settings picker close).
+ *
+ * `useCurrentAgentId` above stays as the disclosed interim most-recent
+ * default; this hook lists the host's agents (most recently updated first)
+ * so the screen can offer a real picker and settings target the chosen
+ * agent instead of always the most recent one. `selectedAgentId` defaults
+ * to the first entry once loaded and follows the user's explicit choice
+ * afterwards — a refresh that drops the selected id falls back to the new
+ * first entry rather than holding a stale id.
+ */
+export interface AvailableAgentOption {
+  id: string;
+  title: string | null;
+}
+
+export interface AgentPickerState {
+  status: "idle" | "loading" | "ready" | "empty" | "error";
+  agents: readonly AvailableAgentOption[];
+  selectedAgentId: string | null;
+  reason: string | null;
+}
+
+const PICKER_IDLE: AgentPickerState = {
+  status: "idle",
+  agents: [],
+  selectedAgentId: null,
+  reason: null,
+};
+
+export function useAgentPicker(client: DaemonClient | null): AgentPickerState & {
+  selectAgent: (agentId: string) => void;
+} {
+  const [state, setState] = useState<AgentPickerState>(PICKER_IDLE);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!client) {
+      setState(PICKER_IDLE);
+      setSelectedId(null);
+      return;
+    }
+
+    setState({ status: "loading", agents: [], selectedAgentId: null, reason: null });
+    let cancelled = false;
+
+    client
+      .fetchAgents({
+        sort: [{ key: "updated_at", direction: "desc" }],
+        page: { limit: 50 },
+      })
+      .then((result) => {
+        if (cancelled) return;
+        const agents: AvailableAgentOption[] = result.entries.map((entry) => ({
+          id: entry.agent.id,
+          title: (entry.agent as { title?: string | null }).title ?? null,
+        }));
+        if (agents.length === 0) {
+          setSelectedId(null);
+          setState({
+            status: "empty",
+            agents: [],
+            selectedAgentId: null,
+            reason: "No agents on this host yet. Settings apply once an agent exists.",
+          });
+          return;
+        }
+        setSelectedId((current) => {
+          const stillThere = current !== null && agents.some((agent) => agent.id === current);
+          const next = stillThere ? current : (agents[0]?.id ?? null);
+          setState({
+            status: "ready",
+            agents,
+            selectedAgentId: next,
+            reason: null,
+          });
+          return next;
+        });
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        setSelectedId(null);
+        setState({
+          status: "error",
+          agents: [],
+          selectedAgentId: null,
+          reason: cause instanceof Error ? cause.message : String(cause),
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  return {
+    ...state,
+    selectedAgentId: selectedId ?? state.selectedAgentId,
+    selectAgent: (agentId: string) => {
+      setSelectedId(agentId);
+      setState((current) =>
+        current.status === "ready" ? { ...current, selectedAgentId: agentId } : current,
+      );
+    },
+  };
+}
+
+/**
  * `/h/:serverId/settings` screen body (T27S2 placeholder, T38B2 built the
  * settings surface, T131 mounts it here).
  *
@@ -102,29 +209,54 @@ export function useCurrentAgentId(client: DaemonClient | null): CurrentAgentStat
  * of the two settings has a real wire today (auto-compaction, since T131;
  * auto-retry remains `"unsupported"`, disclosed and gated, never an
  * enabled control whose value silently dies — the P6-W7 defect this
- * repository's rules name explicitly). `useCurrentAgentId` above resolves
- * which agent those settings target; while there is no client, or no
- * agent yet, the panel still mounts (proving it renders on this route
- * regardless), but both rows render their own truthful `"no-client"`
- * state via `agentId: ""` — `useAutoCompaction`/`useAutoRetry` key off
- * `client` being present, not `agentId` being non-empty, so this never
- * throws.
+ * repository's rules name explicitly). `useAgentPicker` above resolves
+ * which agent those settings target (defaulting to the most recent, the
+ * same value `useCurrentAgentId` resolves, but changeable through the
+ * picker); while there is no client, or no agent yet, the panel still
+ * mounts (proving it renders on this route regardless), but both rows
+ * render their own truthful `"no-client"` state via `agentId: ""` —
+ * `useAutoCompaction`/`useAutoRetry` key off `client` being present, not
+ * `agentId` being non-empty, so this never throws.
  */
 export function HostSettingsScreen() {
   const { client } = useDaemonClientContext();
   const agent = useCurrentAgentId(client);
+  const picker = useAgentPicker(client);
 
   const settingsClient = useMemo(
     () => (client ? createDaemonSettingsClient(client) : undefined),
     [client],
   );
 
-  const effectiveAgentId = agent.agentId ?? "";
+  const effectiveAgentId = picker.selectedAgentId ?? agent.agentId ?? "";
   const autoCompaction = useAutoCompaction({ agentId: effectiveAgentId, client: settingsClient });
   const autoRetry = useAutoRetry({ agentId: effectiveAgentId, client: settingsClient });
 
+  const pickerOptions =
+    picker.status === "ready"
+      ? picker.agents.map((option) => ({
+          value: option.id,
+          label: option.title ? `${option.title} (${option.id})` : option.id,
+        }))
+      : [];
+
   return (
     <>
+      <Section title="Agent">
+        {picker.status === "ready" ? (
+          <Select
+            label="Agent"
+            options={pickerOptions}
+            value={effectiveAgentId}
+            onChange={(event) => picker.selectAgent(event.target.value)}
+            testId="host-settings-agent-picker"
+          />
+        ) : picker.status === "loading" || picker.status === "idle" ? (
+          <p className="pc-agent-settings__note">Loading agents…</p>
+        ) : (
+          <p className="pc-agent-settings__note">{picker.reason}</p>
+        )}
+      </Section>
       {agent.status === "empty" || agent.status === "error" ? (
         <p className="pc-agent-settings__note">{agent.reason}</p>
       ) : null}

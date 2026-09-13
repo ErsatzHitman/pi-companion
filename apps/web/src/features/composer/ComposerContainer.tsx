@@ -6,6 +6,7 @@ import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
 import type { PiUiComposerDraftSource } from "./pi-ui-composer-draft.js";
+import type { VoiceTranscriptionClient } from "./voice-transcribe-client.js";
 
 export interface ComposerContainerProps {
   /** Conversation target this composer submits into (session or agent id). */
@@ -56,6 +57,13 @@ export interface ComposerContainerProps {
    * proposal actions entirely and the draft changes only by typing.
    */
   piUiComposerDrafts?: PiUiComposerDraftSource;
+  /**
+   * Voice transcription client (T277 web close). Resolved by the route
+   * from the live `DaemonClient` via `resolveTranscribeClient`; see
+   * `Composer`'s own doc comment on this prop name. Omitted, a future
+   * mic control reports transcription-unavailable rather than failing.
+   */
+  transcribeClient?: VoiceTranscriptionClient;
 }
 
 /**
@@ -79,6 +87,7 @@ export function ComposerContainer({
   contextTelemetry,
   fileReferenceSource,
   piUiComposerDrafts,
+  transcribeClient,
 }: ComposerContainerProps) {
   const { platform } = useCore();
   return (
@@ -93,6 +102,7 @@ export function ComposerContainer({
       contextTelemetry={contextTelemetry}
       fileReferenceSource={fileReferenceSource}
       piUiComposerDrafts={piUiComposerDrafts}
+      transcribeClient={transcribeClient}
     />
   );
 }

@@ -182,6 +182,25 @@ describe("HostSessionScreen edit-from-here live wiring (fork-agent-ui)", () => {
   });
 });
 
+describe("HostSessionScreen transcribe wiring (T277 web close, T282 pattern)", () => {
+  it("derives transcribeClient from the live client via resolveTranscribeClient", () => {
+    expect(readHostSessionScreenCode()).toMatch(
+      /const transcribeClient = useMemo\(\(\) => resolveTranscribeClient\(client\), \[client\]\);/,
+    );
+  });
+
+  it("passes the resolved client straight through to ComposerContainer — deleting it must fail this assertion", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(/<ComposerContainer[\s\S]*?transcribeClient=\{transcribeClient\}/);
+    expect(code).not.toMatch(/<ComposerContainer[\s\S]*?transcribeClient=\{undefined\}/);
+  });
+
+  it("records a transcript fork into the shared registry so SessionsScreen re-resolves it under its real parent", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(/recordForkRelationship\(outcome\.newSessionId/);
+  });
+});
+
 /**
  * T284: proves this route's attachment-image wiring — a source-level
  * contract test, the same instrument `CLAUDE.md` names for a behavior

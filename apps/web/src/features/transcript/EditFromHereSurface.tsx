@@ -39,6 +39,7 @@
 import { useState } from "react";
 
 import type { Clock, timeline } from "@picompanion/frontend-core";
+import type { sessions as coreSessions } from "@picompanion/frontend-core";
 
 import { Banner } from "../../ui/primitives/index.js";
 import type { ResolveImageSrc } from "./message-attachments.js";
@@ -68,6 +69,11 @@ export interface EditFromHereSurfaceProps {
    * navigates itself — see this file's module doc.
    */
   onOpenSession?: (outcome: EditFromHereOutcome) => void;
+  /**
+   * Resolves the fork's real parent (fork-lands-as-root). Forwarded to
+   * `useEditFromHere`; omitted, the fork attaches to a synthesized root.
+   */
+  resolveParentNode?: (sourceSessionId: string) => coreSessions.SessionTreeNode | undefined;
   testId?: string;
 }
 
@@ -88,6 +94,7 @@ export function EditFromHereSurface({
   onRewindToHere,
   rewindToHereDisabled,
   onOpenSession,
+  resolveParentNode,
   testId,
 }: EditFromHereSurfaceProps) {
   const [lastOutcome, setLastOutcome] = useState<EditFromHereOutcome | null>(null);
@@ -100,6 +107,7 @@ export function EditFromHereSurface({
     onForked: (outcome) => {
       setLastOutcome(outcome);
     },
+    ...(resolveParentNode ? { resolveParentNode } : {}),
   });
 
   const errorTestId = testId ? `${testId}-edit-from-here-error` : undefined;

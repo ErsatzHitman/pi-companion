@@ -2,6 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Clock, TimerHandle, timeline } from "@picompanion/frontend-core";
 
+import { sessions as coreSessions } from "@picompanion/frontend-core";
+
 import type { EditFromHereForkClient, EditFromHereOutcome } from "./use-edit-from-here.js";
 import { useEditFromHere } from "./use-edit-from-here.js";
 
@@ -219,5 +221,66 @@ describe("useEditFromHere (T105)", () => {
     expect(onForked).toHaveBeenCalledTimes(1);
     expect(onForked.mock.calls[0]?.[0].newSessionId).toBe("edit-branch-live");
     expect(result.current.error).toBeNull();
+  });
+
+  it("fork-lands-as-root: attaches the fork to the resolved real parent instead of a synthesized root", async () => {
+    const client: EditFromHereForkClient = {
+      forkAgent: vi.fn(async () => ({ agentId: "edit-branch-1" })),
+    };
+    let outcome: EditFromHereOutcome | undefined;
+    const realParent = coreSessions.createRootSession({
+      agentId: "source-session",
+      createdAt: 1_000,
+    });
+    const resolveParentNode = vi.fn(() => realParent);
+
+    const { result } = renderHook(() =>
+      useEditFromHere({
+        sessionId: "source-session",
+        entries: ENTRIES,
+        clock: new FakeClock(5_000),
+        client,
+        onForked: (o) => {
+          outcome = o;
+        },
+        resolveParentNode,
+      }),
+    );
+
+    await act(async () => {
+      result.current.editFromHere("u2");
+    });
+
+    expect(resolveParentNode).toHaveBeenCalledWith("source-session");
+    expect(outcome?.node.kind).toBe("fork");
+    expect(outcome?.node.parent).toBe(realParent);
+    expect(outcome?.node.root).toBe(realParent.root);
+  });
+
+  it("fork-lands-as-root: falls back to a synthesized root when no resolver is provided", async () => {
+    const client: EditFromHereForkClient = {
+      forkAgent: vi.fn(async () => ({ agentId: "edit-branch-1" })),
+    };
+    let outcome: EditFromHereOutcome | undefined;
+
+    const { result } = renderHook(() =>
+      useEditFromHere({
+        sessionId: "source-session",
+        entries: ENTRIES,
+        clock: new FakeClock(5_000),
+        client,
+        onForked: (o) => {
+          outcome = o;
+        },
+      }),
+    );
+
+    await act(async () => {
+      result.current.editFromHere("u2");
+    });
+
+    expect(outcome?.node.kind).toBe("fork");
+    expect(outcome?.node.parent?.agentId).toBe("source-session");
+    expect(outcome?.node.parent?.kind).toBe("root");
   });
 });

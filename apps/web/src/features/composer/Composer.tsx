@@ -27,6 +27,7 @@ import { useDragAndDrop } from "./use-drag-and-drop.js";
 import { useModelThinking } from "./use-model-thinking.js";
 import { useQueueModes } from "./use-queue-modes.js";
 import { useSlashCommands } from "./use-slash-commands.js";
+import type { VoiceTranscriptionClient } from "./voice-transcribe-client.js";
 
 /** Text summary of the live queue (T28B3): depth and its steer/follow-up split, never colour alone. */
 function describeQueue(steeringCount: number, followUpCount: number): string {
@@ -95,6 +96,17 @@ export interface ComposerProps extends UseComposerOptions {
    * invented.
    */
   fileReferenceSource?: coreComposer.ReferenceFileSource;
+  /**
+   * Voice transcription client (T277 web close, plan.md §9.4). The route
+   * resolves this from the live `DaemonClient` via
+   * `resolveTranscribeClient` (the web equivalent of Android's T282
+   * pattern); `undefined` — no live connection — is the honest
+   * "transcription-unavailable" seam a future mic control will read.
+   * Accepted today so the wiring lands before the button does; no mic
+   * affordance reads it yet (see this file's "no mic/dictate control"
+   * note), so omitting it changes nothing visible.
+   */
+  transcribeClient?: VoiceTranscriptionClient;
 }
 
 /** `ComposerAttachment.status` -> `Chip` tone (T28B6): status is always paired with visible text too, never colour alone (plan.md §10.5). */

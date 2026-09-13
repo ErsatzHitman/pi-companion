@@ -12,6 +12,7 @@ import { ComposerContainer } from "../../features/composer/index.js";
 import { createDaemonAgentTurnClient } from "../../features/composer/index.js";
 import { createPiUiComposerDraftSource } from "../../features/composer/index.js";
 import { createReferenceFileSource } from "../../features/composer/index.js";
+import { resolveTranscribeClient } from "../../features/composer/index.js";
 import { useSessionContextTelemetry } from "../../features/composer/index.js";
 import { usePiUiSession } from "../../features/extensions/pi-ui-session-context.js";
 import {
@@ -20,6 +21,7 @@ import {
   PiExtensionSheetHost,
 } from "../../features/extensions/placements/index.js";
 import { createDaemonSessionResumeClient } from "../../features/sessions/index.js";
+import { recordForkRelationship } from "../../features/sessions/session-fork-registry.js";
 import { SessionResumeScreen } from "../../features/sessions/SessionResumeScreen.js";
 import {
   resolveDirectHttpOrigin,
@@ -513,6 +515,14 @@ export function HostSessionScreen() {
     [client],
   );
   const editFromHereClient = useMemo(() => adaptEditFromHereForkClient(client), [client]);
+  // T277 web close: thread the live `DaemonClient`'s own
+  // `transcribeVoiceClip` as the composer's `transcribeClient` (the web
+  // equivalent of Android's T282 `resolveTranscribeClient` off
+  // `AppCore.connection` — here the equivalent live client is
+  // `useDaemonClientContext()`'s `client`). `undefined` with no
+  // connection, so a future clip reports transcription-unavailable
+  // truthfully instead of a fake transcript.
+  const transcribeClient = useMemo(() => resolveTranscribeClient(client), [client]);
 
   // T395: bumping this re-runs the transcript effect above, which re-resumes
   // from the daemon — a files-only rewind changes no timeline row, so the
@@ -584,7 +594,16 @@ export function HostSessionScreen() {
     entries: transcriptEntries,
   });
 
+  // Fork-lands-as-root: record the transcript fork in the shared registry
+  // (`features/sessions/session-fork-registry.ts`) so `SessionsScreen`'s
+  // own `handleForked`/`buildSessionTree` re-resolves the same fork under
+  // its real parent on its next mount, instead of rendering it as a root.
   function openForkedSession(outcome: EditFromHereOutcome): void {
+    recordForkRelationship(outcome.newSessionId, {
+      kind: "fork",
+      parentId: outcome.sourceSessionId,
+      forkPoint: outcome.forkPoint,
+    });
     void navigate({
       to: "/h/$serverId/session/$agentId",
       params: { serverId, agentId: outcome.newSessionId },
@@ -671,6 +690,7 @@ export function HostSessionScreen() {
         // Pi UI `composer`-kind accept/undo fills and restores the live
         // draft through the session's own action controller and store.
         piUiComposerDrafts={piUiComposerDrafts}
+        transcribeClient={transcribeClient}
       />
     </>
   );
