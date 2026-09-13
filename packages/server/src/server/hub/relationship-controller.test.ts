@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { platform } from "node:os";
 import { afterEach, describe, expect, test } from "vitest";
 import { HubRelationshipHarness } from "./test-utils/relationship-harness.js";
+import type { HubExecutionAgentCreateResponse } from "../messages.js";
 
 async function captureUnhandledRejections(action: () => Promise<void>): Promise<unknown[]> {
   const rejections: unknown[] = [];
@@ -409,7 +410,9 @@ describe("Hub relationship", () => {
       prompt,
       modeId: "full-access",
     });
-    const created = await relationship.ownedCreateResult("running-create");
+    const created = (await relationship.ownedCreateResult(
+      "running-create",
+    )) as HubExecutionAgentCreateResponse;
     const running = await relationship.ownedRunningUpdate(created.payload.agentId!);
 
     await relationship.restartDaemon();
@@ -456,7 +459,9 @@ describe("Hub relationship", () => {
     relationship.connectLatestSocket();
     const prompt = "respond with exactly: completed once";
     relationship.beginOwnedCreate("completed-create", "execution-completed", { prompt });
-    const created = await relationship.ownedCreateResult("completed-create");
+    const created = (await relationship.ownedCreateResult(
+      "completed-create",
+    )) as HubExecutionAgentCreateResponse;
     await relationship.ownedTurnCompletion(created.payload.agentId!);
 
     relationship.beginOwnedCreate("completed-duplicate", "execution-completed", { prompt });
@@ -482,7 +487,9 @@ describe("Hub relationship", () => {
     relationship.connectLatestSocket();
     const prompt = "respond with exactly: already completed";
     relationship.beginOwnedCreate("idle-create", "execution-idle", { prompt });
-    const created = await relationship.ownedCreateResult("idle-create");
+    const created = (await relationship.ownedCreateResult(
+      "idle-create",
+    )) as HubExecutionAgentCreateResponse;
     await relationship.ownedTurnCompletion(created.payload.agentId!);
 
     await relationship.restartDaemon();
@@ -509,7 +516,9 @@ describe("Hub relationship", () => {
     relationship.connectLatestSocket();
     const prompt = "emit a turn failure";
     relationship.beginOwnedCreate("failed-create", "execution-failed", { prompt });
-    const created = await relationship.ownedCreateResult("failed-create");
+    const created = (await relationship.ownedCreateResult(
+      "failed-create",
+    )) as HubExecutionAgentCreateResponse;
     const failed = await relationship.ownedTurnFailure(created.payload.agentId!);
 
     await relationship.restartDaemon();
@@ -775,7 +784,9 @@ describe("Hub relationship", () => {
     await relationship.beginConnect().result;
     relationship.connectLatestSocket();
     relationship.beginOwnedCreate("orphan-create", "execution-orphan", { prompt: "sleep 30" });
-    const created = await relationship.ownedCreateResult("orphan-create");
+    const created = (await relationship.ownedCreateResult(
+      "orphan-create",
+    )) as HubExecutionAgentCreateResponse;
     expect(created).toMatchObject({ payload: { agent: { status: "running" } } });
 
     await relationship.disconnect(true);

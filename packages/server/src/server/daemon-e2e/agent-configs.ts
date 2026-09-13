@@ -32,12 +32,11 @@ export type AgentProvider = keyof typeof agentConfigs;
  * Get test config for creating an agent with full permissions (no prompts).
  */
 export function getFullAccessConfig(provider: AgentProvider) {
-  const config = agentConfigs[provider];
-  const thinkingOptionId = "thinkingOptionId" in config ? config.thinkingOptionId : undefined;
+  const config: AgentTestConfig = agentConfigs[provider];
   return {
     provider: config.provider,
     ...(config.model ? { model: config.model } : {}),
-    ...(thinkingOptionId ? { thinkingOptionId } : {}),
+    ...(config.thinkingOptionId ? { thinkingOptionId: config.thinkingOptionId } : {}),
     ...(config.modes?.full ? { modeId: config.modes.full } : {}),
   };
 }
@@ -46,12 +45,11 @@ export function getFullAccessConfig(provider: AgentProvider) {
  * Get test config for creating an agent that requires permission approval.
  */
 export function getAskModeConfig(provider: AgentProvider) {
-  const config = agentConfigs[provider];
-  const thinkingOptionId = "thinkingOptionId" in config ? config.thinkingOptionId : undefined;
+  const config: AgentTestConfig = agentConfigs[provider];
   return {
     provider: config.provider,
     ...(config.model ? { model: config.model } : {}),
-    ...(thinkingOptionId ? { thinkingOptionId } : {}),
+    ...(config.thinkingOptionId ? { thinkingOptionId: config.thinkingOptionId } : {}),
     ...(config.modes?.ask ? { modeId: config.modes.ask } : {}),
   };
 }
