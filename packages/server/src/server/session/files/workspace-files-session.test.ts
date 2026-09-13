@@ -281,6 +281,160 @@ describe("WorkspaceFilesSession", () => {
     ]);
   });
 
+  test("serves a file-download-bytes chunk with metadata", async () => {
+    const cwd = makeDir("workspace-files-bytes-");
+    writeFileSync(join(cwd, "report.txt"), "hello world");
+    const { subsystem, emitted } = makeSubsystem();
+
+    await subsystem.handleFileDownloadBytesRequest({
+      type: "file_download_bytes_request",
+      cwd,
+      path: "report.txt",
+      offset: 0,
+      length: 5,
+      requestId: "req-bytes",
+    });
+
+    expect(emitted).toHaveLength(1);
+    const message = emitted[0];
+    if (message.type !== "file_download_bytes_response") {
+      throw new Error(`expected file_download_bytes_response, got ${message.type}`);
+    }
+    expect(message.payload.error).toBeNull();
+    expect(message.payload.offset).toBe(0);
+    expect(message.payload.eof).toBe(false);
+    expect(message.payload.size).toBe(11);
+    expect(message.payload.fileName).toBe("report.txt");
+    expect(Buffer.from(message.payload.dataBase64, "base64").toString("utf8")).toBe("hello");
+  });
+
+  test("marks the final file-download-bytes chunk with eof", async () => {
+    const cwd = makeDir("workspace-files-bytes-eof-");
+    writeFileSync(join(cwd, "report.txt"), "hello world");
+    const { subsystem, emitted } = makeSubsystem();
+
+    await subsystem.handleFileDownloadBytesRequest({
+      type: "file_download_bytes_request",
+      cwd,
+      path: "report.txt",
+      offset: 6,
+      length: 65536,
+      requestId: "req-bytes-eof",
+    });
+
+    expect(emitted).toHaveLength(1);
+    const message = emitted[0];
+    if (message.type !== "file_download_bytes_response") {
+      throw new Error(`expected file_download_bytes_response, got ${message.type}`);
+    }
+    expect(message.payload.error).toBeNull();
+    expect(message.payload.offset).toBe(6);
+    expect(message.payload.eof).toBe(true);
+    expect(Buffer.from(message.payload.dataBase64, "base64").toString("utf8")).toBe("world");
+  });
+
+  test("returns an empty eof chunk past the end of the file", async () => {
+    const cwd = makeDir("workspace-files-bytes-past-eof-");
+    writeFileSync(join(cwd, "report.txt"), "hi");
+    const { subsystem, emitted } = makeSubsystem();
+
+    await subsystem.handleFileDownloadBytesRequest({
+      type: "file_download_bytes_request",
+      cwd,
+      path: "report.txt",
+      offset: 99,
+      length: 16,
+      requestId: "req-bytes-past-eof",
+    });
+
+    expect(emitted).toHaveLength(1);
+    const message = emitted[0];
+    if (message.type !== "file_download_bytes_response") {
+      throw new Error(`expected file_download_bytes_response, got ${message.type}`);
+    }
+    expect(message.payload.error).toBeNull();
+    expect(message.payload.dataBase64).toBe("");
+    expect(message.payload.eof).toBe(true);
+  });
+
+  test("rejects an empty download-bytes cwd with an error envelope", async () => {
+    const { subsystem, emitted } = makeSubsystem();
+
+    await subsystem.handleFileDownloadBytesRequest({
+      type: "file_download_bytes_request",
+      cwd: "  ",
+      path: "report.txt",
+      offset: 0,
+      length: 16,
+      requestId: "req-bytes-empty",
+    });
+
+    expect(emitted).toEqual([
+      {
+        type: "file_download_bytes_response",
+        payload: expect.objectContaining({
+          requestId: "req-bytes-empty",
+          offset: 0,
+          dataBase64: "",
+          eof: true,
+          error: "cwd is required",
+        }),
+      },
+    ]);
+  });
+
+  test("rejects an outside-workspace download-bytes path without throwing", async () => {
+    const cwd = makeDir("workspace-files-bytes-jail-");
+    writeFileSync(join(cwd, "ok.txt"), "ok");
+    const { subsystem, emitted } = makeSubsystem();
+
+    await expect(
+      subsystem.handleFileDownloadBytesRequest({
+        type: "file_download_bytes_request",
+        cwd,
+        path: "../escape.txt",
+        offset: 0,
+        length: 16,
+        requestId: "req-bytes-jail",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(emitted).toHaveLength(1);
+    const message = emitted[0];
+    if (message.type !== "file_download_bytes_response") {
+      throw new Error(`expected file_download_bytes_response, got ${message.type}`);
+    }
+    expect(message.payload.offset).toBe(0);
+    expect(message.payload.dataBase64).toBe("");
+    expect(message.payload.eof).toBe(true);
+    expect(typeof message.payload.error).toBe("string");
+  });
+
+  test("reports a missing download-bytes file as an error envelope", async () => {
+    const cwd = makeDir("workspace-files-bytes-missing-");
+    const { subsystem, emitted } = makeSubsystem();
+
+    await expect(
+      subsystem.handleFileDownloadBytesRequest({
+        type: "file_download_bytes_request",
+        cwd,
+        path: "nope.txt",
+        offset: 0,
+        length: 16,
+        requestId: "req-bytes-missing",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(emitted).toHaveLength(1);
+    const message = emitted[0];
+    if (message.type !== "file_download_bytes_response") {
+      throw new Error(`expected file_download_bytes_response, got ${message.type}`);
+    }
+    expect(message.payload.dataBase64).toBe("");
+    expect(message.payload.eof).toBe(true);
+    expect(typeof message.payload.error).toBe("string");
+  });
+
   test("responds to a project icon request", async () => {
     const cwd = makeDir("workspace-files-icon-");
     const { subsystem, emitted } = makeSubsystem();

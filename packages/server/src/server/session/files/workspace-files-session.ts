@@ -6,6 +6,7 @@ import {
   type FileTransferFrame,
 } from "@picompanion/protocol/binary-frames/index";
 import type {
+  FileDownloadBytesRequest,
   FileDownloadTokenRequest,
   FileExplorerRequest,
   FileUploadRequest,
@@ -28,6 +29,7 @@ import {
   deleteExplorerEntry,
   getDownloadableFileInfo,
   listDirectoryEntries,
+  readDownloadableFileChunk,
   readExplorerFile,
   renameExplorerEntry,
   streamExplorerFile,
@@ -470,6 +472,80 @@ export class WorkspaceFilesSession {
           icon: null,
           error: getErrorMessage(error),
           requestId,
+        },
+      });
+    }
+  }
+
+  /**
+   * Serves one `file_download_bytes_request` chunk fetch-and-forward INSIDE
+   * the E2EE channel (the relay only ever sees ciphertext). Reuses
+   * `getDownloadableFileInfo` (via `readDownloadableFileChunk`) so the
+   * scoped-root jail, the is-file gate, and the mime/size attribution are
+   * identical to `handleFileDownloadTokenRequest` — `agentId`, when
+   * present, is accepted on the wire but never used as a filesystem
+   * scope here; a request without a usable `cwd` gets an error envelope.
+   * Never throws: every failure (missing scope, missing file, jail
+   * rejection, short read) is an `error` envelope echoing the requested
+   * `offset` with empty `dataBase64` and `eof: true` so a chunk loop
+   * terminates instead of hanging.
+   */
+  async handleFileDownloadBytesRequest(request: FileDownloadBytesRequest): Promise<void> {
+    const { path: requestedPath, offset, length, requestId } = request;
+    const safeOffset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
+    const cwd = request.cwd?.trim() ?? "";
+    if (!cwd) {
+      this.host.emit({
+        type: "file_download_bytes_response",
+        payload: {
+          requestId,
+          offset: safeOffset,
+          dataBase64: "",
+          eof: true,
+          error: "cwd is required",
+        },
+      });
+      return;
+    }
+
+    this.logger.debug(
+      { cwd, path: requestedPath, offset },
+      `Handling file download bytes request for workspace ${cwd} (${requestedPath} @${offset})`,
+    );
+
+    try {
+      const chunk = await readDownloadableFileChunk({
+        root: cwd,
+        relativePath: requestedPath,
+        offset,
+        length,
+      });
+      this.host.emit({
+        type: "file_download_bytes_response",
+        payload: {
+          requestId,
+          offset: chunk.offset,
+          dataBase64: chunk.bytes.toString("base64"),
+          eof: chunk.eof,
+          size: chunk.size,
+          mimeType: chunk.mimeType,
+          fileName: chunk.fileName,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        { err: error, cwd, path: requestedPath, offset },
+        `Failed to read download bytes for workspace ${cwd}`,
+      );
+      this.host.emit({
+        type: "file_download_bytes_response",
+        payload: {
+          requestId,
+          offset: safeOffset,
+          dataBase64: "",
+          eof: true,
+          error: getErrorMessage(error),
         },
       });
     }
