@@ -173,6 +173,15 @@ class FakeSession implements AgentSession {
     return null;
   }
 
+  async setAutoRetry(_enabled: boolean) {
+    this.recordedCalls.push("setAutoRetry");
+  }
+
+  async getAutoRetry() {
+    this.recordedCalls.push("getAutoRetry");
+    return null;
+  }
+
   async revertConversation() {
     this.recordedCalls.push("revertConversation");
   }
@@ -225,6 +234,8 @@ describe("wrapSessionProvider", () => {
     wrapped.respondToEditorTextRequest?.("request-1", "draft text");
     await wrapped.setAutoCompaction?.(true);
     await wrapped.getAutoCompaction?.();
+    await wrapped.setAutoRetry?.(true);
+    await wrapped.getAutoRetry?.();
     await wrapped.revertConversation?.({ messageId: "message-1" });
     await wrapped.revertFiles?.({ messageId: "message-1" });
     await wrapped.revertBoth?.({ messageId: "message-1" });
@@ -244,6 +255,8 @@ describe("wrapSessionProvider", () => {
       "respondToEditorTextRequest",
       "setAutoCompaction",
       "getAutoCompaction",
+      "setAutoRetry",
+      "getAutoRetry",
       "revertConversation",
       "revertFiles",
       "revertBoth",
@@ -257,7 +270,7 @@ describe("wrapSessionProvider", () => {
   /**
    * Added at the P9-S merge gate. `forwardOptionalSessionMethods`' guard
    * (`typeof method === "function"`) had only its TRUE branch covered: the
-   * `FakeSession` above implements all 16 optional methods, so no test
+   * `FakeSession` above implements every optional method, so no test
    * constructed an inner session that LACKS one. That left the mechanism
    * this task chose over a `Proxy` free to regress into the exact behaviour
    * it was chosen to avoid — measured at the gate by mutating the guard to

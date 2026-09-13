@@ -1207,6 +1207,25 @@ describe("PiRpcAgentSession", () => {
     expect(after).toBe(false);
   });
 
+  test("sets auto-retry through Pi's runtime command", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.setAutoRetry?.(false);
+
+    expect(fakeSession.setAutoRetryRequests).toEqual([false]);
+  });
+
+  test("getAutoRetry defaults to true and reflects the last setAutoRetry write", async () => {
+    const { session } = await createSession();
+
+    await expect(session.getAutoRetry?.()).resolves.toBe(true);
+
+    await session.setAutoRetry?.(false);
+
+    await expect(session.getAutoRetry?.()).resolves.toBe(false);
+  });
+
   test("startTurn forwards a per-message streamingBehavior to Pi's prompt command", async () => {
     const { pi, session } = await createSession();
     const fakeSession = pi.latestSession();

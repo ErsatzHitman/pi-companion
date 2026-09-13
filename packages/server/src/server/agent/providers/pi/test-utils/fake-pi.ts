@@ -107,6 +107,11 @@ export class FakePiSession implements PiRuntimeSession {
   }> = [];
   readonly compactRequests: Array<{ customInstructions?: string }> = [];
   readonly setAutoCompactionRequests: boolean[] = [];
+  readonly setAutoRetryRequests: boolean[] = [];
+  // Session-local auto-retry value: Pi's `get_state` carries no auto-retry
+  // field, so this (default `true`, matching Pi's unconditional retries)
+  // is the source of truth `getAutoRetry` would read on a real session.
+  autoRetryEnabled = true;
   readonly subagentSubscriptionRequests: FakePiSubagentSubscriptionLevel[] = [];
   readonly subagentMessageRequests: FakePiSubagentMessagesSelector[] = [];
   readonly setModelRequests: Array<{ provider: string; modelId: string }> = [];
@@ -253,6 +258,11 @@ export class FakePiSession implements PiRuntimeSession {
       ...this.state,
       autoCompactionEnabled: enabled,
     };
+  }
+
+  async setAutoRetry(enabled: boolean): Promise<void> {
+    this.setAutoRetryRequests.push(enabled);
+    this.autoRetryEnabled = enabled;
   }
 
   async abort(): Promise<void> {

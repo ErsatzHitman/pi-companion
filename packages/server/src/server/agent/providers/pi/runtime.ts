@@ -52,6 +52,10 @@ export interface PiRuntimeSession {
   ): Promise<PiPromptAck>;
   compact(customInstructions?: string): Promise<void>;
   setAutoCompaction(enabled: boolean): Promise<void>;
+  // Pi's `get_state` carries no auto-retry field (unlike
+  // `autoCompactionEnabled`), so there is no `getAutoRetry` here: the
+  // session-local value in `PiRpcAgentSession` is the source of truth.
+  setAutoRetry(enabled: boolean): Promise<void>;
   abort(): Promise<void>;
   getState(): Promise<PiSessionState>;
   getMessages(): Promise<PiAgentMessage[]>;

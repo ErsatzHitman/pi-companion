@@ -18,9 +18,20 @@ export type AgentProviderModeDefinition = Omit<AgentMode, "icon" | "colorTier"> 
     isUnattended?: boolean;
   };
 
-// TODO: `modes` should not be static. Providers (especially ACP) report their
-// own modes at runtime via session/new. We should fetch modes from the provider
-// as source of truth and enrich with UI metadata (icons, colorTier) on top.
+// `modes` here is static UI metadata, never the runtime source of truth.
+// Providers report their own modes at runtime via `fetchCatalog` (see
+// `ProviderDefinition.fetchCatalog` in
+// `packages/server/src/server/agent/provider-registry.ts`), surfaced through
+// the snapshot (`ProviderSnapshotManager.listModes` in
+// `provider-snapshot-manager.ts`) and the `list_provider_modes` /
+// `get_providers_snapshot` response paths (`ListProviderModesResponseMessageSchema`
+// and `GetProvidersSnapshotResponseMessageSchema` in
+// `packages/protocol/src/messages.ts`). The runtime list is the source of
+// truth; this file enriches it with UI metadata (icons, colorTier) on top via
+// `enrichModesWithUiMetadata` (which `provider-registry.ts`'s catalog merge
+// calls), falling back to `getModeVisuals` per mode. A definition's own
+// `modes` array is only the fallback visuals (and `defaultModeId` / `isUnattended`)
+// used when the runtime reports nothing yet.
 export interface AgentProviderDefinition {
   id: string;
   label: string;
@@ -93,4 +104,32 @@ export function getModeVisuals(
   const mode = definition?.modes.find((m) => m.id === modeId);
   if (!mode) return undefined;
   return { icon: mode.icon, colorTier: mode.colorTier };
+}
+
+/**
+ * Enriches runtime-reported modes with static UI metadata on top.
+ * `runtimeModes` (from `fetchCatalog`) is the source of truth and is never
+ * reordered or filtered here; only a missing `icon`/`colorTier` is filled
+ * from the provider's static definition via `getModeVisuals`. A mode the
+ * runtime reports that the definition does not know passes through untouched,
+ * and a mode already carrying both fields is returned as-is.
+ */
+export function enrichModesWithUiMetadata(
+  provider: string,
+  runtimeModes: AgentMode[],
+  definitions: AgentProviderDefinition[] = [
+    ...AGENT_PROVIDER_DEFINITIONS,
+    ...DEV_AGENT_PROVIDER_DEFINITIONS,
+  ],
+): AgentMode[] {
+  return runtimeModes.map((mode) => {
+    if (mode.icon && mode.colorTier) return mode;
+    const visuals = getModeVisuals(provider, mode.id, definitions);
+    if (!visuals) return mode;
+    return {
+      ...mode,
+      icon: mode.icon ?? visuals.icon,
+      colorTier: mode.colorTier ?? visuals.colorTier,
+    };
+  });
 }
