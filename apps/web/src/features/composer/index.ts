@@ -108,3 +108,9 @@ export {
   REFERENCE_FILE_MAX_RESULTS,
 } from "./reference-file-source.js";
 export type { ReferenceFileSourceOptions } from "./reference-file-source.js";
+export { resolveTranscribeClient } from "./voice-transcribe-client.js";
+export type {
+  VoiceTranscriptionClient,
+  VoiceTranscriptionInput,
+  VoiceTranscriptionResult,
+} from "./voice-transcribe-client.js";

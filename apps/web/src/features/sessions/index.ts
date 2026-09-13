@@ -174,6 +174,11 @@ export type {
 } from "./use-fork-clone-session.js";
 export { buildSessionTree } from "./session-tree-state.js";
 export type { SessionRelationship } from "./session-tree-state.js";
+export {
+  clearRecordedRelationshipsForTests,
+  getRecordedRelationships,
+  recordForkRelationship,
+} from "./session-fork-registry.js";
 
 // T38A4: session rename and metadata editing (bounded name validation,
 // plus concurrent-rename arbitration built on `@picompanion/frontend-

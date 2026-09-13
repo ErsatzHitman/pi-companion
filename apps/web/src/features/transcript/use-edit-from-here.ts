@@ -40,20 +40,24 @@
  * function — a mutation that swaps that call for a hand-built object
  * fails that assertion (see this file's test for the mutation proof).
  *
- * `parent` is synthesized as a fresh root (`createRootSession`) rather
- * than resolved against this session's full ancestor chain: that chain
- * is built and owned by `features/sessions/`'s tree-state module
- * (`session-tree-state.ts`, T38A3), a different directory this task does
- * not own or edit. A synthesized root still produces a structurally
- * valid fork (`kind: "fork"`, correct `forkPoint`, correct `agentId`) —
- * only `.node.parent`/`.node.root` describe a one-level tree rather than
- * this session's real recorded ancestry. DISCLOSED GAP: a caller that
- * wants this fork placed correctly in `SessionsScreen`'s full tree view
- * must re-resolve it there (that screen already knows how to place a
- * `SessionRelationship` — see its own `handleForked`); wiring this hook's
- * outcome into that screen is out of this task's Owns line
- * (`apps/web/src/features/sessions/` is off-limits for this task, per
- * T105's own coordination note).
+ * `parent` defaults to a synthesized fresh root (`createRootSession`)
+ * but a caller that holds this session's real ancestry resolves it via
+ * `resolveParentNode` instead: that chain is built and owned by
+ * `features/sessions/`'s tree-state module (`session-tree-state.ts`,
+ * T38A3). A synthesized root still produces a structurally valid fork
+ * (`kind: "fork"`, correct `forkPoint`, correct `agentId`) — only
+ * `.node.parent`/`.node.root` describe a one-level tree rather than
+ * this session's real recorded ancestry. CORRECTED (fork-lands-as-root):
+ * a caller that wants this fork placed correctly in `SessionsScreen`'s
+ * full tree view passes `resolveParentNode` (the screen's own tree
+ * index) so the fork attaches to its real parent here, AND records the
+ * outcome's `SessionRelationship` through
+ * `features/sessions/session-fork-registry.ts` so `SessionsScreen`'s
+ * own `handleForked`/`buildSessionTree` re-resolves the same fork on
+ * its next mount (see `EditFromHereSurface`'s `resolveParentNode` prop
+ * and `host-session-screen.tsx`'s recording `onOpenSession`). Without a
+ * resolver the hook keeps the old synthesized-root fallback so existing
+ * callers and tests keep working.
  */
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -106,6 +110,13 @@ export interface UseEditFromHereOptions {
   /** A fork-capable client; `undefined` only while disconnected (defense in depth — see module doc). */
   client?: EditFromHereForkClient;
   onForked: (outcome: EditFromHereOutcome) => void;
+  /**
+   * Resolves this session's real parent node for the fork (fork-lands-as-root).
+   * When omitted the hook synthesizes a fresh root, preserving the old
+   * standalone behaviour; when provided the fork attaches to the real
+   * ancestry so `SessionsScreen`'s tree shows it under its parent.
+   */
+  resolveParentNode?: (sourceSessionId: string) => coreSessions.SessionTreeNode | undefined;
 }
 
 export interface EditFromHereController {
@@ -119,7 +130,7 @@ export interface EditFromHereController {
 }
 
 export function useEditFromHere(options: UseEditFromHereOptions): EditFromHereController {
-  const { sessionId, entries, clock, client, onForked } = options;
+  const { sessionId, entries, clock, client, onForked, resolveParentNode } = options;
   const targets = useMemo(() => buildEditFromHereTargets(entries), [entries]);
 
   const [isForking, setIsForking] = useState(false);
@@ -156,10 +167,12 @@ export function useEditFromHere(options: UseEditFromHereOptions): EditFromHereCo
       client
         .forkAgent(sessionId, { entryId: forkPoint.messageId, entryIndex: forkPoint.index })
         .then((forked) => {
-          const parent = coreSessions.createRootSession({
-            agentId: sessionId,
-            createdAt: clock.now(),
-          });
+          const parent =
+            resolveParentNode?.(sessionId) ??
+            coreSessions.createRootSession({
+              agentId: sessionId,
+              createdAt: clock.now(),
+            });
           // The real frontend-core call — see this file's module doc for
           // why nothing here hand-builds the fork node instead.
           const result = coreSessions.editFromHere({
@@ -184,7 +197,7 @@ export function useEditFromHere(options: UseEditFromHereOptions): EditFromHereCo
           setError(forkError instanceof Error ? forkError.message : String(forkError));
         });
     },
-    [client, clock, onForked, sessionId, targets],
+    [client, clock, onForked, resolveParentNode, sessionId, targets],
   );
 
   return { targets, editFromHere, isForking, error };

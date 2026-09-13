@@ -11,6 +11,7 @@ import { DiscoveredSessionList } from "./DiscoveredSessionList.js";
 import { RenameSessionDialog } from "./RenameSessionDialog.js";
 import { SessionList } from "./SessionList.js";
 import { SessionTree } from "./session-tree.js";
+import { getRecordedRelationships, recordForkRelationship } from "./session-fork-registry.js";
 import { buildSessionTree } from "./session-tree-state.js";
 import type { SessionRelationship } from "./session-tree-state.js";
 import type { DiscoveredSessionsClient } from "./discovered-sessions-client.js";
@@ -255,8 +256,13 @@ export function SessionsScreen({
   // exactly as it was, satisfying "failure leaves the original
   // untouched" structurally rather than by a rollback path that could
   // itself go wrong.
-  const [relationships, setRelationships] = useState<ReadonlyMap<string, SessionRelationship>>(
-    () => new Map(),
+  // Fork-lands-as-root: seed from the shared transcript-fork registry so a
+  // fork started on the session route (`host-session-screen.tsx` recording
+  // its `EditFromHereOutcome` here) lands under its real parent on this
+  // screen's next mount, not as a root. List-level forks below record here
+  // too, keeping both entry points in one owner (`handleForked`).
+  const [relationships, setRelationships] = useState<ReadonlyMap<string, SessionRelationship>>(() =>
+    getRecordedRelationships(),
   );
 
   function addSession(session: SessionSummary): void {
@@ -268,22 +274,26 @@ export function SessionsScreen({
   }
 
   function handleForked(source: SessionSummary, result: ForkSessionResult): void {
+    const relationship: SessionRelationship = {
+      kind: "fork",
+      parentId: source.id,
+      forkPoint: result.forkPoint,
+    };
+    recordForkRelationship(result.session.id, relationship);
     setRelationships((current) => {
       const next = new Map(current);
-      next.set(result.session.id, {
-        kind: "fork",
-        parentId: source.id,
-        forkPoint: result.forkPoint,
-      });
+      next.set(result.session.id, relationship);
       return next;
     });
     addSession(result.session);
   }
 
   function handleCloned(source: SessionSummary, result: CloneSessionResult): void {
+    const relationship: SessionRelationship = { kind: "clone", sourceId: source.id };
+    recordForkRelationship(result.session.id, relationship);
     setRelationships((current) => {
       const next = new Map(current);
-      next.set(result.session.id, { kind: "clone", sourceId: source.id });
+      next.set(result.session.id, relationship);
       return next;
     });
     addSession(result.session);
