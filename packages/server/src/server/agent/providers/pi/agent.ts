@@ -1391,6 +1391,11 @@ export class PiRpcAgentSession implements AgentSession {
   private outOfBandCompactionCompleted = false;
   private commandCache: AgentSlashCommand[] | null = null;
   private state: PiSessionState;
+  // Session-local auto-retry value: Pi's `get_state` carries no auto-retry
+  // field (unlike `autoCompactionEnabled`), so this — default `true`,
+  // matching Pi's unconditional retries today — is the source of truth
+  // `getAutoRetry` reads. `refreshState` never touches it.
+  private autoRetryEnabled = true;
   private readonly currentModeId: string | null;
   private closed = false;
   // Pi reports an aborted OpenAI Responses stream before the abort RPC resolves.
@@ -2104,6 +2109,26 @@ export class PiRpcAgentSession implements AgentSession {
   async getAutoCompaction(): Promise<boolean | null> {
     await this.refreshState();
     return this.state.autoCompactionEnabled ?? null;
+  }
+
+  // Same "runtimeSession call, then refresh, since Pi emits no event" shape
+  // as setAutoCompaction above, plus the session-local write: Pi's
+  // `get_state` carries no auto-retry field to re-read, so the value stored
+  // here is what `getAutoRetry` returns.
+  async setAutoRetry(enabled: boolean): Promise<void> {
+    await this.runtimeSession.setAutoRetry(enabled);
+    this.autoRetryEnabled = enabled;
+    await this.refreshState();
+  }
+
+  // Reads the session-local value written by `setAutoRetry` (default `true`),
+  // refreshing runtime state first so `runtimeInfo` stays as current as a
+  // set's broadcast does. Never `null` for a live Pi session; `null` is
+  // reserved for providers that leave both methods undefined (see
+  // `AgentManager.getAutoRetry`).
+  async getAutoRetry(): Promise<boolean | null> {
+    await this.refreshState();
+    return this.autoRetryEnabled;
   }
 
   private emit(event: AgentStreamEvent): void {

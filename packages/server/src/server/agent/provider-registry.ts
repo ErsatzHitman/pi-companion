@@ -34,6 +34,7 @@ import {
   AGENT_PROVIDER_DEFINITIONS,
   BUILTIN_PROVIDER_IDS,
   DEV_AGENT_PROVIDER_DEFINITIONS,
+  enrichModesWithUiMetadata,
   getAgentProviderDefinition,
   type AgentProviderDefinition,
 } from "@picompanion/protocol/provider-manifest";
@@ -326,6 +327,8 @@ const SESSION_OPTIONAL_METHOD_KEYS: Record<AgentSessionOptionalMethodKey, true> 
   respondToEditorTextRequest: true,
   setAutoCompaction: true,
   getAutoCompaction: true,
+  setAutoRetry: true,
+  getAutoRetry: true,
   revertConversation: true,
   revertFiles: true,
   revertBoth: true,
@@ -503,15 +506,7 @@ function createRegistryEntry(
     : [];
 
   const decorateModes = (modes: AgentMode[]): AgentMode[] =>
-    modes.map((mode) => {
-      if (mode.icon && mode.colorTier) return mode;
-      const definitionMode = resolved.definition.modes.find((d) => d.id === mode.id);
-      if (!definitionMode) return mode;
-      return Object.assign({}, mode, {
-        icon: mode.icon ?? definitionMode.icon,
-        colorTier: mode.colorTier ?? definitionMode.colorTier,
-      });
-    });
+    enrichModesWithUiMetadata(provider, modes, [resolved.definition]);
 
   const hasStaticModes = resolved.definition.modes.length > 0;
 

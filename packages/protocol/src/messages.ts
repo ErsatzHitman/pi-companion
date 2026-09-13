@@ -1742,9 +1742,13 @@ export const GetQueueModesResponseMessageSchema = z.object({
 // `packages/server/src/server/agent/providers/pi/rpc-types.ts`), the
 // same "set + dedicated get, modeled as its own request/response pair"
 // shape `SetSteeringModeRequestMessageSchema`/`GetQueueModesRequestMessageSchema`
-// use above. Auto-retry has no equivalent daemon-internal path today — see
-// `apps/web/src/features/settings/settings-client.ts`'s header comment for
-// the full audit — so only auto-compaction gets wire messages here.
+// use above. Auto-retry now has the same daemon wire (see
+// `SetAutoRetryRequestMessageSchema`/`GetAutoRetryRequestMessageSchema`
+// below) — Pi's `set_auto_retry` RPC command
+// (`cli-runtime.ts`'s `setAutoRetry` method in
+// `packages/server/src/server/agent/providers/pi/`) is the daemon-internal
+// path, tracked session-locally because `get_state` carries no auto-retry
+// field (unlike `autoCompactionEnabled`).
 export const SetAutoCompactionRequestMessageSchema = z.object({
   type: z.literal("set_auto_compaction_request"),
   agentId: z.string(),
@@ -1771,6 +1775,45 @@ export const GetAutoCompactionResponseMessageSchema = z.object({
     // Nullable because `PiSessionState.autoCompactionEnabled` is itself
     // optional — Pi's `get_state` may not report it (see rpc-types.ts's doc
     // comment on that field) — never defaulted or guessed by this layer.
+    enabled: z.boolean().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// Auto-retry: same "set + dedicated get, modeled as its own
+// request/response pair" shape as auto-compaction above. Mirrors Pi's
+// `set_auto_retry` RPC command (`{ type: "set_auto_retry"; enabled: boolean }`
+// in `packages/server/src/server/agent/providers/pi/rpc-types.ts`'s
+// `PiRpcCommand` union) and the session-local read-back in
+// `PiRpcAgentSession` (`packages/server/src/server/agent/providers/pi/agent.ts`):
+// Pi's `get_state` carries no auto-retry field, so the get reads the value
+// the session last wrote (default `true`, matching Pi's unconditional
+// retries today), never a cached daemon guess.
+export const SetAutoRetryRequestMessageSchema = z.object({
+  type: z.literal("set_auto_retry_request"),
+  agentId: z.string(),
+  enabled: z.boolean(),
+  requestId: z.string(),
+});
+
+export const SetAutoRetryResponseMessageSchema = z.object({
+  type: z.literal("set_auto_retry_response"),
+  payload: AgentActionResponsePayloadSchema,
+});
+
+export const GetAutoRetryRequestMessageSchema = z.object({
+  type: z.literal("get_auto_retry_request"),
+  agentId: z.string(),
+  requestId: z.string(),
+});
+
+export const GetAutoRetryResponseMessageSchema = z.object({
+  type: z.literal("get_auto_retry_response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    // Nullable for the same wire-uniformity reason as auto-compaction's get:
+    // an unsupported provider reports `null` with an error, never a guess.
     enabled: z.boolean().nullable(),
     error: z.string().nullable(),
   }),
@@ -3074,6 +3117,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   GetQueueModesRequestMessageSchema,
   SetAutoCompactionRequestMessageSchema,
   GetAutoCompactionRequestMessageSchema,
+  SetAutoRetryRequestMessageSchema,
+  GetAutoRetryRequestMessageSchema,
   SetAgentFeatureRequestMessageSchema,
   AgentDetachRequestMessageSchema,
   AgentRewindRequestMessageSchema,
@@ -6081,6 +6126,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   GetQueueModesResponseMessageSchema,
   SetAutoCompactionResponseMessageSchema,
   GetAutoCompactionResponseMessageSchema,
+  SetAutoRetryResponseMessageSchema,
+  GetAutoRetryResponseMessageSchema,
   SetAgentFeatureResponseMessageSchema,
   AgentDetachResponseMessageSchema,
   AgentRewindResponseMessageSchema,
@@ -6303,6 +6350,8 @@ export type SetAutoCompactionResponseMessage = z.infer<
 export type GetAutoCompactionResponseMessage = z.infer<
   typeof GetAutoCompactionResponseMessageSchema
 >;
+export type SetAutoRetryResponseMessage = z.infer<typeof SetAutoRetryResponseMessageSchema>;
+export type GetAutoRetryResponseMessage = z.infer<typeof GetAutoRetryResponseMessageSchema>;
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
@@ -6473,6 +6522,8 @@ export type SetFollowUpModeRequestMessage = z.infer<typeof SetFollowUpModeReques
 export type GetQueueModesRequestMessage = z.infer<typeof GetQueueModesRequestMessageSchema>;
 export type SetAutoCompactionRequestMessage = z.infer<typeof SetAutoCompactionRequestMessageSchema>;
 export type GetAutoCompactionRequestMessage = z.infer<typeof GetAutoCompactionRequestMessageSchema>;
+export type SetAutoRetryRequestMessage = z.infer<typeof SetAutoRetryRequestMessageSchema>;
+export type GetAutoRetryRequestMessage = z.infer<typeof GetAutoRetryRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;

@@ -9367,3 +9367,109 @@ test("getAutoCompaction returns null for a provider session that does not suppor
 
   await expect(manager.getAutoCompaction(snapshot.id)).resolves.toBeNull();
 });
+
+// Auto-retry: same live-session + broadcast discipline as auto-compaction above.
+class AutoRetryTestAgentSession extends TestAgentSession {
+  autoRetryEnabled = true;
+
+  override async getRuntimeInfo() {
+    const base = await super.getRuntimeInfo();
+    return {
+      ...base,
+      extra: { autoRetryEnabled: this.autoRetryEnabled },
+    };
+  }
+
+  async setAutoRetry(enabled: boolean): Promise<void> {
+    this.autoRetryEnabled = enabled;
+  }
+
+  async getAutoRetry(): Promise<boolean> {
+    return this.autoRetryEnabled;
+  }
+}
+
+class AutoRetryTestAgentClient extends TestAgentClient {
+  override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+    return new AutoRetryTestAgentSession(config);
+  }
+}
+
+test("setAutoRetry re-reads live state and broadcasts it to every subscriber", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-auto-retry-"));
+  const manager = new AgentManager({
+    clients: { codex: new AutoRetryTestAgentClient() },
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000210",
+  });
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  const firstClientEvents: AgentManagerEvent[] = [];
+  const secondClientEvents: AgentManagerEvent[] = [];
+  manager.subscribe((event) => firstClientEvents.push(event));
+  manager.subscribe((event) => secondClientEvents.push(event));
+
+  await manager.setAutoRetry(snapshot.id, false);
+
+  for (const events of [firstClientEvents, secondClientEvents]) {
+    const last = events.at(-1);
+    expect(last?.type).toBe("agent_state");
+    if (last?.type === "agent_state") {
+      expect(last.agent.runtimeInfo?.extra).toEqual({ autoRetryEnabled: false });
+    }
+  }
+});
+
+test("getAutoRetry reads the live session rather than a value cached from before an out-of-band change", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-auto-retry-"));
+  const manager = new AgentManager({
+    clients: { codex: new AutoRetryTestAgentClient() },
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000211",
+  });
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  const before = await manager.getAutoRetry(snapshot.id);
+  expect(before).toBe(true);
+
+  const agent = manager.getAgent(snapshot.id);
+  const session = agent?.session as unknown as AutoRetryTestAgentSession;
+  session.autoRetryEnabled = false;
+
+  const after = await manager.getAutoRetry(snapshot.id);
+  expect(after).toBe(false);
+});
+
+test("setAutoRetry throws for a provider session that does not support it", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-auto-retry-"));
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000212",
+  });
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  await expect(manager.setAutoRetry(snapshot.id, false)).rejects.toThrow(
+    "Agent session does not support auto-retry",
+  );
+});
+
+test("getAutoRetry returns null for a provider session that does not support it", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-auto-retry-"));
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000213",
+  });
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  await expect(manager.getAutoRetry(snapshot.id)).resolves.toBeNull();
+});

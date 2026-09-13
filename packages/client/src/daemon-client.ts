@@ -3629,6 +3629,82 @@ export class DaemonClient {
     return payload.enabled;
   }
 
+  /**
+   * Sends `set_auto_retry_request` (`packages/protocol/src/messages.ts`),
+   * dispatched by `packages/server/src/server/session.ts`'s
+   * `handleSetAutoRetryRequest` into `AgentManager.setAutoRetry`.
+   * Mirrors `setAutoCompaction`'s request/response shape exactly — same
+   * `AgentActionResponsePayloadSchema` envelope (`accepted`/`error`/`notice`).
+   */
+  async setAutoRetry(agentId: string, enabled: boolean): Promise<AgentProviderNotice | null> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "set_auto_retry_request",
+      agentId,
+      enabled,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "set_auto_retry_response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAutoRetry rejected");
+    }
+    return payload.notice ?? null;
+  }
+
+  /**
+   * Sends `get_auto_retry_request`, handled by
+   * `handleGetAutoRetryRequest` which reads the value fresh off the live
+   * provider session (see that handler's doc). Unlike `setAutoRetry`
+   * above, the response payload carries no `accepted` field — only `error` —
+   * so a rejected request throws directly rather than checking `accepted`,
+   * mirroring `getAutoCompaction`. Throws (rather than resolving `null`)
+   * when the daemon reports no error but also no known value, since this
+   * method's return type must satisfy `SettingsClient.getAutoRetry`'s
+   * `Promise<boolean>` contract.
+   */
+  async getAutoRetry(agentId: string): Promise<boolean> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "get_auto_retry_request",
+      agentId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "get_auto_retry_response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    if (payload.enabled === null) {
+      throw new Error("Daemon could not determine auto-retry state");
+    }
+    return payload.enabled;
+  }
+
   async restartServer(reason?: string, requestId?: string): Promise<RestartRequestedStatusPayload> {
     const resolvedRequestId = this.createRequestId(requestId);
     const message = SessionInboundMessageSchema.parse({

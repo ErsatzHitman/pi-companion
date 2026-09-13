@@ -832,6 +832,20 @@ export interface AgentSession {
    * report it (see `PiSessionState.autoCompactionEnabled`'s doc comment).
    */
   getAutoCompaction?(): Promise<boolean | null>;
+  /**
+   * Mirrors Pi's `set_auto_retry` RPC command
+   * (`PiRuntimeSession.setAutoRetry`, `cli-runtime.ts`'s `setAutoRetry`
+   * method). Only the Pi provider implements these; other providers leave
+   * them undefined, the same convention as `setAutoCompaction` above.
+   * Pi's `get_state` carries no auto-retry field, so the read-back is the
+   * session-local value last written (default `true`), never a remote guess.
+   */
+  setAutoRetry?(enabled: boolean): Promise<void>;
+  /**
+   * Reads the session-local auto-retry value. `null` only when the provider
+   * leaves both methods undefined (unsupported), never for a live Pi session.
+   */
+  getAutoRetry?(): Promise<boolean | null>;
   revertConversation?(input: { messageId: string }): Promise<void>;
   /**
    * Forks the provider conversation at `messageId` via Pi's mirrored

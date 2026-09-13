@@ -143,6 +143,10 @@ class PiCliRuntimeSession implements PiRuntimeSession {
     await this.request({ type: "set_auto_compaction", enabled });
   }
 
+  async setAutoRetry(enabled: boolean): Promise<void> {
+    await this.request({ type: "set_auto_retry", enabled });
+  }
+
   async abort(): Promise<void> {
     await this.request({ type: "abort" });
   }

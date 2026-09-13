@@ -2319,6 +2319,10 @@ export class Session {
         return this.handleSetAutoCompactionRequest(msg);
       case "get_auto_compaction_request":
         return this.handleGetAutoCompactionRequest(msg);
+      case "set_auto_retry_request":
+        return this.handleSetAutoRetryRequest(msg);
+      case "get_auto_retry_request":
+        return this.handleGetAutoRetryRequest(msg);
       case "get_daemon_config_request":
         this.emit({
           type: "get_daemon_config_response",
@@ -3562,6 +3566,63 @@ export class Session {
     } catch (error) {
       this.emit({
         type: "get_auto_compaction_response",
+        payload: {
+          requestId,
+          agentId,
+          enabled: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  /**
+   * Same contract as handleSetAutoCompactionRequest, for auto-retry.
+   * AgentManager.setAutoRetry re-reads the state from the live provider
+   * session after writing it and broadcasts the refreshed state, because Pi
+   * emits no event when auto-retry changes.
+   */
+  private async handleSetAutoRetryRequest(
+    msg: Extract<SessionInboundMessage, { type: "set_auto_retry_request" }>,
+  ): Promise<void> {
+    const { agentId, enabled, requestId } = msg;
+    try {
+      await this.agentManager.setAutoRetry(agentId, enabled);
+      this.emit({
+        type: "set_auto_retry_response",
+        payload: { requestId, agentId, accepted: true, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "set_auto_retry_response",
+        payload: {
+          requestId,
+          agentId,
+          accepted: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  /**
+   * Same contract as handleGetAutoCompactionRequest, for auto-retry —
+   * always reads fresh off the live provider session (see
+   * AgentManager.getAutoRetry), never a cached value.
+   */
+  private async handleGetAutoRetryRequest(
+    msg: Extract<SessionInboundMessage, { type: "get_auto_retry_request" }>,
+  ): Promise<void> {
+    const { agentId, requestId } = msg;
+    try {
+      const enabled = await this.agentManager.getAutoRetry(agentId);
+      this.emit({
+        type: "get_auto_retry_response",
+        payload: { requestId, agentId, enabled, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "get_auto_retry_response",
         payload: {
           requestId,
           agentId,

@@ -6859,6 +6859,212 @@ test("getAutoCompaction rejects when the daemon reports no error but no known va
   await expect(enabledPromise).rejects.toThrow("Daemon could not determine auto-compaction state");
 });
 
+// Auto-retry: same request/response contract as setAutoCompaction/getAutoCompaction
+// above, for the `set_auto_retry` daemon wire.
+test("setAutoRetry sends set_auto_retry_request with the agent id and enabled flag", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const retryPromise = client.setAutoRetry("agt_6", false);
+
+  const request = z
+    .object({
+      type: z.literal("set_auto_retry_request"),
+      agentId: z.string(),
+      enabled: z.boolean(),
+      requestId: z.string(),
+    })
+    .parse(parseSentFrame(mock.sent[mock.sent.length - 1]));
+  expect(request.agentId).toBe("agt_6");
+  expect(request.enabled).toBe(false);
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "set_auto_retry_response",
+      payload: { requestId: request.requestId, agentId: "agt_6", accepted: true, error: null },
+    }),
+  );
+
+  await expect(retryPromise).resolves.toBeNull();
+});
+
+test("setAutoRetry resolves the response's notice back to the caller", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const retryPromise = client.setAutoRetry("agt_6", true);
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]) as { requestId: string };
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "set_auto_retry_response",
+      payload: {
+        requestId: request.requestId,
+        agentId: "agt_6",
+        accepted: true,
+        error: null,
+        notice: { type: "warning", message: "Pi ignored the retry change" },
+      },
+    }),
+  );
+
+  await expect(retryPromise).resolves.toEqual({
+    type: "warning",
+    message: "Pi ignored the retry change",
+  });
+});
+
+test("setAutoRetry rejects when the daemon reports accepted: false", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const retryPromise = client.setAutoRetry("agt_6", false);
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]) as { requestId: string };
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "set_auto_retry_response",
+      payload: {
+        requestId: request.requestId,
+        agentId: "agt_6",
+        accepted: false,
+        error: "no such agent",
+      },
+    }),
+  );
+
+  await expect(retryPromise).rejects.toThrow("no such agent");
+});
+
+test("getAutoRetry sends get_auto_retry_request and resolves the value", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const enabledPromise = client.getAutoRetry("agt_7");
+
+  const request = z
+    .object({
+      type: z.literal("get_auto_retry_request"),
+      agentId: z.string(),
+      requestId: z.string(),
+    })
+    .parse(parseSentFrame(mock.sent[mock.sent.length - 1]));
+  expect(request.agentId).toBe("agt_7");
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "get_auto_retry_response",
+      payload: { requestId: request.requestId, agentId: "agt_7", enabled: true, error: null },
+    }),
+  );
+
+  await expect(enabledPromise).resolves.toBe(true);
+});
+
+test("getAutoRetry rejects when the daemon reports an error", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const enabledPromise = client.getAutoRetry("agt_7");
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]) as { requestId: string };
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "get_auto_retry_response",
+      payload: {
+        requestId: request.requestId,
+        agentId: "agt_7",
+        enabled: null,
+        error: "no such agent",
+      },
+    }),
+  );
+
+  await expect(enabledPromise).rejects.toThrow("no such agent");
+});
+
+test("getAutoRetry rejects when the daemon reports no error but no known value", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const enabledPromise = client.getAutoRetry("agt_7");
+  const request = parseSentFrame(mock.sent[mock.sent.length - 1]) as { requestId: string };
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "get_auto_retry_response",
+      payload: {
+        requestId: request.requestId,
+        agentId: "agt_7",
+        enabled: null,
+        error: null,
+      },
+    }),
+  );
+
+  await expect(enabledPromise).rejects.toThrow("Daemon could not determine auto-retry state");
+});
+
 // T333: React Native's Hermes has no `crypto` global (Expo 54's
 // `expo/src/winter` installs TextDecoder/URL/structuredClone, never
 // `crypto`), and four sites in daemon-client.ts called the bare global.

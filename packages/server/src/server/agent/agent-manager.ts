@@ -1790,6 +1790,41 @@ export class AgentManager {
     return enabled;
   }
 
+  // Same "provider emits no event, so re-read and broadcast" shape as
+  // setAutoCompaction above, for Pi's `set_auto_retry` path.
+  async setAutoRetry(agentId: string, enabled: boolean): Promise<void> {
+    const agent = this.requireSessionAgent(agentId);
+
+    if (!agent.session.setAutoRetry) {
+      throw new Error("Agent session does not support auto-retry");
+    }
+
+    await agent.session.setAutoRetry(enabled);
+    await this.drainSessionEvents(agentId);
+    agent.runtimeInfo = await agent.session.getRuntimeInfo();
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+  }
+
+  /**
+   * Reads auto-retry fresh off the live session (never cached — same reason
+   * getAutoCompaction does), broadcasting the refreshed runtimeInfo the same
+   * way a set does.
+   */
+  async getAutoRetry(agentId: string): Promise<boolean | null> {
+    const agent = this.requireSessionAgent(agentId);
+
+    if (!agent.session.getAutoRetry) {
+      return null;
+    }
+
+    const enabled = await agent.session.getAutoRetry();
+    agent.runtimeInfo = await agent.session.getRuntimeInfo();
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+    return enabled;
+  }
+
   async setTitle(agentId: string, title: string): Promise<void> {
     const agent = this.requireAgent(agentId);
     const normalizedTitle = title.trim();

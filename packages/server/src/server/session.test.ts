@@ -5680,6 +5680,115 @@ describe("T131: auto-compaction requests", () => {
       },
     ]);
   });
+
+  test("set_auto_retry_request: success emits an accepted response", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const setAutoRetry = vi.fn().mockResolvedValue(undefined);
+    const session = createSessionForTest({
+      messages,
+      agentManager: liveAgentManager({ setAutoRetry }),
+    });
+
+    await session.handleMessage({
+      type: "set_auto_retry_request",
+      agentId: "agent-1",
+      enabled: false,
+      requestId: "req-retry-ok",
+    });
+
+    expect(setAutoRetry).toHaveBeenCalledWith("agent-1", false);
+    expect(messages).toEqual([
+      {
+        type: "set_auto_retry_response",
+        payload: { requestId: "req-retry-ok", agentId: "agent-1", accepted: true, error: null },
+      },
+    ]);
+  });
+
+  test("set_auto_retry_request: failure emits a rejected response with the error message", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const session = createSessionForTest({
+      messages,
+      agentManager: liveAgentManager({
+        setAutoRetry: vi.fn().mockRejectedValue(new Error("retry boom")),
+      }),
+    });
+
+    await session.handleMessage({
+      type: "set_auto_retry_request",
+      agentId: "agent-1",
+      enabled: false,
+      requestId: "req-retry-err",
+    });
+
+    expect(messages).toEqual([
+      {
+        type: "set_auto_retry_response",
+        payload: {
+          requestId: "req-retry-err",
+          agentId: "agent-1",
+          accepted: false,
+          error: "retry boom",
+        },
+      },
+    ]);
+  });
+
+  test("get_auto_retry_request: reads the value fresh, not from a value cached on this connection", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const getAutoRetry = vi.fn().mockResolvedValue(true);
+    const session = createSessionForTest({
+      messages,
+      agentManager: liveAgentManager({ getAutoRetry }),
+    });
+
+    await session.handleMessage({
+      type: "get_auto_retry_request",
+      agentId: "agent-1",
+      requestId: "req-get-retry-ok",
+    });
+
+    expect(getAutoRetry).toHaveBeenCalledWith("agent-1");
+    expect(messages).toEqual([
+      {
+        type: "get_auto_retry_response",
+        payload: {
+          requestId: "req-get-retry-ok",
+          agentId: "agent-1",
+          enabled: true,
+          error: null,
+        },
+      },
+    ]);
+  });
+
+  test("get_auto_retry_request: failure emits a null value with the error message", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const session = createSessionForTest({
+      messages,
+      agentManager: liveAgentManager({
+        getAutoRetry: vi.fn().mockRejectedValue(new Error("get retry boom")),
+      }),
+    });
+
+    await session.handleMessage({
+      type: "get_auto_retry_request",
+      agentId: "agent-1",
+      requestId: "req-get-retry-err",
+    });
+
+    expect(messages).toEqual([
+      {
+        type: "get_auto_retry_response",
+        payload: {
+          requestId: "req-get-retry-err",
+          agentId: "agent-1",
+          enabled: null,
+          error: "get retry boom",
+        },
+      },
+    ]);
+  });
 });
 
 describe("agent_permission_resolved carries answeredBy (T111)", () => {
