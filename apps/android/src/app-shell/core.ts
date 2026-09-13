@@ -84,7 +84,10 @@ import { createRNVibrationPlatform, type VibrationPlatform } from "../platform/h
 import { createExpoKeyValueStorage } from "../platform/key-value-storage";
 import { createAppStateLifecycle } from "../platform/lifecycle";
 import { createExpoSharing } from "../platform/expo-sharing-port.js";
-import { createUnavailableAndroidNotificationsPlatform } from "../platform/notifications-platform.js";
+import {
+  createAndroidNotificationsPlatform,
+  createExpoAndroidNotificationsPort,
+} from "../platform/notifications-platform.js";
 import {
   createExpoSqliteDriverFactory,
   createOfflineCacheOwner,
@@ -553,18 +556,14 @@ export interface AppCore {
    * the same "one process-lifetime singleton, threaded down" shape
    * `vibrationPlatform`/`settings` above already follow.
    *
-   * This is still `createUnavailableAndroidNotificationsPlatform()`
-   * today, but no longer because the dependency is missing:
-   * `expo-notifications`/`expo-device` are installed since T391 (see
-   * `startPushRegistration` below, which now drives the real
-   * `PushRegistrationPort`). This general-purpose platform stays
-   * unavailable because its `showNotification`/`onNotificationResponse`
-   * half — `../platform/notifications-platform.ts`'s
-   * `AndroidNotificationsPort` — has no real implementation yet; every
-   * method it does expose still resolves a real, honest value
-   * (`getPermissionState()` -> `"unsupported"`, `show()` a silent
-   * no-op), never a stub that throws. See that factory's module doc for
-   * the fold decision and `getNativePermissionState`.
+   * Built with `createAndroidNotificationsPlatform(
+   * createExpoAndroidNotificationsPort(createExpoPushRegistrationPort()))`
+   * — the general `showNotification`/`onNotificationResponse` half over
+   * the real push-registration port. A build with no native
+   * `ExpoNotifications` module degrades honestly per-method (silent
+   * drop / never-delivered tap) rather than throwing — see that
+   * factory's module doc for the fold decision and
+   * `getNativePermissionState`.
    */
   notifications: NotificationsPlatform;
   /**
@@ -1318,9 +1317,12 @@ export function createAppCore(overrides: CreateAppCoreOverrides = {}): AppCore {
     },
   };
 
-  // T32S12: no `expo-notifications`/`expo-device` installed this wave
-  // (T60C's grant) — see `AppCore["notifications"]`'s doc comment.
-  const notifications = createUnavailableAndroidNotificationsPlatform();
+  // T32S12: real general notifications over the real push port — see
+  // `AppCore["notifications"]`'s doc comment. An absent native module
+  // degrades per-method inside the port, never here.
+  const notifications = createAndroidNotificationsPlatform(
+    createExpoAndroidNotificationsPort(createExpoPushRegistrationPort()),
+  );
 
   // T32S13: the narrowest slice of the real `DaemonClient` T61B's
   // `PushTokenRegistrar` needs (`registerPushToken`/`unregisterPushToken`
