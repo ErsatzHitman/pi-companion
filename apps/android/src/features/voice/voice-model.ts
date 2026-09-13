@@ -331,9 +331,9 @@ export interface VoiceCaptureControllerDeps {
    * `requestStop` as a deterministic post-cleanup pass
    * (`applyVoiceVocabularyRepair`): case-insensitive whole-word matches
    * are rewritten to the saved canonical spelling. Omitted or empty
-   * (today's default mount — `Composer.tsx` does not yet thread the
-   * stored list through) leaves the cleaned transcript untouched; see
-   * that module's header for what the pass is and is not.
+   * leaves the cleaned transcript untouched; the session route threads
+   * the stored list through `ComposerProps.vocabulary` (see that prop's
+   * doc comment), so production transcripts carry the current words.
    */
   vocabulary?: readonly string[];
   now?: () => number;

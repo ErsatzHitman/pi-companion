@@ -55,6 +55,7 @@ import {
   useRewindToHere,
 } from "../../../../../features/transcript/rewind";
 import { deriveSessionRouteStatus } from "../../../../../app-shell/session-route-model";
+import { createVoiceVocabularyController } from "../../../../../features/voice";
 import { createContextUsageSignal } from "../../../../../features/telemetry";
 import type { AgentUsage } from "@picompanion/protocol/agent-types";
 import {
@@ -1174,6 +1175,26 @@ export default function SessionRoute() {
   // Composer's transcribeClient prop — see resolveTranscribeClient's own
   // doc comment and this component's "T282 mount" doc comment above.
   const transcribeClient = resolveTranscribeClient(core.connection);
+  // Voice vocabulary: the route owns one vocabulary controller over the
+  // shared key-value storage (the haptics pattern above — memo per mount,
+  // subscribe in an effect, load once) and passes its snapshot's words to
+  // Composer, closing the seam voice-model.ts's `vocabulary` dep filed.
+  // Words change only in the Settings screen, so the controller identity
+  // below never rebuilds mid-recording from this route's own renders.
+  const vocabularyController = useMemo(
+    () => createVoiceVocabularyController({ storage: core.keyValueStorage }),
+    [core.keyValueStorage],
+  );
+  const [vocabularyWords, setVocabularyWords] = useState<readonly string[]>(
+    () => vocabularyController.getSnapshot().words,
+  );
+  useEffect(() => {
+    const unsubscribe = vocabularyController.subscribe((snapshot) => {
+      setVocabularyWords(snapshot.words);
+    });
+    void vocabularyController.load();
+    return unsubscribe;
+  }, [vocabularyController]);
   // T292: identical fresh-read cast, off the same live DaemonClient, for
   // Composer's slashCommandsClient prop — see resolveSlashCommandsClient's
   // own doc comment.
@@ -1309,6 +1330,7 @@ export default function SessionRoute() {
             queueModeClient={queueModeClient}
             turnStatusClient={turnStatusClient}
             transcribeClient={transcribeClient}
+            vocabulary={vocabularyWords}
             slashCommandsClient={slashCommandsClient}
             editorTextClient={editorTextClient}
             modelThinkingClient={modelThinkingClient}

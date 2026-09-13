@@ -484,7 +484,7 @@ describe("SessionRoute source", () => {
     // the same reasoning `handleSubmit`/`turnRunning`'s cases above use.
     const code = readCode();
     expect(code).toMatch(
-      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+modelThinkingClient=\{modelThinkingClient\}\s+sessionControlsClient=\{sessionControlsClient\}\s+usage=\{usage\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+onMinHeightChange=\{setComposerContentMinHeight\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s+piUiComposerDrafts=\{piUiComposerDrafts\}\s*\/>/,
+      /<Composer\s+sessionId=\{agentId \?\? ""\}\s+onSubmit=\{handleSubmit\}\s+onMicPress=\{handleMicPress\}\s+onAttachPress=\{handleAttachPress\}\s+turnRunning=\{turnRunning\}\s+turnService=\{turnService\}\s+queueModeClient=\{queueModeClient\}\s+turnStatusClient=\{turnStatusClient\}\s+transcribeClient=\{transcribeClient\}\s+vocabulary=\{vocabularyWords\}\s+slashCommandsClient=\{slashCommandsClient\}\s+editorTextClient=\{editorTextClient\}\s+modelThinkingClient=\{modelThinkingClient\}\s+sessionControlsClient=\{sessionControlsClient\}\s+usage=\{usage\}\s+attachmentSource=\{attachmentSource\}\s+cameraCapture=\{cameraCapture\}\s+onMinHeightChange=\{setComposerContentMinHeight\}\s+outbox=\{core\.turnOutbox\.getOutbox\(\) \?\? undefined\}\s+piUiComposerDrafts=\{piUiComposerDrafts\}\s*\/>/,
     );
   });
 

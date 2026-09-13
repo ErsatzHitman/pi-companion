@@ -47,10 +47,9 @@
  * deterministic `applyVoiceVocabularyRepair` pass `voice-model.ts`'s
  * `requestStop` applies after cleanup) and `voice-vocabulary-section.tsx`
  * draws its settings section, mounted by `../settings/SettingsScreen.tsx`.
- * Disclosed seam, not a silent claim: `Composer.tsx` does not yet thread
- * the stored list into the controller's `vocabulary` dep, so words saved
- * in settings take effect once that one prop is threaded — the repair
- * itself is proven in `voice-model.test.ts` wherever a caller passes it.
+ * The session route threads the stored list into the voice controller via
+ * `ComposerProps.vocabulary`, so saved words take effect for transcription
+ * repair; the repair itself is proven in `voice-model.test.ts`.
  */
 export {
   applyTranscriptToDraft,

@@ -349,6 +349,15 @@ export interface ComposerProps {
    */
   transcribeClient?: VoiceTranscriptionClient;
   /**
+   * The user's voice vocabulary words (`../voice/voice-vocabulary-model.ts`),
+   * applied by `requestStop` as a deterministic post-cleanup pass. The
+   * session route owns the vocabulary controller and passes its snapshot's
+   * words; omitted or empty leaves the cleaned transcript untouched. The
+   * array is state-held at the route so its identity only changes when the
+   * stored list actually changes — never rebuilt mid-recording otherwise.
+   */
+  vocabulary?: readonly string[];
+  /**
    * T33B7: the durable outbox every send is recorded through (plan.md
    * §7.1/§12.5). T75: this used to be reached only by an
    * attachment-bearing send — a text-only send, the most common send in
@@ -690,6 +699,7 @@ export function Composer({
   cameraCapture,
   voiceCapture,
   transcribeClient,
+  vocabulary,
   outbox: outboxProp,
   structuredStorage: structuredStorageProp,
   clock: clockProp,
@@ -986,7 +996,7 @@ export function Composer({
   const outboxEntryIdRef = useRef<Map<string, string>>(new Map());
 
   // --- T70/T277: voice entry -----------------------------------------------
-  // One controller per (port, transcribeClient) identity. T277: no longer
+  // One controller per (port, transcribeClient, vocabulary) identity. T277: no longer
   // built over `outbox`/`resolvedSessionId`/`onSubmit` — a finished
   // transcript is applied to `state.draft` (`handleMicPress` below), never
   // sent, so this controller needs none of the send machinery any more. See
@@ -998,8 +1008,9 @@ export function Composer({
       createVoiceCaptureController({
         port: resolvedVoiceCapture,
         ...(transcribeClient ? { transcribe: transcribeClient } : {}),
+        ...(vocabulary && vocabulary.length > 0 ? { vocabulary } : {}),
       }),
-    [resolvedVoiceCapture, transcribeClient],
+    [resolvedVoiceCapture, transcribeClient, vocabulary],
   );
   const [voiceState, setVoiceState] = useState<VoiceState>(IDLE_VOICE_STATE);
   const [voiceOutcome, setVoiceOutcome] = useState<VoiceStopOutcome | VoiceCancelOutcome | null>(

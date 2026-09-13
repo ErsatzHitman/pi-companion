@@ -63,12 +63,10 @@ function describeAddFailure(result: Extract<VoiceVocabularyAddResult, { added: f
  * ("macOS", "iPhone"), and the OS keyboard rewriting that on the way
  * in would corrupt the canonical spelling before it is even saved.
  *
- * **Disclosed non-wiring:** saving words here persists them and
- * `voice-model.ts`'s controller applies whatever vocabulary it is
- * given, but `Composer.tsx` does not yet thread the stored list into
- * that controller — words saved here take effect for transcription
- * repair once that one prop is threaded, not before. That seam is
- * named here so this section never reads as "already live end to end".
+ * **Wired end to end:** saving words here persists them, the session
+ * route threads the stored list into the voice controller via
+ * `ComposerProps.vocabulary`, and `voice-model.ts` applies it as the
+ * post-cleanup repair pass on every transcription.
  */
 export function VoiceVocabularySection({ storage, testId }: VoiceVocabularySectionProps) {
   const { theme } = useTheme();
