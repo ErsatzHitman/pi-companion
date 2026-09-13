@@ -48,9 +48,8 @@ function createStubStt(id: string): SpeechToTextProvider {
   };
 }
 
-function createStubTts(id: string): TextToSpeechProvider {
+function createStubTts(): TextToSpeechProvider {
   return {
-    id,
     synthesizeSpeech: vi.fn(async () => {
       throw new Error("not used in this test");
     }),
@@ -121,7 +120,7 @@ describe("createSpeechService readiness", () => {
 
   it("keeps voice feature available when only realtime voice is enabled and ready", async () => {
     const voiceStt = createStubStt("voice-local");
-    const voiceTts = createStubTts("tts-local");
+    const voiceTts = createStubTts();
     const turnDetection = createStubTurnDetection("turn-local");
 
     initializeLocalSpeechServicesMock.mockResolvedValue({

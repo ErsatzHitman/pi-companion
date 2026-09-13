@@ -5,7 +5,16 @@ import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js
 import { createServiceProxySubsystem, type ServiceProxySubsystem } from "./service-proxy.js";
 import { Session, type SessionOptions } from "./session.js";
 import { asInternals, createStub } from "./test-utils/class-mocks.js";
-import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
+import {
+  asChatService,
+  asDaemonConfigStore,
+  asGitHubService,
+  asLoopService,
+  asProviderUsageService,
+  asScheduleService,
+  asWorkspaceAutoName,
+  createProviderSnapshotManagerStub,
+} from "./test-utils/session-stubs.js";
 import { createTestLogger } from "../test-utils/test-logger.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
 import type {
@@ -85,6 +94,7 @@ function createWorkspaceRuntimeSnapshot(
       remoteUrl: "https://github.com/acme/repo.git",
       isPaseoOwnedWorktree: false,
       isDirty: false,
+      upstreamRef: null,
       baseRef: "main",
       aheadBehind: { ahead: 0, behind: 0 },
       aheadOfOrigin: 0,
@@ -95,6 +105,7 @@ function createWorkspaceRuntimeSnapshot(
     forge: {
       forge: "github",
       featuresEnabled: true,
+      authState: "unauthenticated",
       pullRequest: null,
       error: null,
     },
@@ -248,8 +259,6 @@ function createSessionForWorkspaceGitWatchTests(options?: {
         unsubscribe: () => {},
       }),
       scheduleRefreshForCwd: () => {},
-      onWorkspaceStateMayHaveChanged: () => {},
-      invalidateForge: () => {},
       getMetrics: () => ({
         checkoutDiffTargetCount: 0,
         checkoutDiffSubscriptionCount: 0,
@@ -259,6 +268,13 @@ function createSessionForWorkspaceGitWatchTests(options?: {
       dispose: () => {},
     }),
     workspaceGitService,
+    chatService: asChatService(),
+    scheduleService: asScheduleService(),
+    loopService: asLoopService(),
+    workspaceAutoName: asWorkspaceAutoName({}),
+    providerUsageService: asProviderUsageService({}),
+    daemonConfigStore: asDaemonConfigStore({}),
+    github: asGitHubService({}),
     mcpBaseUrl: null,
     stt: null,
     tts: null,

@@ -118,16 +118,18 @@ function readPiOpenRouterApiKey(): string | null {
 
 function hasCodexAuthTokens(): boolean {
   const auth = readJsonFile(CODEX_AUTH_CONFIG_PATH);
-  if (!auth || typeof auth !== "object" || !("tokens" in auth)) {
-    return false;
-  }
-  const tokens = auth.tokens;
+  const tokens =
+    auth && typeof auth === "object" && "tokens" in auth ? auth.tokens : undefined;
   if (!tokens || typeof tokens !== "object") {
     return false;
   }
+  const accessToken =
+    "access_token" in tokens ? tokens.access_token : undefined;
+  const refreshToken =
+    "refresh_token" in tokens ? tokens.refresh_token : undefined;
   return (
-    (typeof tokens.access_token === "string" && tokens.access_token.length > 0) ||
-    (typeof tokens.refresh_token === "string" && tokens.refresh_token.length > 0)
+    (typeof accessToken === "string" && accessToken.length > 0) ||
+    (typeof refreshToken === "string" && refreshToken.length > 0)
   );
 }
 

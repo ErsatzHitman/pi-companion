@@ -169,7 +169,10 @@ describe("ChatScheduleLoopSession", () => {
     const res = findByType(emitted, "schedule/create/response");
     expect(res?.payload.schedule).toBeDefined();
     expect(res?.payload.schedule).not.toHaveProperty("runs");
-    expect(res?.payload.schedule.id).toBe("s1");
+    if (!res?.payload.schedule) {
+      throw new Error("Expected schedule in schedule/create/response");
+    }
+    expect(res.payload.schedule.id).toBe("s1");
   });
 
   it("schedule/create remaps a self target to an agent target before creating", async () => {

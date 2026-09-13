@@ -9,7 +9,8 @@ import { findFreePort, ScriptRouteStore } from "./script-proxy.js";
 import { ScriptHealthMonitor, type ScriptHealthEntry } from "./script-health-monitor.js";
 import { spawnWorkspaceScript } from "./worktree-bootstrap.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
-import type { TerminalManager } from "./terminal/terminal-manager.js";
+import type { TerminalManager } from "../../terminal/terminal-manager.js";
+import { asServiceProxy } from "./test-utils/session-stubs.js";
 
 interface TcpServerHandle {
   port: number;
@@ -162,7 +163,7 @@ describe("ScriptHealthMonitor", () => {
     const routeStore = new ScriptRouteStore();
     const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
     const monitor = new ScriptHealthMonitor({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       onChange,
       pollIntervalMs: 1_000,
       probeTimeoutMs: 100,
@@ -214,7 +215,7 @@ describe("ScriptHealthMonitor", () => {
 
     const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
     const monitor = new ScriptHealthMonitor({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       onChange,
       pollIntervalMs: 1_000,
       probeTimeoutMs: 100,
@@ -261,7 +262,7 @@ describe("ScriptHealthMonitor", () => {
 
     const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
     const monitor = new ScriptHealthMonitor({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       onChange,
       pollIntervalMs: 1_000,
       probeTimeoutMs: 100,
@@ -292,7 +293,7 @@ describe("ScriptHealthMonitor", () => {
 
     const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
     const monitor = new ScriptHealthMonitor({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       onChange,
       pollIntervalMs: 1_000,
       probeTimeoutMs: 100,
@@ -343,7 +344,7 @@ describe("ScriptHealthMonitor", () => {
 
     const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
     const monitor = new ScriptHealthMonitor({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       onChange,
       pollIntervalMs: 1_000,
       probeTimeoutMs: 100,
@@ -393,7 +394,7 @@ describe("ScriptHealthMonitor", () => {
 
     const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
     const monitor = new ScriptHealthMonitor({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       onChange,
       pollIntervalMs: 1_000,
       probeTimeoutMs: 100,
@@ -450,7 +451,7 @@ describe("ScriptHealthMonitor", () => {
             branchName: null,
             scriptName,
             daemonPort: null,
-            serviceProxy: routeStore,
+            serviceProxy: asServiceProxy(routeStore),
             runtimeStore,
             terminalManager: createStubTerminalManager(
               createTerminalCalls,
@@ -472,7 +473,7 @@ describe("ScriptHealthMonitor", () => {
 
       const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
       const monitor = new ScriptHealthMonitor({
-        serviceProxy: routeStore,
+        serviceProxy: asServiceProxy(routeStore),
         onChange,
         pollIntervalMs: 1_000,
         probeTimeoutMs: 100,
@@ -524,7 +525,7 @@ describe("ScriptHealthMonitor", () => {
 
     const onChange = vi.fn<(workspaceId: string, services: ScriptHealthEntry[]) => void>();
     const monitor = new ScriptHealthMonitor({
-      serviceProxy: routeStore,
+      serviceProxy: asServiceProxy(routeStore),
       onChange,
       pollIntervalMs: 1_000,
       probeTimeoutMs: 100,

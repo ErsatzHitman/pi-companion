@@ -17,6 +17,7 @@ import type { AgentTimelineItem } from "./agent/agent-sdk-types.js";
 import { runAsyncWorktreeBootstrap, spawnWorkspaceScript } from "./worktree-bootstrap.js";
 import { ScriptRouteStore } from "./script-proxy.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
+import { asServiceProxy } from "./test-utils/session-stubs.js";
 import { isPlatform } from "../test-utils/platform.js";
 import {
   createWorktree as createWorktreePrimitive,
@@ -456,7 +457,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
             branchName: "feature-peer-env",
             scriptName,
             daemonPort: 6767,
-            serviceProxy: routeStore,
+            serviceProxy: asServiceProxy(routeStore),
             runtimeStore,
             terminalManager,
           }),

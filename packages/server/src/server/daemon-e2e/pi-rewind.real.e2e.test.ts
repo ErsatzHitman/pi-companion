@@ -71,8 +71,13 @@ function piPrompt(input: { promptToken: string; doneToken: string }): string {
   ].join(" ");
 }
 
-function roleItems(items: AgentTimelineItem[], role: "user_message" | "assistant_message") {
-  return items.filter((item) => item.type === role);
+function roleItems<T extends "user_message" | "assistant_message">(
+  items: AgentTimelineItem[],
+  role: T,
+): Array<Extract<AgentTimelineItem, { type: T }>> {
+  return items.filter(
+    (item): item is Extract<AgentTimelineItem, { type: T }> => item.type === role,
+  );
 }
 
 function expectTimeline(

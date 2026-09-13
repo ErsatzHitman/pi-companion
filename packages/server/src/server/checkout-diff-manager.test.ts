@@ -12,7 +12,12 @@ vi.mock("./checkout-git-utils.js", () => ({
 
 import type pino from "pino";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
-import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
+import type {
+  WorkspaceGitRuntimeSnapshot,
+  WorkspaceGitReadOptions,
+  WorkspaceGitService,
+} from "./workspace-git-service.js";
+import type { CheckoutDiffCompare, CheckoutDiffResult } from "../utils/checkout-git.js";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -40,6 +45,7 @@ function createWorkspaceSnapshot(
       remoteUrl: "https://github.com/acme/repo.git",
       isPaseoOwnedWorktree: false,
       isDirty: false,
+      upstreamRef: null,
       baseRef: "main",
       aheadBehind: { ahead: 1, behind: 0 },
       aheadOfOrigin: 1,
@@ -438,7 +444,13 @@ describe("CheckoutDiffManager", () => {
   });
 
   test("base diff subscriptions refresh for structural workspace changes", async () => {
-    const getCheckoutDiff = vi.fn(async () => ({ diff: "", structured: [] }));
+    const getCheckoutDiff = vi.fn(
+      async (
+        _cwd: string,
+        _compare: CheckoutDiffCompare,
+        _readOptions?: WorkspaceGitReadOptions,
+      ): Promise<CheckoutDiffResult> => ({ diff: "", structured: [] }),
+    );
     const { manager, getOnWorkspaceSnapshot, workspaceGitService } = createManager({
       getCheckoutDiffImplementation: getCheckoutDiff,
     });

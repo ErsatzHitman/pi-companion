@@ -14,7 +14,9 @@ import {
   asDownloadTokenStore,
   asGitHubService,
   asLoopService,
+  asProviderUsageService,
   asScheduleService,
+  asWorkspaceAutoName,
   asWorkspaceGitService,
   createProviderSnapshotManagerStub,
 } from "../test-utils/session-stubs.js";
@@ -74,6 +76,8 @@ function createSessionWithRealPushTokenStore(pushTokenStore: PushTokenStore): Se
     checkoutDiffManager: asCheckoutDiffManager({}),
     github: asGitHubService({}),
     workspaceGitService: asWorkspaceGitService({}),
+    workspaceAutoName: asWorkspaceAutoName({}),
+    providerUsageService: asProviderUsageService({}),
     daemonConfigStore: asDaemonConfigStore({
       get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
       onChange: () => () => {},
@@ -151,6 +155,8 @@ describe("Session push-token wiring (T61)", () => {
       checkoutDiffManager: asCheckoutDiffManager({}),
       github: asGitHubService({}),
       workspaceGitService: asWorkspaceGitService({}),
+      workspaceAutoName: asWorkspaceAutoName({}),
+      providerUsageService: asProviderUsageService({}),
       daemonConfigStore: asDaemonConfigStore({
         get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
         onChange: () => () => {},

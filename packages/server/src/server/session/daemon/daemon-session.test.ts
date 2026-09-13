@@ -435,6 +435,7 @@ describe("DaemonSession", () => {
             maxItemsPerAgent: 12,
           },
         },
+        git: null,
       }),
     });
 

@@ -133,7 +133,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     lastUserMessageAt: overrides.lastUserMessageAt ?? core.now,
     lastUsage: overrides.lastUsage,
     lastError: overrides.lastError,
-  };
+  } as unknown as ManagedAgent;
 }
 
 describe("AgentStorage", () => {
