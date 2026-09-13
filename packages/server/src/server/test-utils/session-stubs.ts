@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { vi, type Mock } from "vitest";
 
 import { getAgentProviderDefinition } from "@picompanion/protocol/provider-manifest";
 
@@ -108,15 +108,15 @@ export function asWorkspaceGitService(stub: {
 }
 
 export function asServiceProxy(stub: {
-  [K in keyof SessionOptions["serviceProxy"]]?: unknown;
-}): SessionOptions["serviceProxy"] {
-  return createStub<SessionOptions["serviceProxy"]>(stub);
+  [K in keyof NonNullable<SessionOptions["serviceProxy"]>]?: unknown;
+}): NonNullable<SessionOptions["serviceProxy"]> {
+  return createStub<NonNullable<SessionOptions["serviceProxy"]>>(stub);
 }
 
 export function asWorkspaceScriptRuntimeStore(stub: {
-  [K in keyof SessionOptions["scriptRuntimeStore"]]?: unknown;
-}): SessionOptions["scriptRuntimeStore"] {
-  return createStub<SessionOptions["scriptRuntimeStore"]>(stub);
+  [K in keyof NonNullable<SessionOptions["scriptRuntimeStore"]>]?: unknown;
+}): NonNullable<SessionOptions["scriptRuntimeStore"]> {
+  return createStub<NonNullable<SessionOptions["scriptRuntimeStore"]>>(stub);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,68 +157,70 @@ export function findByType<T extends SessionOutboundMessage["type"]>(
 // ---------------------------------------------------------------------------
 
 export interface ProviderSnapshotManagerSpies {
-  getSnapshot: ReturnType<typeof vi.fn<[cwd?: string], ProviderSnapshotEntry[]>>;
-  refreshSnapshotForCwd: ReturnType<typeof vi.fn<[unknown], Promise<void>>>;
-  refreshSettingsSnapshot: ReturnType<typeof vi.fn<[unknown], Promise<void>>>;
-  warmUpSnapshotForCwd: ReturnType<typeof vi.fn<[unknown], Promise<void>>>;
-  listRegisteredProviderIds: ReturnType<typeof vi.fn<[], AgentProvider[]>>;
-  hasProvider: ReturnType<typeof vi.fn<[AgentProvider], boolean>>;
-  getProviderLabel: ReturnType<typeof vi.fn<[AgentProvider], string>>;
-  getAgentManagerProviderState: ReturnType<typeof vi.fn<[], AgentManagerProviderState>>;
-  listProviders: ReturnType<typeof vi.fn<[unknown], Promise<ProviderSnapshotEntry[]>>>;
-  getProvider: ReturnType<typeof vi.fn<[unknown], Promise<ProviderSnapshotEntry>>>;
-  listModels: ReturnType<typeof vi.fn<[unknown], Promise<AgentModelDefinition[]>>>;
-  listModes: ReturnType<typeof vi.fn<[unknown], Promise<AgentMode[]>>>;
-  resolveCreateConfig: ReturnType<typeof vi.fn<[unknown], Promise<ResolvedProviderCreateConfig>>>;
-  resolveDefaultModel: ReturnType<typeof vi.fn<[unknown], Promise<string | undefined>>>;
-  getProviderDiagnostic: ReturnType<
-    typeof vi.fn<[AgentProvider], Promise<ProviderDiagnosticResult>>
-  >;
-  applyMutableProviderConfig: ReturnType<typeof vi.fn<[unknown], AgentManagerProviderState>>;
-  destroy: ReturnType<typeof vi.fn<[], void>>;
+  getSnapshot: Mock<(cwd?: string) => ProviderSnapshotEntry[]>;
+  refreshSnapshotForCwd: Mock<(arg: unknown) => Promise<void>>;
+  refreshSettingsSnapshot: Mock<(arg: unknown) => Promise<void>>;
+  warmUpSnapshotForCwd: Mock<(arg: unknown) => Promise<void>>;
+  listRegisteredProviderIds: Mock<() => AgentProvider[]>;
+  hasProvider: Mock<(provider: AgentProvider) => boolean>;
+  getProviderLabel: Mock<(provider: AgentProvider) => string>;
+  getAgentManagerProviderState: Mock<() => AgentManagerProviderState>;
+  listProviders: Mock<(arg: unknown) => Promise<ProviderSnapshotEntry[]>>;
+  getProvider: Mock<(arg: unknown) => Promise<ProviderSnapshotEntry>>;
+  listModels: Mock<(arg: unknown) => Promise<AgentModelDefinition[]>>;
+  listModes: Mock<(arg: unknown) => Promise<AgentMode[]>>;
+  resolveCreateConfig: Mock<(arg: unknown) => Promise<ResolvedProviderCreateConfig>>;
+  resolveDefaultModel: Mock<(arg: unknown) => Promise<string | undefined>>;
+  getProviderDiagnostic: Mock<(provider: AgentProvider) => Promise<ProviderDiagnosticResult>>;
+  applyMutableProviderConfig: Mock<(arg: unknown) => AgentManagerProviderState>;
+  destroy: Mock<() => void>;
 }
 
 export function createProviderSnapshotManagerStub(): {
   manager: ProviderSnapshotManager;
 } & ProviderSnapshotManagerSpies {
-  const getSnapshot = vi.fn<[cwd?: string], ProviderSnapshotEntry[]>(() => []);
-  const refreshSnapshotForCwd = vi.fn<[unknown], Promise<void>>(async () => {});
-  const refreshSettingsSnapshot = vi.fn<[unknown], Promise<void>>(async () => {});
-  const warmUpSnapshotForCwd = vi.fn<[unknown], Promise<void>>(async () => {});
-  const listRegisteredProviderIds = vi.fn<[], AgentProvider[]>(() => []);
-  const hasProvider = vi.fn<[AgentProvider], boolean>(() => false);
-  const getProviderLabel = vi.fn<[AgentProvider], string>((provider) => {
+  const getSnapshot = vi.fn<(cwd?: string) => ProviderSnapshotEntry[]>(() => []);
+  const refreshSnapshotForCwd = vi.fn<(arg: unknown) => Promise<void>>(async () => {});
+  const refreshSettingsSnapshot = vi.fn<(arg: unknown) => Promise<void>>(async () => {});
+  const warmUpSnapshotForCwd = vi.fn<(arg: unknown) => Promise<void>>(async () => {});
+  const listRegisteredProviderIds = vi.fn<() => AgentProvider[]>(() => []);
+  const hasProvider = vi.fn<(provider: AgentProvider) => boolean>(() => false);
+  const getProviderLabel = vi.fn<(provider: AgentProvider) => string>((provider) => {
     try {
       return getAgentProviderDefinition(provider).label;
     } catch {
       return provider;
     }
   });
-  const getAgentManagerProviderState = vi.fn<[], AgentManagerProviderState>(() => ({
+  const getAgentManagerProviderState = vi.fn<() => AgentManagerProviderState>(() => ({
     providerDefinitions: {},
     clients: {},
   }));
-  const listProviders = vi.fn<[unknown], Promise<ProviderSnapshotEntry[]>>(async () => []);
-  const getProvider = vi.fn<[unknown], Promise<ProviderSnapshotEntry>>(async () => {
+  const listProviders = vi.fn<(arg: unknown) => Promise<ProviderSnapshotEntry[]>>(async () => []);
+  const getProvider = vi.fn<(arg: unknown) => Promise<ProviderSnapshotEntry>>(async () => {
     throw new Error("createProviderSnapshotManagerStub: getProvider not stubbed");
   });
-  const listModels = vi.fn<[unknown], Promise<AgentModelDefinition[]>>(async () => []);
-  const listModes = vi.fn<[unknown], Promise<AgentMode[]>>(async () => []);
-  const resolveCreateConfig = vi.fn<[unknown], Promise<ResolvedProviderCreateConfig>>(async () => ({
-    modeId: undefined,
-    featureValues: undefined,
-  }));
-  const resolveDefaultModel = vi.fn<[unknown], Promise<string | undefined>>(async () => undefined);
-  const getProviderDiagnostic = vi.fn<[AgentProvider], Promise<ProviderDiagnosticResult>>(
-    async (provider) => ({ provider, diagnostic: "No diagnostic available for this provider." }),
+  const listModels = vi.fn<(arg: unknown) => Promise<AgentModelDefinition[]>>(async () => []);
+  const listModes = vi.fn<(arg: unknown) => Promise<AgentMode[]>>(async () => []);
+  const resolveCreateConfig = vi.fn<(arg: unknown) => Promise<ResolvedProviderCreateConfig>>(
+    async () => ({
+      modeId: undefined,
+      featureValues: undefined,
+    }),
   );
-  const applyMutableProviderConfig = vi.fn<[unknown], AgentManagerProviderState>(() => ({
+  const resolveDefaultModel = vi.fn<(arg: unknown) => Promise<string | undefined>>(
+    async () => undefined,
+  );
+  const getProviderDiagnostic = vi.fn<
+    (provider: AgentProvider) => Promise<ProviderDiagnosticResult>
+  >(async (provider) => ({ provider, diagnostic: "No diagnostic available for this provider." }));
+  const applyMutableProviderConfig = vi.fn<(arg: unknown) => AgentManagerProviderState>(() => ({
     providerDefinitions: {},
     clients: {},
   }));
   const on = vi.fn();
   const off = vi.fn();
-  const destroy = vi.fn<[], void>();
+  const destroy = vi.fn<() => void>();
   const stub = {
     getSnapshot,
     refreshSnapshotForCwd,

@@ -69,9 +69,15 @@ const sessionMock = vi.hoisted(() => {
       inflightRequests: 0,
       peakInflightRequests: 0,
     }));
-    readonly args: Record<string, unknown>;
+    readonly args: Record<string, unknown> & {
+      clientCapabilities?: Record<string, unknown> | null;
+    };
 
-    constructor(args: Record<string, unknown>) {
+    constructor(
+      args: Record<string, unknown> & {
+        clientCapabilities?: Record<string, unknown> | null;
+      },
+    ) {
       this.args = args;
       instances.push(this);
     }
@@ -105,7 +111,7 @@ vi.mock("./push/push-service.js", () => ({
 }));
 
 import { z } from "zod";
-import { VoiceAssistantWebSocketServer } from "./websocket-server";
+import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 import { parseServerInfoStatusPayload } from "./messages.js";
 import type { SpeechReadinessSnapshot } from "./speech/speech-runtime.js";
 

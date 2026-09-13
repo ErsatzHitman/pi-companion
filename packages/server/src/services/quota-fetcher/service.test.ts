@@ -227,7 +227,7 @@ describe("ProviderUsageService", () => {
 
   it("deduplicates concurrent cache misses", async () => {
     let calls = 0;
-    let resolveUsage: ((usage: ProviderUsage) => void) | null = null;
+    const pendingResolvers: Array<(usage: ProviderUsage) => void> = [];
     const service = new ProviderUsageService({
       logger: createLogger(),
       now: () => Date.parse("2026-06-19T00:00:00.000Z"),
@@ -238,7 +238,7 @@ describe("ProviderUsageService", () => {
           fetchUsage: () => {
             calls += 1;
             return new Promise<ProviderUsage>((resolve) => {
-              resolveUsage = resolve;
+              pendingResolvers.push(resolve);
             });
           },
         },
@@ -249,7 +249,9 @@ describe("ProviderUsageService", () => {
     const second = service.listUsage();
 
     expect(calls).toBe(1);
-    resolveUsage?.({
+    const resolveUsage = pendingResolvers[0];
+    if (!resolveUsage) throw new Error("expected usage fetch to start");
+    resolveUsage({
       providerId: "claude",
       displayName: "Claude",
       status: "available",

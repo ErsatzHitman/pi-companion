@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import pino from "pino";
 import {
-  type ChatServiceError,
   FileBackedChatService,
   parseMentionAgentIds,
   type PostChatMessageInput,
@@ -41,7 +40,7 @@ describe("FileBackedChatService", () => {
       service.createRoom({
         name: "CLI-FEATURES-EPIC",
       }),
-    ).rejects.toMatchObject<Partial<ChatServiceError>>({
+    ).rejects.toMatchObject({
       code: "chat_room_name_taken",
     });
 
@@ -73,7 +72,7 @@ describe("FileBackedChatService", () => {
         body: "bad reply",
         replyToMessageId: "missing",
       }),
-    ).rejects.toMatchObject<Partial<ChatServiceError>>({
+    ).rejects.toMatchObject({
       code: "chat_message_not_found",
     });
 
@@ -170,12 +169,10 @@ describe("FileBackedChatService", () => {
     const deleted = await service.deleteRoom({ room: room.id });
     expect(deleted.room.messageCount).toBe(1);
 
-    await expect(waitPromise).rejects.toMatchObject<Partial<ChatServiceError>>({
+    await expect(waitPromise).rejects.toMatchObject({
       code: "chat_room_deleted",
     });
-    await expect(service.inspectRoom({ room: room.name })).rejects.toMatchObject<
-      Partial<ChatServiceError>
-    >({
+    await expect(service.inspectRoom({ room: room.name })).rejects.toMatchObject({
       code: "chat_room_not_found",
     });
   });

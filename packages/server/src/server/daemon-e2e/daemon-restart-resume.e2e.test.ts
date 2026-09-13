@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { createDaemonTestContext, type DaemonTestContext } from "../test-utils/index.js";
-import type { PersistenceHandle } from "@picompanion/protocol/messages";
 
 function tmpCwd(): string {
   return mkdtempSync(path.join(tmpdir(), "daemon-restart-resume-"));
@@ -42,7 +41,7 @@ describe("daemon restart resume", () => {
       expect(afterRemember.final?.persistence).toBeTruthy();
       expect(afterRemember.final!.persistence!.metadata).toMatchObject({ marker });
 
-      const handle = afterRemember.final!.persistence as PersistenceHandle;
+      const handle = afterRemember.final!.persistence!;
 
       await ctx.cleanup();
       ctx = await createDaemonTestContext();
