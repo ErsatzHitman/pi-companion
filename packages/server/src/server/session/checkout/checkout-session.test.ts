@@ -25,11 +25,15 @@ import {
 import { expandTilde } from "../../../utils/path.js";
 import type { GitMetadataGenerator } from "./git-metadata-generator.js";
 
-function isCheckDetailsResponse(msg: SessionOutboundMessage): boolean {
+function isCheckDetailsResponse(
+  msg: SessionOutboundMessage,
+): msg is Extract<SessionOutboundMessage, { type: "checkout.forge.get_check_details.response" }> {
   return msg.type === "checkout.forge.get_check_details.response";
 }
 
-function isTimelineResponse(msg: SessionOutboundMessage): boolean {
+function isTimelineResponse(
+  msg: SessionOutboundMessage,
+): msg is Extract<SessionOutboundMessage, { type: "pull_request_timeline_response" }> {
   return msg.type === "pull_request_timeline_response";
 }
 
@@ -187,6 +191,7 @@ function createGitSnapshot(
       remoteUrl: null,
       isPaseoOwnedWorktree: false,
       isDirty: overrides?.isDirty ?? false,
+      upstreamRef: null,
       baseRef: null,
       aheadBehind: null,
       aheadOfOrigin: null,
@@ -194,7 +199,12 @@ function createGitSnapshot(
       hasRemote: false,
       diffStat: null,
     },
-    forge: { featuresEnabled: false, pullRequest: null, error: null },
+    forge: {
+      featuresEnabled: false,
+      authState: "no_remote" as const,
+      pullRequest: null,
+      error: null,
+    },
   };
 }
 
@@ -809,6 +819,7 @@ describe("CheckoutSession", () => {
         ...createGitSnapshot(cwd, "feature/gitlab-auto-merge"),
         forge: {
           featuresEnabled: true,
+          authState: "authenticated" as const,
           error: null,
           pullRequest: {
             number: 14,
@@ -920,19 +931,23 @@ describe("CheckoutSession", () => {
 
   describe("check details routing", () => {
     it("routes get-check-details through the resolved GitLab adapter", async () => {
-      const githubCalls: number[] = [];
+      const githubCalls: Array<number | undefined> = [];
       const gitlabCalls: Array<{ cwd: string; checkRunId: number }> = [];
       const gitlabService: Partial<ForgeService> = {
         async getCheckDetails(input) {
-          gitlabCalls.push({ cwd: input.cwd, checkRunId: input.checkRunId });
+          if (input.checkRunId === undefined) {
+            throw new Error("Expected checkRunId in this test");
+          }
+          const checkRunId = input.checkRunId;
+          gitlabCalls.push({ cwd: input.cwd, checkRunId });
           return {
-            checkRunId: input.checkRunId,
+            checkRunId,
             name: "Pipeline (feat/x)",
             annotations: [],
             failedJobs: [],
             truncated: false,
             pipeline: {
-              id: input.checkRunId,
+              id: checkRunId,
               status: "success",
               rawStatus: "success",
               url: "https://gitlab.example.com/g/r/-/pipelines/306",

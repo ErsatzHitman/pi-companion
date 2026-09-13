@@ -1,7 +1,11 @@
 import path from "node:path";
 import type pino from "pino";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import type { CheckoutSnapshotFacts, CheckoutStatusGit } from "../utils/checkout-git.js";
+import type {
+  CheckoutSnapshotFacts,
+  CheckoutStatusGit,
+  CheckoutStatusGitNonPaseo,
+} from "../utils/checkout-git.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
 
@@ -45,7 +49,7 @@ function createWatcherHarness(harnessOptions?: { failDirectories?: Set<string> }
   return { records, subscribe };
 }
 
-function createCheckoutFacts(cwd: string): CheckoutSnapshotFacts {
+function createCheckoutFacts(cwd: string): Extract<CheckoutSnapshotFacts, { isGit: true }> {
   return {
     isGit: true,
     worktreeRoot: cwd,
@@ -60,13 +64,14 @@ function createCheckoutFacts(cwd: string): CheckoutSnapshotFacts {
     comparisonBaseRef: null,
     branchRemoteName: null,
     branchMergeRef: null,
+    upstreamStatus: null,
     pullRequestLookupTarget: { headRef: "main" },
   };
 }
 
 function createCheckoutStatus(
   cwd: string,
-  overrides?: Partial<CheckoutStatusGit>,
+  overrides?: Partial<CheckoutStatusGitNonPaseo>,
 ): CheckoutStatusGit {
   return {
     isGit: true,
@@ -74,6 +79,7 @@ function createCheckoutStatus(
     mainRepoRoot: null,
     currentBranch: "main",
     isDirty: false,
+    upstreamRef: null,
     baseRef: "main",
     aheadBehind: { ahead: 0, behind: 0 },
     aheadOfOrigin: null,
@@ -240,8 +246,8 @@ describe("WorkspaceGitService checkout observation", () => {
 
   test("an observer abandoned during async setup is closed", async () => {
     const watcher = createWatcherHarness();
-    const openedSubscription = createDeferred<{ unsubscribe: () => Promise<void> }>();
     const unsubscribeWatcher = vi.fn(async () => {});
+    const openedSubscription = createDeferred<{ unsubscribe: typeof unsubscribeWatcher }>();
     watcher.subscribe.mockImplementationOnce(async () => openedSubscription.promise);
     const service = createService(watcher);
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
@@ -337,7 +343,10 @@ describe("WorkspaceGitService checkout observation", () => {
 
   test("worktree and metadata events invalidate only their matching diff projections", async () => {
     const watcher = createWatcherHarness();
-    const getCheckoutDiff = vi.fn(async () => ({ diff: "", structured: [] }));
+    const getCheckoutDiff = vi.fn(async (_cwd: string, _options: unknown) => ({
+      diff: "",
+      structured: [],
+    }));
     const service = createService(watcher, { getCheckoutDiff });
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
 

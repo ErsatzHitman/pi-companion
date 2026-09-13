@@ -35,6 +35,7 @@ function createFacts(cwd: string): CheckoutSnapshotFacts {
     comparisonBaseRef: null,
     branchRemoteName: null,
     branchMergeRef: null,
+    upstreamStatus: null,
     pullRequestLookupTarget: { headRef: "main" },
   };
 }
@@ -46,6 +47,7 @@ function createStatus(cwd: string): CheckoutStatusGit {
     mainRepoRoot: null,
     currentBranch: "main",
     isDirty: false,
+    upstreamRef: null,
     baseRef: "main",
     aheadBehind: { ahead: 0, behind: 0 },
     aheadOfOrigin: null,

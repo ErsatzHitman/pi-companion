@@ -53,17 +53,14 @@ describe("paseo daemon bootstrap", () => {
       speech: {
         providers: {
           dictationStt: { provider: "openai", explicit: true },
+          voiceTurnDetection: { provider: "openai", explicit: true },
           voiceStt: { provider: "openai", explicit: true },
           voiceTts: { provider: "openai", explicit: true },
         },
       },
     });
     try {
-      const response = await fetch(`http://127.0.0.1:${daemonHandle.port}/api/health`, {
-        headers: daemonHandle.agentMcpAuthHeader
-          ? { Authorization: daemonHandle.agentMcpAuthHeader }
-          : undefined,
-      });
+      const response = await fetch(`http://127.0.0.1:${daemonHandle.port}/api/health`);
       expect(response.ok).toBe(true);
       const payload = await response.json();
       expect(payload.status).toBe("ok");
@@ -171,8 +168,9 @@ describe("paseo daemon bootstrap", () => {
     const paseoHome = path.join(paseoHomeRoot, ".paseo");
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     await mkdir(paseoHome, { recursive: true });
+    const mainPort = await findFreePort();
     const config: PaseoDaemonConfig = {
-      listen: "127.0.0.1:0",
+      listen: `127.0.0.1:${mainPort}`,
       paseoHome,
       corsAllowedOrigins: [],
       hostnames: true,
@@ -186,6 +184,7 @@ describe("paseo daemon bootstrap", () => {
       openai: undefined,
       speech: undefined,
       serviceProxy: {
+        publicBaseUrl: null,
         standaloneListen: `127.0.0.1:${address.port}`,
       },
     };
@@ -193,7 +192,7 @@ describe("paseo daemon bootstrap", () => {
 
     try {
       await expect(daemon.start()).rejects.toThrow();
-      await expect(fetch(`http://127.0.0.1:${daemon.port}/api/health`)).rejects.toThrow();
+      await expect(fetch(`http://127.0.0.1:${mainPort}/api/health`)).rejects.toThrow();
     } finally {
       await daemon.stop().catch(() => undefined);
       await new Promise<void>((resolve) => occupiedServer.close(() => resolve()));
@@ -354,7 +353,7 @@ describe("paseo daemon bootstrap", () => {
     }
 
     const daemonHandle = await createTestPaseoDaemon({
-      serviceProxy: { standaloneListen: `127.0.0.1:${standalonePort}` },
+      serviceProxy: { publicBaseUrl: null, standaloneListen: `127.0.0.1:${standalonePort}` },
     });
     try {
       daemonHandle.daemon.serviceProxy.registerWorkspaceService({
@@ -413,7 +412,10 @@ describe("paseo daemon bootstrap", () => {
       appBaseUrl: "https://app.paseo.sh",
       openai: undefined,
       speech: undefined,
-      serviceProxy: { standaloneListen: `127.0.0.1:${standalonePort}` },
+      serviceProxy: {
+        publicBaseUrl: null,
+        standaloneListen: `127.0.0.1:${standalonePort}`,
+      },
     };
     const daemon = await createPaseoDaemon(config, pino({ level: "silent" }));
 
@@ -497,6 +499,7 @@ describe("paseo daemon bootstrap", () => {
       speech: {
         providers: {
           dictationStt: { provider: "openai", explicit: true },
+          voiceTurnDetection: { provider: "openai", explicit: true },
           voiceStt: { provider: "openai", explicit: true },
           voiceTts: { provider: "openai", explicit: true },
         },
@@ -520,7 +523,7 @@ describe("paseo daemon bootstrap", () => {
 
   test("does not block daemon start on local speech model downloads", async () => {
     const originalFetch = globalThis.fetch;
-    let releaseFetch: ((value: Response) => void) | null = null;
+    let releaseFetch: ((value: Response) => void) | undefined;
     const fetchGate = new Promise<Response>((resolve) => {
       releaseFetch = resolve;
     });

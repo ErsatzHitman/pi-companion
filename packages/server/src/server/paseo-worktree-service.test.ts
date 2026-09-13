@@ -1048,6 +1048,13 @@ function createDeps(options?: {
     upsert: async (project) => {
       projects.set(project.projectId, project);
     },
+    update: async (projectId, updater) => {
+      const project = projects.get(projectId);
+      if (!project) return null;
+      const updated = updater(project);
+      projects.set(projectId, updated);
+      return updated;
+    },
     archive: async (projectId, archivedAt) => {
       const project = projects.get(projectId);
       if (project) projects.set(projectId, { ...project, archivedAt });
@@ -1107,6 +1114,9 @@ function createPersistedProjectRecordForTest(input: {
     rootPath: input.rootPath,
     kind: "git",
     displayName: input.displayName,
+    projectKey: null,
+    customName: null,
+    customIconRevision: null,
     createdAt: "2026-04-22T00:00:00.000Z",
     updatedAt: "2026-04-22T00:00:00.000Z",
     archivedAt: null,
@@ -1126,9 +1136,17 @@ function createPersistedWorkspaceRecordForTest(input: {
     cwd: input.cwd,
     kind: input.kind,
     displayName: input.displayName,
+    title: null,
+    branch: null,
+    worktreeRoot: null,
+    baseBranch: null,
+    isPaseoOwnedWorktree: false,
+    mainRepoRoot: null,
     createdAt: "2026-04-22T00:00:00.000Z",
     updatedAt: "2026-04-22T00:00:00.000Z",
     archivedAt: null,
+    autoArchivedChangeRequestUrl: null,
+    pinnedAt: null,
   };
 }
 
@@ -1139,6 +1157,7 @@ function createGitHubServiceStub(): ForgeService {
     searchIssuesAndPrs: async () => ({
       items: [],
       featuresEnabled: true,
+      authState: "authenticated" as const,
       githubFeaturesEnabled: true,
     }),
     getPullRequest: async ({ number }) => ({
@@ -1150,6 +1169,7 @@ function createGitHubServiceStub(): ForgeService {
       baseRefName: "main",
       headRefName: `pr-${number}`,
       labels: [],
+      updatedAt: "2026-04-11T00:00:00.000Z",
     }),
     getPullRequestHeadRef: async ({ number }) => `pr-${number}`,
     defaultCheckoutRefs: ({ changeRequestNumber }) => [
@@ -1172,11 +1192,28 @@ function createGitHubServiceStub(): ForgeService {
       isCrossRepository: false,
     }),
     getCurrentPullRequestStatus: async () => null,
+    getPullRequestTimeline: async () => ({
+      prNumber: 0,
+      repoOwner: "",
+      repoName: "",
+      items: [],
+      truncated: false,
+      error: null,
+    }),
+    getCheckDetails: async () => ({
+      checkRunId: 0,
+      name: "",
+      annotations: [],
+      failedJobs: [],
+      truncated: false,
+    }),
     createPullRequest: async () => ({
       number: 1,
       url: "https://github.com/acme/repo/pull/1",
     }),
     mergePullRequest: async () => ({ success: true }),
+    enablePullRequestAutoMerge: async () => ({ success: true as const }),
+    disablePullRequestAutoMerge: async () => ({ success: true as const }),
     isAuthenticated: async () => true,
     invalidate: () => {},
   };
@@ -1187,32 +1224,53 @@ function createWorkspaceGitServiceStub(): WorkspaceGitService {
     registerWorkspace: () => ({
       unsubscribe: () => {},
     }),
+    onSnapshotUpdated: () => ({
+      unsubscribe: () => {},
+    }),
     peekSnapshot: (cwd) => createWorkspaceGitSnapshot(cwd),
     getCheckout: async (cwd) => {
       try {
         const snapshot = createWorkspaceGitSnapshot(cwd);
+        if (snapshot.git.isPaseoOwnedWorktree) {
+          return {
+            cwd,
+            isGit: true as const,
+            currentBranch: snapshot.git.currentBranch,
+            remoteUrl: snapshot.git.remoteUrl,
+            worktreeRoot: snapshot.git.repoRoot ?? cwd,
+            isPaseoOwnedWorktree: true as const,
+            mainRepoRoot: snapshot.git.mainRepoRoot ?? cwd,
+          };
+        }
         return {
           cwd,
-          isGit: snapshot.git.isGit,
+          isGit: true as const,
           currentBranch: snapshot.git.currentBranch,
           remoteUrl: snapshot.git.remoteUrl,
-          worktreeRoot: snapshot.git.repoRoot,
-          isPaseoOwnedWorktree: snapshot.git.isPaseoOwnedWorktree,
+          worktreeRoot: snapshot.git.repoRoot ?? cwd,
+          isPaseoOwnedWorktree: false as const,
           mainRepoRoot: snapshot.git.mainRepoRoot,
         };
       } catch {
         return {
           cwd,
-          isGit: false,
+          isGit: false as const,
           currentBranch: null,
           remoteUrl: null,
           worktreeRoot: null,
-          isPaseoOwnedWorktree: false,
+          isPaseoOwnedWorktree: false as const,
           mainRepoRoot: null,
         };
       }
     },
     getSnapshot: async (cwd) => createWorkspaceGitSnapshot(cwd),
+    getCheckoutDiff: async () => ({ diff: "" }),
+    validateBranchRef: async () => ({ kind: "not-found" }),
+    hasLocalBranch: async () => false,
+    suggestBranchesForCwd: async () => [],
+    listStashes: async () => [],
+    listWorktrees: async () => [],
+    getProjectSlug: async (cwd) => cwd,
     resolveForge: async () => null,
     resolveRepoRoot: async (cwd) => {
       try {
@@ -1222,6 +1280,7 @@ function createWorkspaceGitServiceStub(): WorkspaceGitService {
       }
     },
     resolveDefaultBranch: async () => "main",
+    resolveRepoRemoteUrl: async () => null,
     refresh: async () => {},
     requestWorkingTreeWatch: async (cwd) => ({
       repoRoot: cwd,
@@ -1230,6 +1289,20 @@ function createWorkspaceGitServiceStub(): WorkspaceGitService {
     scheduleRefreshForCwd: () => {},
     onWorkspaceStateMayHaveChanged: () => {},
     invalidateForge: () => {},
+    getMetrics: () => ({
+      workspaceTargetCount: 0,
+      workspaceListenerCount: 0,
+      repositoryTargetCount: 0,
+      repositoryWorkspaceLinkCount: 0,
+      workingTreeWatchTargetCount: 0,
+      workingTreeWatchListenerCount: 0,
+      workspaceObservationSetupInFlightCount: 0,
+      workingTreeWatchSetupInFlightCount: 0,
+      workspaceRefreshInFlightCount: 0,
+      workspaceRefreshQueuedCount: 0,
+      fetchInFlightCount: 0,
+      snapshotUpdatedListenerCount: 0,
+    }),
     dispose: () => {},
   };
 }
@@ -1266,6 +1339,7 @@ function createWorkspaceGitSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {
       remoteUrl: null,
       isPaseoOwnedWorktree: repoRoot !== mainRepoRoot,
       isDirty: false,
+      upstreamRef: null,
       baseRef: "main",
       aheadBehind: null,
       aheadOfOrigin: null,
@@ -1275,6 +1349,7 @@ function createWorkspaceGitSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {
     },
     forge: {
       featuresEnabled: false,
+      authState: "no_remote" as const,
       pullRequest: null,
       error: null,
     },

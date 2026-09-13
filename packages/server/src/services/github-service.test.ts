@@ -15,6 +15,7 @@ import {
   type GitHubPullRequestStatusFacts,
 } from "./github-service.js";
 import { isPlatform } from "../test-utils/platform.js";
+import type { ForgeReadOptions, ForgeSpecificStatusFacts } from "./forge-service.js";
 import { CheckoutPrStatusResponseSchema } from "@picompanion/protocol/messages";
 
 const EXPECTED_GITHUB_FAST_POLL_MS = 20_000;
@@ -264,7 +265,7 @@ function createCurrentPullRequestStatus(
 
 function githubStatusFacts(
   overrides: Partial<GitHubPullRequestStatusFacts> = {},
-): GitHubPullRequestStatusFacts & { forge: "github" } {
+): ForgeSpecificStatusFacts {
   return {
     forge: "github",
     mergeStateStatus: "CLEAN",

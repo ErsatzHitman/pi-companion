@@ -18,8 +18,8 @@ type SessionMessage<T extends SessionOutboundMessage["type"]> = Extract<
 >;
 
 interface AudioOutputState {
-  targetGroupId: string | null;
-  chunks: Array<{ index: number; bytes: Buffer }>;
+  targetGroupId: string | null | undefined;
+  chunks: Array<{ index: number | undefined; bytes: Buffer }>;
   format: string;
 }
 
@@ -37,8 +37,8 @@ function makeTranscriptionHandler(
   };
 }
 
-function byIndex(a: { index: number }, b: { index: number }): number {
-  return a.index - b.index;
+function byIndex(a: { index: number | undefined }, b: { index: number | undefined }): number {
+  return (a.index ?? 0) - (b.index ?? 0);
 }
 
 function chunkBytes(entry: { bytes: Buffer }): Buffer {
@@ -119,6 +119,8 @@ function getVoiceRoundtripConfig(provider: VoiceRoundtripProvider): {
         model: "opencode/gpt-5-nano",
         modeId: "default",
       };
+    default:
+      throw new Error(`Unsupported voice roundtrip provider: ${provider}`);
   }
 }
 
@@ -165,6 +167,7 @@ beforeAll(async () => {
     speech: {
       providers: {
         dictationStt: { provider: "openai", explicit: true },
+        voiceTurnDetection: { provider: "openai", explicit: true },
         voiceStt: { provider: "openai", explicit: true },
         voiceTts: { provider: "openai", explicit: true },
       },

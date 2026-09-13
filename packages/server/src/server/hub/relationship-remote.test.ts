@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
-import type { AddressInfo, Socket } from "node:net";
+import type { AddressInfo } from "node:net";
+import type { Duplex } from "node:stream";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import pino from "pino";
@@ -394,7 +395,7 @@ class UpgradeRejectingHub {
       }),
     );
   });
-  private readonly sockets = new Set<Socket>();
+  private readonly sockets = new Set<Duplex>();
   private readonly releasedAttempts = new Map<number, Deferred<void>>();
   private attemptObserved = deferred<void>();
   private attempts = 0;
@@ -510,6 +511,9 @@ class ManualRelationshipClock implements HubRelationshipClock, HubRelationshipRe
 const unusedExecutionAgents: HubExecutionAgents = {
   create: async () => {
     throw new Error("Unexpected Hub agent create");
+  },
+  control: async () => {
+    throw new Error("Unexpected Hub agent control");
   },
   subscribe: () => () => undefined,
   invalidateAuthority: async () => undefined,

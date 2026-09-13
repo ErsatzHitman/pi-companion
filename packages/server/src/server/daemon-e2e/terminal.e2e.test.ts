@@ -154,8 +154,9 @@ function toWsBuffer(raw: WebSocket.RawData): Buffer | null {
   if (raw instanceof ArrayBuffer) {
     return Buffer.from(raw);
   }
-  if (ArrayBuffer.isView(raw)) {
-    return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength);
+  const maybeView: unknown = raw;
+  if (ArrayBuffer.isView(maybeView)) {
+    return Buffer.from(maybeView.buffer, maybeView.byteOffset, maybeView.byteLength);
   }
   return null;
 }
@@ -1048,6 +1049,9 @@ test("one client can stream two terminals concurrently", async () => {
 
   expect(firstSubscribe.error).toBeNull();
   expect(secondSubscribe.error).toBeNull();
+  if (firstSubscribe.error !== null || secondSubscribe.error !== null) {
+    throw new Error("Expected both terminal subscriptions to succeed");
+  }
   expect(firstSubscribe.slot).not.toBe(secondSubscribe.slot);
 
   const firstOutput = waitForTerminalOutput(ctx.client, firstTerminalId, (text) =>

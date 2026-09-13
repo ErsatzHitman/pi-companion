@@ -57,6 +57,9 @@ test("Hub MCP configuration reaches the provider alongside Paseo MCP without ent
     type: "hub.execution.agent.create.response",
     payload: { success: true, agent: { provider: "pi" } },
   });
+  if (response.type !== "hub.execution.agent.create.response" || response.payload.agent === null) {
+    throw new Error("Expected a successful Hub execution agent create response");
+  }
   expect(response.payload.agent).not.toHaveProperty("config");
   expect(response.payload.agent).not.toHaveProperty("mcpServers");
   expect(response.payload.agent.persistence?.metadata).toEqual({
@@ -112,6 +115,9 @@ test("reserved Paseo MCP input does not invalidate replay of an owned execution"
     type: "hub.execution.agent.create.response",
     payload: { success: true, executionId: "replayed-execution" },
   });
+  if (original.type !== "hub.execution.agent.create.response") {
+    throw new Error("Expected a Hub execution agent create response");
+  }
   const providerCreations = hub.providerCreations();
 
   hub.beginOwnedCreate("replay-create", "replayed-execution", {
@@ -235,6 +241,9 @@ test("failed create never archives a reused worktree", async () => {
     worktree: { mode: "branch-off", newBranch: "shared-hub-worktree" },
   });
   const original = await hub.ownedCreateResult("original-create");
+  if (original.type !== "hub.execution.agent.create.response") {
+    throw new Error("Expected a Hub execution agent create response");
+  }
   const worktreeCwd = original.payload.agent?.cwd;
   expect(worktreeCwd).toEqual(expect.any(String));
   await hub.ownedTurnCompletion(original.payload.agentId!);

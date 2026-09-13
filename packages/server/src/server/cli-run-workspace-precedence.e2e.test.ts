@@ -47,7 +47,7 @@ test("daemon resolves human and managed CLI workspace ownership", async () => {
     const firstWorkspaceId = await mintLocalWorkspace(client, cwd);
 
     const firstAgent = await client.createAgent({
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd,
       workspaceId: firstWorkspaceId,
       title: "First run agent",
@@ -63,7 +63,7 @@ test("daemon resolves human and managed CLI workspace ownership", async () => {
     expect(secondWorkspaceId).not.toBe(firstWorkspaceId);
 
     const secondAgent = await client.createAgent({
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: otherCwd,
       workspaceId: secondWorkspaceId,
       title: "Second run agent",
@@ -80,7 +80,7 @@ test("daemon resolves human and managed CLI workspace ownership", async () => {
     // agent lands in the named workspace and the workspace set is unchanged.
     const idsBeforeAttach = await workspaceIds(client);
     const attachedAgent = await client.createAgent({
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: path.join(otherCwd, "stale-client-directory"),
       workspaceId: firstWorkspaceId,
       title: "Attached agent",
@@ -91,7 +91,7 @@ test("daemon resolves human and managed CLI workspace ownership", async () => {
 
     await expect(
       client.createAgent({
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd,
         workspaceId: "wks_missing",
         title: "Missing workspace agent",
@@ -99,7 +99,7 @@ test("daemon resolves human and managed CLI workspace ownership", async () => {
     ).rejects.toThrow("Workspace wks_missing not found");
 
     const sameWorkspaceChild = await client.createAgent({
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd: otherCwd,
       callerAgentId: firstAgent.id,
       title: "Same workspace child",
@@ -110,7 +110,7 @@ test("daemon resolves human and managed CLI workspace ownership", async () => {
     expect(await workspaceIds(client)).toEqual(idsBeforeAttach);
 
     const crossWorkspaceChild = await client.createAgent({
-      ...getFullAccessConfig("codex"),
+      ...getFullAccessConfig("pi"),
       cwd,
       workspaceId: secondWorkspaceId,
       callerAgentId: firstAgent.id,

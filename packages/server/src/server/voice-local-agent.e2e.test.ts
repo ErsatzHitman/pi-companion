@@ -8,7 +8,6 @@ import { createDaemonTestContext, type DaemonTestContext } from "./test-utils/in
 import { getFullAccessConfig } from "./daemon-e2e/agent-configs.js";
 import { OpenAITTS } from "./speech/providers/openai/tts.js";
 import type { SessionOutboundMessage } from "@picompanion/protocol/messages";
-import type { FetchAgentsEntry } from "@picompanion/client/internal/daemon-client";
 
 type SessionMessage<T extends SessionOutboundMessage["type"]> = Extract<
   SessionOutboundMessage,
@@ -84,6 +83,7 @@ function waitForSignal<T>(
       speech: {
         providers: {
           dictationStt: { provider: "openai", explicit: true },
+          voiceTurnDetection: { provider: "openai", explicit: true },
           voiceStt: { provider: "openai", explicit: true },
           voiceTts: { provider: "openai", explicit: true },
         },
@@ -112,7 +112,7 @@ function waitForSignal<T>(
     const voiceCwd = mkdtempSync(path.join(tmpdir(), "voice-local-agent-"));
     const targetAgent = await ctx.client.createAgent({
       config: {
-        ...getFullAccessConfig("codex"),
+        ...getFullAccessConfig("pi"),
         cwd: voiceCwd,
       },
     });
@@ -169,7 +169,7 @@ function waitForSignal<T>(
 
     const agents = await ctx.client.fetchAgents();
     expect(
-      agents.some((agent: FetchAgentsEntry) => String(agent.labels?.surface ?? "") === "voice"),
+      agents.entries.some((entry) => String(entry.agent.labels?.surface ?? "") === "voice"),
     ).toBe(false);
   }, 180000);
 });
