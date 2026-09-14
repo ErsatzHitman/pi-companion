@@ -96,6 +96,12 @@ import {
 } from "./tool-call-mapper.js";
 
 const PI_PROVIDER = "pi";
+// FIX-S6: matches `history-mapper.ts`'s `mapUserMessage` positional
+// fallback id (`${provider}-history-user-${userIndex}`) so a
+// history-replayed row's messageId — which no longer carries Pi's captured
+// tree-entry id directly, see that file's own doc comment — can still be
+// resolved back to a captured entry by position for rewind.
+const PI_HISTORY_USER_MESSAGE_ID_PATTERN = new RegExp(`^${PI_PROVIDER}-history-user-(\\d+)$`);
 const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = "medium";
 const PI_BINARY_COMMAND = process.env.PI_COMMAND ?? process.env.PI_ACP_PI_COMMAND ?? "pi";
 const PI_CATALOG_REQUEST_TIMEOUT_MS = 120_000;
@@ -1830,7 +1836,7 @@ export class PiRpcAgentSession implements AgentSession {
     }
     await this.refreshState().catch(() => undefined);
     await this.requestEntryCapture("rewind");
-    const targetEntry = this.capturedUserEntriesById.get(input.messageId);
+    const targetEntry = this.resolveCapturedEntryForRewind(input.messageId);
     if (!targetEntry) {
       throw new Error(`Pi rewind target ${input.messageId} was not found in captured tree entries`);
     }
@@ -2382,6 +2388,32 @@ export class PiRpcAgentSession implements AgentSession {
     for (const requestId of this.pendingExtensionResults.keys()) {
       this.rejectExtensionResult(requestId, error);
     }
+  }
+
+  /**
+   * FIX-S6: resolves a rewind target by Pi's own captured tree-entry id
+   * first (`capturedUserEntriesById` — how every *live* user message is
+   * keyed, see `handleSubmittedUserEntryMarker` above), then, only if that
+   * misses, by the *positional* fallback id a history-replayed message now
+   * always carries (`history-mapper.ts`'s `mapUserMessage` no longer
+   * threads a captured id through that item at all — see its own doc
+   * comment for why). `capturedUserEntries` is refreshed immediately
+   * before this runs (`requestEntryCapture("rewind")`, this method's only
+   * caller) and is in the same encounter order `mapUserMessage`'s own
+   * `userIndex` counts against, so entry `N - 1` in this array is the same
+   * source row as position `N` in that fallback id.
+   */
+  private resolveCapturedEntryForRewind(messageId: string): PiCapturedEntry | undefined {
+    const direct = this.capturedUserEntriesById.get(messageId);
+    if (direct) {
+      return direct;
+    }
+    const positionalMatch = PI_HISTORY_USER_MESSAGE_ID_PATTERN.exec(messageId);
+    if (!positionalMatch) {
+      return undefined;
+    }
+    const position = Number(positionalMatch[1]);
+    return this.capturedUserEntries[position - 1];
   }
 
   private recordCapturedUserEntries(entries: PiCapturedEntry[]): void {

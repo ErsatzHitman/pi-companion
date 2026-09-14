@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
-import { streamPiHistory } from "./providers/pi/history-mapper.js";
+import { streamPiHistory, type PiCapturedUserMessageEntry } from "./providers/pi/history-mapper.js";
+import { parseMessagesFromText } from "./providers/pi/pi-live-tail.js";
 import type { PiAgentMessage } from "./providers/pi/rpc-types.js";
 import type { AgentTimelineItem } from "./agent-sdk-types.js";
 
@@ -255,6 +256,153 @@ describe("InMemoryAgentTimelineStore", () => {
         )
         .map((item) => item.text);
       expect(userTexts).toEqual(["WAVE-OK", "WAVE-OK"]);
+    });
+
+    /**
+     * FIX-S6 regression: the test above ("importing the same fixture Pi
+     * session twice") calls `streamPiHistory` identically both times, so it
+     * never actually modelled the real asymmetry between the two
+     * production importers and passed even with the FIX-S5-only fix that
+     * still shipped the headline bug's user-row half. The real asymmetry,
+     * confirmed by reading both call sites: `agent.ts`'s RPC-driven
+     * `streamHistory()` supplies `userEntries` (Pi's own captured tree-entry
+     * ids, fetched via a live extension round trip); `pi-live-tail.ts`'s
+     * independent read of the raw `.jsonl` session file
+     * (`bootstrapTail`/`incrementalTail`) never can, and additionally sees
+     * the file's own interleaved non-`message` rows (`model_change`,
+     * `thinking_level_change`, `custom_message`, and a top-level `custom`
+     * type distinct from a `message`-typed row whose `role` is `"custom"`)
+     * that the RPC path's `getMessages()` never surfaces at all. This test
+     * drives both real shapes — including that raw-file noise, through the
+     * actual `parseMessagesFromText` `pi-live-tail.ts` uses — through the
+     * same dedupe path `agent-manager.ts` wires up, in both possible race
+     * orderings, and asserts one row per logical message survives, in the
+     * original order.
+     */
+    it("holds each user and assistant message exactly once, in order, whichever importer shape runs first (cross-importer race)", async () => {
+      // The RPC-shaped feed (`agent.ts`'s `streamHistory()`): a clean
+      // message list plus Pi's own captured tree-entry ids for the two
+      // user turns.
+      const rpcMessages: PiAgentMessage[] = [
+        { role: "user", content: "Hello" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Hello! How can I help you today?" }],
+        },
+        { role: "user", content: "Hi" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Hi there! What would you like to do?" }],
+        },
+        { role: "custom", content: "Reply with exactly: WAVE-OK" },
+        { role: "assistant", content: [{ type: "text", text: "WAVE-OK" }] },
+      ];
+      const capturedEntries: PiCapturedUserMessageEntry[] = [
+        { id: "entry-live-1", text: "Hello" },
+        { id: "entry-live-2", text: "Hi" },
+      ];
+
+      // The raw-file-shaped feed (`pi-live-tail.ts`'s `bootstrapTail`): the
+      // *same* logical session, but read from `.jsonl` text interleaving
+      // real `message` rows with the non-`message` row types Pi's own
+      // session file carries and the RPC path never returns.
+      const rawJsonlLines = [
+        JSON.stringify({ type: "model_change", model: "some-model" }),
+        JSON.stringify({ type: "message", message: { role: "user", content: "Hello" } }),
+        JSON.stringify({ type: "thinking_level_change", level: "high" }),
+        JSON.stringify({
+          type: "message",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Hello! How can I help you today?" }],
+          },
+        }),
+        JSON.stringify({ type: "custom_message", text: "not a message row" }),
+        JSON.stringify({ type: "message", message: { role: "user", content: "Hi" } }),
+        JSON.stringify({ type: "custom", note: "top-level custom type, not a message row" }),
+        JSON.stringify({
+          type: "message",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Hi there! What would you like to do?" }],
+          },
+        }),
+        JSON.stringify({ type: "thinking_level_change", level: "low" }),
+        JSON.stringify({
+          type: "message",
+          message: { role: "custom", content: "Reply with exactly: WAVE-OK" },
+        }),
+        JSON.stringify({ type: "model_change", model: "another-model" }),
+        JSON.stringify({
+          type: "message",
+          message: { role: "assistant", content: [{ type: "text", text: "WAVE-OK" }] },
+        }),
+      ];
+      const liveTailMessages = parseMessagesFromText(rawJsonlLines.join("\n") + "\n");
+      // Sanity: the noise rows above were genuinely filtered out, not just
+      // coincidentally absent from the assertion below.
+      expect(liveTailMessages).toHaveLength(6);
+      expect(liveTailMessages).toEqual(rpcMessages);
+
+      const expectedTexts = [
+        "Hello",
+        "Hello! How can I help you today?",
+        "Hi",
+        "Hi there! What would you like to do?",
+        "Reply with exactly: WAVE-OK",
+        "WAVE-OK",
+      ];
+
+      async function importRpcShape(
+        store: InMemoryAgentTimelineStore,
+        agentId: string,
+      ): Promise<void> {
+        for await (const event of streamPiHistory("pi", rpcMessages, capturedEntries)) {
+          if (event.type !== "timeline") continue;
+          store.append(agentId, event.item, { dedupeKey: dedupeKeyFor(event.item) });
+        }
+      }
+      async function importLiveTailShape(
+        store: InMemoryAgentTimelineStore,
+        agentId: string,
+      ): Promise<void> {
+        for await (const event of streamPiHistory("pi", liveTailMessages)) {
+          if (event.type !== "timeline") continue;
+          store.append(agentId, event.item, { dedupeKey: dedupeKeyFor(event.item) });
+        }
+      }
+
+      function textsOf(store: InMemoryAgentTimelineStore, agentId: string): string[] {
+        return store
+          .getRows(agentId)
+          .map((row) => row.item)
+          .filter(
+            (
+              item,
+            ): item is Extract<AgentTimelineItem, { type: "user_message" | "assistant_message" }> =>
+              item.type === "user_message" || item.type === "assistant_message",
+          )
+          .map((item) => item.text);
+      }
+
+      // Ordering 1: RPC path wins the race (the common case — its captured
+      // entries are usually populated by the time it runs).
+      const rpcFirstStore = new InMemoryAgentTimelineStore();
+      rpcFirstStore.initialize("agent-1");
+      await importRpcShape(rpcFirstStore, "agent-1");
+      await importLiveTailShape(rpcFirstStore, "agent-1");
+      expect(rpcFirstStore.getRows("agent-1")).toHaveLength(6);
+      expect(textsOf(rpcFirstStore, "agent-1")).toEqual(expectedTexts);
+
+      // Ordering 2: the file-tail watcher wins the race instead (the scenario
+      // the owner's reproduction actually hit — a fast raw-file read finishing
+      // before the RPC round trip does, right after a daemon restart).
+      const liveTailFirstStore = new InMemoryAgentTimelineStore();
+      liveTailFirstStore.initialize("agent-1");
+      await importLiveTailShape(liveTailFirstStore, "agent-1");
+      await importRpcShape(liveTailFirstStore, "agent-1");
+      expect(liveTailFirstStore.getRows("agent-1")).toHaveLength(6);
+      expect(textsOf(liveTailFirstStore, "agent-1")).toEqual(expectedTexts);
     });
   });
 });
