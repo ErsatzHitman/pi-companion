@@ -5601,12 +5601,14 @@ describe("T38B0c: queue-mode requests and per-message routing", () => {
     const messages: SessionOutboundMessage[] = [];
     const acceptedClientMessageIds = new Set<string>();
     const submittedUserRows: string[] = [];
-    const streamAgent = vi.fn((_agentId: string, _prompt: unknown, options?: { clientMessageId?: string }) => {
-      if (options?.clientMessageId) {
-        submittedUserRows.push(options.clientMessageId);
-      }
-      return (async function* noop() {})();
-    });
+    const streamAgent = vi.fn(
+      (_agentId: string, _prompt: unknown, options?: { clientMessageId?: string }) => {
+        if (options?.clientMessageId) {
+          submittedUserRows.push(options.clientMessageId);
+        }
+        return (async function* noop() {})();
+      },
+    );
     const replaceAgentRun = vi.fn();
     const session = createSessionForTest({
       messages,
@@ -5648,7 +5650,9 @@ describe("T38B0c: queue-mode requests and per-message routing", () => {
     expect(submittedUserRows).toEqual(["shared-message-id"]);
 
     const responses = messages.filter(
-      (message): message is Extract<SessionOutboundMessage, { type: "send_agent_message_response" }> =>
+      (
+        message,
+      ): message is Extract<SessionOutboundMessage, { type: "send_agent_message_response" }> =>
         message.type === "send_agent_message_response",
     );
     expect(responses).toHaveLength(2);

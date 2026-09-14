@@ -239,7 +239,10 @@ test("FIX-S1: startAgentRun is idempotent by clientMessageId — a duplicate dis
   );
 
   const logger = createTestLogger();
-  const runOptions = { replaceRunning: true, runOptions: { clientMessageId: "dup-client-message" } };
+  const runOptions = {
+    replaceRunning: true,
+    runOptions: { clientMessageId: "dup-client-message" },
+  };
   const first = startAgentRun(agentManager, "agent-1", "hello", logger, runOptions);
   const second = startAgentRun(agentManager, "agent-1", "hello", logger, runOptions);
 
