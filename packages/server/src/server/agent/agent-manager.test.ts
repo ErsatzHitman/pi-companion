@@ -5110,6 +5110,140 @@ test("replaceAgentRun stays running when a stale old terminal arrives before the
   unsubscribe();
 });
 
+test("FIX-S2: a cancelled turn's buffered event is dropped as a superseded run, not recorded as an extra assistant row once the replacement turn has started", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stray-event-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  const secondStartEntered = deferred<void>();
+  const allowSecondStartToResolve = deferred<void>();
+  const interruptStarted = deferred<void>();
+  const allowInterruptToFinish = deferred<void>();
+  const secondTurnDone = deferred<void>();
+  let capturedSession: StraySession | null = null;
+
+  class StraySession extends TestAgentSession {
+    private localTurnCounter = 0;
+
+    override async startTurn(): Promise<{ turnId: string }> {
+      const turnId = `turn-${++this.localTurnCounter}`;
+      const turnNum = this.localTurnCounter;
+
+      if (turnNum === 1) {
+        setTimeout(() => {
+          this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        }, 0);
+        return { turnId };
+      }
+
+      // Replacement turn: resolve only once the test releases it, so the
+      // stray event below is guaranteed to arrive while this streamAgent
+      // call's pendingRun is still un-started (the buffered/staged window
+      // HOLE 2 is about).
+      secondStartEntered.resolve();
+      await allowSecondStartToResolve.promise;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: "replacement content" },
+        });
+        this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+        secondTurnDone.resolve();
+      }, 0);
+      return { turnId };
+    }
+
+    override async interrupt(): Promise<void> {
+      interruptStarted.resolve();
+      await allowInterruptToFinish.promise;
+      // The provider acknowledges the interrupt (this promise is about to
+      // resolve) and settles turn-1's run — but a real provider can still
+      // have one more chunk of the cancelled turn's output buffered up
+      // internally, delivered slightly later as a "timeline" event carrying
+      // no turnId of its own. That stray delivery is simulated by the test
+      // body below, once it observes the replacement turn has begun.
+      this.pushEvent({
+        type: "turn_canceled",
+        provider: this.provider,
+        reason: "Interrupted",
+        turnId: "turn-1",
+      });
+    }
+  }
+
+  class StrayClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      capturedSession = new StraySession(config);
+      return capturedSession;
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new StrayClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000401",
+  });
+
+  try {
+    const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+
+    const firstRun = manager.streamAgent(snapshot.id, "first run");
+    const firstRunDrain = (async () => {
+      for await (const _event of firstRun) {
+        // Drain events so lifecycle updates are applied.
+      }
+    })();
+    await manager.waitForAgentRunStart(snapshot.id);
+
+    const secondRunPromise = manager.replaceAgentRun(snapshot.id, "replacement run");
+    await interruptStarted.promise;
+    allowInterruptToFinish.resolve();
+
+    const secondRun = await secondRunPromise;
+    const secondRunDrain = (async () => {
+      for await (const _event of secondRun) {
+        // Drain replacement run.
+      }
+    })();
+
+    await secondStartEntered.promise;
+
+    // THE STRAGGLER: fires while the replacement turn's own startTurn() is
+    // still pending, so it lands in that streamAgent call's own
+    // pendingRun.stagedEvents — exactly the "buffered ... flushed after the
+    // replacement turn has started" mechanic HOLE 2 describes. It carries no
+    // turnId, matching a real provider's untagged trailing content.
+    capturedSession!.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      item: { type: "assistant_message", text: "stray content from the cancelled turn" },
+    });
+
+    allowSecondStartToResolve.resolve();
+
+    await secondTurnDone.promise;
+    await firstRunDrain;
+    await secondRunDrain;
+
+    const rows = manager.fetchTimeline(snapshot.id, { direction: "tail", limit: 0 }).rows;
+    const assistantTexts = rows
+      .filter((row) => row.item.type === "assistant_message")
+      .map((row) => (row.item.type === "assistant_message" ? row.item.text : ""));
+
+    // The replacement turn's own content is recorded normally — only the
+    // superseded turn's straggler is dropped.
+    expect(assistantTexts).toContain("replacement content");
+    expect(assistantTexts).not.toContain("stray content from the cancelled turn");
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("FIX-S1: startAgentRun dispatch is idempotent by clientMessageId — same id keeps one turn, a different id still steers", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-client-message-idempotency-"));
   const storagePath = join(workdir, "agents");

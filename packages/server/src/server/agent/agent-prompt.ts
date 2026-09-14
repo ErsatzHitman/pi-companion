@@ -57,24 +57,22 @@ export async function startAgentRun(
     },
     "agent.session.start_stream.request",
   );
-  // Out-of-band commands (e.g. /goal pause) must run WITHOUT canceling an
-  // in-flight turn — replaceAgentRun would interrupt the running turn. The
-  // intercept lives at this layer so it covers every prompt entrypoint.
-  if (agentManager.tryRunOutOfBand(agentId, prompt, options?.runOptions)) {
-    return { outOfBand: true };
-  }
-  // FIX-S1: make send dispatch idempotent by clientMessageId. A repeated
-  // request carrying the same clientMessageId (transport retry,
-  // double-submit, reconnect replay) must never start a second provider
-  // turn, or cancel the in-flight turn via replaceAgentRun and start
-  // another — it must short-circuit with the same success shape the first
-  // call produced. This check-then-record has no `await` between the two
-  // steps, so it is atomic with respect to any other call reaching this
-  // function — whichever call's synchronous prefix runs first wins.
-  // Requests with no clientMessageId keep today's behavior. A DIFFERENT
-  // clientMessageId arriving while a turn is in flight is untouched by this
-  // check and still steers/replaces via shouldReplace below, exactly as
-  // before.
+  // FIX-S2: make send dispatch idempotent by clientMessageId across EVERY
+  // dispatch path, not just the new-turn/replace path below. This guard
+  // used to sit after the tryRunOutOfBand call, which let a
+  // retried/duplicated send whose prompt the live session accepts
+  // out-of-band (a steer injected into a turn already running) run twice:
+  // tryRunOutOfBand dispatches a REAL out-of-band handler run and records
+  // the clientMessageId itself once accepted, so a duplicate arriving
+  // before that recording landed was never recognized as a repeat. Hoisting
+  // the check above tryRunOutOfBand closes that — every dispatch path is
+  // now guarded by the same check. This check-then-record has no `await`
+  // between the two steps, so it is atomic with respect to any other call
+  // reaching this function — whichever call's synchronous prefix runs
+  // first wins. Requests with no clientMessageId keep today's behavior. A
+  // DIFFERENT clientMessageId arriving while a turn is in flight is
+  // untouched by this check and still steers/replaces via shouldReplace
+  // below, or is accepted out-of-band, exactly as before.
   const clientMessageId = options?.runOptions?.clientMessageId;
   if (clientMessageId && agentManager.hasAcceptedClientMessage?.(agentId, clientMessageId)) {
     logger.trace(
@@ -85,6 +83,12 @@ export async function startAgentRun(
   }
   if (clientMessageId) {
     agentManager.recordAcceptedClientMessage?.(agentId, clientMessageId);
+  }
+  // Out-of-band commands (e.g. /goal pause) must run WITHOUT canceling an
+  // in-flight turn — replaceAgentRun would interrupt the running turn. The
+  // intercept lives at this layer so it covers every prompt entrypoint.
+  if (agentManager.tryRunOutOfBand(agentId, prompt, options?.runOptions)) {
+    return { outOfBand: true };
   }
   const shouldReplace = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
   const runOptions = options?.runOptions;
