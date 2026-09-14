@@ -195,3 +195,51 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Per-message icon actions (UI-W2): "Edit from here"/"Rewind to here"
+ * (`message-row.tsx`) used to render as full-width bordered
+ * `<Button kind="secondary">` rows under every eligible user message.
+ * They are now a compact, right-aligned row of `IconButton`s
+ * (`ui/primitives/IconButton.tsx`) that stays out of the way at rest and
+ * comes forward on interaction, matching the mockup's "hover reveal"
+ * affordance treatment for row-scoped actions elsewhere in this file
+ * (see `.pc-work-group__head`'s own hover state above).
+ *
+ * Accessibility (never `display: none`/`visibility: hidden`, only
+ * `opacity`): a keyboard user tabbing through the transcript, or a
+ * screen-reader user, must always be able to reach these controls, so
+ * only opacity is ever toggled here — the buttons stay in the
+ * accessibility tree and tab order at every width. Three states:
+ *  1. At rest, quiet (reduced opacity) so the row reads as plain
+ *     transcript content, not a toolbar.
+ *  2. Full opacity on `:hover`/`:focus-within` of the *row*
+ *     (`.pc-message-row`), not just the action group itself, so tabbing
+ *     into a button (which focuses a descendant, triggering
+ *     `:focus-within` on every ancestor) reveals the whole row exactly
+ *     like a mouse hover does.
+ *  3. Always full opacity under `(hover: none)` — a touch/coarse-pointer
+ *     device has no hover state to reveal them with, so they must never
+ *     depend on one (plan.md §10.5's pointer-independent affordance
+ *     requirement).
+ * The opacity figures themselves have no dedicated token (`primitives.css`
+ * already uses the same raw 0.5/0.6 pattern for `IconButton`/`Button`
+ * disabled states); every size, colour, and spacing value below still
+ * comes from a token custom property.
+ */
+.pc-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-1);
+  margin-top: var(--spacing-1);
+  opacity: 0.5;
+  transition: opacity var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.pc-message-row:hover .pc-message-actions,
+.pc-message-row:focus-within .pc-message-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .pc-message-actions {
+    opacity: 1;
+  }
+}
