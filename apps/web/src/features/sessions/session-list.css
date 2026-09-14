@@ -38,6 +38,25 @@
   gap: var(--spacing-1);
 }
 
+/**
+ * UI-W13: `SessionRowActionsButton`'s local popover (an icon-only
+ * trigger, replacing the old visible-text "Actions for …" button).
+ * The trigger sits at the row's right edge, so the content right-aligns
+ * the same way `features/files`' `.pc-file-popover__content` does for
+ * its own icon-triggered popovers, rather than opening off-screen past
+ * a narrow trigger.
+ */
+.pc-session-row-actions {
+  align-self: center;
+  flex: none;
+}
+
+.pc-session-row-actions__content {
+  right: 0;
+  left: auto;
+  min-width: 12rem;
+}
+
 .pc-session-row__button {
   display: flex;
   flex: 1;

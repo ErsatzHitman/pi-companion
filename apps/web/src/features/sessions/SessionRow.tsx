@@ -1,4 +1,5 @@
-import { Button, Popover, StatusIndicator } from "../../ui/primitives/index.js";
+import { Button, StatusIndicator } from "../../ui/primitives/index.js";
+import { SessionRowActionsButton } from "./session-row-actions-button.js";
 import { statusPresentation } from "./status-presentation.js";
 import type { SessionSummary } from "./types.js";
 
@@ -60,8 +61,9 @@ export interface SessionRowProps {
  * are keyboard reachable". Status is always visible text via
  * `StatusIndicator`, never colour alone.
  *
- * `onArchive`/`onRequestDelete` (T27B4) render a `Popover` of row
- * actions alongside the button rather than folding them into it, so
+ * `onArchive`/`onRequestDelete` (T27B4) render a popover of row
+ * actions (`SessionRowActionsButton`, UI-W13's icon-only, aria-labelled
+ * trigger) alongside the button rather than folding them into it, so
  * activating a row (open) and acting on it (archive/delete) stay two
  * separately reachable, separately labelled controls.
  */
@@ -115,8 +117,8 @@ export function SessionRow({
         </p>
       ) : null}
       {showActions ? (
-        <Popover
-          triggerLabel={`Actions for ${title}`}
+        <SessionRowActionsButton
+          accessibleName={`Actions for ${title}`}
           testId={`session-row-actions-trigger-${session.id}`}
         >
           <div className="pc-session-row__actions">
@@ -169,7 +171,7 @@ export function SessionRow({
               </Button>
             ) : null}
           </div>
-        </Popover>
+        </SessionRowActionsButton>
       ) : null}
     </li>
   );
