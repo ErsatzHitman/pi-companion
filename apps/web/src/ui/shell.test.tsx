@@ -386,6 +386,25 @@ describe("Shell rail collapse toggles", () => {
     await user.keyboard("{Control>}b{/Control}");
     expect(shellRoot.getAttribute("data-rail-session")).toBe("expanded");
   });
+
+  it("ignores Ctrl/Cmd+B while focus is inside a textarea, but still works once focus returns to the document body", async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell({
+      sessionRail: <textarea data-testid="rail-editable-probe" />,
+    });
+    const textarea = await screen.findByTestId("rail-editable-probe");
+    const shellRoot = container.querySelector(".shell")!;
+
+    textarea.focus();
+    expect(document.activeElement).toBe(textarea);
+    await user.keyboard("{Control>}b{/Control}");
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("expanded");
+
+    textarea.blur();
+    expect(document.activeElement).not.toBe(textarea);
+    await user.keyboard("{Control>}b{/Control}");
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("collapsed");
+  });
 });
 
 /**

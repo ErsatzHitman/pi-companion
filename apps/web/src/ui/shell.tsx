@@ -82,6 +82,24 @@ export const ROUTE_HEADINGS: Record<string, string> = {
  * error boundaries, and the dev-only labs — none of which should be left
  * without an `<h1>` either.
  */
+/**
+ * FIX-W7: true when `target` is (or sits inside) an editable surface that
+ * owns its own keystrokes — a form control (`<input>`, `<textarea>`,
+ * `<select>`) or any `contenteditable` region (a rich-text composer
+ * field), or any open modal/dialog (`role="dialog"`/`role="alertdialog"`,
+ * the shared contract `Dialog.tsx`/`Sheet.tsx`/`Popover.tsx` all render).
+ * `Shell`'s global Ctrl/Cmd+B and Ctrl/Cmd+. keydown listener must defer
+ * to all of these rather than hijack a keystroke a focused textarea, a
+ * `TextField`, or a modal's own field is meant to receive.
+ */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (target.isContentEditable) return true;
+  return target.closest('[role="dialog"], [role="alertdialog"]') != null;
+}
+
 function useRouteHeading(): string {
   const matches = useMatches();
   for (let i = matches.length - 1; i >= 0; i -= 1) {
@@ -133,6 +151,9 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (!event.ctrlKey && !event.metaKey) return;
+      // FIX-W7: an input/textarea/select, a contenteditable region, or an
+      // open dialog owns this keystroke instead — see `isEditableTarget`.
+      if (isEditableTarget(event.target)) return;
       if (event.key === "b" || event.key === "B") {
         event.preventDefault();
         toggleSessionRail();
