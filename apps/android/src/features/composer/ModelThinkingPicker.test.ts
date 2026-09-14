@@ -3,30 +3,31 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * `ModelThinkingPicker.tsx` imports `react-native` (via `Select` from
- * `../../ui/primitives`), which cannot be rendered under this
- * workspace's plain `vitest` setup — the RolldownError on
- * `node_modules/react-native/index.js:1:0`, proven 27+ times across
- * this codebase (see `../sessions/session-tree-sheet.test.ts`'s doc
- * comment for the identical constraint and the `readCode()`/
+ * `ModelThinkingPicker.tsx` imports `react-native`, which cannot be
+ * rendered under this workspace's plain `vitest` setup — the
+ * RolldownError on `node_modules/react-native/index.js:1:0`, proven
+ * 27+ times across this codebase (see `../sessions/session-tree-sheet.test.ts`'s
+ * doc comment for the identical constraint and the `readCode()`/
  * `readComponentCode()` pattern this file copies). All real logic
  * (availability derivation, current-selection labels, thinking-option
  * derivation, the round trip) already has render-free behavioural proof
  * in `./model-thinking-model.test.ts`; this file only proves the `.tsx`
  * actually wires that into the render tree — the unavailable-state
- * gate, the always-visible summary line, both `Select`s' wiring, and
- * the error/notice rows — rather than silently dropping any of it.
+ * gate, the always-visible summary line, the model rows, the effort
+ * segment control, and the error/notice rows — rather than silently
+ * dropping any of it.
+ *
+ * UI-A4 rewrote this file's assertions for the `Select`-free rebuild
+ * onto `docs/ui-reference/pi-companion-app.html`'s own `.pm-row`/
+ * `.tick`/`.seg` shape — an inline row per model with a leading tick on
+ * the selected one, and a segmented effort control whose steps beyond
+ * the selected model's ceiling render disabled rather than being
+ * filtered out.
  *
  * `readComponentCode()` anchors every assertion below to the one
  * top-level `ModelThinkingPicker` function (CLAUDE.md's "a sibling
  * occurrence of the same code satisfying a whole-file toMatch" defect
- * class) — this file declares no second top-level function today, but
- * the anchor costs nothing and stops that defect class from ever
- * silently reappearing.
- *
- * Every assertion below was mutation-checked by hand (delete the real
- * construct, re-run this file, confirm the specific `it` fails, restore
- * byte-identically). See this task's (T39B) report for the run log.
+ * class).
  */
 function readSource(): string {
   return readFileSync(fileURLToPath(new URL("./ModelThinkingPicker.tsx", import.meta.url)), "utf8");
@@ -52,16 +53,13 @@ function readComponentCode(): string {
   return body ?? "";
 }
 
-describe("ModelThinkingPicker: composes only already-audited primitives, no bespoke Pressable", () => {
-  it("declares no raw Pressable/Touchable* of its own", () => {
-    const code = readCode();
-    expect(code).not.toMatch(/<(Pressable|TouchableOpacity|TouchableHighlight)\b/);
+describe("ModelThinkingPicker: rebuilt off pm-row/tick/seg, no Select left", () => {
+  it("imports no Select from ../../ui/primitives", () => {
+    expect(readCode()).not.toMatch(/from "\.\.\/\.\.\/ui\/primitives"/);
   });
 
-  it("imports Select from ../../ui/primitives, the component already in touch-targets.test.ts's 48dp audit", () => {
-    expect(readCode()).toMatch(
-      /import \{ Select, type SelectOption \} from "\.\.\/\.\.\/ui\/primitives";/,
-    );
+  it("declares its own Pressable rows, each a real accessibility button", () => {
+    expect(readCode()).toMatch(/accessibilityRole="button"/);
   });
 });
 
@@ -78,17 +76,17 @@ describe("ModelThinkingPicker: a truthful unavailable/loading state, never an en
     expect(code).toMatch(/testID=\{`\$\{testId\}-unavailable`\}>\s*\{label\}/);
   });
 
-  it("never renders a Select at all while unavailable (the early return has no Select in its branch)", () => {
+  it("never renders a model row at all while unavailable (the early return has no Pressable in its branch)", () => {
     const code = readComponentCode();
     const earlyReturnBranch = code.slice(
       code.indexOf('if (state.availability !== "ready") {'),
-      code.indexOf("const modelOptions"),
+      code.indexOf("const { unsupportedReason }"),
     );
-    expect(earlyReturnBranch).not.toMatch(/<Select\b/);
+    expect(earlyReturnBranch).not.toMatch(/<Pressable\b/);
   });
 });
 
-describe("ModelThinkingPicker: the current selection is visible without opening either picker", () => {
+describe("ModelThinkingPicker: the current selection is visible without opening either row's own menu", () => {
   it("renders a summary line built from the model's own currentModelLabel/currentThinkingLabel, not inline derivation", () => {
     const code = readComponentCode();
     expect(code).toMatch(/testID=\{`\$\{testId\}-summary`\}/);
@@ -98,48 +96,56 @@ describe("ModelThinkingPicker: the current selection is visible without opening 
   });
 });
 
-describe("ModelThinkingPicker: the model Select is wired to onSelectModel with the tapped option's raw value", () => {
-  it("passes state.models mapped to {value, label} as the model Select's options", () => {
-    expect(readComponentCode()).toMatch(
-      /const modelOptions: SelectOption\[\] = state\.models\.map\(\(model\) => \(\{\s*\n\s*value: model\.id,\s*\n\s*label: model\.label,\s*\n\s*\}\)\);/,
-    );
+describe("ModelThinkingPicker: one row per model, with a leading tick on the selected row", () => {
+  it("maps state.models to rows, each calling onSelectModel with that model's own id", () => {
+    const code = readComponentCode();
+    expect(code).toMatch(/\{state\.models\.map\(\(model\) => \{/);
+    expect(code).toMatch(/onPress=\{\(\) => onSelectModel\(model\.id\)\}/);
   });
 
-  it("the model Select's value is state.modelId, and onValueChange is onSelectModel directly (no wrapper)", () => {
+  it("a row's tick is only visible when that model is the selected one", () => {
     const code = readComponentCode();
-    expect(code).toMatch(/label="Model"\s*\n\s*options=\{modelOptions\}/);
-    expect(code).toMatch(/value=\{state\.modelId \?\? ""\}/);
-    expect(code).toMatch(/onValueChange=\{onSelectModel\}/);
+    expect(code).toMatch(/const selected = model\.id === state\.modelId;/);
+    expect(code).toMatch(/selected \? styles\.tickOn : null/);
+  });
+
+  it("a row's trailing value is that model's own thinking ceiling, never a shared/global one", () => {
+    expect(readComponentCode()).toMatch(
+      /const ceiling = model\.thinkingOptions\?\.\[model\.thinkingOptions\.length - 1\]\?\.label;/,
+    );
   });
 });
 
-describe("ModelThinkingPicker: the thinking Select maps the sentinel default value back to null", () => {
-  it("derives its options via the model's own thinkingOptionsForSelection, never a private re-derivation", () => {
+describe("ModelThinkingPicker: the effort segment shows every reachable step, disabling those past the selected model's ceiling", () => {
+  it("derives its steps via the model's own thinkingOptionsForSelection for the unsupported gate, never a private re-derivation", () => {
     expect(readComponentCode()).toMatch(
-      /const \{ options: thinkingOptions, unsupportedReason \} = thinkingOptionsForSelection\(state\);/,
+      /const \{ unsupportedReason \} = thinkingOptionsForSelection\(state\);/,
     );
   });
 
-  it("shows unsupportedReason's text instead of a Select whenever it is non-null", () => {
+  it("builds the segment's steps from every model's own thinking options, not only the selected model's", () => {
+    expect(readComponentCode()).toMatch(/const effortSteps = allThinkingOptions\(state\.models\);/);
+  });
+
+  it("shows unsupportedReason's text instead of the segment control whenever it is non-null", () => {
     const code = readComponentCode();
     expect(code).toMatch(/\{unsupportedReason \? \(/);
     expect(code).toMatch(/testID=\{`\$\{testId\}-thinking-unavailable`\}/);
   });
 
-  it("prepends a Default option, and the current value falls back to the sentinel exactly when thinkingOptionId is null", () => {
+  it("disables exactly the steps outside the selected model's own reachable set, rather than filtering them out", () => {
     const code = readComponentCode();
     expect(code).toMatch(
-      /\{ value: DEFAULT_THINKING_VALUE, label: "Default" \},\s*\n\s*\.\.\.thinkingOptions\.map/,
+      /const reachable = reachableIds\.has\(option\.id\);/,
     );
-    expect(code).toMatch(
-      /const thinkingValue = state\.thinkingOptionId \?\? DEFAULT_THINKING_VALUE;/,
-    );
+    expect(code).toMatch(/disabled=\{!reachable\}/);
+    expect(code).not.toMatch(/effortSteps\.filter/);
   });
 
-  it("maps the sentinel value back to null before calling onSelectThinking, and passes any real id straight through", () => {
-    expect(readComponentCode()).toMatch(
-      /onSelectThinking\(value === DEFAULT_THINKING_VALUE \? null : value\)/,
-    );
+  it("keeps a Default segment so onSelectThinking(null) stays reachable, matching the sentinel-to-null mapping the old Select used", () => {
+    const code = readComponentCode();
+    expect(code).toMatch(/onPress=\{\(\) => onSelectThinking\(null\)\}/);
+    expect(code).toMatch(/onPress=\{\(\) => reachable && onSelectThinking\(option\.id\)\}/);
   });
 });
 
