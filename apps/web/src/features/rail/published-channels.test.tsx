@@ -161,25 +161,25 @@ describe("published channels end to end (T40A4)", () => {
 
     render(<LiveRail store={store} />);
 
-    // subagents:fleet -> a real roster row, not a count.
-    const fleetCard = screen.getByTestId("pi-rail-element-subagents-fleet");
+    // subagents:fleet -> a real .agent row in the Subagents card, not a count.
+    const fleetRow = screen.getByTestId("pi-rail-agent-fleet-job-1");
     expect(
-      within(fleetCard).getByText("research: synthetic query on /tmp/synthetic.ts"),
+      within(fleetRow).getByText("research: synthetic query on /tmp/synthetic.ts"),
     ).toBeTruthy();
-    expect(within(fleetCard).getByText("In progress")).toBeTruthy();
+    expect(within(fleetRow).getByText("Running")).toBeTruthy();
 
-    // workflow:progress -> a real determinate progress bar (T113 closed the
-    // gap T40A4 disclosed here).
-    const workflowCard = screen.getByTestId("pi-rail-element-workflow-workflow-widget");
-    expect(within(workflowCard).getAllByText("workflow · implement").length).toBeGreaterThan(0);
-    const workflowBar = within(workflowCard).getByRole("progressbar");
-    expect(workflowBar.getAttribute("aria-valuenow")).toBe("40");
-    expect(within(workflowCard).getByText("2")).toBeTruthy();
-    expect(within(workflowCard).getByText("5")).toBeTruthy();
+    // workflow:progress -> a real .phase row with a determinate mono step
+    // counter (T113 closed the gap T40A4 disclosed here).
+    const workflowPhase = screen.getByTestId("pi-rail-phase-workflow-workflow-widget");
+    expect(within(workflowPhase).getByText("workflow · implement")).toBeTruthy();
+    expect(within(workflowPhase).getByText("2/5")).toBeTruthy();
+    expect(within(workflowPhase).getByText("Running")).toBeTruthy();
 
     // pi-goal:status -> the pinned indeterminate progress element.
     const goalCard = screen.getByTestId("pi-rail-element-goal-goal-progress");
-    expect(within(goalCard).getByText("Synthetic objective — /tmp/synthetic.ts")).toBeTruthy();
+    expect(
+      within(goalCard).getAllByText("Synthetic objective — /tmp/synthetic.ts").length,
+    ).toBeGreaterThan(0);
 
     // CORRECTED (P6-W4 merge gate): this asserts only that a `startedAt`
     // already present on the element survives into the card's raw-payload
@@ -209,8 +209,9 @@ describe("published channels end to end (T40A4)", () => {
     render(<LiveRail store={store} />);
 
     expect(screen.queryByTestId("pi-extension-rail-empty")).toBeNull();
-    expect(screen.queryByText(/workflow/i)).toBeNull();
-    expect(screen.getByTestId("pi-rail-element-subagents-fleet")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Workflow" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Subagents" })).toBeTruthy();
+    expect(screen.getByTestId("pi-rail-agent-fleet-job-1")).toBeTruthy();
     expect(screen.getByTestId("pi-rail-element-goal-goal-progress")).toBeTruthy();
   });
 
@@ -221,7 +222,7 @@ describe("published channels end to end (T40A4)", () => {
     store.ingestDelta(AGENT_ID, 3, upsert(goalProgressElement));
 
     render(<LiveRail store={store} />);
-    expect(screen.getByTestId("pi-extension-rail-list")).toBeTruthy();
+    expect(screen.getByTestId("pi-extension-rail")).toBeTruthy();
     expect(screen.queryByTestId("pi-extension-rail-empty")).toBeNull();
 
     // Simulate the channel(s) getting dropped the way a real reconnect/
@@ -239,10 +240,9 @@ describe("published channels end to end (T40A4)", () => {
     // component instance) and shows a real, named, user-visible element —
     // not a blank pane, not a console line, not a boolean this test reads
     // off the store instead of the screen.
-    expect(screen.queryByTestId("pi-extension-rail-list")).toBeNull();
-    const empty = screen.getByTestId("pi-extension-rail-empty");
-    expect(within(empty).getByText("No live extensions")).toBeTruthy();
-    expect(screen.queryByTestId("pi-rail-element-subagents-fleet")).toBeNull();
+    expect(screen.getByRole("heading", { name: "No live extensions" })).toBeTruthy();
+    expect(screen.getByTestId("pi-extension-rail-empty")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
     expect(screen.queryByTestId("pi-rail-element-goal-goal-progress")).toBeNull();
   });
 });

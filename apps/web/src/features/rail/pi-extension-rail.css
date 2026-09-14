@@ -1,48 +1,222 @@
 /**
- * `PiExtensionRail` / `RailElementCard` styles (plan.md §8.3, §10.1, §11.5;
- * T29R1). Colocated with the components the way `ui/shell.css` sits next to
- * `ui/shell.tsx` and `ui/primitives/primitives.css` sits next to the
- * primitives it styles. Every value below is a design token: no raw hex,
- * pixel spacing, or duration literal.
+ * `PiExtensionRail` / `RailElementCard` styles (plan.md §8.3, §10.1, §11.5),
+ * rebuilt to match the reference Live pane's `.live` region
+ * (`docs/ui-reference/pi-companion-web.html`: `.card`, `.card-h`, `.agent`,
+ * `.agent-t`, `.agent-s`, `.track`, `.phase`). Every value below is a design
+ * token (`apps/web/src/styles/global.css`'s "no raw hex/pixel-spacing/
+ * duration literal" rule, extended here to typography): no raw colour, and
+ * every spacing/radius/font-size is the nearest token on the shared scale
+ * to the mockup's literal px value where the scale has no exact match
+ * (documented per rule below). The handful of remaining raw pixel values
+ * are structural alignment (glyph column width, connector offsets, track
+ * height) with no themed equivalent, matching how `.track`/`.phase`'s own
+ * hairline connector is specified in the reference itself.
  */
 
-.pi-extension-rail__list {
+.pi-extension-rail {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
-.pi-extension-rail__item {
-  display: block;
-}
-
+/* `.card` */
 .pi-extension-rail__card {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--spacing-3);
 }
 
+/* `.card-h` */
 .pi-extension-rail__card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--spacing-2);
 }
 
+/* `.card-h .t` */
 .pi-extension-rail__card-title {
   margin: 0;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
   color: var(--color-ink);
 }
 
-.pi-extension-rail__card-summary {
+/* `.card-h .n` */
+.pi-extension-rail__card-count {
+  margin-left: auto;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-extension-rail__empty-description {
   margin: 0;
   font-size: var(--font-size-base);
   color: var(--color-ink-2);
+}
+
+/* `.agent + .agent` */
+.pi-extension-rail__agent + .pi-extension-rail__agent {
+  margin-top: var(--spacing-2);
+  padding-top: var(--spacing-2);
+  border-top: 1px solid var(--color-line-soft);
+}
+
+/* `.agent-t` */
+.pi-extension-rail__agent-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink);
+}
+
+.pi-extension-rail__agent-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `.agent-t .gl` / `.phase .g`: a fixed glyph column, no themed equivalent for a 12px hit box. */
+.pi-extension-rail__glyph {
+  font-family: var(--font-family-mono);
+  width: 12px;
+  text-align: center;
+  flex: none;
+}
+
+.pi-extension-rail__glyph--pending {
+  color: var(--color-ink-3);
+}
+.pi-extension-rail__glyph--running {
+  color: var(--color-accent);
+}
+.pi-extension-rail__glyph--done {
+  color: var(--color-green);
+}
+.pi-extension-rail__glyph--blocked {
+  color: var(--color-orange);
+}
+
+/* `.agent-t .el` */
+.pi-extension-rail__elapsed {
+  margin-left: auto;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* `.agent-s`: 19px left indent matches the glyph column (12px) + its gap (var(--spacing-2), 8px). */
+.pi-extension-rail__agent-detail {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  margin: var(--spacing-1) 0 var(--spacing-2) 19px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `.track` */
+.pi-extension-rail__track {
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-field);
+  margin-left: 19px;
+  overflow: hidden;
+}
+.pi-extension-rail__track i {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+}
+.pi-extension-rail__track--done i {
+  background: var(--color-green);
+}
+.pi-extension-rail__track--wait i {
+  background: var(--color-line-strong);
+}
+
+/* `.flow` / `.phase` */
+.pi-extension-rail__flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.pi-extension-rail__phase {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: var(--spacing-2);
+  align-items: start;
+  padding: var(--spacing-1) 0;
+  position: relative;
+}
+.pi-extension-rail__phase-glyph {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  line-height: 16px;
+}
+.pi-extension-rail__phase-name {
+  font-size: var(--font-size-md);
+  line-height: 16px;
+  color: var(--color-ink);
+}
+.pi-extension-rail__phase--running .pi-extension-rail__phase-name {
+  font-weight: var(--font-weight-semibold);
+}
+.pi-extension-rail__phase-detail {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-3);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+/* Vertical connector between phases, offset to the glyph column's centre. */
+.pi-extension-rail__phase:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 6.5px;
+  top: 22px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--color-line-strong);
+}
+.pi-extension-rail__phase--done::before {
+  background: var(--color-green);
+  opacity: 0.45;
+}
+
+/* Loading shimmer */
+.pi-extension-rail__shimmer-row {
+  height: var(--spacing-4);
+  border-radius: var(--radius-control);
+  background: var(--color-field);
+  animation: pi-extension-rail-shimmer 1.2s var(--motion-easing-standard) infinite;
+}
+.pi-extension-rail__shimmer-row + .pi-extension-rail__shimmer-row {
+  margin-top: var(--spacing-2);
+}
+.pi-extension-rail__shimmer-row--title {
+  width: 40%;
+  height: var(--spacing-3);
+}
+@keyframes pi-extension-rail-shimmer {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /*
