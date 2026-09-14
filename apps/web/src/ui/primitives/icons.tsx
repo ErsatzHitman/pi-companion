@@ -15,7 +15,8 @@ export type IconName =
   | "panel-left"
   | "panel-right"
   | "folder"
-  | "terminal";
+  | "terminal"
+  | "add";
 
 const paths: Record<IconName, ReactElement> = {
   close: <path d="M3 3l10 10M13 3L3 13" />,
@@ -41,6 +42,10 @@ const paths: Record<IconName, ReactElement> = {
   ),
   folder: <path d="M2 4.5h4l1.3 1.5H14v7.5H2v-9Z" />,
   terminal: <path d="M3 4.5l3.5 3.5L3 11.5M8 11.5h5" />,
+  // Terminal switcher's "New terminal" chip (UI-W8): a plain plus glyph,
+  // paired with the visible "New terminal" label the chip renders next
+  // to it -- the icon alone stays decorative/`aria-hidden`.
+  add: <path d="M8 2.5v11M2.5 8h11" />,
 };
 
 export function Icon({ name, ...rest }: { name: IconName } & SVGProps<SVGSVGElement>) {

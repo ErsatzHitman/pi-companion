@@ -132,6 +132,56 @@ describe("TerminalRoute", () => {
     expect(client.createTerminal).not.toHaveBeenCalled();
   });
 
+  it("renders each terminal as its own chip tab, marks the active one, and keeps 'New terminal' at the end (UI-W8)", async () => {
+    // Two terminals whose labels could visually run together if the
+    // switcher lost its per-item element boundary (the defect this test
+    // guards against) -- each must stay a distinct chip with its own
+    // exact text, never concatenated into one node.
+    const client = new FakeSessionTerminalClient([
+      { id: "term-1", name: "Term One" },
+      { id: "term-2", name: "Term Two" },
+    ]);
+    renderTerminalRoute({
+      serverId: "host-42",
+      agentId: "agent-9",
+      terminalId: "term-1",
+      client,
+      workspaceRoot: "/work",
+    });
+
+    const activeChip = await screen.findByTestId("terminal-route-list-item-term-1");
+    const inactiveChip = screen.getByTestId("terminal-route-list-item-term-2");
+    const newChip = screen.getByTestId("terminal-route-new");
+
+    expect(activeChip.textContent).toBe("Term One");
+    expect(inactiveChip.textContent).toBe("Term Two");
+    expect(activeChip.className).toContain("pc-terminal-route__chip");
+    expect(inactiveChip.className).toContain("pc-terminal-route__chip");
+
+    // `aria-current` (never colour alone) is what marks the active tab,
+    // and only the active one carries it.
+    expect(activeChip.getAttribute("aria-current")).toBe("page");
+    expect(inactiveChip.getAttribute("aria-current")).toBeNull();
+
+    // The two tabs are separate list items, each its own chip element --
+    // not one run-together string with no separator or gap between them
+    // (`textContent` alone can't prove that: it concatenates sibling text
+    // regardless of markup, which is exactly why this asserts on the
+    // element boundary instead).
+    const list = screen.getByTestId("terminal-route-list");
+    const items = list.querySelectorAll("li");
+    expect(items).toHaveLength(2);
+    expect(items[0]?.textContent).toBe("Term One");
+    expect(items[1]?.textContent).toBe("Term Two");
+
+    // "New terminal" is its own chip, carries the icon+label content, and
+    // is never marked as the active tab.
+    expect(newChip.className).toContain("pc-terminal-route__chip");
+    expect(newChip.textContent).toContain("New terminal");
+    expect(newChip.getAttribute("aria-current")).toBeNull();
+    expect(newChip.querySelector("svg")).toBeTruthy();
+  });
+
   it("creates and opens a real terminal when the requested id is the 'new' link segment", async () => {
     const client = new FakeSessionTerminalClient([], "term-created");
     const { router } = renderTerminalRoute({
@@ -180,6 +230,23 @@ describe("TerminalRoute", () => {
       terminalId: "term-7",
     });
 
+    expect(await axe(container)).toHaveNoViolations();
+  }, 20_000);
+
+  it("has no axe violations with the chip-tab switcher showing multiple terminals (UI-W8)", async () => {
+    const client = new FakeSessionTerminalClient([
+      { id: "term-1", name: "Term One" },
+      { id: "term-2", name: "Term Two" },
+    ]);
+    const { container } = renderTerminalRoute({
+      serverId: "host-42",
+      agentId: "agent-9",
+      terminalId: "term-1",
+      client,
+      workspaceRoot: "/work",
+    });
+
+    await waitFor(() => expect(screen.getByTestId("terminal-route-list")).toBeTruthy());
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
 });

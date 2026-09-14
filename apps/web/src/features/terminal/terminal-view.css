@@ -21,6 +21,20 @@
   gap: var(--spacing-3);
   padding-bottom: var(--spacing-2);
   border-bottom: 1px dashed var(--color-line);
+  font-size: var(--font-size-xs);
+}
+
+/* Quiet "eyebrow" status row (UI-W8): the existing StatusIndicator
+ * ('Terminal: Connected') keeps its own tone dot and status text
+ * unchanged -- only its label is toned down to the small-caps, muted
+ * treatment `docs/ui-reference/pi-companion-web.html`'s `.eyebrow` uses,
+ * so this reads as a quiet caption above the terminal surface rather
+ * than a bold header competing with it. */
+.pc-terminal__header .pc-status__label {
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-wide);
+  text-transform: uppercase;
+  color: var(--color-ink-3);
 }
 
 .pc-terminal__surface {
@@ -39,4 +53,36 @@
   box-shadow:
     var(--shadow-hairline),
     0 0 0 2px var(--color-accent);
+}
+
+/*
+ * xterm's own accessibility helpers -- its screen-reader row tree, the
+ * "too much output to announce" `aria-live` region, and the hidden
+ * input/IME textarea -- are plain, unstyled DOM nodes here:
+ * `@xterm/xterm`'s own `css/xterm.css` (which normally positions all
+ * three off-screen) is never imported anywhere in this app, so without
+ * this rule they render as ordinary flowed text between the real
+ * terminal surfaces. Hidden with the repository's standard
+ * visually-hidden technique (same values as `.pc-visually-hidden` in
+ * `ui/primitives/primitives.css`) rather than `display:none`, which
+ * would remove them from the accessibility tree too -- the one audience
+ * they exist for. Class names confirmed directly against the bundled
+ * `node_modules/@xterm/xterm/css/xterm.css` and `lib/xterm.js`'s
+ * `AccessibilityManager`: `.xterm-accessibility` is the row-tree
+ * container, `.live-region` is its `aria-live="assertive"` child that
+ * carries the "Too much output..." message, and `.xterm-helper-textarea`
+ * is the hidden input/IME target.
+ */
+.pc-terminal__surface .xterm-accessibility,
+.pc-terminal__surface .xterm-helper-textarea,
+.pc-terminal__surface .live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

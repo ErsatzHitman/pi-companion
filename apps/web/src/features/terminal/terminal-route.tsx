@@ -5,6 +5,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  Icon,
   LoadingState,
   Section,
 } from "../../ui/primitives/index.js";
@@ -87,7 +88,7 @@ export function TerminalRoute({
             {state.terminals.map((entry) => (
               <li key={entry.id}>
                 <Link
-                  className="pc-link"
+                  className="pc-terminal-route__chip"
                   to="/h/$serverId/session/$agentId/terminal/$terminalId"
                   params={{ serverId, agentId, terminalId: entry.id }}
                   aria-current={entry.id === state.terminalId ? "page" : undefined}
@@ -99,11 +100,12 @@ export function TerminalRoute({
             ))}
           </ul>
           <Link
-            className="pc-link"
+            className="pc-terminal-route__chip pc-terminal-route__chip--new"
             to="/h/$serverId/session/$agentId/terminal/$terminalId"
             params={{ serverId, agentId, terminalId: NEW_TERMINAL_ROUTE_SEGMENT }}
             data-testid="terminal-route-new"
           >
+            <Icon name="add" className="pc-terminal-route__chip-icon" />
             New terminal
           </Link>
         </nav>

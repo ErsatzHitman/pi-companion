@@ -1,31 +1,79 @@
 /**
  * TerminalRoute styles (plan.md §10.2, T30A2). Token-only, same rule as
  * `terminal-view.css`.
+ *
+ * The switcher is rendered as `.chip` tabs (UI-W8), mirroring
+ * `docs/ui-reference/pi-companion-web.html`'s `.chip` (mono type, hairline
+ * ring) with a fully-round tab shape and an accent-tint active state, so
+ * two adjacent terminal labels always read as separate tappable tabs --
+ * never as one run-together string. Every value is one of this app's own
+ * `--color-*`/`--font-*`/`--spacing-*`/`--radius-*` custom properties
+ * (`apps/web/src/styles/global.css`'s injected token layer) -- no raw hex.
  */
 
 .pc-terminal-route__switcher {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-3);
+  gap: var(--spacing-2);
   margin: 0 0 var(--spacing-3) 0;
 }
 
 .pc-terminal-route__list {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--spacing-2);
   margin: 0;
   padding: 0;
   list-style: none;
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
 }
 
-.pc-terminal-route__list [aria-current="page"] {
-  font-weight: var(--font-weight-semibold);
+.pc-terminal-route__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  height: 1.375rem;
+  padding: 0 var(--spacing-2);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-hairline);
+  background-color: var(--color-inset);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-easing-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-easing-standard),
+    color var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.pc-terminal-route__chip:hover {
+  background-color: var(--color-hover);
   color: var(--color-ink);
+}
+.pc-terminal-route__chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+/* Active tab: accent tint fill + accent hairline ring, plus `aria-current`
+ * itself (never colour alone, plan.md §10.5) so the current terminal is
+ * identifiable without relying on the tint. */
+.pc-terminal-route__chip[aria-current="page"] {
+  background-color: var(--color-accent-tint);
+  color: var(--color-accent-ink);
+  box-shadow: 0 0 0 1px var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+/* "New terminal" sits at the switcher's right end regardless of how many
+ * tabs precede it or whether they wrap. */
+.pc-terminal-route__chip--new {
+  margin-left: auto;
+}
+.pc-terminal-route__chip-icon {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .pc-terminal-route__error {
