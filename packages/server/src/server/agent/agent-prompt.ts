@@ -11,11 +11,30 @@ export type AgentUnarchiveController = Pick<AgentManager, "notifyAgentState" | "
 export type AgentRunController = Pick<
   AgentManager,
   "getAgent" | "tryRunOutOfBand" | "hasInFlightRun" | "replaceAgentRun" | "streamAgent"
->;
+> & {
+  // FIX-S1: optional so AgentRunController fakes built before FIX-S1 (which
+  // stub only the methods above) keep compiling and running unchanged —
+  // startAgentRun treats a missing implementation the same as "not yet
+  // accepted", i.e. today's behavior. The real AgentManager always
+  // implements both.
+  hasAcceptedClientMessage?: AgentManager["hasAcceptedClientMessage"];
+  recordAcceptedClientMessage?: AgentManager["recordAcceptedClientMessage"];
+};
 
 export interface StartAgentRunOptions {
   replaceRunning?: boolean;
   runOptions?: AgentRunOptions;
+}
+
+export interface StartAgentRunResult {
+  outOfBand: boolean;
+  /**
+   * FIX-S1: true when this call was short-circuited because `clientMessageId`
+   * was already accepted — no turn was started or replaced. Callers that
+   * gate a post-dispatch wait on `outOfBand` (there is nothing new to wait
+   * for) must gate on this the same way.
+   */
+  duplicate?: boolean;
 }
 
 export async function startAgentRun(
@@ -24,7 +43,7 @@ export async function startAgentRun(
   prompt: AgentPromptInput,
   logger: Logger,
   options?: StartAgentRunOptions,
-): Promise<{ outOfBand: boolean }> {
+): Promise<StartAgentRunResult> {
   const snapshot = agentManager.getAgent(agentId);
   logger.trace(
     {
@@ -43,6 +62,29 @@ export async function startAgentRun(
   // intercept lives at this layer so it covers every prompt entrypoint.
   if (agentManager.tryRunOutOfBand(agentId, prompt, options?.runOptions)) {
     return { outOfBand: true };
+  }
+  // FIX-S1: make send dispatch idempotent by clientMessageId. A repeated
+  // request carrying the same clientMessageId (transport retry,
+  // double-submit, reconnect replay) must never start a second provider
+  // turn, or cancel the in-flight turn via replaceAgentRun and start
+  // another — it must short-circuit with the same success shape the first
+  // call produced. This check-then-record has no `await` between the two
+  // steps, so it is atomic with respect to any other call reaching this
+  // function — whichever call's synchronous prefix runs first wins.
+  // Requests with no clientMessageId keep today's behavior. A DIFFERENT
+  // clientMessageId arriving while a turn is in flight is untouched by this
+  // check and still steers/replaces via shouldReplace below, exactly as
+  // before.
+  const clientMessageId = options?.runOptions?.clientMessageId;
+  if (clientMessageId && agentManager.hasAcceptedClientMessage?.(agentId, clientMessageId)) {
+    logger.trace(
+      { agentId, clientMessageId },
+      "agent.session.start_stream.duplicate_client_message",
+    );
+    return { outOfBand: false, duplicate: true };
+  }
+  if (clientMessageId) {
+    agentManager.recordAcceptedClientMessage?.(agentId, clientMessageId);
   }
   const shouldReplace = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
   const runOptions = options?.runOptions;
@@ -176,7 +218,7 @@ export async function waitForAgentRunStartWithTimeout(
  */
 export async function sendPromptToAgent(
   params: SendPromptToAgentParams,
-): Promise<{ outOfBand: boolean }> {
+): Promise<StartAgentRunResult> {
   const unarchive = params.unarchive ?? true;
 
   const record = await params.agentStorage.get(params.agentId);
@@ -229,7 +271,7 @@ export async function startCreatedAgentInitialPrompt(
     },
   );
 
-  if (!dispatchResult.outOfBand) {
+  if (!dispatchResult.outOfBand && !dispatchResult.duplicate) {
     await waitForAgentRunStartWithTimeout(params.agentManager, params.agentId);
   }
 

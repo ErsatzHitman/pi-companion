@@ -9,6 +9,7 @@ import {
   isSystemInjectedEnvelope,
   sendPromptToAgent,
   setupFinishNotification,
+  startAgentRun,
 } from "./agent-prompt.js";
 import type { AgentManagerEvent, ManagedAgent } from "./agent-manager.js";
 
@@ -192,6 +193,65 @@ test("sendPromptToAgent forwards the client message id as run options", async ()
     outputSchema: { type: "object" },
     clientMessageId: "msg-client-1",
   });
+});
+
+test("FIX-S1: startAgentRun is idempotent by clientMessageId — a duplicate dispatched before the first settles starts the provider turn exactly once", async () => {
+  const agent: ManagedAgent = Object.create(null);
+  Reflect.set(agent, "id", "agent-1");
+  Reflect.set(agent, "provider", "codex");
+
+  let startTurnCalls = 0;
+  const accepted = new Set<string>();
+
+  const agentManager: AgentManager = Object.create(AgentManager.prototype);
+  Reflect.set(
+    agentManager,
+    "getAgent",
+    vi.fn(() => agent),
+  );
+  Reflect.set(agentManager, "tryRunOutOfBand", vi.fn().mockReturnValue(false));
+  Reflect.set(agentManager, "hasInFlightRun", vi.fn().mockReturnValue(false));
+  Reflect.set(
+    agentManager,
+    "hasAcceptedClientMessage",
+    vi.fn((_agentId: string, clientMessageId: string) => accepted.has(clientMessageId)),
+  );
+  Reflect.set(
+    agentManager,
+    "recordAcceptedClientMessage",
+    vi.fn((_agentId: string, clientMessageId: string) => {
+      accepted.add(clientMessageId);
+    }),
+  );
+  const streamAgentSpy = vi.fn(() => {
+    // Stands in for the fake provider's start-turn hook: each accepted
+    // dispatch reaches AgentManager.streamAgent exactly once.
+    startTurnCalls += 1;
+    return (async function* noop() {})();
+  });
+  Reflect.set(agentManager, "streamAgent", streamAgentSpy);
+  Reflect.set(
+    agentManager,
+    "replaceAgentRun",
+    vi.fn(async () => {
+      throw new Error("replaceAgentRun must not run for a duplicate clientMessageId");
+    }),
+  );
+
+  const logger = createTestLogger();
+  const runOptions = { replaceRunning: true, runOptions: { clientMessageId: "dup-client-message" } };
+  const first = startAgentRun(agentManager, "agent-1", "hello", logger, runOptions);
+  const second = startAgentRun(agentManager, "agent-1", "hello", logger, runOptions);
+
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  expect(startTurnCalls).toBe(1);
+  expect(streamAgentSpy).toHaveBeenCalledTimes(1);
+  // The second call resolves against the first's outcome: same non-error
+  // "accepted" shape, distinguished only by the duplicate flag callers use
+  // to skip waiting for a (non-existent) new run to start.
+  expect(firstResult).toEqual({ outOfBand: false });
+  expect(secondResult).toEqual({ outOfBand: false, duplicate: true });
 });
 
 test("finish notifications tell the parent the child's last assistant message", async () => {

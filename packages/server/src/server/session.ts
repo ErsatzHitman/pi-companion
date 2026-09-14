@@ -44,6 +44,7 @@ import {
   sendPromptToAgent,
   waitForAgentRunStartWithTimeout,
   unarchiveAgentState,
+  type StartAgentRunResult,
 } from "./agent/agent-prompt.js";
 import {
   resolveCreateAgentTitles,
@@ -7432,7 +7433,7 @@ export class Session {
         },
         "agent.session.send_agent_message",
       );
-      let dispatchResult: { outOfBand: boolean };
+      let dispatchResult: StartAgentRunResult;
       try {
         dispatchResult = await sendPromptToAgent({
           agentManager: this.agentManager,
@@ -7464,7 +7465,13 @@ export class Session {
         return;
       }
 
-      if (dispatchResult.outOfBand) {
+      // FIX-S1: a `duplicate` dispatch (same clientMessageId already
+      // accepted) started or replaced no turn, so there is nothing new to
+      // wait for — treat it the same as `outOfBand` and respond success
+      // immediately, mirroring the shape the first call for this
+      // clientMessageId produced. The client must not see an error for a
+      // retried send.
+      if (dispatchResult.outOfBand || dispatchResult.duplicate) {
         this.emit({
           type: "send_agent_message_response",
           payload: {
