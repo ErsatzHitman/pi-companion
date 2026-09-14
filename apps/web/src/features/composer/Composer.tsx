@@ -633,23 +633,40 @@ export function Composer({
     }
   }
 
-  // UI-W12: a synchronous ref, not React state, carries the "a compact
-  // send is queued" flag across the render `setDraftText` below triggers —
-  // the same reason `use-composer.ts`'s own `submitLockRef` (FIX-W1) is a
-  // ref rather than state. `submit` is recreated each render closed over
-  // that render's OWN `draftText` (`use-composer.ts`'s `useCallback` deps),
-  // so calling the `submit` already in scope in the same tick as
+  // UI-W12 (FIX-W5): a synchronous ref, not React state, carries the "a
+  // compact send is queued" flag — plus what draft, if any, to restore once
+  // it lands — across the render `setDraftText` below triggers, the same
+  // reason `use-composer.ts`'s own `submitLockRef` (FIX-W1) is a ref rather
+  // than state. `submit` is recreated each render closed over that
+  // render's OWN `draftText` (`use-composer.ts`'s `useCallback` deps), so
+  // calling the `submit` already in scope in the same tick as
   // `setDraftText(COMPACT_NOW_TEXT)` would still send whatever text was in
   // the draft before this click, not `COMPACT_NOW_TEXT`. This effect fires
   // after the render that follows that state update — the one where
   // `submit`'s closure actually sees `COMPACT_NOW_TEXT` — and calls it
   // exactly once.
-  const pendingCompactRef = useRef(false);
+  //
+  // `null` means no compact send is pending. `handleCompactNow` below never
+  // leaves a stale entry here: the one case that does not reach this
+  // effect at all (the draft is already exactly `COMPACT_NOW_TEXT`) submits
+  // directly and clears this ref itself in the same tick (BUG 1, FIX-W5) —
+  // see that function's own doc comment.
+  const pendingCompactRef = useRef<{ restoreText: string | null } | null>(null);
   useEffect(() => {
-    if (!pendingCompactRef.current || draftText !== COMPACT_NOW_TEXT) return;
-    pendingCompactRef.current = false;
-    void submit();
-  }, [draftText, submit]);
+    const pending = pendingCompactRef.current;
+    if (!pending || draftText !== COMPACT_NOW_TEXT) return;
+    pendingCompactRef.current = null;
+    void submit().then(() => {
+      // BUG 2 (FIX-W5): restore the user's own in-progress draft once the
+      // compact send is durably enqueued — `submit()`'s `outbox.enqueue`
+      // always runs, and settles, before its own returned promise does —
+      // rather than silently discarding it. `setDraftText` (not
+      // `setDraftTextState`) so the restored text is also re-persisted
+      // through the same `draftController.update` an ordinary keystroke
+      // uses, not just shown once and lost on reload.
+      if (pending.restoreText !== null) setDraftText(pending.restoreText);
+    });
+  }, [draftText, submit, setDraftText]);
 
   const compactNowUnavailableReason = describeCompactNowUnavailable(
     Boolean(composerOptions.client),
@@ -661,16 +678,53 @@ export function Composer({
    * Replaces the current draft with `COMPACT_NOW_TEXT` and lets the effect
    * above submit it once that text has actually landed in state — the same
    * `submit()` a user who typed `/compact` and pressed Enter would
-   * trigger, never a second, fabricated send path. Whatever the user had
-   * drafted is overwritten, the same outcome typing over it by hand would
-   * have had; nothing here duplicates `submit()`'s own outbox write,
-   * optimistic-timeline row, or error handling.
+   * trigger, never a second, fabricated send path.
+   *
+   * FIX-W5 (BUG 1): when `draftText` is *already* exactly `COMPACT_NOW_TEXT`
+   * (typed by hand before this row was ever opened), `setDraftText`ing the
+   * same value is a no-op — React bails the identical-value update via
+   * `Object.is`, no re-render happens, and the effect above would never
+   * run, leaving `pendingCompactRef` stuck set for a later, unrelated
+   * keystroke that happens to pass through that exact string on its way to
+   * something longer (e.g. typing "/compact the last 3 turns please"
+   * character by character) — that keystroke's own re-render would then
+   * fire the stale effect and auto-submit the truncated command, stealing
+   * the rest of the sentence. This case submits directly instead of
+   * depending on a state transition that may never happen, and clears the
+   * ref itself in the same tick so it can never outlive this click.
+   *
+   * FIX-W5 (BUG 2): whatever the user had actually typed — if anything,
+   * and if it is not itself just `COMPACT_NOW_TEXT` again — is captured
+   * before it is overwritten and restored into the draft once the compact
+   * send is enqueued (see the effect above), rather than silently
+   * discarded.
+   *
+   * FIX-W5 (BUG 3): staged attachments are cleared up front rather than
+   * riding along with `/compact`. The daemon has no manual-compaction RPC
+   * (`COMPACT_NOW_TEXT`'s own doc comment) — `/compact` travels as plain
+   * chat text, and a compaction instruction has no defined use for an
+   * uploaded file, so shipping one alongside it would only glue the user's
+   * upload to a message that ignores it. This is also the only option
+   * actually reachable from this component: `submit()` (`use-composer.ts`,
+   * out of this task's ownership) unconditionally attaches whatever is
+   * currently staged and then clears it on every submission that proceeds,
+   * so the sole way to keep those files off THIS particular send is to
+   * clear them before calling `submit()`, not after.
    */
   function handleCompactNow(): void {
     if (compactNowUnavailableReason) return;
-    pendingCompactRef.current = true;
-    setDraftText(COMPACT_NOW_TEXT);
     setControlsOpen(false);
+    attachments.clear();
+    const trimmedDraft = draftText.trim();
+    const restoreText =
+      trimmedDraft.length > 0 && trimmedDraft !== COMPACT_NOW_TEXT ? draftText : null;
+    if (draftText === COMPACT_NOW_TEXT) {
+      pendingCompactRef.current = null;
+      void submit();
+      return;
+    }
+    pendingCompactRef.current = { restoreText };
+    setDraftText(COMPACT_NOW_TEXT);
   }
 
   const statusTestId = testId ? `${testId}-status` : undefined;
