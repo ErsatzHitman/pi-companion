@@ -685,6 +685,12 @@ export function HostSessionScreen() {
         editorTextClient={client ?? undefined}
         // T386: the ring's derived context-window telemetry.
         contextTelemetry={contextTelemetry}
+        // UI-W11: a real `DaemonClient` satisfies `DaemonSessionCostClient`
+        // structurally (`daemon-session-cost-client.ts`'s own doc) —
+        // passed directly, same as `editorTextClient` above, so the
+        // context ring's sheet can mount `SessionCostMeterContainer`
+        // alongside `ContextMeter`.
+        sessionCostClient={client ?? undefined}
         // T389: `@file` candidates from the connected daemon.
         fileReferenceSource={fileReferenceSource}
         // Pi UI `composer`-kind accept/undo fills and restores the live

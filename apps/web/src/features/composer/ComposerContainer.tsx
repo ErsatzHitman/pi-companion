@@ -2,6 +2,7 @@ import { useCore } from "../../app/core-context.js";
 import { Composer } from "./Composer.js";
 import type { AgentTurnClient } from "./agent-turn-client.js";
 import type { DaemonEditorTextSource } from "./daemon-editor-text-client.js";
+import type { DaemonSessionCostClient } from "../telemetry/daemon-session-cost-client.js";
 import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
@@ -42,6 +43,15 @@ export interface ComposerContainerProps {
    * renders the ring's honest "not reported" state.
    */
   contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
+  /**
+   * UI-W11: live `DaemonSessionCostClient` for the session-cost readout
+   * in the composer's context-ring sheet — see `Composer`'s own doc
+   * comment on this same prop name. `routes/screens/host-session-screen.tsx`
+   * passes its raw `client` here, the same way it already does for
+   * `editorTextClient`; a real `DaemonClient` satisfies this interface
+   * structurally.
+   */
+  sessionCostClient?: DaemonSessionCostClient;
   /**
    * T389: `@file` candidate listing for this session, built by the route
    * from the connected daemon's own `listDirectory`. Omitted when there is
@@ -85,6 +95,7 @@ export function ComposerContainer({
   client,
   editorTextClient,
   contextTelemetry,
+  sessionCostClient,
   fileReferenceSource,
   piUiComposerDrafts,
   transcribeClient,
@@ -100,6 +111,7 @@ export function ComposerContainer({
       client={client}
       editorTextClient={editorTextClient}
       contextTelemetry={contextTelemetry}
+      sessionCostClient={sessionCostClient}
       fileReferenceSource={fileReferenceSource}
       piUiComposerDrafts={piUiComposerDrafts}
       transcribeClient={transcribeClient}
