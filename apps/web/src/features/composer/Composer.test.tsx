@@ -1286,9 +1286,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     const client = new FakeAgentTurnClient();
     const filePicker = new FakeFilePicker();
     filePicker.enqueue([makeFakePickedFile({ name: "notes.txt", mimeType: "text/plain" })]);
-    render(
-      <Composer {...baseProps()} filePicker={filePicker} client={client} testId="composer" />,
-    );
+    render(<Composer {...baseProps()} filePicker={filePicker} client={client} testId="composer" />);
 
     await user.click(screen.getByRole("button", { name: "Attach files" }));
     await waitFor(() =>
