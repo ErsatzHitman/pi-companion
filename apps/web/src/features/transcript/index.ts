@@ -1,3 +1,14 @@
+export { RecoveredTurnBanner } from "./recovered-turn-banner.js";
+export type { RecoveredTurnBannerProps } from "./recovered-turn-banner.js";
+export {
+  confirmRecoveredTurn,
+  describeRecoveredTurn,
+  discardRecoveredTurn,
+  selectRecoveredTurnsForSession,
+} from "./recovered-turn-model.js";
+export type { AwaitingConfirmationEntry, RecoveredTurnOutbox } from "./recovered-turn-model.js";
+export { useRecoveredTurns } from "./use-recovered-turns.js";
+export type { RecoveredTurnSource, UseRecoveredTurnsResult } from "./use-recovered-turns.js";
 export { Transcript } from "./transcript.js";
 export type { TranscriptProps, WebTranscriptEntry } from "./transcript.js";
 export { isCoreMessageEntry, TranscriptMessageRow } from "./message-row.js";

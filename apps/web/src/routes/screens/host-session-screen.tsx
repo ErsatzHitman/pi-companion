@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 
-import { timeline as coreTimeline } from "@picompanion/frontend-core";
+import { composer as coreComposer, timeline as coreTimeline } from "@picompanion/frontend-core";
 import type { Clock, StructuredStorage } from "@picompanion/frontend-core";
 import type { DaemonClient } from "@picompanion/client";
 
@@ -27,7 +27,11 @@ import {
   resolveDirectHttpOrigin,
   useAttachmentImageResolver,
 } from "../../features/transcript/attachment-image-resolver.js";
-import { EditFromHereSurface } from "../../features/transcript/index.js";
+import {
+  EditFromHereSurface,
+  RecoveredTurnBanner,
+  useRecoveredTurns,
+} from "../../features/transcript/index.js";
 import { RewindDialog, useRewindToHere } from "../../features/transcript/rewind/index.js";
 import { selectLatestTodoEntry, TodoDock } from "../../features/transcript/index.js";
 import type {
@@ -515,6 +519,22 @@ export function HostSessionScreen() {
     [client],
   );
   const editFromHereClient = useMemo(() => adaptEditFromHereForkClient(client), [client]);
+  // FIX-W6: the same `platform.structuredStorage`/`platform.clock`
+  // singleton `ComposerContainer` feeds `useComposer`'s own outbox (both
+  // come from this one `useCore()` value) — so a submission
+  // `use-composer.ts` parks in `awaiting-confirmation` is visible through
+  // this instance too; see `use-recovered-turns.ts`'s own doc comment for
+  // why a second `OutboxController` object over the same storage is not a
+  // second data source.
+  const recoveredTurnOutbox = useMemo(
+    () => new coreComposer.OutboxController(platform.structuredStorage, platform.clock),
+    [platform.structuredStorage, platform.clock],
+  );
+  const { turns: recoveredTurns, refresh: refreshRecoveredTurns } = useRecoveredTurns(
+    recoveredTurnOutbox,
+    agentId,
+    platform.clock,
+  );
   // T277 web close: thread the live `DaemonClient`'s own
   // `transcribeVoiceClip` as the composer's `transcribeClient` (the web
   // equivalent of Android's T282 `resolveTranscribeClient` off
@@ -639,6 +659,12 @@ export function HostSessionScreen() {
         cachedAt={transcriptCachedAt}
         now={platform.clock.now()}
         testId="session-offline-banner"
+      />
+      <RecoveredTurnBanner
+        turns={recoveredTurns}
+        outbox={recoveredTurnOutbox}
+        onChange={refreshRecoveredTurns}
+        testId="host-session-recovered-turn"
       />
       <EditFromHereSurface
         sessionId={agentId}
