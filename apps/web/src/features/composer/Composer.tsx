@@ -27,7 +27,7 @@ import { QueueModePicker } from "./QueueModePicker.js";
 import { ReferenceSuggestions } from "./ReferenceSuggestions.js";
 import { ContextMeter } from "../rail/context-meter.js";
 import type { DaemonSessionCostClient } from "../telemetry/daemon-session-cost-client.js";
-import { SessionCostMeterContainer } from "../telemetry/SessionCostMeterContainer.js";
+import { SessionCostMeterContainer } from "../telemetry/index.js";
 import type { UseComposerOptions } from "./use-composer.js";
 import { useComposer } from "./use-composer.js";
 import { useAgentTurnStatus } from "./use-agent-turn-status.js";
