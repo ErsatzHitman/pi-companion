@@ -56,9 +56,9 @@ export interface PiExtensionRailProps {
    * (`docs/ui-reference/pi-companion-web.html` `.live` region) holds only
    * the Subagents and Workflow cards — no Context/Cache/Cost block — that
    * telemetry now belongs to the composer's context ring
-   * (`features/composer/ContextRing.tsx`) and `root-route.tsx`'s own
-   * direct `ContextMeter` mount beside this rail, neither owned by this
-   * component.
+   * (`features/composer/ContextRing.tsx` opens it; `Composer.tsx` renders
+   * the same `ContextMeter` inside that ring's own session-controls
+   * sheet), neither owned by this component.
    */
   telemetry?: coreTelemetry.ContextWindowTelemetry;
   /** Shimmer placeholder rows instead of content, while the first Pi UI snapshot has not arrived yet. */

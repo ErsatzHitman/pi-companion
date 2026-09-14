@@ -17,8 +17,8 @@ import { PiExtensionRail } from "./pi-extension-rail.js";
  * §11.5). The pane holds exactly two named cards — Subagents, Workflow —
  * plus a generic `.card` per other pinned element kind, and NO Context/
  * Cache/Cost block (that telemetry moved to the composer's context ring
- * and `root-route.tsx`'s own direct `ContextMeter` mount, neither owned by
- * this component).
+ * and its own session-controls sheet in `features/composer/Composer.tsx`,
+ * neither owned by this component).
  *
  * Fixtures below mirror the real daemon-synthesized shapes recorded in
  * `packages/frontend-core/src/testing/fixtures/extensions/scenarios/

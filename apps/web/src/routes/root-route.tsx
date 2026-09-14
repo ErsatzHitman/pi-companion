@@ -1,4 +1,3 @@
-import { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 import { Outlet, createRootRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
@@ -8,7 +7,7 @@ import {
   usePiUiSession,
 } from "../features/extensions/pi-ui-session-context.js";
 import { PiNoticeBannerContainer } from "../features/notices/index.js";
-import { ContextMeter, PiExtensionRail, PiExtensionStatusStrip } from "../features/rail/index.js";
+import { PiExtensionRail, PiExtensionStatusStrip } from "../features/rail/index.js";
 import {
   SESSIONS_NOT_CONNECTED,
   SessionRail,
@@ -24,7 +23,6 @@ import type {
   SessionListConnectionState,
   SessionListState,
 } from "../features/sessions/index.js";
-import { SessionCostMeterContainer } from "../features/telemetry/index.js";
 import { Shell } from "../ui/shell.js";
 import { NotFoundScreen } from "./not-found-screen.js";
 import { RouteErrorScreen } from "./route-error-screen.js";
@@ -41,19 +39,29 @@ import { RouteErrorScreen } from "./route-error-screen.js";
  * This file is pure assembly: it composes already-built, already-tested
  * pieces (`useSessionListSync` + `groupSessions`/`statusPresentation` for
  * the left rail's live session list; `PiUiElementStore` +
- * `ExtensionActionController` + `PiExtensionRail`/`PiExtensionStatusStrip`/
- * `ContextMeter` + `SessionCostMeterContainer` for the right rail) against
- * the live `DaemonClient` T53A1 provides via `useDaemonClientContext()`. It
- * adds no new feature behaviour of its own beyond the wiring glue documented
- * below.
+ * `ExtensionActionController` + `PiExtensionRail`/`PiExtensionStatusStrip`
+ * for the right rail) against the live `DaemonClient` T53A1 provides via
+ * `useDaemonClientContext()`. It adds no new feature behaviour of its own
+ * beyond the wiring glue documented below. The context-window/cache-hit
+ * and session-cost meters this file mounted directly here up to T386 no
+ * longer live in this rail at all: the reference Live pane
+ * (`docs/ui-reference/pi-companion-web.html` `.live` region) holds only
+ * the status strip and `PiExtensionRail`'s own cards, and the
+ * context-window/cache-hit numbers now render inside the composer's own
+ * context-ring sheet (`features/composer/Composer.tsx`,
+ * `features/rail/context-meter.tsx`'s `ContextMeter` reused there
+ * unchanged). Session cost has no live mount anywhere in the app now —
+ * `features/telemetry/SessionCostMeterContainer.tsx`'s own doc comment
+ * already describes it as "ready to mount" once a route wires it
+ * somewhere; wiring it back in is a later task's concern, not this one's.
  *
  * **Why this file does not simply reuse `features/sessions`' `SessionList`/
  * `SessionsScreen` components or `features/rail`'s existing per-kind
  * cards' exact same DOM structure for its own inline rendering.** Those
  * already exist and are reused directly wherever there is no risk of
- * double-mounting the same live data (`ContextMeter`, `PiExtensionRail`,
- * `SessionCostMeterContainer`, `PiUiSessionProvider`) — this file adds no
- * parallel implementation of any of them. The one deliberate exception is
+ * double-mounting the same live data (`PiExtensionRail`,
+ * `PiUiSessionProvider`) — this file adds no parallel implementation of
+ * any of them. The one deliberate exception is
  * the *left* rail's row rendering: `HostSessionsScreen`
  * (`routes/screens/host-sessions-screen.tsx`, a different, already-merged
  * task's owned file, not touched here) mounts `features/sessions`'
@@ -155,10 +163,9 @@ interface ExtensionRailContentProps {
   agentId: string;
   /**
    * The adapted daemon client this rail reads the open session's live
-   * snapshot through; its `Live` head status pill and the context-window
-   * telemetry below both come from that one snapshot, and an
-   * `agent_update` re-renders this rail rather than the whole routed
-   * tree.
+   * snapshot through; its `Live` head status pill comes from that one
+   * snapshot, and an `agent_update` re-renders this rail rather than the
+   * whole routed tree.
    */
   chromeClient: SessionChromeClient | null;
 }
@@ -169,16 +176,15 @@ interface ExtensionRailContentProps {
  * — `status` is "header or right-rail status" per §11.3, and this column
  * is the right-rail half of that; until this mount, every daemon-
  * synthesized `status` element sat unrendered), pinned fleet/workflow/loop/
- * goal elements (`PiExtensionRail`), the context-window/cache meter
- * (`ContextMeter`), the session cost meter (`SessionCostMeterContainer`) —
- * the exact trio `SessionCostMeterContainer`'s own module doc already names
- * as "ready to mount as a sibling of `ContextMeter` inside `PiExtensionRail`/
- * `Shell`'s `extensionRail` slot" — and, since T112, live `pi_notice`
- * warnings (`PiNoticeBannerContainer`, `features/notices/`): the Pi
- * provider's only channel for out-of-band operator-visible notices,
- * produced by the daemon since long before this task and consumed by
- * nobody until now (found by the P6-W4 import-graph walk, confirmed by
- * `grep -rn pi_notice`).
+ * goal elements (`PiExtensionRail`) — matching the reference Live pane
+ * (`docs/ui-reference/pi-companion-web.html` `.live` region), which holds
+ * only the status strip and `PiExtensionRail`'s own cards, no
+ * context/cache/cost block — and, since T112, live `pi_notice` warnings
+ * (`PiNoticeBannerContainer`, `features/notices/`): the Pi provider's only
+ * channel for out-of-band operator-visible notices, produced by the
+ * daemon since long before this task and consumed by nobody until now
+ * (found by the P6-W4 import-graph walk, confirmed by `grep -rn
+ * pi_notice`).
  *
  * A fresh `PiUiElementStore` is created per `agentId` and a single
  * `agent_stream` subscription feeds both the element store and the action
@@ -203,8 +209,6 @@ function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentPro
   const session = useSessionSnapshot(chromeClient, agentId);
   const piUiSession = usePiUiSession();
 
-  const windowTelemetry = coreTelemetry.deriveContextWindowTelemetry(session?.lastUsage);
-
   // The provider wrapping `Shell` owns this session's live store and action
   // controller; on every session route this rail renders for, its value is
   // non-null. Guarding keeps a non-session render from throwing rather than
@@ -221,8 +225,6 @@ function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentPro
         <span className="shell__live-eyebrow">Live</span>
         <SessionStatusPill session={session} testId="shell-live-status" />
       </div>
-      <ContextMeter telemetry={windowTelemetry} />
-      <SessionCostMeterContainer agentId={agentId} client={client ?? undefined} />
       <PiNoticeBannerContainer agentId={agentId} client={client ?? undefined} />
       <PiExtensionStatusStrip
         elements={elements}

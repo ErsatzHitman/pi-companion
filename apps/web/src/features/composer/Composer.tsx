@@ -25,6 +25,7 @@ import { ModelThinkingPicker } from "./ModelThinkingPicker.js";
 import { PromptRoutingPicker } from "./PromptRoutingPicker.js";
 import { QueueModePicker } from "./QueueModePicker.js";
 import { ReferenceSuggestions } from "./ReferenceSuggestions.js";
+import { ContextMeter } from "../rail/context-meter.js";
 import type { UseComposerOptions } from "./use-composer.js";
 import { useComposer } from "./use-composer.js";
 import { useComposerReferences } from "./use-composer-references.js";
@@ -145,9 +146,12 @@ export interface ComposerProps extends UseComposerOptions {
   editorTextClient?: DaemonEditorTextSource;
   /**
    * This session's derived context-window telemetry, from
-   * `useSessionContextTelemetry` — the SAME derivation the right rail's
-   * `ContextMeter` renders (`routes/root-route.tsx` owns that half). Omit
-   * when no usage has been reported and the ring renders its honest
+   * `useSessionContextTelemetry`. The ring's own sheet is now the only
+   * place `ContextMeter` renders: UI-W9 removed `routes/root-route.tsx`'s
+   * direct mount beside `PiExtensionRail`, because the reference `.live`
+   * region (`docs/ui-reference/pi-companion-web.html`) carries no
+   * Context/Cache/Cost block at all — that readout belongs to the ring.
+   * Omit when no usage has been reported and the ring renders its honest
    * "not reported" state rather than a fabricated 0%.
    */
   contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
@@ -827,6 +831,18 @@ export function Composer({
       >
         <div className="pc-composer__session-controls">
           <p data-testid={contextSummaryTestId}>{describeContextSummary(contextTelemetry)}</p>
+          {/* UI-W9: the reference `#ctx-menu` popover's own
+              final `.menu-g` group is its "Context" readout
+              (`docs/ui-reference/pi-companion-web.html`) — the SAME
+              `ContextMeter` the right rail used to mount directly now
+              renders here instead, off the ring's own `contextTelemetry`
+              prop, so the two can never disagree. */}
+          {contextTelemetry ? (
+            <ContextMeter
+              telemetry={contextTelemetry}
+              testId={testId ? `${testId}-context-meter` : undefined}
+            />
+          ) : null}
         </div>
       </Sheet>
     </div>

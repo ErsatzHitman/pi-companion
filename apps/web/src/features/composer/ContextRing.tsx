@@ -11,11 +11,12 @@ import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
  * tabular-nums`. It sits immediately right of the attach button and opens
  * the session's controls.
  *
- * The fraction is the SAME derived telemetry the right rail's
- * `ContextMeter` renders: `@picompanion/frontend-core`'s
- * `telemetry.ContextWindowTelemetry` (T29C1's pure derivation off
- * `AgentUsage`), so this ring can never disagree with the rail about how
- * much of the window is used.
+ * The fraction is the SAME derived telemetry `ContextMeter`
+ * (`features/rail/context-meter.tsx`, reused inside this ring's own
+ * session-controls sheet in `Composer.tsx`) renders:
+ * `@picompanion/frontend-core`'s `telemetry.ContextWindowTelemetry`
+ * (T29C1's pure derivation off `AgentUsage`), so the ring's percentage and
+ * the sheet's full readout can never disagree.
  *
  * **Unknown is not zero.** When the provider has not reported both token
  * fields, the ring draws its bare track and no percentage at all — the

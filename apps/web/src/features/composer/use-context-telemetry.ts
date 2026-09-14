@@ -11,13 +11,12 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
  * through `@picompanion/frontend-core`'s
  * `telemetry.deriveContextWindowTelemetry` (T29C1).
  *
- * `routes/root-route.tsx` performs the identical subscription for its
- * `ContextMeter`; this hook is duplicated rather than shared because the
- * two live in different owned directories and neither may import the
- * other's internals (`apps/web/src/features/rail/` renders the meter,
- * `routes/root-route.tsx` wires it). It is the same derivation, from the
- * same wire field, so the composer's ring and the rail's meter cannot
- * disagree about the numbers — only about who subscribes.
+ * `Composer.tsx`'s session-controls sheet renders `features/rail`'s
+ * `ContextMeter` directly off this hook's own return value — passed down
+ * as the `contextTelemetry` prop from `host-session-screen.tsx`, which
+ * calls this hook exactly once per session — so the ring's percentage and
+ * the sheet's full context-window/cache-hit readout are always the same
+ * derivation, read once, never two competing subscriptions.
  *
  * Resets to `undefined` (→ `{ contextWindow: { status: "unknown" } }`)
  * whenever the connection or session identity changes, so a switched

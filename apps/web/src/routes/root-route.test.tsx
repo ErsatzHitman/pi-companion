@@ -93,11 +93,16 @@ describe("root route rail wiring (T53A3)", () => {
     // (no live Pi UI elements without a daemon connection).
     expect(within(extensionRail).queryByTestId("shell-extension-rail-empty")).toBeNull();
     expect(within(extensionRail).getByTestId("pi-extension-rail-empty")).toBeTruthy();
-    // The context-window/cache meter (T29C2) and session cost meter
-    // (T48A2) both mount alongside it, honestly reporting "unknown"
-    // without a live `AgentUsage` stream.
-    expect(within(extensionRail).getByRole("heading", { name: "Context" })).toBeTruthy();
-    expect(within(extensionRail).getByRole("heading", { name: "Cost" })).toBeTruthy();
+    // T386 follow-up (UI-W9): context/cache/cost telemetry no longer
+    // mounts in this rail at all -- the reference Live pane (`.live`
+    // region, `docs/ui-reference/pi-companion-web.html`) holds only the
+    // status strip and `PiExtensionRail`'s own cards. The context-window/
+    // cache-hit numbers moved into the composer's own context-ring sheet
+    // (`ContextMeter` reused there unchanged; see `Composer.test.tsx` for
+    // that surface's own coverage); session cost has no live mount
+    // anywhere in the app right now.
+    expect(within(extensionRail).queryByRole("heading", { name: "Context" })).toBeNull();
+    expect(within(extensionRail).queryByRole("heading", { name: "Cost" })).toBeNull();
   }, 20_000);
 
   it("keeps both rail regions structurally present at once (plan.md §8.3 three-region layout)", async () => {
@@ -121,7 +126,11 @@ describe("root route rail wiring (T53A3)", () => {
     const { container } = renderAt("/h/host-1/session/agent-1");
 
     await screen.findByLabelText("Message Pi", {}, { timeout: 15_000 });
-    await screen.findByRole("heading", { name: "Cost" });
+    // T386 follow-up (UI-W9): no "Cost" heading mounts here anymore (see
+    // the previous test's own correction) -- wait on the extension rail's
+    // own empty-state content instead, so this still only asserts once
+    // both rails have actually finished rendering.
+    await screen.findByTestId("pi-extension-rail-empty");
 
     const results = await axe(container);
     expect(results).toHaveNoViolations();
