@@ -371,7 +371,15 @@ async function readFileRange(filePath: string, start: number, end: number): Prom
   }
 }
 
-function parseMessagesFromText(text: string): PiAgentMessage[] {
+/**
+ * Exported (FIX-S6) purely so a regression test can drive the exact same
+ * noise-row filtering `bootstrapTail`/`incrementalTail` rely on — raw Pi
+ * `.jsonl` lines interleave `message`-typed rows (the only ones this keeps)
+ * with `custom_message`, `model_change`, `thinking_level_change` and other
+ * top-level entry types the RPC `get_messages` path never surfaces at all
+ * — without needing a full filesystem-backed `PiLiveTailWatcher`.
+ */
+export function parseMessagesFromText(text: string): PiAgentMessage[] {
   const lines = text.split(/\r?\n/);
   const messages: PiAgentMessage[] = [];
   for (const raw of lines) {

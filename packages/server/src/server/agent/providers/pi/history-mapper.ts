@@ -180,19 +180,42 @@ export class PiHistoryMapper {
     if (!text && images.length === 0) {
       return [];
     }
-    const userEntry = this.userEntries[this.userIndex - 1];
-    // T-FIX-S5: always assign a stable, non-text identity derived from this
-    // message's native position in Pi's own history (`userIndex`, a running
-    // counter over `user`-role rows in encounter order), falling back from a
-    // captured live entry's id when one exists. Two independent importers of
-    // the *same* underlying Pi session file (a full RPC-history replay and
-    // `pi-live-tail.ts`'s own from-scratch bootstrap read) both process rows
-    // in the same order starting from the same origin, so they compute the
-    // identical id for the same source row every time — which is exactly the
-    // key `AgentManager`'s history-import dedupe (see `agent-manager.ts`'s
-    // `deriveHistoryTimelineDedupeKey`) needs to collapse a re-imported row
-    // back onto the one already recorded instead of appending a duplicate.
-    const messageId = userEntry ? userEntry.id : `${this.provider}-history-user-${this.userIndex}`;
+    // T-FIX-S6 (corrects T-FIX-S5): ALWAYS the positional fallback —
+    // `this.userIndex`, a running counter over `user`-role rows in
+    // encounter order — never `this.userEntries`' captured Pi tree-entry
+    // id, even when one is available for this row. FIX-S5's own comment
+    // here claimed the positional id was used with the captured id only as
+    // a fallback; the code actually did the opposite (captured id first,
+    // position only when no captured entry existed), and that is what left
+    // the headline bug half-fixed: `agent.ts`'s RPC-driven `streamHistory()`
+    // populates `userEntries` from a live extension round trip
+    // (`requestEntryCapture`) almost every time it runs, while
+    // `pi-live-tail.ts`'s independent, RPC-free read of the raw `.jsonl`
+    // file (`bootstrapTail`) can never obtain that id and always
+    // constructs this mapper with no `userEntries` at all — so the two
+    // importers computed two *different*, non-derivable-from-each-other
+    // ids for the very same logical user message, and
+    // `AgentManager.deriveHistoryTimelineDedupeKey` (which trusts
+    // `item.messageId` verbatim) could never collapse the re-import.
+    // `userIndex`, by contrast, counts a property intrinsic to the row
+    // itself (its position among `user`-role rows), which both importers
+    // derive identically without needing to agree on anything external:
+    // `pi-live-tail.ts`'s `parseMessagesFromText` filters the raw file to
+    // the exact same row set (`entry.type === "message"` with a known
+    // `PiAgentMessage` role) that the RPC path's `getMessages()` reflects,
+    // so item N in one importer's feed is item N in the other's too
+    // (proved by the "mapping the same session twice" test below, and by
+    // `agent-timeline-store.test.ts`'s FIX-S6 cross-importer regression
+    // test). Rewinding a history-replayed message is resolved back to
+    // Pi's live captured entry by *position* instead
+    // (`agent.ts`'s `revertConversation`/`resolveCapturedEntryForRewind`),
+    // not by carrying the captured id through this item. `userEntries` is
+    // still accepted (API compatibility with `agent.ts`'s call site, and so
+    // a caller can prove supplying it changes nothing — see
+    // history-mapper.test.ts's FIX-S6 cross-importer stability test) but is
+    // deliberately never read for identity purposes.
+    void this.userEntries[this.userIndex - 1];
+    const messageId = `${this.provider}-history-user-${this.userIndex}`;
     return [
       {
         type: "timeline",

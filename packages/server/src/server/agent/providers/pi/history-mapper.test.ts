@@ -312,7 +312,18 @@ describe("Pi history mapper", () => {
     expect(userMessageIds[0]).not.toBe(userMessageIds[1]);
   });
 
-  test("uses Pi tree entry ids for replayed user messages", async () => {
+  // FIX-S6: this replaces a prior "uses Pi tree entry ids for replayed user
+  // messages" test that pinned the exact behavior the headline duplication
+  // bug turned on — `mapUserMessage` preferring `userEntries`' captured id
+  // over the positional fallback. `agent.ts`'s RPC-driven `streamHistory()`
+  // supplies `userEntries`; `pi-live-tail.ts`'s independent raw-`.jsonl`
+  // read never can, so that preference made the two importers disagree on
+  // every user message's identity. `userEntries` is still accepted (Pi's
+  // captured entry is still resolved for rewind — see `agent.ts`'s
+  // `resolveCapturedEntryForRewind`, by *position* rather than by
+  // threading the id through this item) but must no longer change
+  // `messageId` itself, on pain of reintroducing this exact bug.
+  test("FIX-S6: a captured Pi tree entry id never overrides the positional messageId", async () => {
     await expect(
       collectHistory(
         [
@@ -332,7 +343,7 @@ describe("Pi history mapper", () => {
         item: {
           type: "user_message",
           text: "first prompt",
-          messageId: "entry-user-1",
+          messageId: "pi-history-user-1",
         },
       },
       {
@@ -350,9 +361,26 @@ describe("Pi history mapper", () => {
         item: {
           type: "user_message",
           text: "second prompt",
-          messageId: "entry-user-2",
+          messageId: "pi-history-user-2",
         },
       },
     ]);
+  });
+
+  test("FIX-S6: the same session maps to identical messageIds whether or not userEntries is supplied (cross-importer stability)", async () => {
+    const messages: PiAgentMessage[] = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: [{ type: "text", text: "Hello! How can I help you today?" }] },
+      { role: "user", content: "Hi" },
+    ];
+    // Simulates `agent.ts`'s RPC path (real captured entries supplied).
+    const withCapturedEntries = await collectHistory(messages, [
+      { id: "entry-abc", text: "Hello" },
+      { id: "entry-def", text: "Hi" },
+    ]);
+    // Simulates `pi-live-tail.ts`'s raw-file path (never supplies any).
+    const withoutCapturedEntries = await collectHistory(messages);
+
+    expect(withCapturedEntries).toEqual(withoutCapturedEntries);
   });
 });
