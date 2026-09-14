@@ -1,4 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { createElement, StrictMode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { composer as coreComposer } from "@picompanion/frontend-core";
@@ -783,5 +785,52 @@ describe("useComposer per-session draft persistence (T389)", () => {
       }),
     );
     await waitFor(() => expect(second.result.current.draftText).toBe(""));
+  });
+
+  it("restores a persisted draft exactly once under React StrictMode's double mount-effect invocation, and sends nothing", async () => {
+    const clock = new FakeClock(1_000);
+    const storage = new InMemoryStructuredStorage();
+    const client = new FakeAgentTurnClient();
+    await new coreComposer.DraftStore(storage, clock).save(draftKey("session-1"), {
+      text: "restored under strict mode",
+    });
+
+    // StrictMode double-invokes every mount effect (setup -> cleanup ->
+    // setup again) in development, which is exactly the mount-restore
+    // effect this test exercises: `draftControllerRef`'s `??=` means both
+    // invocations share the same `DraftSessionController`, and that
+    // controller's own `generation` counter (drafts.ts) plus this hook's
+    // per-invocation `cancelled` closure flag are the two guards this test
+    // proves hold together, the same shape
+    // `use-session-terminal.test.tsx`'s own StrictMode test already proves
+    // for that hook's mount effect.
+    // Plain `createElement`, not JSX: this file is `.ts`, not `.tsx`.
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(StrictMode, null, children);
+    const { result } = renderHook(
+      () =>
+        useComposer({
+          sessionId: "session-1",
+          serverId: "server-1",
+          clock,
+          structuredStorage: storage,
+          filePicker: new FakeFilePicker(),
+          client,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.draftText).toBe("restored under strict mode"));
+    // Give any extra, wrongly-surviving restore a chance to land before
+    // asserting there wasn't one.
+    await act(async () => {
+      await settle();
+    });
+    expect(result.current.draftText).toBe("restored under strict mode");
+
+    // Restoring a draft must never itself submit it.
+    expect(client.sentMessages).toEqual([]);
+    expect(result.current.visibleRows).toEqual([]);
+    expect(result.current.isSubmitting).toBe(false);
   });
 });
