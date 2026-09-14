@@ -873,6 +873,30 @@ export class AgentManager {
    * FIX-S1: record `clientMessageId` as accepted before its timeline row
    * necessarily exists. Bounded per agent (oldest entry evicted first) so a
    * long-lived agent's accepted-id set cannot grow without bound.
+   *
+   * FIX-S3: why eviction cannot reopen the duplicate-dispatch hole this set
+   * exists to close. This Set only has to cover an id from the moment it is
+   * recorded here until the matching `recordSubmittedPrompt` call lands for
+   * it (see `hasAcceptedClientMessage`'s doc comment above for that gap's
+   * shape). The instant `recordSubmittedPrompt` runs, `hasAcceptedClientMessage`
+   * starts finding the id via `timelineStore.getSubmittedUserMessage`
+   * instead — permanently, independent of whether this Set still holds it
+   * — so evicting an already-timelined id is a pure memory optimization,
+   * never a correctness change. Eviction can only discard an id that is
+   * STILL inside that pre-timeline gap, and FIFO order means that is only
+   * possible for an id once `ACCEPTED_CLIENT_MESSAGE_ID_LIMIT` MORE
+   * distinct ids have been accepted for the same agent after it. For
+   * eviction to reopen the hole, then, this many concurrent/rapid-fire
+   * dispatches would have to land for the SAME agent and race ahead of the
+   * oldest one's own `recordSubmittedPrompt` — i.e. either the limit set
+   * far below plausible per-agent burst concurrency, or a provider
+   * round-trip stalled long enough that this many more sends are accepted
+   * for the same agent while the oldest is still unacknowledged. Today's
+   * per-agent dispatch shape (one turn in flight at a time;
+   * `recordSubmittedPrompt` runs promptly after dispatch — synchronously
+   * for out-of-band commands, at `turn_started` for a new/replacement
+   * turn) keeps both far from plausible, but neither is structurally ruled
+   * out, which is why this stays a FIFO bound and not an unbounded set.
    */
   recordAcceptedClientMessage(agentId: string, clientMessageId: string): void {
     this.acceptedClientMessageIds ??= new Map();
