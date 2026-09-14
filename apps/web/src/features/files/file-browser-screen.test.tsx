@@ -443,6 +443,10 @@ describe("FileBrowserScreen upload and download (T30B4)", () => {
     renderFilesScreenAt("/h/host-1/session/agent-1/files", client, undefined, { uploadClient });
 
     await screen.findByTestId("file-browser-entry-src");
+    // UI-W7: the upload panel now lives inside the toolbar's Upload
+    // popover rather than standing open above the breadcrumbs.
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("file-upload-trigger"));
     expect(screen.getByTestId("file-upload-panel")).toBeTruthy();
     // This app has no real `<input type="file">` interaction available in
     // jsdom without a user-supplied `File`; `use-file-upload.test.ts` and

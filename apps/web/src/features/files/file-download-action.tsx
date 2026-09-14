@@ -1,4 +1,4 @@
-import { Banner, Button, Progress } from "../../ui/primitives/index.js";
+import { Banner, Button, IconButton, Progress } from "../../ui/primitives/index.js";
 import type { FileDownloadController } from "./use-file-download.js";
 import "./files.css";
 
@@ -36,14 +36,13 @@ export function FileDownloadAction({ controller, cwd, path, fileName }: FileDown
 
   return (
     <div className="pc-file-download">
-      <Button
-        kind="secondary"
+      <IconButton
+        icon="download"
+        accessibleName={busy ? `Downloading ${fileName}` : `Download ${fileName}`}
         onClick={() => controller.download(cwd, path, fileName)}
         disabled={busy}
         data-testid={`file-download-button-${path}`}
-      >
-        {busy ? "Downloading…" : "Download"}
-      </Button>
+      />
       {isActive && state.status === "requesting-token" ? (
         <div className="pc-file-download__progress-row">
           <Progress
