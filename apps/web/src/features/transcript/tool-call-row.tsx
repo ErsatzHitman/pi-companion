@@ -63,6 +63,23 @@ const STATUS_TEXT: Record<tools.ToolCallViewStatus, string> = {
   canceled: "Canceled",
 };
 
+/**
+ * The reference's finished-tool-block fill (`docs/ui-reference/
+ * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`,
+ * backed by its `--tool-success-bg` / `--tool-error-bg` custom
+ * properties) applies only once a call has actually settled — a
+ * `running`/`blocked`/`canceled` call gets no tint, matching the
+ * reference, which never marks an in-flight block either way. Returns a
+ * `pc-tool-call--*` modifier for the card root; `tool-call-row.css`
+ * applies the tint to `.pc-tool-call__body` from that ancestor class
+ * rather than every body needing to know its own tool's status.
+ */
+function toolToneClass(status: tools.ToolCallViewStatus): string | undefined {
+  if (status === "completed") return "pc-tool-call--success";
+  if (status === "failed") return "pc-tool-call--error";
+  return undefined;
+}
+
 const MAX_BODY_CHARS = 4000;
 const MAX_PAYLOAD_CHARS = 4000;
 const MAX_LIST_ROWS = 20;
@@ -607,24 +624,30 @@ function UnknownToolCard({
   const imageResult =
     typeof tool.result === "string" && isImageDataUri(tool.result) ? tool.result : null;
 
+  const toneClass = toolToneClass(tool.status);
   return (
-    <Card className="pc-tool-call pc-tool-call--generic" data-testid={testId}>
+    <Card
+      className={["pc-tool-call", "pc-tool-call--generic", toneClass].filter(Boolean).join(" ")}
+      data-testid={testId}
+    >
       <ToolCallHeader tool={tool} testId={testId} />
-      <p className="pc-tool-call__meta">
-        Unrecognized tool{tool.source ? ` from ${tool.source}` : ""}: {tool.toolName}
-      </p>
-      {tool.status === "failed" ? (
-        <p className="pc-tool-call__meta pc-tool-call__meta--error">
-          {safeStringify(tool.rawError)}
+      <div className="pc-tool-call__body">
+        <p className="pc-tool-call__meta">
+          Unrecognized tool{tool.source ? ` from ${tool.source}` : ""}: {tool.toolName}
         </p>
-      ) : imageResult ? (
-        <ImageResult dataUri={imageResult} label={`Image result from ${tool.toolName}`} />
-      ) : tool.result !== undefined ? (
-        <details className="pc-tool-call__details">
-          <summary>Result</summary>
-          <CodeBlock code={safeStringify(tool.result)} language="json" />
-        </details>
-      ) : null}
+        {tool.status === "failed" ? (
+          <p className="pc-tool-call__meta pc-tool-call__meta--error">
+            {safeStringify(tool.rawError)}
+          </p>
+        ) : imageResult ? (
+          <ImageResult dataUri={imageResult} label={`Image result from ${tool.toolName}`} />
+        ) : tool.result !== undefined ? (
+          <details className="pc-tool-call__details">
+            <summary>Result</summary>
+            <CodeBlock code={safeStringify(tool.result)} language="json" />
+          </details>
+        ) : null}
+      </div>
       <details className="pc-tool-call__details">
         <summary>Input</summary>
         <CodeBlock code={safeStringify(tool.collapsibleInput)} language="json" />
@@ -663,8 +686,9 @@ function UnknownToolCard({
 type KnownToolCallViewModel = Exclude<tools.ToolCallViewModel, tools.GenericToolCallViewModel>;
 
 function KnownToolCard({ tool, testId }: { tool: KnownToolCallViewModel; testId?: string }) {
+  const toneClass = toolToneClass(tool.status);
   return (
-    <Card className="pc-tool-call" data-testid={testId}>
+    <Card className={["pc-tool-call", toneClass].filter(Boolean).join(" ")} data-testid={testId}>
       <ToolCallHeader tool={tool} testId={testId} />
       {tool.summary ? <p className="pc-tool-call__meta">{tool.summary}</p> : null}
       {tool.status === "failed" && tool.errorText ? (

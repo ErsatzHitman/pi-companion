@@ -117,22 +117,24 @@
 
 /* StreamingMessage -------------------------------------------------------- */
 
-/* The mockup draws no bubble around assistant prose at all, but this
- * recipe's surface card is the existing approved treatment for both
- * speakers (plan.md §10.2), so it stays — narrowed to hug its own measure
- * (`fit-content`) instead of filling the column, which is what the
- * reference's `78ch` prose cap produces in practice. The user bubble below
- * takes the mockup's accent tint and 14px window radius. */
+/* CORRECTED (UI-W10): this used to say the surface card treatment "stays"
+ * for both speakers. Checked directly against the reference
+ * (`docs/ui-reference/pi-companion-web.html`): only `.turn-user .body`
+ * ever gets a background, radius, or padding — the default `.turn`/
+ * `.prose` (assistant) draws no card, border, or fill at all, just bare
+ * text under the meta line. The live app instead drew every assistant
+ * turn inside a bordered `--color-surface` box (confirmed against a
+ * screenshot of the running app), which the reference never does. This
+ * rule now carries no visual treatment of its own — an assistant turn is
+ * unstyled `.pc-message__text` — matching the reference exactly. The user
+ * bubble below is unaffected: it already supplies its own background,
+ * radius, and padding. */
 .pc-message {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-1);
   width: fit-content;
   max-width: 100%;
-  padding: var(--spacing-3);
-  border-radius: var(--radius-card);
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-hairline);
 }
 /* Mockup `.turn-user .body { background: var(--accent-tint); border-radius:
  * var(--r-blk); padding: 11px 14px; max-width: 72ch }`. `--radius-window`
@@ -152,7 +154,6 @@
   border-radius: var(--radius-window);
   padding: var(--pc-message-user-padding-block) var(--pc-message-user-padding-inline);
   max-width: 72ch;
-  box-shadow: none;
 }
 .pc-message__text {
   margin: 0;

@@ -73,6 +73,28 @@
   gap: var(--spacing-2);
 }
 
+/* The reference's finished-tool-block fill (`docs/ui-reference/
+ * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`,
+ * `background: var(--tool-success-bg)` / `var(--tool-error-bg)`). Those
+ * two roles are already published design tokens
+ * (`packages/design-tokens/src/tokens.ts`'s `PiRoleColorTokens`), emitted
+ * here as `--color-tool-success-bg` / `--color-tool-error-bg` by the same
+ * `color-${key}` convention every other role token uses
+ * (`packages/design-tokens/src/web.ts`'s `colorDeclarations`). The card
+ * root carries the modifier (`tool-call-row.tsx`'s `toolToneClass`) so
+ * every family's body picks up the tint from one ancestor rule instead of
+ * each body needing to know its own tool's status. */
+.pc-tool-call--success .pc-tool-call__body {
+  background-color: var(--color-tool-success-bg);
+  border-radius: var(--radius-control);
+  padding: var(--spacing-2) var(--spacing-3);
+}
+.pc-tool-call--error .pc-tool-call__body {
+  background-color: var(--color-tool-error-bg);
+  border-radius: var(--radius-control);
+  padding: var(--spacing-2) var(--spacing-3);
+}
+
 .pc-tool-call__actions {
   margin: 0;
   padding-left: var(--spacing-4);
