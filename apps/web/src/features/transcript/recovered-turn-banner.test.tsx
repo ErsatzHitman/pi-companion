@@ -79,6 +79,75 @@ describe("RecoveredTurnBanner (FIX-W6)", () => {
     expect(outbox.calls.remove).toEqual([]);
   });
 
+  it("Resend calls onResendConfirmed once confirmResend reports a real flip (FIX-W8)", async () => {
+    const turn = makeTurn({ id: "outbox_resend_2" });
+    const outbox = createCountingOutbox({ ...turn, status: "pending" });
+    const onResendConfirmed = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <RecoveredTurnBanner
+        turns={[turn]}
+        outbox={outbox}
+        onResendConfirmed={onResendConfirmed}
+        onChange={onChange}
+        testId="rt"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Resend the message that could not be confirmed as sent",
+      }),
+    );
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    expect(onResendConfirmed).toHaveBeenCalledTimes(1);
+  });
+
+  it("Resend does NOT call onResendConfirmed when confirmResend no-ops (a stale click on an entry that already moved on)", async () => {
+    const turn = makeTurn({ id: "outbox_resend_stale" });
+    const outbox = createCountingOutbox(null); // confirmResend returns null: no real flip
+    const onResendConfirmed = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <RecoveredTurnBanner
+        turns={[turn]}
+        outbox={outbox}
+        onResendConfirmed={onResendConfirmed}
+        onChange={onChange}
+        testId="rt"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Resend the message that could not be confirmed as sent",
+      }),
+    );
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    expect(onResendConfirmed).not.toHaveBeenCalled();
+  });
+
+  it("Discard never calls onResendConfirmed", async () => {
+    const turn = makeTurn({ id: "outbox_discard_2" });
+    const outbox = createCountingOutbox();
+    const onResendConfirmed = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <RecoveredTurnBanner
+        turns={[turn]}
+        outbox={outbox}
+        onResendConfirmed={onResendConfirmed}
+        onChange={onChange}
+        testId="rt"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Discard the message that could not be confirmed as sent",
+      }),
+    );
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    expect(onResendConfirmed).not.toHaveBeenCalled();
+  });
+
   it("Discard calls outbox.remove exactly once and never confirmResend", async () => {
     const turn = makeTurn({ id: "outbox_discard_1" });
     const outbox = createCountingOutbox();

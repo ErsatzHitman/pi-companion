@@ -320,6 +320,41 @@ describe("HostSessionScreen recovered-turn wiring (FIX-W6)", () => {
   });
 });
 
+/**
+ * FIX-W8: `RecoveredTurnBanner`'s Resend action only flips an entry's
+ * status back to `pending` (`confirmRecoveredTurn` -> `confirmResend`,
+ * see `../../features/transcript/recovered-turn-banner.tsx`'s own module
+ * doc); nothing pushed it over the wire until `usePendingOutboxResume`.
+ * A full render cannot observe this wiring for the same reason every
+ * other client/platform-derived block in this file gives (this route's
+ * `client` comes from a real `HostController` nothing in this suite can
+ * inject), so this pins it at the source level — the same instrument
+ * the FIX-W6 block just above already uses for the sibling outbox wire.
+ */
+describe("HostSessionScreen pending-outbox resend wiring (FIX-W8)", () => {
+  it("imports usePendingOutboxResume from features/composer/use-pending-outbox-resume", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(
+      /import \{ usePendingOutboxResume \} from "\.\.\/\.\.\/features\/composer\/use-pending-outbox-resume\.js";/,
+    );
+  });
+
+  it("builds it from the same agentTurnClient/recoveredTurnOutbox this route already constructs, plus the live connection status", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(/const pendingOutboxResume = usePendingOutboxResume\(\{/);
+    expect(code).toMatch(/client: agentTurnClient,/);
+    expect(code).toMatch(/outbox: recoveredTurnOutbox,/);
+    expect(code).toMatch(/connectionStatus: info\.status,/);
+  });
+
+  it("wires RecoveredTurnBanner's onResendConfirmed to resumePending — deleting it must fail this assertion", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(
+      /<RecoveredTurnBanner[\s\S]*?onResendConfirmed=\{\(\) => void pendingOutboxResume\.resumePending\(\)\}/,
+    );
+  });
+});
+
 describe("HostSessionScreen Pi UI placement wiring", () => {
   it("reads the one shared session value from usePiUiSession", () => {
     expect(readHostSessionScreenCode()).toMatch(/const piUiSession = usePiUiSession\(\);/);

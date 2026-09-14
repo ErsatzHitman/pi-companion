@@ -14,6 +14,10 @@ import { createPiUiComposerDraftSource } from "../../features/composer/index.js"
 import { createReferenceFileSource } from "../../features/composer/index.js";
 import { resolveTranscribeClient } from "../../features/composer/index.js";
 import { useSessionContextTelemetry } from "../../features/composer/index.js";
+// FIX-W8: not re-exported through `../../features/composer/index.js` —
+// imported directly from its own module, the same "new file, direct
+// import" choice this task's other composer-owned imports above make.
+import { usePendingOutboxResume } from "../../features/composer/use-pending-outbox-resume.js";
 import { usePiUiSession } from "../../features/extensions/pi-ui-session-context.js";
 import {
   PiExtensionInlineStack,
@@ -535,6 +539,20 @@ export function HostSessionScreen() {
     agentId,
     platform.clock,
   );
+  // FIX-W8: `confirmResend` (driven by `RecoveredTurnBanner`'s Resend
+  // action, via `confirmRecoveredTurn`) only flips a parked entry's status
+  // back to `pending` — nothing pushed it over the wire until this hook.
+  // Fed the same `agentTurnClient`/`recoveredTurnOutbox` this route already
+  // builds, so a resend reuses the exact wire path (and the exact
+  // `clientMessageId`) a fresh send would. `info.status` also triggers a
+  // resend pass on every reconnect, mirroring Android's
+  // `resumePendingTurnOutboxEntries` (`apps/android/src/app-shell/core.ts`).
+  const pendingOutboxResume = usePendingOutboxResume({
+    client: agentTurnClient,
+    sessionId: agentId,
+    outbox: recoveredTurnOutbox,
+    connectionStatus: info.status,
+  });
   // T277 web close: thread the live `DaemonClient`'s own
   // `transcribeVoiceClip` as the composer's `transcribeClient` (the web
   // equivalent of Android's T282 `resolveTranscribeClient` off
@@ -663,6 +681,7 @@ export function HostSessionScreen() {
       <RecoveredTurnBanner
         turns={recoveredTurns}
         outbox={recoveredTurnOutbox}
+        onResendConfirmed={() => void pendingOutboxResume.resumePending()}
         onChange={refreshRecoveredTurns}
         testId="host-session-recovered-turn"
       />

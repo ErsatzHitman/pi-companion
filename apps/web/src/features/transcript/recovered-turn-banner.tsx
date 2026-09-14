@@ -18,6 +18,15 @@
  * own `aria-label` naming the action so a screen reader announces "Resend
  * the message that could not be confirmed as sent" rather than a bare
  * "Resend" ambiguous against any other control on the page.
+ *
+ * FIX-W8: `confirmRecoveredTurn` only flips the entry's status back to
+ * `pending` — it holds no network client, so nothing here ever pushed the
+ * entry over the wire (see `../composer/use-pending-outbox-resume.ts`'s
+ * module doc for the full account of that gap). `onResendConfirmed` is
+ * this component's hook for the caller to actually do that: called once,
+ * only after `confirmRecoveredTurn` reports the flip really happened
+ * (never after Discard, and never after a stale/no-op Resend on an entry
+ * that already moved on).
  */
 import { Fragment } from "react";
 
@@ -36,12 +45,26 @@ import {
 export interface RecoveredTurnBannerProps {
   turns: readonly AwaitingConfirmationEntry[];
   outbox: RecoveredTurnOutbox;
+  /**
+   * FIX-W8: called once a Resend action's `confirmRecoveredTurn` call
+   * resolves `true` — the entry really was `awaiting-confirmation` and is
+   * now `pending`. The caller's chance to actually send it (see this
+   * file's own module doc). Never called for Discard, and never called
+   * when the flip was a no-op.
+   */
+  onResendConfirmed?: () => void;
   /** Called after either action settles (success or failure), so a caller can re-poll immediately rather than waiting for the next interval tick. */
   onChange?: () => void;
   testId?: string;
 }
 
-export function RecoveredTurnBanner({ turns, outbox, onChange, testId }: RecoveredTurnBannerProps) {
+export function RecoveredTurnBanner({
+  turns,
+  outbox,
+  onResendConfirmed,
+  onChange,
+  testId,
+}: RecoveredTurnBannerProps) {
   if (turns.length === 0) {
     return null;
   }
@@ -64,7 +87,10 @@ export function RecoveredTurnBanner({ turns, outbox, onChange, testId }: Recover
               data-testid={testId ? `${testId}-${turn.id}-resend` : undefined}
               onClick={() => {
                 void confirmRecoveredTurn(outbox, turn)
-                  .then(() => onChange?.())
+                  .then((confirmed) => {
+                    if (confirmed) onResendConfirmed?.();
+                    onChange?.();
+                  })
                   .catch(() => onChange?.());
               }}
             >
