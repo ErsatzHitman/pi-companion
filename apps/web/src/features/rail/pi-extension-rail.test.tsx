@@ -118,7 +118,10 @@ const planModeStatus: PiUiElement = {
   payload: { kind: "status", text: "Reviewing changes" },
 };
 
-function renderRail(elements: PiUiElement[], extra: Partial<Parameters<typeof PiExtensionRail>[0]> = {}) {
+function renderRail(
+  elements: PiUiElement[],
+  extra: Partial<Parameters<typeof PiExtensionRail>[0]> = {},
+) {
   return render(
     <PiExtensionRail
       elements={elements}
@@ -152,7 +155,13 @@ describe("PiExtensionRail", () => {
   it("never mounts a Context/Cache/Cost block, even when a caller still passes telemetry", () => {
     const telemetry: coreTelemetry.ContextWindowTelemetry = {
       contextWindow: { status: "known", usedTokens: 1, maxTokens: 2, usedFraction: 0.5 },
-      cacheShare: { status: "known", cachedTokens: 1, freshTokens: 1, cacheHitFraction: 0.5, cacheHitPercent: 50 },
+      cacheShare: {
+        status: "known",
+        cachedTokens: 1,
+        freshTokens: 1,
+        cacheHitFraction: 0.5,
+        cacheHitPercent: 50,
+      },
     };
     renderRail([todoWidget], { telemetry });
     expect(screen.queryByTestId("context-meter")).toBeNull();
@@ -187,9 +196,15 @@ describe("PiExtensionRail", () => {
       expect(within(done).getByText("Done")).toBeTruthy();
 
       // Status is never colour-only: each row's glyph character itself differs.
-      expect(within(running).getByTestId("pi-rail-agent-fleet-job-1-glyph").textContent).toContain("◐");
-      expect(within(blocked).getByTestId("pi-rail-agent-fleet-job-2-glyph").textContent).toContain("◆");
-      expect(within(done).getByTestId("pi-rail-agent-fleet-job-3-glyph").textContent).toContain("✓");
+      expect(within(running).getByTestId("pi-rail-agent-fleet-job-1-glyph").textContent).toContain(
+        "◐",
+      );
+      expect(within(blocked).getByTestId("pi-rail-agent-fleet-job-2-glyph").textContent).toContain(
+        "◆",
+      );
+      expect(within(done).getByTestId("pi-rail-agent-fleet-job-3-glyph").textContent).toContain(
+        "✓",
+      );
     });
 
     it("renders a .track bar only when a row's progress is known, never a fabricated 0%", () => {
@@ -235,7 +250,9 @@ describe("PiExtensionRail", () => {
       const card = screen.getByRole("heading", { name: "Workflow" }).closest("section");
       if (!card) throw new Error("expected a section ancestor");
       expect(within(card).getByText("1 of 1")).toBeTruthy();
-      expect(within(screen.getByTestId("pi-rail-phase-workflow-workflow-widget")).getByText("Done")).toBeTruthy();
+      expect(
+        within(screen.getByTestId("pi-rail-phase-workflow-workflow-widget")).getByText("Done"),
+      ).toBeTruthy();
     });
   });
 
@@ -244,9 +261,9 @@ describe("PiExtensionRail", () => {
       renderRail([todoWidget]);
       const cardRoot = screen.getByTestId("pi-rail-element-todo-rpiv-todos");
       expect(cardRoot.tagName).toBe("SECTION");
-      expect(within(cardRoot).getAllByRole("heading", { name: "Todos (1/3)" }).length).toBeGreaterThan(
-        0,
-      );
+      expect(
+        within(cardRoot).getAllByRole("heading", { name: "Todos (1/3)" }).length,
+      ).toBeGreaterThan(0);
       expect(within(cardRoot).getByText("Next: write the tests")).toBeTruthy();
     });
 
@@ -273,7 +290,10 @@ describe("PiExtensionRail", () => {
   });
 
   describe("CSS (docs/ui-reference/pi-companion-web.html mockup values)", () => {
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "pi-extension-rail.css"), "utf8");
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "pi-extension-rail.css"),
+      "utf8",
+    );
 
     const ruleBodyFor = (selector: string) => {
       const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -293,7 +313,9 @@ describe("PiExtensionRail", () => {
     });
 
     it("sizes the agent name row at the mockup's 11.5px (--font-size-md)", () => {
-      expect(ruleBodyFor(".pi-extension-rail__agent-row")).toMatch(/font-size:\s*var\(--font-size-md\)/);
+      expect(ruleBodyFor(".pi-extension-rail__agent-row")).toMatch(
+        /font-size:\s*var\(--font-size-md\)/,
+      );
     });
 
     it("sizes the elapsed label mono at the mockup's 11px (--font-size-sm)", () => {
@@ -303,10 +325,18 @@ describe("PiExtensionRail", () => {
     });
 
     it("colours each status glyph by a distinct token, not one shared colour", () => {
-      expect(ruleBodyFor(".pi-extension-rail__glyph--running")).toMatch(/color:\s*var\(--color-accent\)/);
-      expect(ruleBodyFor(".pi-extension-rail__glyph--done")).toMatch(/color:\s*var\(--color-green\)/);
-      expect(ruleBodyFor(".pi-extension-rail__glyph--blocked")).toMatch(/color:\s*var\(--color-orange\)/);
-      expect(ruleBodyFor(".pi-extension-rail__glyph--pending")).toMatch(/color:\s*var\(--color-ink-3\)/);
+      expect(ruleBodyFor(".pi-extension-rail__glyph--running")).toMatch(
+        /color:\s*var\(--color-accent\)/,
+      );
+      expect(ruleBodyFor(".pi-extension-rail__glyph--done")).toMatch(
+        /color:\s*var\(--color-green\)/,
+      );
+      expect(ruleBodyFor(".pi-extension-rail__glyph--blocked")).toMatch(
+        /color:\s*var\(--color-orange\)/,
+      );
+      expect(ruleBodyFor(".pi-extension-rail__glyph--pending")).toMatch(
+        /color:\s*var\(--color-ink-3\)/,
+      );
     });
 
     it("lays the phase grid out with the mockup's 3-column template and a done-phase connector", () => {

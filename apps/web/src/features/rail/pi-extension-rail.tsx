@@ -1,4 +1,4 @@
-import { extensions, type Clock } from "@picompanion/frontend-core";
+import { extensions, type Clock, type TimerHandle } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 import type {
   PiUiElement,
@@ -27,10 +27,12 @@ const { piUiElementKeyOf } = extensions;
 /** Real wall-clock `Clock` (plan.md §7.3) for the Subagents card's live elapsed-time labels. */
 const wallClock: Clock = {
   now: () => Date.now(),
-  setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
-  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
-  setInterval: (callback, intervalMs) => globalThis.setInterval(callback, intervalMs),
-  clearInterval: (handle) => globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>),
+  setTimeout: (callback, delayMs) =>
+    globalThis.setTimeout(callback, delayMs) as unknown as TimerHandle,
+  clearTimeout: (handle) => globalThis.clearTimeout(handle as unknown as number),
+  setInterval: (callback, intervalMs) =>
+    globalThis.setInterval(callback, intervalMs) as unknown as TimerHandle,
+  clearInterval: (handle) => globalThis.clearInterval(handle as unknown as number),
 };
 
 export interface PiExtensionRailProps {

@@ -15,7 +15,10 @@
  * `hold` bucket) rather than inventing a fifth glyph the mockup never
  * defines.
  */
-import type { PiUiProgressPayload, PiUiRosterRowState } from "@picompanion/protocol/pi-ui-bridge/schema";
+import type {
+  PiUiProgressPayload,
+  PiUiRosterRowState,
+} from "@picompanion/protocol/pi-ui-bridge/schema";
 
 export type RailStatus = "pending" | "running" | "done" | "blocked";
 
