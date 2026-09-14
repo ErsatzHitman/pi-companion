@@ -1,7 +1,7 @@
 import type { extensions } from "@picompanion/frontend-core";
 import type { PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
-import { Card, CodeBlock } from "../../ui/primitives/index.js";
+import { CodeBlock } from "../../ui/primitives/index.js";
 import { PiUiElementView } from "../extensions/registry-index.js";
 // Side-effect import: registers every known kind's real component
 // (`status`, `widget`, `panel`, `progress`, `roster`, `log`, `markdown`,
@@ -66,6 +66,8 @@ export function RailElementCard({
   revision,
 }: RailElementCardProps) {
   const testId = `pi-rail-element-${element.ns}-${element.id}`;
+  const headingId = `${testId}-heading`;
+  const title = element.title ?? element.kind;
   const rawPayload = JSON.stringify(element, null, 2);
   const rawPayloadDisplay =
     rawPayload.length > RAW_PAYLOAD_CHAR_LIMIT
@@ -73,7 +75,12 @@ export function RailElementCard({
       : rawPayload;
 
   return (
-    <Card className="pi-extension-rail__card" data-testid={testId}>
+    <section className="pi-extension-rail__card" aria-labelledby={headingId} data-testid={testId}>
+      <div className="pi-extension-rail__card-header">
+        <h2 className="pi-extension-rail__card-title" id={headingId}>
+          {title}
+        </h2>
+      </div>
       <PiUiElementView
         element={element}
         agentId={agentId}
@@ -85,6 +92,6 @@ export function RailElementCard({
         <summary>Raw payload</summary>
         <CodeBlock code={rawPayloadDisplay} language="json" testId={`${testId}-raw`} />
       </details>
-    </Card>
+    </section>
   );
 }
