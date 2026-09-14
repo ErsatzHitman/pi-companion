@@ -1,10 +1,16 @@
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { Link, useMatches, useNavigate, useParams } from "@tanstack/react-router";
 
 import { ConnectionStatus } from "../features/connection/connection-status.js";
 import { NEW_TERMINAL_ROUTE_SEGMENT } from "../features/terminal/terminal-route-params.js";
-import { EmptyState, IconButton } from "./primitives/index.js";
+import { EmptyState, Icon, IconButton } from "./primitives/index.js";
+import { useRailCollapse } from "./use-rail-collapse.js";
 import "./shell.css";
+
+/** IDs the header's collapse toggles point `aria-controls` at. */
+const SESSION_RAIL_ID = "shell-session-rail-region";
+const EXTENSION_RAIL_ID = "shell-extension-rail-region";
 
 /**
  * Named slots for the plan.md §8.3 three-region wide layout. Feature
@@ -116,9 +122,35 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
   const serverId = params.serverId;
   const agentId = params.agentId;
   const navigate = useNavigate();
+  const { sessionCollapsed, extensionCollapsed, toggleSessionRail, toggleExtensionRail } =
+    useRailCollapse();
+
+  // Keyboard shortcuts (owner requirement): Ctrl/Cmd+B toggles the left
+  // (session) rail, Ctrl/Cmd+. toggles the right (live extension) rail —
+  // both also stated in the buttons' own `title` below. `event.metaKey`
+  // covers macOS Cmd; `event.ctrlKey` covers Windows/Linux Ctrl, so only
+  // one of the two needs to be held.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!event.ctrlKey && !event.metaKey) return;
+      if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        toggleSessionRail();
+      } else if (event.key === ".") {
+        event.preventDefault();
+        toggleExtensionRail();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleSessionRail, toggleExtensionRail]);
 
   return (
-    <div className="shell">
+    <div
+      className="shell"
+      data-rail-session={sessionCollapsed ? "collapsed" : "expanded"}
+      data-rail-extension={extensionCollapsed ? "collapsed" : "expanded"}
+    >
       <header className="shell__header">
         {/*
           Visually hidden rather than rendered: the header already carries
@@ -141,28 +173,50 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
           <span className="shell__brand-name">Pi Companion</span>
         </Link>
         {headerWorkspace}
+        <IconButton
+          icon="panel-left"
+          accessibleName={sessionCollapsed ? "Show sessions" : "Hide sessions"}
+          aria-expanded={!sessionCollapsed}
+          aria-controls={SESSION_RAIL_ID}
+          title={`${sessionCollapsed ? "Show sessions" : "Hide sessions"} (Ctrl/Cmd+B)`}
+          className="shell__rail-toggle"
+          data-testid="shell-toggle-session-rail"
+          onClick={toggleSessionRail}
+        />
         <div className="shell__header-spacer" />
         <div className="shell__header-tools">
           {serverId && agentId ? (
             <>
               <Link
-                className="pc-link shell__nav-link"
+                className="shell__nav-link"
                 to="/h/$serverId/session/$agentId/files/$"
                 params={{ serverId, agentId, _splat: "" }}
                 data-testid="shell-files-link"
               >
-                Files
+                <Icon name="folder" className="shell__nav-link-icon" />
+                <span>Files</span>
               </Link>
               <Link
-                className="pc-link shell__nav-link"
+                className="shell__nav-link"
                 to="/h/$serverId/session/$agentId/terminal/$terminalId"
                 params={{ serverId, agentId, terminalId: NEW_TERMINAL_ROUTE_SEGMENT }}
                 data-testid="shell-terminal-link"
               >
-                Terminal
+                <Icon name="terminal" className="shell__nav-link-icon" />
+                <span>Terminal</span>
               </Link>
             </>
           ) : null}
+          <IconButton
+            icon="panel-right"
+            accessibleName={extensionCollapsed ? "Show live pane" : "Hide live pane"}
+            aria-expanded={!extensionCollapsed}
+            aria-controls={EXTENSION_RAIL_ID}
+            title={`${extensionCollapsed ? "Show live pane" : "Hide live pane"} (Ctrl/Cmd+.)`}
+            className="shell__rail-toggle"
+            data-testid="shell-toggle-extension-rail"
+            onClick={toggleExtensionRail}
+          />
           <ConnectionStatus />
           {serverId ? (
             <IconButton
@@ -179,6 +233,7 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
       </header>
       <div className="shell__regions" data-testid="shell-regions">
         <nav
+          id={SESSION_RAIL_ID}
           className="shell__rail shell__rail--session"
           aria-label="Sessions"
           data-testid="shell-session-rail"
@@ -197,6 +252,7 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
           {children}
         </main>
         <aside
+          id={EXTENSION_RAIL_ID}
           className="shell__rail shell__rail--extension"
           aria-label="Pi extensions"
           data-testid="shell-extension-rail"

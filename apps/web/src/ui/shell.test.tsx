@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { CoreProvider } from "../app/core-context.js";
 import { routeTree } from "../routes/route-tree.js";
@@ -63,6 +63,14 @@ function renderShell(
   );
   return result;
 }
+
+beforeEach(() => {
+  // `useRailCollapse` (this task's `use-rail-collapse.ts`) reads/writes real
+  // `window.localStorage`, which jsdom keeps across tests in the same file
+  // unless cleared — without this, a collapse flag persisted by one test
+  // would leak into the next test's fresh `renderShell` call.
+  window.localStorage.clear();
+});
 
 afterEach(cleanup);
 
@@ -269,6 +277,114 @@ describe("Shell", () => {
     });
     await screen.findByText("sessions");
     expect(await axe(populated)).toHaveNoViolations();
+  });
+});
+
+/**
+ * Manual rail collapse (owner requirement, not in the design reference —
+ * see `shell.css`'s own header comment and `ui/use-rail-collapse.ts`).
+ */
+describe("Shell rail collapse toggles", () => {
+  it("toggling the session rail flips its button's aria-expanded and hides the rail via the shell's data attribute", async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell({});
+
+    const toggle = await screen.findByTestId("shell-toggle-session-rail");
+    const shellRoot = container.querySelector(".shell")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.getAttribute("aria-label")).toBe("Hide sessions");
+    expect(toggle.getAttribute("aria-controls")).toBe(screen.getByTestId("shell-session-rail").id);
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("expanded");
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-label")).toBe("Show sessions");
+    // This attribute is what `shell.css`'s `[data-rail-session="collapsed"]`
+    // rule keys off to unconditionally hide `.shell__rail--session` and
+    // recompute `.shell__regions`'s grid columns so the centre column
+    // reclaims the freed track — see that file's own comment for why an
+    // attribute selector (not a class toggled elsewhere) is what makes a
+    // manual choice win over the responsive ladder at every width.
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("collapsed");
+    // The extension rail's own state is untouched by the session toggle.
+    expect(shellRoot.getAttribute("data-rail-extension")).toBe("expanded");
+
+    await user.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("expanded");
+  });
+
+  it("toggling the extension rail flips its button's aria-expanded and hides the rail via the shell's data attribute", async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell({});
+
+    const toggle = await screen.findByTestId("shell-toggle-extension-rail");
+    const shellRoot = container.querySelector(".shell")!;
+    expect(toggle.getAttribute("aria-label")).toBe("Hide live pane");
+    expect(toggle.getAttribute("aria-controls")).toBe(
+      screen.getByTestId("shell-extension-rail").id,
+    );
+
+    await user.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-label")).toBe("Show live pane");
+    expect(shellRoot.getAttribute("data-rail-extension")).toBe("collapsed");
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("expanded");
+  });
+
+  it("keeps both toggles visible and operable while their own rail is collapsed", async () => {
+    const user = userEvent.setup();
+    renderShell({});
+    const sessionToggle = await screen.findByTestId("shell-toggle-session-rail");
+    await user.click(sessionToggle);
+    // Still in the DOM, still clickable — collapsing hides the RAIL, never
+    // the button that reopens it.
+    expect(screen.getByTestId("shell-toggle-session-rail")).toBe(sessionToggle);
+    await user.click(sessionToggle);
+    expect(sessionToggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("mentions the keyboard shortcut in each toggle's title", async () => {
+    renderShell({});
+    expect((await screen.findByTestId("shell-toggle-session-rail")).getAttribute("title")).toBe(
+      "Hide sessions (Ctrl/Cmd+B)",
+    );
+    expect(screen.getByTestId("shell-toggle-extension-rail").getAttribute("title")).toBe(
+      "Hide live pane (Ctrl/Cmd+.)",
+    );
+  });
+
+  it("reads a persisted collapsed flag back on mount, for both rails independently", async () => {
+    window.localStorage.setItem("picompanion.rail-collapsed.session", "1");
+    const { container } = renderShell({});
+    await screen.findByTestId("shell-toggle-session-rail");
+
+    const shellRoot = container.querySelector(".shell")!;
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("collapsed");
+    expect(shellRoot.getAttribute("data-rail-extension")).toBe("expanded");
+    expect(screen.getByTestId("shell-toggle-session-rail").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+  });
+
+  it("Ctrl/Cmd+B toggles the session rail and Ctrl/Cmd+. toggles the extension rail", async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell({});
+    await screen.findByTestId("shell-toggle-session-rail");
+    const shellRoot = container.querySelector(".shell")!;
+
+    await user.keyboard("{Control>}b{/Control}");
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("collapsed");
+    expect(shellRoot.getAttribute("data-rail-extension")).toBe("expanded");
+
+    await user.keyboard("{Control>}.{/Control}");
+    expect(shellRoot.getAttribute("data-rail-extension")).toBe("collapsed");
+
+    // Same shortcuts toggle back.
+    await user.keyboard("{Control>}b{/Control}");
+    expect(shellRoot.getAttribute("data-rail-session")).toBe("expanded");
   });
 });
 

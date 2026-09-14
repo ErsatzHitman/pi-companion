@@ -2824,6 +2824,21 @@ export const CAPABILITIES = [
       /no Android surface can (?:answer|resolve) (?:a )?(?:checkpoint )?conflict/i,
     ],
   },
+  {
+    // UI-W3 (apps/web/src/ui/shell.tsx + ui/use-rail-collapse.ts): the
+    // design reference (docs/ui-reference/pi-companion-web.html) has no
+    // manual collapse affordance for either rail, but the owner requires
+    // one for both. `useRailCollapse` is declared in exactly one shipped
+    // file (`ui/use-rail-collapse.ts`), so a plain bare-string
+    // `methodNames` entry is sufficient — no T168 AND-group needed.
+    name: "manual sidebar collapse for both rails (useRailCollapse)",
+    methodNames: ["useRailCollapse"],
+    denyingPhrases: [
+      /(?:the |either )?rails? (?:cannot|can'?t) be collapsed/i,
+      /no collapse affordance (?:exists|is offered) for (?:the |either )?rails?/i,
+      /(?:the )?session rail and (?:the )?(?:live|extension) (?:pane|rail) (?:have|has) no (?:manual )?(?:collapse|hide) (?:toggle|control)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
