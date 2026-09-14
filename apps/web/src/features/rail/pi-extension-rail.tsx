@@ -1,5 +1,4 @@
 import { extensions, type Clock, type TimerHandle } from "@picompanion/frontend-core";
-import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 import type {
   PiUiElement,
   PiUiProgressPayload,
@@ -49,18 +48,6 @@ export interface PiExtensionRailProps {
   actionController: extensions.ExtensionActionController;
   /** This agent's current known Pi UI Bridge revision, for the dev-mode stale-state badge. */
   revision?: number;
-  /**
-   * Accepted for source compatibility with callers built against the
-   * earlier design, where this component itself mounted `ContextMeter`
-   * behind this prop. Deliberately unused now: the reference Live pane
-   * (`docs/ui-reference/pi-companion-web.html` `.live` region) holds only
-   * the Subagents and Workflow cards — no Context/Cache/Cost block — that
-   * telemetry now belongs to the composer's context ring
-   * (`features/composer/ContextRing.tsx` opens it; `Composer.tsx` renders
-   * the same `ContextMeter` inside that ring's own session-controls
-   * sheet), neither owned by this component.
-   */
-  telemetry?: coreTelemetry.ContextWindowTelemetry;
   /** Shimmer placeholder rows instead of content, while the first Pi UI snapshot has not arrived yet. */
   loading?: boolean;
 }

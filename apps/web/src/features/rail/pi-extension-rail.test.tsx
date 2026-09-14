@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { extensions, type Clock, type TimerHandle } from "@picompanion/frontend-core";
-import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 import type { PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
@@ -150,23 +149,6 @@ describe("PiExtensionRail", () => {
   it("collapses to the empty state only when genuinely empty, not when every element is non-pinned", () => {
     renderRail([planModeStatus]);
     expect(screen.getByTestId("pi-extension-rail-empty")).toBeTruthy();
-  });
-
-  it("never mounts a Context/Cache/Cost block, even when a caller still passes telemetry", () => {
-    const telemetry: coreTelemetry.ContextWindowTelemetry = {
-      contextWindow: { status: "known", usedTokens: 1, maxTokens: 2, usedFraction: 0.5 },
-      cacheShare: {
-        status: "known",
-        cachedTokens: 1,
-        freshTokens: 1,
-        cacheHitFraction: 0.5,
-        cacheHitPercent: 50,
-      },
-    };
-    renderRail([todoWidget], { telemetry });
-    expect(screen.queryByTestId("context-meter")).toBeNull();
-    expect(screen.queryByText(/Context window/)).toBeNull();
-    expect(screen.queryByText(/Cache hit/)).toBeNull();
   });
 
   it("renders shimmer placeholder rows, not content, while loading", () => {
