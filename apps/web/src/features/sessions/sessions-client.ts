@@ -22,6 +22,15 @@ export interface CreateSessionInput {
   provider: string;
   /** Matches `AgentSessionConfig.cwd`: the workspace directory the new session runs in. */
   cwd: string;
+  /**
+   * An optional first prompt to send the moment the session starts
+   * (UI-W13; matches `DaemonClient.createAgent`'s
+   * `CreateAgentRequestOptions.initialPrompt`,
+   * `packages/client/src/daemon-client.ts`). Omitted (or empty after
+   * trimming) means exactly today's behavior: a session created with
+   * nothing queued to run.
+   */
+  initialPrompt?: string;
 }
 
 /**

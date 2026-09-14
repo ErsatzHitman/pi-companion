@@ -1,44 +1,78 @@
 /**
- * Discovered-session list styles (T27B5, plan.md §8.3/§10.2). Every
- * value is a `var(--...)` custom property from `@picompanion/design-
- * tokens` — no raw hex colour, pixel spacing literal, or duration
- * literal, matching `session-list.css`'s precedent.
+ * Discovered-session list styles (T27B5, plan.md §8.3/§10.2; restyled
+ * at UI-W13 to the same `.srow`-family row grammar `features/files`'
+ * `.pc-file-browser__row-item` and `SessionRail`'s
+ * `.pc-session-rail__row` already use — a mono glyph column, a title,
+ * and a mono meta line, with hairline separators between rows and a
+ * hover highlight, instead of each row standing alone in its own
+ * dashed-bordered box). Every value is a `var(--...)` custom property
+ * from `@picompanion/design-tokens` — no raw hex colour, pixel spacing
+ * literal, or duration literal, matching `session-list.css`'s
+ * precedent.
  */
 
 .pc-discovered-session-rows {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1);
   margin: 0;
   padding: 0;
   list-style: none;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-hairline);
+  overflow: hidden;
 }
 
 .pc-discovered-session-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-3);
-  border: 1px dashed var(--color-line);
-  border-radius: var(--radius-control);
+  gap: var(--spacing-2);
+  border-bottom: 1px dashed var(--color-line);
+  background-color: var(--color-surface);
   padding: var(--spacing-2) var(--spacing-3);
+}
+
+.pc-discovered-session-row:hover {
+  background-color: var(--color-hover);
+}
+
+.pc-discovered-session-rows li:last-child .pc-discovered-session-row {
+  border-bottom: none;
+}
+
+.pc-discovered-session-row__glyph {
+  flex: none;
+  width: 14px;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  text-align: center;
+  color: var(--color-ink-3);
 }
 
 .pc-discovered-session-row__body {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--spacing-1);
 }
 
 .pc-discovered-session-row__title {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   color: var(--color-ink);
 }
 
 .pc-discovered-session-row__meta {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-size-xs);

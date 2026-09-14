@@ -28,7 +28,10 @@ export type IconName =
   | "folder-plus"
   | "file-plus"
   | "file"
-  | "trash";
+  | "trash"
+  // UI-W13 (session row-actions trigger): appended, existing entries
+  // above are untouched.
+  | "more";
 
 const paths: Record<IconName, ReactElement> = {
   close: <path d="M3 3l10 10M13 3L3 13" />,
@@ -117,6 +120,11 @@ const paths: Record<IconName, ReactElement> = {
   // Waste bin (per-row Delete action): a lid line plus a tapered body,
   // the same straight-line construction as every glyph above.
   trash: <path d="M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5 5 13.5h6l.5-9" />,
+  // Three-dot "more" trigger (row-actions popovers, e.g. `SessionRow`):
+  // three zero-length horizontal segments, which the shared round
+  // line-cap renders as dots — the same path-only, stroke-based
+  // construction as every glyph above, no fill introduced.
+  more: <path d="M3.5 8h0M8 8h0M12.5 8h0" />,
 };
 
 export function Icon({ name, ...rest }: { name: IconName } & SVGProps<SVGSVGElement>) {

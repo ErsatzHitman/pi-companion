@@ -92,6 +92,13 @@
   font-size: var(--font-size-sm, 12px);
 }
 
+/* First prompt (UI-W13, optional): a shorter textarea than the shared
+   primitive's default, matching this dialog's compact vocabulary. */
+
+.pc-create-session__prompt-field .pc-field__textarea {
+  min-height: 4.5rem;
+}
+
 /* Quick-pick chips for real, already-known working directories. -------- */
 
 .pc-create-session__chips {

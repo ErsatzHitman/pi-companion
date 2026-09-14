@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 
-import { Banner, TextField } from "../../ui/primitives/index.js";
+import { Banner, TextArea, TextField } from "../../ui/primitives/index.js";
 import { useModalBehavior } from "../../ui/primitives/use-modal-behavior.js";
 import { explainSessionsCreateError } from "./sessions-client.js";
 import type { CreateSessionController } from "./use-create-session.js";
@@ -164,6 +164,16 @@ export function CreateSessionDialog({
           autoComplete="off"
           spellCheck={false}
           className="pc-create-session__cwd-field"
+        />
+
+        <TextArea
+          label="First prompt (optional)"
+          value={controller.initialPrompt}
+          onChange={(event) => controller.setInitialPrompt(event.target.value)}
+          placeholder="What should Pi do first?"
+          rows={3}
+          testId="create-session-initial-prompt-field"
+          className="pc-create-session__prompt-field"
         />
 
         {uniqueRecentCwds.length > 0 ? (
