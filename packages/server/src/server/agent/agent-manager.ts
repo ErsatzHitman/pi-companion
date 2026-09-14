@@ -649,8 +649,44 @@ export class AgentManager {
   // buffer — enqueueSessionEvent drops an event whose tagged generation is
   // older than the agent's current one before it can be staged or
   // dispatched, closing exactly that window.
+  //
+  // FIX-S4: for a replacement turn with no tool call, a real provider (and
+  // the fake session in this file's own regression test) can produce that
+  // turn's OWN "timeline"/"turn_completed" events synchronously inside
+  // `session.startTurn(...)` — before that call's own `await` (if it has
+  // one on this path) ever yields, and therefore strictly before the
+  // `isReplacement` bump below runs. Those events land in the SAME
+  // un-started pendingRun.stagedEvents buffer the straggler above does,
+  // tagged with the SAME pre-bump generation. A plain "timeline" event
+  // never carries a turnId at this point (attachManagedTurnIdentity's
+  // default case leaves it undefined; it is only backfilled later,
+  // downstream of this check), so the generation tag is the only signal
+  // available — and it cannot tell the two apart, because FIX-S2's own
+  // regression test deliberately injects its straggler in the identical
+  // window (after streamForwarder has invoked the replacement's
+  // `session.startTurn(...)`, before that call resolves), so no fixed bump
+  // time can separate "old turn's late straggler" from "new turn's
+  // earliest output" by timing alone.
+  //
+  // The signal that DOES separate them is call-stack identity: the
+  // replacement's own events are emitted synchronously, nested inside
+  // AgentManager's own call to `agent.session.startTurn(...)` — nothing
+  // else can execute during that synchronous span, by single-threaded
+  // construction. A genuine straggler is, by definition, produced by
+  // independent async session machinery and can never be nested inside
+  // that call. `startTurnSynchronousAgents`/`eventsProducedDuringOwnStartTurnCall`
+  // mark exactly that span (see streamForwarder's call site and
+  // subscribeToSession's callback) and isSupersededRunEvent treats
+  // membership as an unconditional "never superseded", regardless of the
+  // generation tag — while a straggler produced outside that span still
+  // falls through to the pre-existing generation check unchanged.
   private readonly runGenerations = new Map<string, number>();
   private readonly eventRunGeneration = new WeakMap<AgentStreamEvent, number>();
+  // FIX-S4: agentIds currently inside the synchronous span of their own
+  // `agent.session.startTurn(...)` call — see the runGenerations doc
+  // comment above.
+  private readonly startTurnSynchronousAgents = new Set<string>();
+  private readonly eventsProducedDuringOwnStartTurnCall = new WeakSet<AgentStreamEvent>();
   private readonly agentsAwaitingInitialSnapshotPersist = new Set<string>();
   private readonly sessionEventTails = new Map<string, Promise<void>>();
   private readonly runs = new AgentRunState();
@@ -2293,7 +2329,20 @@ export class AgentManager {
       let turnId: string;
       let turnStream: ReturnType<AgentRunState["createTurnStream"]> | null = null;
       try {
-        const result = await agent.session.startTurn(prompt, options);
+        // FIX-S4: mark the synchronous span of this call only — cleared
+        // right after it returns a promise, before that promise is
+        // awaited — so subscribeToSession's callback can tell an event
+        // produced as a direct side effect of starting THIS turn apart
+        // from an unrelated async straggler. See the runGenerations doc
+        // comment's FIX-S4 paragraph.
+        this.startTurnSynchronousAgents.add(agentId);
+        let startTurnPromise: ReturnType<typeof agent.session.startTurn>;
+        try {
+          startTurnPromise = agent.session.startTurn(prompt, options);
+        } finally {
+          this.startTurnSynchronousAgents.delete(agentId);
+        }
+        const result = await startTurnPromise;
         turnId = result.turnId;
       } catch (error) {
         agent.pendingReplacement = false;
@@ -3643,6 +3692,12 @@ export class AgentManager {
       // the event, not whatever generation happens to be current when it's
       // later flushed.
       this.eventRunGeneration.set(event, this.getRunGeneration(agentId));
+      // FIX-S4: this callback IS the production moment, so "currently
+      // inside our own call to session.startTurn(...)" is observable right
+      // here — see the runGenerations doc comment's FIX-S4 paragraph.
+      if (this.startTurnSynchronousAgents.has(agentId)) {
+        this.eventsProducedDuringOwnStartTurnCall.add(event);
+      }
       this.enqueueSessionEvent(agentId, event);
     });
     agent.unsubscribeSession = unsubscribe;
@@ -3663,8 +3718,18 @@ export class AgentManager {
    * Events with no recorded generation (nothing tagged them — e.g. the
    * force-canceled synthetic events cancelAgentRun dispatches directly,
    * bypassing this funnel) are never considered superseded.
+   *
+   * FIX-S4: a stale generation tag alone is not sufficient — see the
+   * runGenerations doc comment's FIX-S4 paragraph for the race this guards
+   * against. An event produced synchronously inside AgentManager's own
+   * call to `agent.session.startTurn(...)` is never a straggler, however
+   * it was tagged: that call-stack span belongs exclusively to the run
+   * currently being started, so nothing else can have produced the event.
    */
   private isSupersededRunEvent(agentId: string, event: AgentStreamEvent): boolean {
+    if (this.eventsProducedDuringOwnStartTurnCall.has(event)) {
+      return false;
+    }
     const taggedGeneration = this.eventRunGeneration.get(event);
     return taggedGeneration !== undefined && taggedGeneration < this.getRunGeneration(agentId);
   }
