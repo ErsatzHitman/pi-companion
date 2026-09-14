@@ -85,6 +85,17 @@
 }
 .pc-composer__meta-chip {
   display: inline-flex;
+  /* Without this, the flex item's automatic min-width stays at its
+   * button's own min-content size (the flexbox spec's "automatic minimum
+   * size" rule), so it never actually shrinks — the child's own
+   * `overflow: hidden; text-overflow: ellipsis` below never gets a
+   * chance to activate, and once all three chips' combined natural
+   * width exceeds what `.pc-composer__meta` is allotted, the excess
+   * paints past this chip's box (default `overflow: visible`) directly
+   * over the keyboard-contract hint and Stop button beside it. Same fix,
+   * same reason, as `.pc-prompt-bar__foot-state` and `.pc-composer__meta`
+   * already apply one level up. */
+  min-width: 0;
 }
 .pc-composer__meta-chip .pc-popover__trigger {
   /* The reference's 11px has no matching type-scale token (10.5px/12.5px
