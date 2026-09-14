@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { Clock } from "@picompanion/frontend-core";
 
 import { createBrowserClock } from "../../platform/clock.js";
-import { Button, Section, Toast } from "../../ui/primitives/index.js";
+import { Section, Toast } from "../../ui/primitives/index.js";
 import { CreateSessionDialog } from "./CreateSessionDialog.js";
 import { DeleteSessionDialog } from "./DeleteSessionDialog.js";
 import { DiscoveredSessionList } from "./DiscoveredSessionList.js";
@@ -18,6 +18,7 @@ import type { DiscoveredSessionsClient } from "./discovered-sessions-client.js";
 import { createPendingConnectionDiscoveredSessionsClient } from "./pending-connection-discovered-sessions-client.js";
 import { createPendingConnectionSessionsClient } from "./pending-connection-sessions-client.js";
 import "./session-list.css";
+import "./sessions-screen.css";
 import { SESSIONS_NOT_CONNECTED, explainSessionsActionError } from "./sessions-client.js";
 import type {
   CloneSessionResult,
@@ -351,25 +352,44 @@ export function SessionsScreen({
     [listState, relationships],
   );
 
+  const recentCwds = [
+    ...new Set((listState.kind === "ready" ? listState.sessions : []).map((s) => s.cwd)),
+  ].slice(0, 5);
+
+  const [findExpanded, setFindExpanded] = useState(false);
+
+  function toggleFindSessions(): void {
+    const next = !findExpanded;
+    setFindExpanded(next);
+    if (next) discovery.discover();
+  }
+
   return (
     <Section title="Sessions" className="pc-sessions-screen">
-      <Button
-        onClick={controller.openDialog}
-        className="pc-sessions-screen__create-trigger"
-        data-testid="create-session-trigger"
-      >
-        New session
-      </Button>
-      <Button
-        kind="secondary"
-        onClick={discovery.discover}
-        disabled={discovery.phase === "loading"}
-        className="pc-sessions-screen__discover-trigger"
-        data-testid="discover-sessions-trigger"
-      >
-        {discovery.phase === "loading" ? "Looking…" : "Find sessions"}
-      </Button>
-      <DiscoveredSessionList controller={discovery} />
+      <div className="pc-sessions-screen__header">
+        <span className="pc-sessions-screen__eyebrow">Workspace</span>
+        <div className="pc-sessions-screen__header-actions">
+          <button
+            type="button"
+            className="pc-sessions-screen__pill pc-sessions-screen__pill--accent"
+            onClick={controller.openDialog}
+            data-testid="create-session-trigger"
+          >
+            New session
+          </button>
+          <button
+            type="button"
+            className="pc-sessions-screen__pill"
+            onClick={toggleFindSessions}
+            disabled={discovery.phase === "loading"}
+            aria-expanded={findExpanded}
+            data-testid="discover-sessions-trigger"
+          >
+            {discovery.phase === "loading" ? "Looking…" : "Find sessions"}
+          </button>
+        </div>
+      </div>
+      {findExpanded ? <DiscoveredSessionList controller={discovery} /> : null}
       <SessionList
         state={listState}
         onSelectSession={openSession}
@@ -383,10 +403,11 @@ export function SessionsScreen({
         cloningSessionId={forkClone.cloningSessionId}
         renameSupersededNoticeBySessionId={renameSupersededNoticeBySessionId}
       />
-      <Section title="Session tree" className="pc-sessions-screen__tree">
+      <section className="pc-sessions-screen__tree-card" data-testid="sessions-screen-tree-card">
+        <span className="pc-sessions-screen__eyebrow">Session tree</span>
         <SessionTree nodes={treeNodes} onSelectSession={openSession} />
-      </Section>
-      <CreateSessionDialog controller={controller} />
+      </section>
+      <CreateSessionDialog controller={controller} recentCwds={recentCwds} />
       <DeleteSessionDialog controller={actions} />
       <RenameSessionDialog controller={rename} />
       {actionErrorMessage ? (
