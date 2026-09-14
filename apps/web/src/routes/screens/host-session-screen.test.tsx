@@ -290,6 +290,36 @@ describe("HostSessionScreen attachment-image wiring (T284)", () => {
  * the same reason the attachment-image block above gives: this route's
  * client comes from a `HostController` nothing in this suite can inject.
  */
+/**
+ * FIX-W6: `RecoveredTurnBanner` reads a real `OutboxController` built from
+ * this route's own `platform.structuredStorage`/`platform.clock` — the
+ * same `useCore()` singleton `ComposerContainer` feeds `useComposer`'s own
+ * outbox, so a send parked `awaiting-confirmation` by the composer is
+ * visible here too. A full render cannot observe this construction (it
+ * depends on `useCore()`'s real platform, not something this suite
+ * injects a fake for), so this pins it at the source level, the same
+ * instrument every other platform/client-derived wiring block in this file
+ * already uses.
+ */
+describe("HostSessionScreen recovered-turn wiring (FIX-W6)", () => {
+  it("builds the outbox from platform.structuredStorage/platform.clock — the same source ComposerContainer's outbox uses", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(
+      /const recoveredTurnOutbox = useMemo\(\s*\(\) => new coreComposer\.OutboxController\(platform\.structuredStorage, platform\.clock\),/,
+    );
+  });
+
+  it("mounts RecoveredTurnBanner above EditFromHereSurface, fed the same outbox instance", () => {
+    const code = readHostSessionScreenCode();
+    const bannerIndex = code.indexOf("<RecoveredTurnBanner");
+    const transcriptIndex = code.indexOf("<EditFromHereSurface");
+    expect(bannerIndex).toBeGreaterThan(-1);
+    expect(transcriptIndex).toBeGreaterThan(bannerIndex);
+    expect(code).toMatch(/<RecoveredTurnBanner[\s\S]*?turns=\{recoveredTurns\}/);
+    expect(code).toMatch(/<RecoveredTurnBanner[\s\S]*?outbox=\{recoveredTurnOutbox\}/);
+  });
+});
+
 describe("HostSessionScreen Pi UI placement wiring", () => {
   it("reads the one shared session value from usePiUiSession", () => {
     expect(readHostSessionScreenCode()).toMatch(/const piUiSession = usePiUiSession\(\);/);
