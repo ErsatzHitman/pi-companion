@@ -5110,6 +5110,87 @@ test("replaceAgentRun stays running when a stale old terminal arrives before the
   unsubscribe();
 });
 
+test("FIX-S1: startAgentRun dispatch is idempotent by clientMessageId — same id keeps one turn, a different id still steers", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-client-message-idempotency-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  let startTurnCalls = 0;
+  const interruptCalled = deferred<void>();
+
+  class IdempotencySession extends TestAgentSession {
+    private localTurnCounter = 0;
+
+    override async startTurn(): Promise<{ turnId: string }> {
+      startTurnCalls += 1;
+      this.localTurnCounter += 1;
+      const turnId = `turn-${this.localTurnCounter}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+      }, 0);
+      return { turnId };
+    }
+
+    override async interrupt(): Promise<void> {
+      interruptCalled.resolve();
+      this.pushEvent({
+        type: "turn_canceled",
+        provider: this.provider,
+        reason: "Interrupted",
+        turnId: `turn-${this.localTurnCounter}`,
+      });
+    }
+  }
+
+  class IdempotencyClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new IdempotencySession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new IdempotencyClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000411",
+  });
+
+  try {
+    const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+
+    const dispatchOptions = {
+      replaceRunning: true,
+      runOptions: { clientMessageId: "first-client-message" },
+    };
+    const first = startAgentRun(manager, snapshot.id, "first run", logger, dispatchOptions);
+    const second = startAgentRun(manager, snapshot.id, "first run", logger, dispatchOptions);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toEqual({ outOfBand: false });
+    expect(secondResult).toEqual({ outOfBand: false, duplicate: true });
+
+    await manager.waitForAgentRunStart(snapshot.id);
+    expect(startTurnCalls).toBe(1);
+
+    // A DIFFERENT clientMessageId arriving while the turn is in flight must
+    // still steer — cancel the running turn via replaceAgentRun and start a
+    // new one — exactly as before this fix.
+    await startAgentRun(manager, snapshot.id, "replacement run", logger, {
+      replaceRunning: true,
+      runOptions: { clientMessageId: "replacement-client-message" },
+    });
+    await interruptCalled.promise;
+    await manager.waitForAgentRunStart(snapshot.id);
+
+    expect(startTurnCalls).toBe(2);
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("applies live autonomous events and preserves usage omitted from completion", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-live-events-"));
   const storagePath = join(workdir, "agents");

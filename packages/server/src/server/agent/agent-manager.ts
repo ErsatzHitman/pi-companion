@@ -621,6 +621,20 @@ export class AgentManager {
   private readonly agents = new Map<string, LiveManagedAgent>();
   private readonly timelineStore = new InMemoryAgentTimelineStore();
   private readonly providerSubagents = new ProviderSubagentStore();
+  // FIX-S1: bounded per-agent set of clientMessageIds already accepted for
+  // dispatch. Closes the window between startAgentRun (agent-prompt.ts)
+  // deciding to accept a send and the user_message timeline row existing —
+  // recordSubmittedPrompt only runs after the provider's session.startTurn
+  // resolves (see streamAgent's streamForwarder below), so a duplicate
+  // clientMessageId arriving in that window would otherwise see no
+  // submitted-user-message row and be dispatched a second time. Read via
+  // hasAcceptedClientMessage, written via recordAcceptedClientMessage. Not
+  // `readonly`: hasAcceptedClientMessage/recordAcceptedClientMessage lazily
+  // initialize it on first use so a test double built via
+  // `Object.create(AgentManager.prototype)` (which never runs field
+  // initializers) does not crash inheriting these two real methods.
+  private acceptedClientMessageIds: Map<string, Set<string>> | undefined;
+  private static readonly ACCEPTED_CLIENT_MESSAGE_ID_LIMIT = 50;
   private readonly agentsAwaitingInitialSnapshotPersist = new Set<string>();
   private readonly sessionEventTails = new Map<string, Promise<void>>();
   private readonly runs = new AgentRunState();
@@ -818,6 +832,45 @@ export class AgentManager {
       Boolean(agent.activeForegroundTurnId) ||
       this.runs.hasRun(agentId)
     );
+  }
+
+  /**
+   * FIX-S1: true when `clientMessageId` has already been accepted for
+   * dispatch on `agentId` — either its user_message timeline row exists
+   * (recordSubmittedPrompt already ran for it) or a dispatch for it is in
+   * flight but hasn't reached that point yet (recordAcceptedClientMessage
+   * already ran for it). startAgentRun (agent-prompt.ts) calls this before
+   * ever calling streamAgent/replaceAgentRun so a repeated request carrying
+   * the same clientMessageId (transport retry, double-submit, reconnect
+   * replay) never starts or replaces a second provider turn.
+   */
+  hasAcceptedClientMessage(agentId: string, clientMessageId: string): boolean {
+    if (this.acceptedClientMessageIds?.get(agentId)?.has(clientMessageId)) {
+      return true;
+    }
+    return this.timelineStore?.has(agentId)
+      ? this.timelineStore.getSubmittedUserMessage(agentId, clientMessageId) !== null
+      : false;
+  }
+
+  /**
+   * FIX-S1: record `clientMessageId` as accepted before its timeline row
+   * necessarily exists. Bounded per agent (oldest entry evicted first) so a
+   * long-lived agent's accepted-id set cannot grow without bound.
+   */
+  recordAcceptedClientMessage(agentId: string, clientMessageId: string): void {
+    this.acceptedClientMessageIds ??= new Map();
+    let ids = this.acceptedClientMessageIds.get(agentId);
+    if (!ids) {
+      ids = new Set();
+      this.acceptedClientMessageIds.set(agentId, ids);
+    }
+    ids.add(clientMessageId);
+    while (ids.size > AgentManager.ACCEPTED_CLIENT_MESSAGE_ID_LIMIT) {
+      const oldest = ids.values().next().value;
+      if (oldest === undefined) break;
+      ids.delete(oldest);
+    }
   }
 
   subscribe(callback: AgentSubscriber, options?: SubscribeOptions): () => void {

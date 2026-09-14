@@ -5596,6 +5596,71 @@ describe("T38B0c: queue-mode requests and per-message routing", () => {
     ];
     expect(runOptions?.streamingBehavior).toBeUndefined();
   });
+
+  test("FIX-S1: send_agent_message_request — two dispatches sharing one messageId start one turn, record one user row, and each gets a success response", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const acceptedClientMessageIds = new Set<string>();
+    const submittedUserRows: string[] = [];
+    const streamAgent = vi.fn(
+      (_agentId: string, _prompt: unknown, options?: { clientMessageId?: string }) => {
+        if (options?.clientMessageId) {
+          submittedUserRows.push(options.clientMessageId);
+        }
+        return (async function* noop() {})();
+      },
+    );
+    const replaceAgentRun = vi.fn();
+    const session = createSessionForTest({
+      messages,
+      agentManager: liveAgentManager({
+        tryRunOutOfBand: vi.fn(() => false),
+        hasInFlightRun: vi.fn(() => false),
+        hasAcceptedClientMessage: vi.fn((_agentId: string, clientMessageId: string) =>
+          acceptedClientMessageIds.has(clientMessageId),
+        ),
+        recordAcceptedClientMessage: vi.fn((_agentId: string, clientMessageId: string) => {
+          acceptedClientMessageIds.add(clientMessageId);
+        }),
+        streamAgent,
+        replaceAgentRun,
+        waitForAgentRunStart: vi.fn().mockResolvedValue(undefined),
+      }),
+      agentStorage: { get: vi.fn().mockResolvedValue(undefined) },
+    });
+
+    await Promise.all([
+      session.handleMessage({
+        type: "send_agent_message_request",
+        agentId: "agent-1",
+        text: "hello",
+        messageId: "shared-message-id",
+        requestId: "req-send-dup-1",
+      }),
+      session.handleMessage({
+        type: "send_agent_message_request",
+        agentId: "agent-1",
+        text: "hello",
+        messageId: "shared-message-id",
+        requestId: "req-send-dup-2",
+      }),
+    ]);
+
+    expect(streamAgent).toHaveBeenCalledTimes(1);
+    expect(replaceAgentRun).not.toHaveBeenCalled();
+    expect(submittedUserRows).toEqual(["shared-message-id"]);
+
+    const responses = messages.filter(
+      (
+        message,
+      ): message is Extract<SessionOutboundMessage, { type: "send_agent_message_response" }> =>
+        message.type === "send_agent_message_response",
+    );
+    expect(responses).toHaveLength(2);
+    for (const response of responses) {
+      expect(response.payload.accepted).toBe(true);
+      expect(response.payload.error).toBeNull();
+    }
+  });
 });
 
 describe("T131: auto-compaction requests", () => {
