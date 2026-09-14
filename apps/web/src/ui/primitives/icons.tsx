@@ -15,7 +15,9 @@ export type IconName =
   | "panel-left"
   | "panel-right"
   | "folder"
-  | "terminal";
+  | "terminal"
+  | "edit"
+  | "rewind";
 
 const paths: Record<IconName, ReactElement> = {
   close: <path d="M3 3l10 10M13 3L3 13" />,
@@ -41,6 +43,18 @@ const paths: Record<IconName, ReactElement> = {
   ),
   folder: <path d="M2 4.5h4l1.3 1.5H14v7.5H2v-9Z" />,
   terminal: <path d="M3 4.5l3.5 3.5L3 11.5M8 11.5h5" />,
+  // Pencil (UI-W2's "Edit from here" — `message-row.tsx`): a single
+  // closed outline from the barrel down to a tapered tip, the same
+  // one-path, straight-line construction as every glyph above (no arcs,
+  // no fill).
+  edit: <path d="M13 4 6.3 10.3 1.3 13.7 4.7 8.7 11 2Z" />,
+  // Anticlockwise history arrow (UI-W2's "Rewind to here" —
+  // `message-row.tsx`): an exact horizontal mirror of `refresh`'s own
+  // circle-plus-hook construction, so the gap and arrowhead sit at the
+  // top-left instead of the top-right and the arc sweeps the opposite
+  // (anticlockwise) way — reads as "undo/rewind" rather than "reload",
+  // never identical to `refresh` at a glance.
+  rewind: <path d="M3 8A5 5 0 1 0 4.5 4.5M3 3v3h3" />,
 };
 
 export function Icon({ name, ...rest }: { name: IconName } & SVGProps<SVGSVGElement>) {

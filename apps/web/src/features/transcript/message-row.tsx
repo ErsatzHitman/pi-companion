@@ -1,7 +1,7 @@
 import { memo, useRef } from "react";
 import { timeline } from "@picompanion/frontend-core";
 
-import { Button } from "../../ui/primitives/index.js";
+import { IconButton } from "../../ui/primitives/index.js";
 import { StreamingMessage } from "../../ui/recipes/index.js";
 import { MessageAttachments } from "./message-attachments.js";
 import type { ResolveImageSrc } from "./message-attachments.js";
@@ -164,7 +164,7 @@ function TranscriptMessageRowImpl({
   renderCount.current += 1;
 
   return (
-    <div data-render-count={renderCount.current}>
+    <div className="pc-message-row" data-render-count={renderCount.current}>
       {/* The mockup's `.meta` line, above the block rather than inside it:
           the visible speaker (`you`/`pi`) plus this row's own time. The
           bubble below keeps its `role="group"` `aria-label` as the
@@ -189,25 +189,39 @@ function TranscriptMessageRowImpl({
           testId={testId ? `${testId}-attachments` : undefined}
         />
       ) : null}
-      {entry.kind === "user-message" && onEditFromHere ? (
-        <Button
-          kind="secondary"
-          disabled={!canEditFromHere}
-          onClick={() => onEditFromHere(entry.id)}
-          data-testid={testId ? `${testId}-edit-from-here` : undefined}
-        >
-          Edit from here
-        </Button>
-      ) : null}
-      {entry.kind === "user-message" && onRewindToHere ? (
-        <Button
-          kind="secondary"
-          disabled={!(entry.messageId ?? entry.clientMessageId) || rewindToHereDisabled === true}
-          onClick={() => onRewindToHere(entry.id)}
-          data-testid={testId ? `${testId}-rewind-to-here` : undefined}
-        >
-          Rewind to here
-        </Button>
+      {/* Icon-only per-message actions (UI-W2): compact `IconButton`s
+          (`ui/primitives/IconButton.tsx`) replace the former full-width
+          secondary `Button` rows. Grouped in `.pc-message-actions`
+          (`transcript.css`), quiet at rest and brought to full opacity on
+          hover/focus-within of this row — see that file's own doc comment
+          for the accessibility reasoning (opacity only, never
+          `display`/`visibility`, and always visible on a coarse pointer).
+          Each button's `aria-label`/`title` (set from `accessibleName`)
+          still carries the full former label, unabbreviated, so every
+          existing accessible-name query keeps matching unchanged. */}
+      {entry.kind === "user-message" && (onEditFromHere || onRewindToHere) ? (
+        <div className="pc-message-actions">
+          {onEditFromHere ? (
+            <IconButton
+              icon="edit"
+              accessibleName="Edit from here"
+              disabled={!canEditFromHere}
+              onClick={() => onEditFromHere(entry.id)}
+              data-testid={testId ? `${testId}-edit-from-here` : undefined}
+            />
+          ) : null}
+          {onRewindToHere ? (
+            <IconButton
+              icon="rewind"
+              accessibleName="Rewind to here"
+              disabled={
+                !(entry.messageId ?? entry.clientMessageId) || rewindToHereDisabled === true
+              }
+              onClick={() => onRewindToHere(entry.id)}
+              data-testid={testId ? `${testId}-rewind-to-here` : undefined}
+            />
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
