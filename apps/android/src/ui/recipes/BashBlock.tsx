@@ -6,13 +6,13 @@ import { useTheme } from "../theme/theme-context";
 import { PixelLoader } from "./PixelLoader";
 import { ShimmerText } from "./ShimmerText";
 
-/** The artifact's `.bash .bd` — a 1px rule at half the tone's strength. */
+/** The artifact's `.bash .bd` — a 1px rule at half its colour's strength. */
 export const RULE_OPACITY = 0.5;
 /** `.bash-in`'s own padding, which is narrower vertically than a `.blk`'s. */
-export const BASH_PADDING_VERTICAL = 7;
-export const BASH_PADDING_HORIZONTAL = 12;
+export const BASH_PADDING_VERTICAL = 8;
+export const BASH_PADDING_HORIZONTAL = 2;
 /** The artifact's gap between the loader, the label and the readouts. */
-const RUN_ROW_GAP = 9;
+const RUN_ROW_GAP = 8;
 /** `.pxl`'s cell edge inside a bash block, from `PixelLoader`'s own default. */
 const LOADER_CELL = 4;
 
@@ -33,8 +33,8 @@ export interface BashBlockProps {
   cancelHint?: string;
   /**
    * `true` to draw the artifact's `.bash-dim`: the rules and the
-   * command in `ink-3` instead of green, for a command that did not run
-   * to completion.
+   * command in `ink-3` instead of their normal `line-strong`/`ink`, for
+   * a command that did not run to completion.
    */
   dimmed?: boolean;
   /** `true` to suppress the shimmer, e.g. under reduced motion. */
@@ -46,12 +46,19 @@ export interface BashBlockProps {
  * BashBlock recipe (T359) — the artifact's `.bash`.
  *
  * A shell command is the one thing in the transcript the design does
- * NOT box: instead of a `.blk` it gets a 1px green rule above and below
- * at half strength, the command in bold green after a `$`, and its
- * output in `ink-2` between them. The rules are the whole container,
- * which is why this recipe draws no background and no radius — giving
- * it a card as well would make it look like a tool result rather than
- * like a terminal.
+ * NOT box: instead of a `.blk` it gets a 1px rule above and below at
+ * half strength, drawn from `line-strong`, the command in bold `ink`
+ * after a `$`, and its output in `ink-2` between them. The rules are
+ * the whole container, which is why this recipe draws no background
+ * and no radius — giving it a card as well would make it look like a
+ * tool result rather than like a terminal.
+ *
+ * **UI-A2 removed the green this recipe used to paint here.** The
+ * reference's own CSS carries none — `.bash .bd{background:var(
+ * --line-strong)}`, `.bash-cmd{color:var(--ink)}` — so green was never
+ * part of the artifact's shell block, only of an earlier approximation
+ * of it. A dimmed block (`dimmed`, below) still recolours both to
+ * `ink-3`, unchanged.
  *
  * **While it runs**, a row beneath the command carries `PixelLoader`
  * (the app's shared 3×3 running mark), a shimmering "Running…", a mono
@@ -70,8 +77,8 @@ export interface BashBlockProps {
  *
  * **Colour is not the only signal.** The command is prefixed by a
  * literal `$` and the running row says the literal word "Running…", so
- * the green rules and the shimmer are both decoration over text that
- * already states what this is and what it is doing (plan.md §10.5).
+ * the rules and the shimmer are both decoration over text that already
+ * states what this is and what it is doing (plan.md §10.5).
  */
 export function BashBlock({
   command,
@@ -85,14 +92,15 @@ export function BashBlock({
 }: BashBlockProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const tone = dimmed ? theme.colors["ink-3"] : theme.colors.green;
+  const ruleColor = dimmed ? theme.colors["ink-3"] : theme.colors["line-strong"];
+  const commandColor = dimmed ? theme.colors["ink-3"] : theme.colors.ink;
 
   return (
     <View style={styles.wrapper} testID={testId}>
-      <View style={[styles.rule, { backgroundColor: tone }]} />
+      <View style={[styles.rule, { backgroundColor: ruleColor }]} />
       <View style={styles.inner}>
         <Text
-          style={[styles.mono, styles.command, { color: tone }]}
+          style={[styles.mono, styles.command, { color: commandColor }]}
           testID={testId ? `${testId}-command` : undefined}
         >
           {`$ ${command}`}
@@ -120,7 +128,7 @@ export function BashBlock({
           </View>
         ) : null}
       </View>
-      <View style={[styles.rule, { backgroundColor: tone }]} />
+      <View style={[styles.rule, { backgroundColor: ruleColor }]} />
     </View>
   );
 }

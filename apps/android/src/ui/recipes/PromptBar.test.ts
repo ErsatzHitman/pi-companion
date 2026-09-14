@@ -35,3 +35,13 @@ describe("PromptBar: forwards real focus/blur events (plan.md §9.3)", () => {
     expect(readCode()).toMatch(/onBlur=\{onBlur\}/);
   });
 });
+
+describe("PromptBar: send icon uses the on-accent alias, not --page (UI-A2)", () => {
+  it("colours the send icon from accentContrast, matching Button's own text-on-accent-fill token", () => {
+    expect(readCode()).toMatch(/color=\{theme\.colors\.accentContrast\}/);
+  });
+
+  it("never reads the send icon colour from page (that token is this recipe's own background role, not an on-accent one)", () => {
+    expect(readCode()).not.toMatch(/color=\{theme\.colors\.page\}/);
+  });
+});

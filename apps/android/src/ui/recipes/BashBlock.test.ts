@@ -18,7 +18,7 @@ describe("BashBlock.tsx: the artifact's .bash (T359)", () => {
   it("draws a rule above AND below, at the artifact's half strength", () => {
     const code = readCode();
     const rules =
-      code.match(/<View style=\{\[styles\.rule, \{ backgroundColor: tone \}\]\} \/>/g) ?? [];
+      code.match(/<View style=\{\[styles\.rule, \{ backgroundColor: ruleColor \}\]\} \/>/g) ?? [];
     expect(rules).toHaveLength(2);
     expect(code).toMatch(/export const RULE_OPACITY = 0\.5;/);
     expect(code).toMatch(/opacity: RULE_OPACITY/);
@@ -32,19 +32,32 @@ describe("BashBlock.tsx: the artifact's .bash (T359)", () => {
     expect(code).not.toMatch(/backgroundColor: theme\.colors\.(surface|field|inset)/);
   });
 
-  it("carries the artifact's own inner padding, which is not a block's", () => {
+  it("carries the artifact's own inner padding, which is not a block's (UI-A2: 8/2, not 7/12)", () => {
     const code = readCode();
-    expect(code).toMatch(/export const BASH_PADDING_VERTICAL = 7;/);
-    expect(code).toMatch(/export const BASH_PADDING_HORIZONTAL = 12;/);
+    expect(code).toMatch(/export const BASH_PADDING_VERTICAL = 8;/);
+    expect(code).toMatch(/export const BASH_PADDING_HORIZONTAL = 2;/);
   });
 
-  it("prints a literal $ before the command, so the green is not the only thing saying 'shell'", () => {
+  it("matches the artifact's run-row gap (UI-A2: 8, not 9)", () => {
+    expect(readCode()).toMatch(/const RUN_ROW_GAP = 8;/);
+  });
+
+  it("prints a literal $ before the command, so colour is not the only thing saying 'shell'", () => {
     expect(readCode()).toMatch(/\{`\$ \$\{command\}`\}/);
   });
 
-  it("switches the whole tone to ink-3 for a dimmed block, rather than recolouring each part", () => {
+  it("dims the rule and the command to the same ink-3, but otherwise draws them from two different theme roles (UI-A2: line-strong/ink, never green)", () => {
     const code = readCode();
-    expect(code).toMatch(/const tone = dimmed \? theme\.colors\["ink-3"\] : theme\.colors\.green;/);
+    expect(code).toMatch(
+      /const ruleColor = dimmed \? theme\.colors\["ink-3"\] : theme\.colors\["line-strong"\];/,
+    );
+    expect(code).toMatch(
+      /const commandColor = dimmed \? theme\.colors\["ink-3"\] : theme\.colors\.ink;/,
+    );
+  });
+
+  it("paints no green anywhere — the reference's own CSS has none (UI-A2)", () => {
+    expect(readCode()).not.toMatch(/theme\.colors\.green/);
   });
 
   it("puts the output in ink-2 between the rules", () => {

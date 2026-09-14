@@ -67,6 +67,7 @@ export interface PromptBarProps {
  *                 max-height: 110px }
  * .ic { width: 34px; height: 34px; border-radius: 9px }
  * .cmp .ic.send { background: var(--accent); color: var(--surface) }
+ * :root[data-theme="dark"] .cmp .ic.send { color: #0d1b2a }
  * ```
  *
  * So the bar is the attach mark, the context ring, the input, the
@@ -74,6 +75,19 @@ export interface PromptBarProps {
  * on `surface`, radius 18. It used to be a column (input above, then a
  * row of ring/queued/Send), which put the microphone and attachment
  * outside the bar entirely and made Send a labelled text button.
+ *
+ * **UI-A2: the send icon reads `accentContrast`, not `theme.colors.page`
+ * (what this recipe used to read).** The reference hand-picks a
+ * different on-accent colour per theme (`--surface` light, `#0d1b2a`
+ * dark) — close to, but not byte-identical to, `accentContrast`'s own
+ * computed values. `design-tokens/src/tokens.ts` already names this
+ * exact situation — text or an icon painted directly on a saturated
+ * solid `accent`/status fill — with a dedicated alias,
+ * `accentContrast`, that `Button.tsx`'s own primary variant already
+ * paints on the identical `accent` background. Reading that alias here
+ * keeps the send icon and the primary button on one on-accent colour by
+ * construction, rather than re-deriving the reference's two literals by
+ * hand.
  *
  * **The queued counter stays, one line above the box.** The reference
  * has no queue state to draw; the counter is this app's, and keeping it
@@ -145,7 +159,7 @@ export function PromptBar({
           testID={testId ? `${testId}-send` : undefined}
         >
           <View style={[styles.sendBox, canSend ? null : styles.sendBoxDisabled]}>
-            <VectorIcon name="send" size={SEND_ICON_SIZE} color={theme.colors.page} />
+            <VectorIcon name="send" size={SEND_ICON_SIZE} color={theme.colors.accentContrast} />
           </View>
         </Pressable>
       </View>

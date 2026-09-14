@@ -18,7 +18,7 @@ export interface ToggleProps {
   testId?: string;
 }
 
-const TRACK_WIDTH = 44;
+const TRACK_WIDTH = 40;
 const KNOB_SIZE = 20;
 const KNOB_INSET = 3;
 

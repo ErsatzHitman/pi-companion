@@ -197,7 +197,7 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
 });
 
 describe("BashBlock: the shell block states its state in words (T359)", () => {
-  it("prints a literal $ and the literal word Running, so neither the green nor the shimmer is load-bearing", () => {
+  it("prints a literal $ and the literal word Running, so neither colour nor the shimmer is load-bearing", () => {
     const code = readRecipeCode("BashBlock");
     expect(code).toMatch(/\{`\$ \$\{command\}`\}/);
     expect(code).toMatch(/Running…/);
