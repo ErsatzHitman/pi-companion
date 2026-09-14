@@ -89,6 +89,7 @@ import {
   TextField,
   Toggle,
 } from "../../ui/primitives";
+import { ScreenBar } from "../../ui/recipes";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import {
@@ -191,6 +192,16 @@ export interface FilesScreenProps {
    * entirely, matching the same "omit rather than show broken" rule.
    */
   fetchImpl?: DownloadFetch;
+  /**
+   * UI-A5: this screen's `ScreenBar` closes back to the session it was
+   * opened from. Optional, matching `../sessions/sessions-screen.tsx`'s
+   * `onClose`/`../live/live-screen.tsx`'s `onBack` convention — the
+   * route stub that renders this screen
+   * (`../../app/h/[serverId]/session/[agentId]/files/[...path].tsx`, off
+   * limits to this task) does not wire one yet, so the bar simply omits
+   * its leading action rather than rendering a button that does nothing.
+   */
+  onBack?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -217,6 +228,7 @@ export function FilesScreen({
   downloadOrigin,
   connectionPath,
   fetchImpl,
+  onBack,
 }: FilesScreenProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -409,96 +421,113 @@ export function FilesScreen({
   const breadcrumbs = useMemo(() => buildFilesBreadcrumbs(path_), [path_]);
 
   return (
-    <ScrollView style={styles.container} testID={testId}>
-      <FilesBreadcrumbRow
-        breadcrumbs={breadcrumbs}
-        onNavigate={
-          controller
-            ? (crumbPath) => {
-                setSelectedEntry(null);
-                controller.load(crumbPath);
+    <View style={styles.screen}>
+      {/* UI-A5: adopts the shared ScreenBar for chrome consistency with every other full screen (plan.md §6/§9.2) — no mockup frame exists for this screen, so only the header shape changes; every action/title/testid below is unchanged. */}
+      <ScreenBar
+        title="Files"
+        leading={
+          onBack
+            ? {
+                mark: "\u2039",
+                accessibleName: "Back to session",
+                onPress: onBack,
+                testId: `${testId}-back`,
               }
             : undefined
         }
-        theme={theme}
-        testId={`${testId}-breadcrumbs`}
+        testId={`${testId}-bar`}
       />
-      {uploadController ? (
-        <UploadPanel
-          controller={uploadController}
-          state={uploadState}
-          theme={theme}
-          testId={`${testId}-upload`}
-        />
-      ) : null}
-      {opsController ? (
-        <FileOpsPanel
-          controller={opsController}
-          state={opsState}
-          theme={theme}
-          testId={`${testId}-ops`}
-        />
-      ) : null}
-      {!client || workspaceRoot === undefined ? (
-        <ErrorState
-          title="Not connected"
-          description="Connect to a daemon to browse files for this session."
-          testId={`${testId}-not-connected`}
-        />
-      ) : selectedEntry ? (
-        <FileContentView
-          entry={selectedEntry}
-          state={fileState}
-          client={client}
-          workspaceRoot={workspaceRoot}
-          onSaved={() => fileController?.retry()}
-          onBack={() => setSelectedEntry(null)}
-          downloadController={downloadController}
-          downloadState={downloadState}
-          canSave={canShareFiles}
-          theme={theme}
-          testId={`${testId}-file`}
-        />
-      ) : state === null || state.status === "loading" ? (
-        <LoadingState
-          title="Listing folder…"
-          description={path_.length > 0 ? path_ : "Workspace root"}
-          testId={`${testId}-loading`}
-        />
-      ) : state.status === "error" ? (
-        <ErrorState
-          title={state.error?.title ?? "Couldn't list this folder"}
-          description={state.error?.description ?? ""}
-          testId={`${testId}-error`}
-        />
-      ) : state.entries !== null && state.entries.length === 0 ? (
-        <EmptyState
-          title="This folder is empty"
-          description="Nothing here yet."
-          testId={`${testId}-empty`}
-        />
-      ) : (
-        <Section title="Contents" testId={`${testId}-contents`}>
-          <View style={styles.rows}>
-            {(state.entries ?? []).map((entry) => (
-              <FileEntryRow
-                key={entry.path}
-                entry={entry}
-                theme={theme}
-                onOpen={
-                  controller
-                    ? entry.kind === "directory"
-                      ? () => controller.open(entry)
-                      : () => setSelectedEntry(entry)
-                    : undefined
+      <ScrollView style={styles.container} testID={testId}>
+        <FilesBreadcrumbRow
+          breadcrumbs={breadcrumbs}
+          onNavigate={
+            controller
+              ? (crumbPath) => {
+                  setSelectedEntry(null);
+                  controller.load(crumbPath);
                 }
-                testId={`${testId}-entry-${entry.path || entry.name}`}
-              />
-            ))}
-          </View>
-        </Section>
-      )}
-    </ScrollView>
+              : undefined
+          }
+          theme={theme}
+          testId={`${testId}-breadcrumbs`}
+        />
+        {uploadController ? (
+          <UploadPanel
+            controller={uploadController}
+            state={uploadState}
+            theme={theme}
+            testId={`${testId}-upload`}
+          />
+        ) : null}
+        {opsController ? (
+          <FileOpsPanel
+            controller={opsController}
+            state={opsState}
+            theme={theme}
+            testId={`${testId}-ops`}
+          />
+        ) : null}
+        {!client || workspaceRoot === undefined ? (
+          <ErrorState
+            title="Not connected"
+            description="Connect to a daemon to browse files for this session."
+            testId={`${testId}-not-connected`}
+          />
+        ) : selectedEntry ? (
+          <FileContentView
+            entry={selectedEntry}
+            state={fileState}
+            client={client}
+            workspaceRoot={workspaceRoot}
+            onSaved={() => fileController?.retry()}
+            onBack={() => setSelectedEntry(null)}
+            downloadController={downloadController}
+            downloadState={downloadState}
+            canSave={canShareFiles}
+            theme={theme}
+            testId={`${testId}-file`}
+          />
+        ) : state === null || state.status === "loading" ? (
+          <LoadingState
+            title="Listing folder…"
+            description={path_.length > 0 ? path_ : "Workspace root"}
+            testId={`${testId}-loading`}
+          />
+        ) : state.status === "error" ? (
+          <ErrorState
+            title={state.error?.title ?? "Couldn't list this folder"}
+            description={state.error?.description ?? ""}
+            testId={`${testId}-error`}
+          />
+        ) : state.entries !== null && state.entries.length === 0 ? (
+          <EmptyState
+            title="This folder is empty"
+            description="Nothing here yet."
+            testId={`${testId}-empty`}
+          />
+        ) : (
+          <Section title="Contents" testId={`${testId}-contents`}>
+            <View style={styles.rows}>
+              {(state.entries ?? []).map((entry) => (
+                <FileEntryRow
+                  key={entry.path}
+                  entry={entry}
+                  theme={theme}
+                  onOpen={
+                    controller
+                      ? entry.kind === "directory"
+                        ? () => controller.open(entry)
+                        : () => setSelectedEntry(entry)
+                      : undefined
+                  }
+                  testId={`${testId}-entry-${entry.path || entry.name}`}
+                />
+              ))}
+            </View>
+          </Section>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1315,6 +1344,9 @@ function HighlightedCodeBody({
 
 function createStyles(theme: NativeTheme) {
   return StyleSheet.create({
+    // UI-A5: the ScreenBar sits above the scrolling body as a fixed
+    // sibling, matching every other adopting screen.
+    screen: { flex: 1, backgroundColor: theme.colors.page },
     container: { flex: 1 },
     breadcrumbRow: {
       flexDirection: "row",

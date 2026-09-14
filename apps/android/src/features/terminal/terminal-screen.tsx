@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { EmptyState } from "../../ui/primitives";
+import { ScreenBar } from "../../ui/recipes";
 import { useTheme } from "../../ui/theme/theme-context";
 import {
   createNotConnectedTerminalBinaryTransport,
@@ -39,6 +40,17 @@ export interface TerminalScreenProps {
   webview?: TerminalWebViewPort;
   /** Fixed daemon terminal-stream slot for this screen's terminal. Defaults to `0` (single-terminal screen). */
   slot?: number;
+  /**
+   * UI-A5: this screen's `ScreenBar` closes back to the session it was
+   * opened from. Optional, matching `../files/files-screen.tsx`'s
+   * `onBack`/`../live/live-screen.tsx`'s own `onBack` convention — the
+   * route stub that renders this screen
+   * (`../../app/h/[serverId]/session/[agentId]/terminal/[terminalId].tsx`,
+   * off limits to this task) does not wire one yet, so the bar simply
+   * omits its leading action rather than rendering a button that does
+   * nothing.
+   */
+  onBack?: () => void;
 }
 
 /**
@@ -100,6 +112,7 @@ export function TerminalScreen({
   transport,
   webview,
   slot = 0,
+  onBack,
 }: TerminalScreenProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -140,25 +153,48 @@ export function TerminalScreen({
     controllerRef.current?.setTheme(terminalTheme);
   }, [terminalTheme]);
 
+  const bar = (
+    <ScreenBar
+      title="Terminal"
+      leading={
+        onBack
+          ? {
+              mark: "\u2039",
+              accessibleName: "Back to session",
+              onPress: onBack,
+              testId: "terminal-screen-back",
+            }
+          : undefined
+      }
+      testId="terminal-screen-bar"
+    />
+  );
+
   if (!resolvedWebview.isAvailable || !resolvedWebview.attachHost) {
     return (
-      <View style={styles.container} testID="terminal-screen">
-        <EmptyState
-          title="Terminal unavailable"
-          description="This build has no embedded terminal renderer installed yet. Your session and its output are unaffected."
-          testId="terminal-unavailable"
-        />
+      <View style={styles.screen}>
+        {bar}
+        <View style={styles.container} testID="terminal-screen">
+          <EmptyState
+            title="Terminal unavailable"
+            description="This build has no embedded terminal renderer installed yet. Your session and its output are unaffected."
+            testId="terminal-unavailable"
+          />
+        </View>
       </View>
     );
   }
 
   return (
-    <View
-      style={styles.container}
-      testID="terminal-screen"
-      accessibilityLabel={`Terminal ${terminalId}`}
-    >
-      <TerminalWebViewHost port={resolvedWebview} testId="terminal-webview" />
+    <View style={styles.screen}>
+      {bar}
+      <View
+        style={styles.container}
+        testID="terminal-screen"
+        accessibilityLabel={`Terminal ${terminalId}`}
+      >
+        <TerminalWebViewHost port={resolvedWebview} testId="terminal-webview" />
+      </View>
     </View>
   );
 }
@@ -185,6 +221,12 @@ function createTerminalScreenClock(): Clock {
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
+    // UI-A5: the ScreenBar sits above the terminal body as a fixed
+    // sibling, matching every other adopting screen.
+    screen: {
+      flex: 1,
+      backgroundColor: theme.colors.page,
+    },
     container: {
       flex: 1,
       backgroundColor: theme.colors.page,

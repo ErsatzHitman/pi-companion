@@ -17,6 +17,7 @@ import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import { usePressScale } from "../../ui/theme/use-press-scale";
 import { createSettingsController, type SettingsSnapshot } from "./settings-model";
+import { DRAWING_EXTENSIONS, silentExtensionsSummary } from "./settings-extension-coverage";
 import { VoiceVocabularySection } from "../voice";
 import {
   settingsHostAccessibilityLabel,
@@ -96,19 +97,30 @@ export interface SettingsScreenProps {
  * every setting below belongs to, with a live status pill. Nothing here
  * said which daemon it was about before.
  *
- * **Four of `HANDOFF.md` §7.5's rows are deliberately not drawn, and
- * this is the reason.** Model, Thinking effort, Auto-compaction and
- * "Ask before every tool" are per-AGENT on the wire: every method that
- * reads or writes them (`session-controls-model.ts`'s
+ * **Two of `HANDOFF.md` §7.5's rows are deliberately not drawn, and
+ * this is the reason.** Model and Thinking effort, and Auto-compaction
+ * and "Ask before every tool", are per-AGENT on the wire: every method
+ * that reads or writes them (`session-controls-model.ts`'s
  * `listProviderModes`, `setAgentMode`, `getAutoCompaction`,
  * `setAutoCompaction`) takes an `agentId`, and this screen is
  * per-host — it has no session to name. Drawing them here would mean
  * either a local preference nothing on the wire reads, or a control
  * that silently applied to one arbitrary session. Both are worse than
- * their absence, and all four are already reachable where they belong:
- * the session's own context-ring menu. The same argument covers §7.5's
- * extension rows and its "Loaded but silent" card — which extensions
- * have drawn is state a session accumulates, not a property of a host.
+ * their absence, and both pairs of rows are already reachable where
+ * they belong: the session's own context-ring menu.
+ *
+ * **UI-A5 — the other two of §7.5's regions are informational, not
+ * per-agent state, and are drawn.** The "extensions that draw" list and
+ * the "Loaded but silent" card name CAPABILITIES this app supports —
+ * which extension namespaces get a dedicated Pi UI Bridge element and
+ * which only change agent behavior — not live state belonging to any
+ * one session, so the per-agent argument above does not apply to them.
+ * Both are static, honest copy sourced from plan.md §11.7 rather than
+ * the mockup's own invented sample text, via
+ * `./settings-extension-coverage.ts` — that module's own doc comment
+ * explains why: neither `../extensions/registry.ts` nor any sibling
+ * renderer module keeps a namespace -> extension-name table at runtime
+ * for this to read back live.
  */
 export function SettingsScreen({
   storage,
@@ -196,6 +208,46 @@ export function SettingsScreen({
         storage={storage}
         testId={testId ? `${testId}-voice-vocabulary` : undefined}
       />
+      {/*
+        UI-A5: the two informational A3 regions the module doc's
+        "other two ... are informational" paragraph describes — static,
+        honest copy from `./settings-extension-coverage.ts`, never a
+        Pressable (there is no detail screen these rows navigate to yet).
+      */}
+      <Section
+        title="Extensions that draw"
+        variant="label"
+        testId={testId ? `${testId}-extensions-drawing-section` : undefined}
+      >
+        <Card style={styles.navCard}>
+          {DRAWING_EXTENSIONS.map((row, index) => (
+            <View key={row.name}>
+              <View
+                style={styles.extensionRow}
+                testID={testId ? `${testId}-extension-${row.name}` : undefined}
+              >
+                <Text style={styles.extensionName}>{row.name}</Text>
+                <Text style={styles.extensionDescription}>{row.description}</Text>
+              </View>
+              {index < DRAWING_EXTENSIONS.length - 1 ? <Divider /> : null}
+            </View>
+          ))}
+        </Card>
+      </Section>
+      <Section
+        title="Loaded but silent"
+        variant="label"
+        testId={testId ? `${testId}-extensions-silent-section` : undefined}
+      >
+        <Card style={styles.card}>
+          <Text
+            style={styles.silentSummary}
+            testID={testId ? `${testId}-extensions-silent-summary` : undefined}
+          >
+            {silentExtensionsSummary()}
+          </Text>
+        </Card>
+      </Section>
       {onOpenDevices || onOpenDiagnostics ? (
         <Section
           title="More"
@@ -287,6 +339,29 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontSize: theme.typography.variant.caption.fontSize,
     },
     navCard: { padding: 0, overflow: "hidden" },
+    // UI-A5: the extensions-that-draw row, mirroring the mockup's
+    // `.row .n`/`.s` name-then-description stack via theme tokens.
+    extensionRow: {
+      paddingHorizontal: theme.spacing[4],
+      paddingVertical: theme.spacing[3],
+      gap: 2,
+    },
+    extensionName: {
+      color: theme.colors.ink,
+      fontSize: theme.typography.variant.body.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+    },
+    extensionDescription: {
+      color: theme.colors["ink-3"],
+      fontSize: theme.typography.variant.caption.fontSize,
+    },
+    // UI-A5: the "Loaded but silent" card's paragraph, mirroring the
+    // mockup's `.card p`.
+    silentSummary: {
+      color: theme.colors["ink-2"],
+      fontSize: theme.typography.variant.body.fontSize,
+      lineHeight: theme.typography.variant.body.lineHeight,
+    },
     hint: {
       color: theme.colors["ink-3"],
       fontSize: theme.typography.variant.body.fontSize,
