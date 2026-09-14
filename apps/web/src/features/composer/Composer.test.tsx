@@ -1237,6 +1237,76 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect(screen.queryByTestId("composer-session-controls")).toBeNull();
   });
 
+  it("BUG 1 (FIX-W5): a draft already exactly '/compact' sends once on click, and a later keystroke merely passing through that exact string does not auto-submit", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.type(input, "/compact");
+    await openRingSheet(user);
+
+    await user.click(screen.getByTestId("composer-compact-now"));
+
+    // (a) One click, with the draft already exactly '/compact', sends
+    // exactly one message whose text is '/compact'.
+    await waitFor(() => expect(client.sentMessages).toHaveLength(1));
+    expect(client.sentMessages[0]?.text).toBe("/compact");
+    await waitFor(() => expect(input.value).toBe(""));
+
+    // (b) Typing a longer message that passes through the literal
+    // '/compact' string on its way to something longer must not resurrect
+    // the click above and steal the rest of the sentence: the stale-ref
+    // bug fired a second, truncated send right at the keystroke where the
+    // draft matched '/compact' exactly.
+    await user.type(input, "/compact the last 3 turns please");
+
+    await waitFor(() => expect(input.value).toBe("/compact the last 3 turns please"));
+    expect(client.sentMessages).toHaveLength(1);
+  });
+
+  it("BUG 2 (FIX-W5): restores the user's own in-progress draft once the compact send is enqueued, instead of discarding it", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.type(input, "don't forget the deploy notes");
+    await openRingSheet(user);
+
+    await user.click(screen.getByTestId("composer-compact-now"));
+
+    await waitFor(() => expect(client.sentMessages).toHaveLength(1));
+    expect(client.sentMessages[0]?.text).toBe("/compact");
+    await waitFor(() => expect(input.value).toBe("don't forget the deploy notes"));
+  });
+
+  it("BUG 3 (FIX-W5): clears staged attachments before a compact send rather than sending them along with '/compact'", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    const filePicker = new FakeFilePicker();
+    filePicker.enqueue([makeFakePickedFile({ name: "notes.txt", mimeType: "text/plain" })]);
+    render(
+      <Composer {...baseProps()} filePicker={filePicker} client={client} testId="composer" />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Attach files" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-attachments").textContent).toContain("notes.txt"),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("composer-attachments").textContent).not.toContain("uploading"),
+    );
+
+    await openRingSheet(user);
+    await user.click(screen.getByTestId("composer-compact-now"));
+
+    await waitFor(() => expect(client.sentMessages).toHaveLength(1));
+    expect(client.sentMessages[0]?.text).toBe("/compact");
+    expect(client.sentMessages[0]?.options?.attachments).toBeUndefined();
+    expect(screen.queryByTestId("composer-attachments")).toBeNull();
+  });
+
   it("the Compact now row is disabled with a real explanation when there is no live client (UI-W12)", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
