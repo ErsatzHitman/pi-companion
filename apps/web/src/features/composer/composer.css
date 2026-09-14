@@ -211,6 +211,48 @@
   gap: var(--spacing-4);
 }
 
+/* "Compact now" (UI-W12): the reference `#ctx-menu` popover's Context
+ * group ends with a `.mrow`-styled `#row-compact` button
+ * (`docs/ui-reference/pi-companion-web.html`) — a full-width key/value
+ * row, the action's name on the left and why it is (or isn't) available
+ * on the right. `Composer.tsx`'s own doc comment on `COMPACT_NOW_TEXT`
+ * explains why this sends plain chat text rather than calling an RPC. */
+.pc-composer__compact-now {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  width: 100%;
+  padding: var(--spacing-2) var(--spacing-3);
+  border: none;
+  border-radius: var(--radius-chip);
+  background-color: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+.pc-composer__compact-now:hover:not(:disabled) {
+  background-color: var(--color-accent-tint);
+}
+
+.pc-composer__compact-now:disabled {
+  color: var(--color-ink-3);
+  cursor: not-allowed;
+}
+
+.pc-composer__compact-now-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.pc-composer__compact-now-value {
+  color: var(--color-ink-3);
+  font-size: var(--font-size-sm);
+  text-align: right;
+}
+
 /* Slash-command completion (T28B4): `CommandSearch` already positions its
  * own dropdown (`.pc-command-search__list`) absolutely relative to itself,
  * so this wrapper only needs to sit in normal flow directly under the
