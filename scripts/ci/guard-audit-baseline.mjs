@@ -494,9 +494,19 @@ export const AUDIT_BASELINE = [
     reason: NO_INSTALL_REASON,
   },
   {
+    // FIX-CI4: range re-synced. The prior baseline recorded this advisory's
+    // range as the ecosystem wildcard `*`; a fresh `npm audit --json` on this
+    // tree now reports the same (package, severity) pair with the advisory's
+    // own affected range, `<=2.0.2`, which is a narrower, more precise
+    // statement of the same finding, not a new one. Checked before accepting
+    // rather than assumed: `npm audit fix --dry-run --json` (no `--force`)
+    // does not touch `image-size` — its own `fixAvailable` names
+    // `expo@57.0.22` with `isSemVerMajor: true`, the same Android/Expo
+    // major-bump blocker every other ANDROID_TOOLCHAIN_OWNER entry in this
+    // file already carries. Same owner and reason as the rest of this group.
     package: "image-size",
     severity: "high",
-    range: "*",
+    range: "<=2.0.2",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
