@@ -20,6 +20,7 @@ import {
   InMemoryStructuredStorage,
   makeFakePickedFile,
 } from "./test-doubles.js";
+import type { DaemonSessionCostClient } from "../telemetry/daemon-session-cost-client.js";
 import { useComposer } from "./use-composer.js";
 
 /** Guards a `waitFor` that depends on `useModelThinking`'s own promise chains settling. */
@@ -54,6 +55,45 @@ async function openQueueChip(user: ReturnType<typeof userEvent.setup>): Promise<
 /** The ring's own Sheet (T388): context-usage summary only, no pickers. */
 async function openRingSheet(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByRole("button", { name: /^Session controls/ }));
+}
+
+type FakeSessionCostAgent = {
+  id: string;
+  model: string | null;
+  lastUsage?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number };
+  activeTurn?: { turnId: string; startedAt: string | null } | null;
+};
+type FakeSessionCostUpdateMessage = {
+  type: "agent_update";
+  payload:
+    | { kind: "upsert"; agent: FakeSessionCostAgent }
+    | { kind: "remove"; agentId: string };
+};
+
+/**
+ * A minimal fake `DaemonSessionCostClient` (UI-W11), mirroring
+ * `SessionCostMeterContainer.test.tsx`'s own `createFakeDaemon` — this
+ * feature only needs to prove the sheet forwards a wired
+ * `sessionCostClient` through; the adapter's own wire behaviour is
+ * already proven there.
+ */
+function createFakeSessionCostDaemon(): DaemonSessionCostClient & {
+  pushUpdate: (agent: FakeSessionCostAgent) => void;
+} {
+  const handlers = new Set<(message: FakeSessionCostUpdateMessage) => void>();
+  return {
+    on: ((_type: "agent_update", handler: (message: FakeSessionCostUpdateMessage) => void) => {
+      handlers.add(handler);
+      return () => {
+        handlers.delete(handler);
+      };
+    }) as DaemonSessionCostClient["on"],
+    pushUpdate(agent) {
+      for (const handler of handlers) {
+        handler({ type: "agent_update", payload: { kind: "upsert", agent } });
+      }
+    },
+  };
 }
 
 describe("Composer", () => {
@@ -1150,7 +1190,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect((input as HTMLTextAreaElement).value).toBe("kept");
   });
 
-  it("the context ring opens the session-controls sheet, showing only the context summary (T388: model/routing/queue moved to the metadata-row chips)", async () => {
+  it("the context ring opens the session-controls sheet, showing the context summary and an honest cost readout, never pickers (T388/UI-W11)", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
 
@@ -1166,6 +1206,13 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect(screen.getByTestId("composer-context-summary").textContent).toContain(
       "not been reported",
     );
+    // UI-W11: `SessionCostMeterContainer` mounts unconditionally (it needs
+    // only `sessionId`, not `contextTelemetry`) directly after
+    // `ContextMeter`, and with no live `sessionCostClient` shows its own
+    // honest "not priced yet" state — never a fabricated $0.00.
+    expect(
+      within(sheet).getByTestId("composer-session-cost-meter-unknown"),
+    ).toBeTruthy();
     expect(screen.queryByLabelText("Model")).toBeNull();
   });
 
@@ -1202,6 +1249,26 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     const compactNow = screen.getByTestId("composer-compact-now");
     expect(compactNow.hasAttribute("disabled")).toBe(true);
     expect(compactNow.textContent).toContain("Connect to a session");
+  it("UI-W11: reflects live agent_update cost pushes from a wired sessionCostClient inside the session-controls sheet", async () => {
+    const user = userEvent.setup();
+    const daemon = createFakeSessionCostDaemon();
+    render(<Composer {...baseProps()} sessionCostClient={daemon} testId="composer" />);
+
+    await openRingSheet(user);
+    expect(screen.getByTestId("composer-session-cost-meter-unknown")).toBeTruthy();
+
+    act(() => {
+      daemon.pushUpdate({
+        id: "session-1",
+        model: "claude-sonnet-4",
+        activeTurn: { turnId: "turn_1", startedAt: "2026-08-31T12:00:00.000Z" },
+        lastUsage: { inputTokens: 1_000_000, outputTokens: 0 },
+      });
+    });
+
+    expect(screen.getByTestId("composer-session-cost-meter-readout").textContent).toBe(
+      "$3.0000 this session",
+    );
   });
 
   it("draws the ring's percentage from the telemetry prop the route supplies", () => {

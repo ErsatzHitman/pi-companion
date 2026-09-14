@@ -26,6 +26,8 @@ import { PromptRoutingPicker } from "./PromptRoutingPicker.js";
 import { QueueModePicker } from "./QueueModePicker.js";
 import { ReferenceSuggestions } from "./ReferenceSuggestions.js";
 import { ContextMeter } from "../rail/context-meter.js";
+import type { DaemonSessionCostClient } from "../telemetry/daemon-session-cost-client.js";
+import { SessionCostMeterContainer } from "../telemetry/SessionCostMeterContainer.js";
 import type { UseComposerOptions } from "./use-composer.js";
 import { useComposer } from "./use-composer.js";
 import { useComposerReferences } from "./use-composer-references.js";
@@ -193,6 +195,21 @@ export interface ComposerProps extends UseComposerOptions {
    * "not reported" state rather than a fabricated 0%.
    */
   contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
+  /**
+   * Live `DaemonSessionCostClient` for the session-cost readout mounted
+   * in the same sheet, directly after `ContextMeter` (UI-W11).
+   * `SessionCostMeterContainer`'s own doc (`features/telemetry/
+   * SessionCostMeterContainer.tsx`) names this composer sheet as exactly
+   * where it is "ready to mount" — this is that mount. `undefined` — no
+   * live connection yet, the same "no live client yet" seam every other
+   * daemon-backed prop on this component already uses — leaves the
+   * meter in `SessionCostStore`'s own honest "not priced yet" state,
+   * never a fabricated `$0.00`. A real `DaemonClient` satisfies this
+   * interface structurally (that container's own doc), so
+   * `routes/screens/host-session-screen.tsx` passes its raw `client`
+   * here directly, the same way it already does for `editorTextClient`.
+   */
+  sessionCostClient?: DaemonSessionCostClient;
   /**
    * `@file` candidate listing (T389). The route supplies this from the
    * daemon's existing `listDirectory` when a connection exists. Omit it and
@@ -388,6 +405,7 @@ export function Composer({
   testId,
   editorTextClient,
   contextTelemetry,
+  sessionCostClient,
   fileReferenceSource,
   ...composerOptions
 }: ComposerProps) {
@@ -923,6 +941,19 @@ export function Composer({
               testId={testId ? `${testId}-context-meter` : undefined}
             />
           ) : null}
+          {/* UI-W11: the reference `#ctx-menu` group also carries a Cost
+              readout — `SessionCostMeterContainer` (`features/telemetry/`)
+              mounts directly after `ContextMeter` so the ring's popover
+              carries the full context/cost group. Unlike `ContextMeter`
+              above, this always mounts (it needs only `sessionId`, not
+              `contextTelemetry`) and shows its own honest "not priced
+              yet" state whenever there is no live `sessionCostClient` or
+              no priced turn — never a fabricated `$0.00`. */}
+          <SessionCostMeterContainer
+            agentId={composerOptions.sessionId}
+            client={sessionCostClient}
+            testId={testId ? `${testId}-session-cost-meter` : undefined}
+          />
           {/* UI-W12: the reference `#ctx-menu` popover's Context group ends
               with its `.mrow`-styled `#row-compact`
               (`docs/ui-reference/pi-companion-web.html`) — "Compact now"

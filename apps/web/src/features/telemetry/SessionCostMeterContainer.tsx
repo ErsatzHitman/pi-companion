@@ -10,14 +10,12 @@ export interface SessionCostMeterContainerProps {
   /** Session this meter accumulates cost for. */
   agentId: string;
   /**
-   * Live daemon adapter (T48A2). Defaults to `undefined`: this app has
-   * no route that can obtain a live `DaemonClient` yet — the same
-   * "no live client yet" state `ComposerContainer`
-   * (`features/composer/ComposerContainer.tsx`) already documents. Once
-   * a route can obtain one, a real `DaemonClient` satisfies
-   * `DaemonSessionCostClient` as-is; `daemon-session-cost-client.ts`'s
-   * own doc and tests already prove the real wire round trip today,
-   * independent of when this prop gets wired. Without one, the meter
+   * Live daemon adapter (T48A2). `routes/screens/host-session-screen.tsx`
+   * passes its raw `DaemonClient` here (via `Composer`'s
+   * `sessionCostClient` prop, UI-W11) whenever a connection exists; a
+   * real `DaemonClient` satisfies `DaemonSessionCostClient` as-is —
+   * `daemon-session-cost-client.ts`'s own doc and tests prove the real
+   * wire round trip. `undefined` with no live connection: the meter then
    * renders `SessionCostStore`'s initial "unknown" state — honest, never
    * a fabricated `$0.00`.
    */
@@ -29,17 +27,14 @@ export interface SessionCostMeterContainerProps {
  * Wires a per-session `SessionCostStore` to a live `client` (when given)
  * and renders `SessionCostMeter` from it (plan.md §8.3, §11.5; T48A2).
  *
- * Ready to mount as a sibling of `ContextMeter` inside
- * `PiExtensionRail`/`Shell`'s `extensionRail` slot — this component only
- * needs `agentId` and, once one exists, a live `DaemonSessionCostClient`;
- * it does not read `PiExtensionRail`'s own props, so adding
- * `<SessionCostMeterContainer agentId={agentId} client={...} />` next to
- * `<ContextMeter telemetry={...} />` there is the entire integration
- * step for whichever task wires the real session route (`features/rail/`
- * is a different task's owned directory — see this feature's module
- * docs for why that wiring is deliberately left to that task, the same
- * way `ContextMeter`/`PiExtensionRail` themselves left their own live
- * wiring to a later task).
+ * Mounted as a sibling of `ContextMeter` inside the composer's own
+ * context-ring sheet (`features/composer/Composer.tsx`, UI-W11) — not in
+ * `PiExtensionRail`/`Shell`'s `extensionRail` slot: the reference Live
+ * pane (`docs/ui-reference/pi-companion-web.html` `.live` region) carries
+ * no Context/Cache/Cost block at all, so that telemetry lives in the ring
+ * instead (`root-route.tsx`'s own module doc explains the move). This
+ * component still only needs `agentId` and, once one exists, a live
+ * `DaemonSessionCostClient` — it reads no props of whatever mounts it.
  *
  * A fresh `SessionCostStore` is created per `agentId` (not reused across
  * a session switch), so cost never leaks from one session into another.

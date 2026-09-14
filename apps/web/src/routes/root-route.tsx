@@ -52,10 +52,9 @@ import { RouteErrorScreen } from "./route-error-screen.js";
  * context-window/cache-hit numbers now render inside the composer's own
  * context-ring sheet (`features/composer/Composer.tsx`,
  * `features/rail/context-meter.tsx`'s `ContextMeter` reused there
- * unchanged). Session cost has no live mount anywhere in the app now —
- * `features/telemetry/SessionCostMeterContainer.tsx`'s own doc comment
- * already describes it as "ready to mount" once a route wires it
- * somewhere; wiring it back in is a later task's concern, not this one's.
+ * unchanged). Session cost (`features/telemetry/SessionCostMeterContainer.tsx`)
+ * mounts in that same sheet now too, directly after `ContextMeter`
+ * (UI-W11) — not in this rail at all.
  *
  * **Why this file does not simply reuse `features/sessions`' `SessionList`/
  * `SessionsScreen` components or `features/rail`'s existing per-kind
