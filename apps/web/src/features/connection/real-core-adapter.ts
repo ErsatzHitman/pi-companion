@@ -1,22 +1,24 @@
 import type { Clock, hosts } from "@picompanion/frontend-core";
 
 /**
- * Live connection adapter for the shell badge (replaces
- * `fake-core-adapter.ts`'s T15 stand-in).
+ * Generic core-shaped connection adapter (originally built to replace
+ * `fake-core-adapter.ts`'s T15 stand-in for the shell badge).
  *
- * The badge (`connection-status.tsx`, via `use-connection-state.ts`) reads
- * shell connection state through the core-shaped interface below
- * (`getConnectionSnapshot` + `subscribeConnection`, read via
- * `useSyncExternalStore`). The fake resolved that interface from static
- * sources alone (a daemon-served hint, a dev-env host, a saved host) and
- * so claimed "Connected" without ever opening a socket. This adapter
- * carries no resolution logic of its own: `DaemonClientProvider`
- * (`app/daemon-client-context.tsx`) publishes the live
- * `HostController` snapshot it already subscribes to, so the badge reads
- * the same `DaemonClient` lifecycle every live screen already reads via
- * `useDaemonClientContext()` — one `HostController`, one subscription
- * chain. This module never calls `subscribeConnectionInfo` itself, so it
- * adds no second subscription.
+ * FIX-L3: the shell badge (`connection-status.tsx`) no longer reads
+ * through this adapter. It used to: `DaemonClientProvider`
+ * (`app/daemon-client-context.tsx`) published its live `HostController`
+ * snapshot in here from a `useEffect`, one render after the same `info`
+ * already reached every direct `useDaemonClientContext()` reader (the
+ * session rail's connection foot, `host-screen.tsx`, and so on) — a
+ * second, effect-lagged hop that could and did leave the badge on a
+ * stale status after the real connection had already moved on. The
+ * badge now reads `useDaemonClientContext()` directly, the exact same
+ * source every other live consumer already used, so it can never lag
+ * behind them again. `DaemonClientProvider` still republishes into this
+ * adapter (`toDaemonConnectionState` below is still its mapping), kept
+ * for any future plain get/subscribe consumer that does not otherwise
+ * need the full `DaemonClientContextValue` shape; nothing in this app
+ * currently reads it.
  */
 export type DaemonConnectionState = "connecting" | "connected" | "disconnected";
 
