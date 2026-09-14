@@ -20078,3 +20078,513 @@ on"), and the file was not moved into the serial lane because it is already the 
 - [x] The Windows CI job excludes the git-heavy temp directories from Defender, and prints whether
       that worked
 - [x] `testTimeout` untouched, no test-level retry added, no new serial-lane member
+
+## Wave 4 — web/Android UI reference-parity pass and a send-duplication bug fix (2026-09-15)
+
+Two owner reports drove this wave, filed and shipped under the commit prefixes below rather than
+master-table `T`-numbers — every ID here is the literal prefix on its own commit, so `git log
+<prefix>` on this tree finds it directly. First: "the UI has drifted far from the design and is
+very poor," judged against `docs/ui-reference/pi-companion-web.html` (web, `UI-W*`/`FIX-E1`) and
+`docs/ui-reference/pi-companion-app.html` (Android, `UI-A*`). Second: a messaging defect where one
+send produced two user rows and up to four assistant responses, and where an error blanked the
+page such that reloading it resent the original message (`FIX-S*` on the server, `FIX-W*` on web).
+Every commit named below is in `git log 039b5fe..84a953d`; merge commits are not cited individually
+since none carries its own content. Two tooling lessons the wave surfaced are recorded at the end.
+
+### Web UI parity pass (`docs/ui-reference/pi-companion-web.html`)
+
+#### UI-W1 — Search transcript removed from web entirely
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** The web-only transcript find feature is deleted outright:
+`transcript-search-bar.tsx` and its test, the `TranscriptSearchBar`/`TranscriptSearchBarProps`
+barrel exports, and every bit of search state in `transcript.tsx` (query/index, derived match
+lists, next/previous handlers, the scroll-to-active-match effect, per-row search classes/data
+attributes) and `transcript.css` (`.pc-transcript-search*`, the now-orphaned
+`.pc-transcript__row--search-match`/`--search-active` rules). `packages/frontend-core/src/timeline/
+transcript-search.ts` is untouched — Android keeps its own `transcript-search-bar.tsx`/
+`transcript-search-model.ts` built on that same core module, confirmed still present in
+`apps/android/src/features/transcript/`.
+
+**Evidence.** Commit `b1397aa` records a sweep of `apps/web/src`, `apps/web/e2e`, `docs/*.md` and
+`scripts/ci` for `Search transcript`/`transcript-search`/`TranscriptSearch` finding no remaining
+web-side mention and no reference-only doc touched.
+
+- [x] No Search-transcript affordance, state, or CSS remains anywhere under `apps/web/src`
+- [x] `packages/frontend-core`'s `transcript-search` module is untouched and Android still uses it
+
+#### UI-W2 — Per-message actions made icon-only
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** `message-row.tsx` replaces the full-width bordered `<Button kind="secondary">`
+rows for "Edit from here"/"Rewind to here" with compact, right-aligned `IconButton`s (new
+`edit`/`rewind` glyphs in `icons.tsx`) grouped in `.pc-message-actions`. Each button's
+accessible name — via `IconButton`'s `accessibleName`, exposed as both `aria-label` and
+`title` — still carries the former label unabbreviated, so every existing
+`getByRole('button', { name: ... })` query keeps matching. All handler/prop/hook wiring is
+unchanged. The row reveals its actions on hover/`focus-within`, and CSS keeps them visible under
+a `(hover: none)` media feature so a coarse (touch) pointer never loses them.
+
+**Evidence.** Commit `1c2e009`.
+
+- [x] Actions are icon-only with an unabbreviated accessible name, not a visible label
+- [x] Hidden until row hover/focus, always shown on a pointer with no hover
+- [x] No existing accessible-name query needed to change
+
+#### UI-W3 — Both rails made collapsible, reference rail ladder adopted
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** `shell.css` adopts the reference's fixed-width rail ladder (264/344px, stepping
+to 232/312px below 1360px; auto-hiding the extension rail below 1180px and the session rail below
+860px) and switches rail dividers from dashed to solid 1px (`--color-line`), against
+`docs/ui-reference/pi-companion-web.html` directly, keeping the existing 720px stacked-fallback
+pin. New `apps/web/src/ui/use-rail-collapse.ts` (`useRailCollapse`) is a `localStorage`-backed
+hook for manual per-rail collapse, modelled on `theme-preference.ts`'s guarded read/write shape so
+a blocked/unavailable `localStorage` degrades to in-memory rather than throwing, covered by
+`use-rail-collapse.test.ts`. `shell.tsx` adds two `IconButton` toggles
+(`aria-expanded`/`aria-controls`, "Hide/Show sessions", "Hide/Show live pane") wired to Ctrl/Cmd+B
+and Ctrl/Cmd+. via a keydown listener; collapsed state is exposed as `data-rail-session`/
+`data-rail-extension` on the shell root, and `shell.css` keys unconditional override rules off
+those attributes so a manual choice always wins over the responsive ladder.
+
+**Follow-up in the same wave (`FIX-W7`, commit `ab24480`).** The global keydown listener fired
+Ctrl/Cmd+B and Ctrl/Cmd+. even while focus was inside a textarea, `TextField`, contenteditable
+region, or an open dialog. A new `isEditableTarget` check now bails out of the handler for those
+targets, proven by a test that the shortcut is ignored while focus is inside a textarea and fires
+again once focus returns to the document body.
+
+**Evidence.** Commits `0a9e3c5`, `ab24480`.
+
+- [x] Both rails collapse independently, state persisted to `localStorage`
+- [x] Ctrl/Cmd+B and Ctrl/Cmd+. toggle the rails, and are suppressed while an editable/dialog
+      target has focus
+- [x] A manual collapse choice overrides the responsive breakpoint ladder
+
+#### UI-W4 — Model/routing/queue controls moved to a metadata chip row
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** `Composer.tsx`'s context-ring `Sheet` (testid `composer-session-controls`) now
+shows only a context-usage summary; `ModelThinkingPicker`, `PromptRoutingPicker` and
+`QueueModePicker` each moved into their own metadata-row chip's anchored `Popover`, each chip a
+real `aria-haspopup`/`aria-expanded` button showing that picker's live collapsed state. The
+standalone "Commands" toggle button is dropped — typing a bare `/` already auto-opens the slash
+palette via `useSlashCommands`, so the button was redundant. Stop moved into the foot row as an
+`IconButton` (new `stop` glyph), rendered only while abortable (a wired client, whether or not an
+abort is already in flight) instead of sitting permanently disabled.
+
+**Evidence.** Commit `ab8b358`; `FIX-E1`'s `apps/web/e2e/keyboard-navigation.spec.ts` update
+(commit `8aab22d`) re-pins the new Tab order (Attach files → Model/Routing/Queue chips → Stop)
+as a direct consequence.
+
+- [x] Model/effort, routing and queue controls read and act through metadata-row chips, not the
+      context-ring popover
+- [x] No "Commands" button; `/` still opens the palette
+- [x] Stop renders only while a client is wired to abort, never permanently disabled
+
+#### UI-W5 — Live pane rebuilt into Subagents/Workflow cards
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** `pi-extension-rail.tsx`/`.css` and new `rail-status.ts` rebuild the Live pane's
+`.live` region into the reference's Subagents and Workflow cards with a single empty state,
+replacing the prior per-widget layout; `rail-element-card.tsx` and the rail's own test suite were
+rewritten against the new shape (`pi-extension-rail.test.tsx` went from a per-widget assertion set
+to one matching the two-card structure).
+
+**Evidence.** Commit `9d26c48`; commit `dc10ab2` fixed a `TimerHandle` typecheck error and
+formatting introduced by the rebuild before merge.
+
+- [x] The Live pane draws Subagents and Workflow cards matching the reference, with one empty
+      state covering both
+
+#### UI-W9 / UI-W11 — Context/Cache/Cost block removed from the right rail; ContextMeter and session cost re-homed into the ring sheet
+
+`labels: phase-9, area: web` · `depends-on: UI-W9` · `wave: P9-X`
+
+**What shipped.** `root-route.tsx`'s `ExtensionRailContent` had been mounting `<ContextMeter>` and
+`<SessionCostMeterContainer>` directly as siblings of `PiExtensionRail` in `Shell`'s extension-rail
+slot even after `PiExtensionRail` itself was rebuilt to the reference (whose `.live` region has no
+Context/Cache/Cost block) — that route-level mount was the thing still putting the block on
+screen. `UI-W9` (commit `3717818`) removes both mounts and re-homes `ContextMeter` (unchanged,
+reused from `features/rail/context-meter.tsx`) into the composer's own `composer-session-controls`
+sheet as a distinct region. That left the session-cost readout with no mount at all — `UI-W11`
+(commits `f8b9cfd`, `1f0594a`) re-mounts `SessionCostMeterContainer` into the same sheet beside it,
+and corrects the doc comments that had gone stale claiming "no live mount" (the `T124` rule).
+Merging `UI-W11` against the concurrently-landing `UI-W12` (Compact now, below) required a repair
+commit (`c2bbe42`) after a mechanical merge concatenated both branches' additions to the same
+`Context` group and dropped a closing brace in `Composer.test.tsx`; the sheet now renders
+ContextMeter, then the session cost readout, then Compact now, with both branches' tests intact.
+
+**Evidence.** Commits `3717818`, `f8b9cfd`, `1f0594a`, `c2bbe42`.
+
+- [x] No Context/Cache/Cost block in the right rail
+- [x] `ContextMeter` and the session-cost readout both render, live, inside the composer's
+      session-controls sheet
+- [x] No stale "not mounted" prose survives the moves
+
+#### UI-W6 / UI-W13 — New Session rebuilt: in-place open, honest cold-start progress, icon-only row actions, first-prompt threading
+
+`labels: phase-9, area: web` · `depends-on: UI-W6` · `wave: P9-X`
+
+**What shipped.** `UI-W6` (commits `41347ba`, `a0cb272`) opens the New Session dialog in place
+from the session rail instead of navigating away, restyles `CreateSessionDialog.tsx` to the
+reference's vocabulary, and compacts `SessionsScreen`'s header with a collapsible find-sessions
+region and a tree card. Its cold-start affordance is deliberately honest rather than a bare
+spinner: a code comment records that "a cold-start create measured at 52.5s," so after
+`ELAPSED_COUNTER_THRESHOLD_SECONDS` (5s) of "submitting," the dialog replaces the bare "starting"
+line with a live elapsed-seconds counter (`data-testid="create-session-elapsed"`) rather than
+letting a slow create look stuck. `UI-W13` (commits `1282fc7`, `2ea6ec1`) restyles session-row
+trigger actions to an icon-only button (`session-row-actions-button.tsx`) matching `UI-W2`'s
+grammar, restyles `DiscoveredSessionRow` onto that same `.srow`-family grammar, and threads an
+optional `initialPrompt` end to end — `CreateSessionDialog` → `use-create-session.ts` →
+`daemon-sessions-client.ts` → `sessions-client.ts` — so a session can be created with its first
+prompt already queued.
+
+**Evidence.** Commits `41347ba`, `a0cb272`, `1282fc7`, `2ea6ec1`.
+
+- [x] New Session opens in place from the rail, not a navigation
+- [x] A slow create shows a live elapsed counter after 5s rather than an indefinite spinner
+- [x] Session-row actions are icon-only; discovered-session rows share the same row grammar
+- [x] An optional first prompt can be supplied at creation and reaches the daemon
+
+#### UI-W7 / UI-W8 — Files screen rebuilt as a toolbar; Terminal accessibility and switcher fixed
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** `UI-W7` (commit `1fd014b`) replaces the Files screen's always-open
+`FileUploadPanel`/`FileOpsPanel`/`FileSearchPanel` stack with one compact `FileToolbar`
+(breadcrumbs left, icon-button actions right) plus per-row actions (rename/delete/download,
+revealed on hover/focus and kept visible under `(hover: none)`, via opacity/pointer-events rather
+than `display:none`) — the same `.srow` row grammar `UI-W13` uses for session rows. `UI-W8`
+(commit `8438235`) fixes two real defects visible in the owner's screenshot: `@xterm/xterm`'s own
+`css/xterm.css` (which normally positions `.xterm-accessibility`/`.live-region`/
+`.xterm-helper-textarea` off-screen) is never imported anywhere in the app, so xterm's
+screen-reader helper text ("Too much output to announce...") rendered as ordinary visible body
+text; `terminal-view.css` now hides those three nodes with the repository's standard
+visually-hidden pattern instead of `display:none`, keeping them available to the screen readers
+they exist for. The terminal switcher's per-terminal labels are restyled as `.chip` tabs (pill
+radius, `aria-current` on the active tab, a "New terminal" chip pinned right).
+
+**Evidence.** Commits `1fd014b`, `8438235`.
+
+- [x] Files reads as a toolbar plus row actions, not a stack of always-open forms
+- [x] xterm's screen-reader helper nodes are visually hidden, not rendered as visible page text
+- [x] The terminal switcher renders as chip tabs with an active-tab indicator
+
+#### UI-W10 — Transcript visual-parity pass
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** The assistant turn no longer draws a bordered `--color-surface` card — only the
+user turn (`.pc-message--user`) keeps its own filled bubble, matching
+`docs/ui-reference/pi-companion-web.html`'s `.turn`/`.prose` (no card for the assistant at all).
+`tool-call-row.tsx`/`.css` give a completed tool call the reference's success/error tints
+(`.tool-out.tool-ok`/`.tool-out.tool-err`, backed by `--tool-success-bg`/`--tool-error-bg`) via a
+`pc-tool-call--success`/`pc-tool-call--error` modifier applied only once a call is
+completed/failed — running/blocked/canceled stay untinted. No testid, role, or accessible name
+changed.
+
+**Evidence.** Commit `1e04ff2`.
+
+- [x] The assistant turn renders with no bordered card; the user bubble is unaffected
+- [x] A completed tool call's body carries the reference's success/error tint; in-flight calls do
+      not
+
+#### UI-W12 — A Compact now row sends the literal `/compact` through the normal submit path
+
+`labels: phase-9, area: web` · `depends-on: UI-W9` · `wave: P9-X`
+
+**What shipped.** The reference's context-menu Context group ends with a "Compact now" row.
+There is no manual-compaction RPC on the wire (confirmed against
+`apps/web/src/features/sessions/rpc-command-web-parity.ts`'s own "compact" gap entry and
+`plan.md` §11.1's RPC-command list), so the row sets the draft to the literal text `/compact` and
+an effect calls the same `useComposer().submit()` a typed Enter would call, once that text has
+landed in draft state. It is disabled, with a visible explanation, whenever `useComposer`'s own
+`canSend` would refuse a real send (no live client, a submission in flight, a pending attachment
+upload).
+
+**Two same-wave bug fixes followed the initial row (both before `FIX-W9`, filed separately
+below).** `FIX-W5` (commit `887517a`) fixed three defects: the effect relied on a
+`setDraftText(COMPACT_NOW_TEXT)` re-render that never fires when the draft already equals that
+string exactly (React bails via `Object.is`), leaving a stale ref that a later keystroke passing
+through the literal `/compact` substring could resurrect into an unwanted auto-submit — fixed by
+branching on `draftText === COMPACT_NOW_TEXT` and submitting directly; the user's in-progress draft
+was being silently discarded rather than restored after the compact send settled; and staged
+attachments were being sent alongside `/compact`, which the daemon has no use for, so they are now
+cleared before the compact submission runs.
+
+**Evidence.** Commits `82b820c`, `c2bbe42`, `887517a`.
+
+- [x] Compact now sends exactly `/compact` through the real submit path, no fabricated RPC
+- [x] Disabled, with a stated reason, whenever a real send would also be refused
+- [x] A draft equal to `/compact` sends once; a later keystroke through that literal substring
+      does not auto-resubmit; the user's own draft is restored, not discarded
+
+#### FIX-E1 — New session pill's text was 1.33:1 contrast against its own background
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** A real accessibility defect found by a real-browser axe run
+(`accessibility.spec.ts`'s `/h/$serverId/sessions` sweep): `.pc-sessions-screen__pill--accent`
+used `--color-accent-ink` — a darker hover/active shade meant for backgrounds — as its own label
+colour on an accent background, producing 1.33:1 contrast (invisible blue-on-blue text). Switched
+to `--color-accent-contrast`, the token every other accent-background control (e.g.
+`.pc-button--primary`) already uses for its own label.
+
+**Evidence.** Commit `7227378`.
+
+- [x] The New session pill's label passes axe `color-contrast` against its accent background
+
+### Android UI parity pass (`docs/ui-reference/pi-companion-app.html`)
+
+#### UI-A2 — Primitives fidelity: Select on Sheet, BashBlock colours, PromptBar send icon, Toggle width
+
+`labels: phase-9, area: android` · `wave: P9-X`
+
+**What shipped.** `Select.tsx` is rebuilt on the shared `Sheet` primitive instead of a second
+native `Modal`, which had been fighting the composer's own modal for IME focus. `BashBlock.tsx`
+adopts the reference's ink/`line-strong` colours and padding; `PromptBar.tsx` gives the send
+button an on-accent icon colour; `Toggle.tsx`'s track is corrected to the reference's 40dp width.
+
+**Evidence.** Commit `a2f864f`.
+
+- [x] `Select` no longer opens a second native `Modal`
+- [x] `BashBlock`, `PromptBar`'s send icon and `Toggle`'s track match the reference
+
+#### UI-A3 — Chat chrome trim
+
+`labels: phase-9, area: android` · `wave: P9-X`
+
+**What shipped.** The resting status strip now collapses; the Session tree moves out of the
+persistent header; the New session pill's corner radius matches the reference; and
+`StreamingMessage` drops the visible speaker caption.
+
+**Evidence.** Commit `e4123a5`.
+
+- [x] The status strip collapses at rest; the session tree is not pinned in the persistent header
+- [x] The New session pill's radius and `StreamingMessage`'s caption match the reference
+
+#### UI-A4 — Composer controls sheet rebuilt on pm-row/tick/seg shape
+
+`labels: phase-9, area: android` · `wave: P9-X`
+
+**What shipped.** `ModelThinkingPicker.tsx`, `QueueModePicker.tsx` and `PromptControlsMenu.tsx`
+are rebuilt around the reference's `.pm-row`/`.tick`/`.seg` shapes: model rows show a leading tick
+visible only on the selected row; the effort control is a segmented row where a step unreachable
+for the current model renders `disabled` (`accessibilityState={{ disabled: !reachable }}`,
+`opacity: .38`) rather than being hidden; queue-mode rows (`.pm-row[data-cyc]`) cycle their own
+value in place on tap instead of opening a second menu; and a Compact now row is added, honestly
+disabled with the label "no wire path — /compact is a slash command, not a menu action" — the same
+audit `UI-W12` records found no manual-compact RPC, applied here since Android's composer has no
+equivalent free-text send path to reuse.
+
+**Evidence.** Commits `7ee7c65`, `ff56970`, `1916976`.
+
+- [x] Model rows tick only the selected model
+- [x] Effort steps unreachable for the current model are disabled, not hidden
+- [x] Queue-mode rows cycle in place rather than opening a second menu
+- [x] Compact now is disabled with a stated reason, since no manual-compact RPC exists
+
+#### UI-A5 — Files/Terminal adopt the shared ScreenBar; Settings gains extension-coverage content
+
+`labels: phase-9, area: android` · `wave: P9-X`
+
+**What shipped.** `files-screen.tsx` and `terminal-screen.tsx` open with the shared `ScreenBar`
+(title + optional `onBack`), matching the chrome every other redesigned screen already uses; every
+existing testid/action/title is unchanged and `onBack` is a new optional prop no current route
+caller passes. `SettingsScreen.tsx` adds the two informational regions the mockup draws (an
+extensions-that-draw list, a Loaded-but-silent card), sourced from a new
+`settings-extension-coverage.ts` data module whose content is drawn from `plan.md` §11.7 rather
+than the mockup's own invented sample text — the extensions registry keeps no namespace-to-name
+table this could otherwise read back from live state. The two per-agent regions (Model/
+Thinking-effort, Auto-compaction/Ask-before-every-tool) stay out, per the screen's own existing
+per-host reasoning. No new `Pressable` was added; both new regions are plain, non-interactive.
+
+**Evidence.** Commit `fea43ed`.
+
+- [x] Files and Terminal open with the shared `ScreenBar`
+- [x] Settings shows both informational extension-coverage cards, sourced from `plan.md` §11.7
+- [x] Neither new region adds an interactive touch target
+
+### Messaging duplication and recovery
+
+Owner report: one send could show two user rows and up to four assistant responses, and an error
+that blanked the page would resend the original message on reload.
+
+#### FIX-S1 / FIX-S2 — Server dispatch made idempotent by `clientMessageId`; a run-generation tag stops a cancelled turn's buffered event from re-appearing
+
+`labels: phase-9, area: server` · `depends-on: FIX-S1` · `wave: P9-X`
+
+**What shipped.** `FIX-S1` (commit `c532d3a`) found that `handleSendAgentMessageRequest` →
+`sendPromptToAgent` → `startAgentRun` called `agentManager.streamAgent`/`replaceAgentRun`
+unconditionally regardless of `clientMessageId`; the only id-aware guard
+(`recordSubmittedPrompt`) ran after `session.startTurn`, inside `streamAgent`'s own forwarder, so
+it suppressed a duplicate timeline row but never a duplicate provider invocation. The fix makes
+`startAgentRun` check `AgentManager.hasAcceptedClientMessage` before ever calling
+`streamAgent`/`replaceAgentRun`: the check covers both the committed `user_message` timeline row
+and a new bounded in-memory per-agent set (`acceptedClientMessageIds`, `ACCEPTED_CLIENT_MESSAGE_
+ID_LIMIT`-capped) that closes the window between accepting a send and that row existing, with no
+`await` between check and record so the two stay atomic. `FIX-S2` (commit `caca921`) closed two
+remaining holes `FIX-S1` did not yet cover: it hoists that same check ABOVE the `tryRunOutOfBand`
+call (a retried send the live session would accept out-of-band, as a steer into an already-running
+turn, could otherwise still dispatch twice), and tags every event `AgentManager` receives from a
+session with a per-agent, monotonically increasing run generation, captured at
+`subscribeToSession`'s own callback — the single funnel every real session-emitted event passes
+through exactly once. `enqueueSessionEvent` now drops any event tagged with an older generation
+than the agent's current one, closing the race where a cancelled turn's trailing content event
+(carrying no `turnId` of its own) could land in a still-pending replacement turn's staged events
+and get recorded as an extra assistant row once that turn started. `FIX-S3` (commit `ff6acdb`,
+comment-only, no behaviour change) documents why the bounded set's FIFO eviction cannot reopen the
+duplicate-dispatch hole: it only needs to cover an id from accept time until its matching
+`recordSubmittedPrompt` call lands a timeline row, since the timeline-row fallback covers it
+permanently after that regardless of set membership.
+
+**Evidence.** Commits `c532d3a`, `7dc8ac9` (oxfmt), `caca921`, `ff6acdb`. `FIX-S1`'s own commit
+message records three new/extended regression suites (`agent-prompt.test.ts`, `agent-manager.
+test.ts`, `session.test.ts`, 355 tests together) proving a repeated `clientMessageId` reaches the
+fake provider's start-turn hook exactly once; `FIX-S2`'s adds a same-id-vs-different-id case and an
+end-to-end buffered-straggler regression pin via `fetchTimeline`.
+
+- [x] A retried send sharing a `clientMessageId` with an in-flight or already-accepted send
+      dispatches at most once, on every path including out-of-band steering
+- [x] A cancelled turn's buffered trailing event cannot be re-enqueued as an extra assistant row
+      under a replacement turn
+- [x] The bounded set's eviction policy is proven safe by the timeline-row fallback, in writing
+
+#### FIX-W1 — Composer `submit()` re-entrancy guarded with a synchronous ref lock
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** Two synchronous `submit()` calls in one tick (double-tap, ghost click, double
+Enter) both observed `isSubmitting=false`, since React state only updates after a render, so each
+minted its own `clientMessageId` and outbox entry. A `useRef<boolean>` lock is now set
+synchronously on entry, checked before every other guard, and cleared in `finally` so a
+thrown/returned submission never leaves the composer stuck.
+
+**Evidence.** Commit `e22fa8b`, which records two `submit()` calls fired in one `act()` without an
+await between them now sending exactly once, with exactly one outbox entry recorded.
+
+- [x] Two synchronous submits in one tick send once, with one outbox entry
+
+#### FIX-W2 — A persisted draft already durably submitted is never restored
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** `submit()` already cleared the persisted draft in the step right after
+`outbox.enqueue()` resolved — that timing did not change here. What `FIX-W2` adds is a second,
+independent guard for the window before that clear resolves (or if `DraftSessionController.
+clear()` silently swallows a storage error): `frontend-core`'s `drafts.ts` gains a pure
+`isDraftAlreadySubmitted` (comparing trimmed draft text against an outbox entry's payload for
+pending/sending/awaiting-confirmation/sent statuses) threaded through `DraftSessionController.
+open()` as an optional `isAlreadySubmitted` callback; a positive match blanks the restore and
+drops the stale persisted draft outright. `apps/web`'s `use-composer.ts` wires this to the hook's
+own `OutboxController.loadAll(sessionId)`.
+
+**Evidence.** Commit `0ee2a5a`; `FIX-W7`'s follow-up (commit `a288d28`) adds a `React.StrictMode`
+test over the same mount-restore effect, over the wrapper shape `use-session-terminal.test.tsx`
+already established, confirming the double-invocation restores the draft exactly once with no
+defect found.
+
+- [x] A reload in the window before the post-submit clear resolves does not restore
+      already-queued text
+- [x] A resend from a restored draft cannot mint a new `clientMessageId` the server has no way to
+      correlate with the original
+
+#### FIX-W3 — A recoverable root error boundary around the router
+
+`labels: phase-9, area: web` · `wave: P9-X`
+
+**What shipped.** Before this, the only boundary in `apps/web/src` was `ExtensionElementBoundary`,
+scoped to one Pi UI element; `createRouter` set no `defaultErrorComponent`, so any uncaught render
+error unmounted the whole tree and left a blank page, whose only recovery — a hard reload — is
+precisely what re-armed the duplicate send `FIX-W2` fixes (a persisted draft outliving a durable
+submission). The new boundary renders an in-app error state from existing primitives with a
+"Try again" action that resets it.
+
+**Evidence.** Commit `f75f2e3`.
+
+- [x] An uncaught render error shows an in-app recoverable state, not a blank page
+
+#### FIX-W6 / FIX-W8 — A recovered-turn banner, and a real resend path that reuses the original `clientMessageId`
+
+`labels: phase-9, area: web` · `depends-on: FIX-W6` · `wave: P9-X`
+
+**What shipped.** `FIX-W6` (commit `95db2e8`) mirrors Android's own
+`recovered-turn-model.ts` behaviour contract without depending on anything Android-only: web has
+no cold-start recovery pass, so the new `apps/web/src/features/transcript/recovered-turn-model.ts`
+selects directly off `OutboxController.loadAll`'s `OutboxEntry[]`. `use-recovered-turns.ts` polls
+the outbox (via the injected `Clock`, no raw `setInterval`) for the session's
+awaiting-confirmation entries; `recovered-turn-banner.tsx` renders a `Banner` with
+keyboard-reachable, `aria`-labelled Resend/Discard buttons, mounted in `host-session-screen.tsx`.
+Disclosed gap in that same commit: Resend only flipped the entry back to `pending`
+(`OutboxController.confirmResend`) — nothing then pushed it over the wire, since web (unlike
+Android's reconnect-triggered `resumePendingTurnOutboxEntries`) had no equivalent. `FIX-W8`
+(commit `fee0ff1`) closes that gap: new `use-pending-outbox-resume.ts`'s
+`resumePendingOutboxEntries` resends every pending, prompt-kind entry reusing its ORIGINAL
+`payload.clientMessageId` (never minting a new one) as `SendAgentMessageOptions.messageId`, so the
+server's `FIX-S1` dedupe treats a resend as the same logical send; `usePendingOutboxResume` adds a
+synchronous in-flight ref guard (mirroring `FIX-W1`'s lock) so a rapid double-click or a reconnect
+firing mid-flight sends once, plus an optional resend-on-reconnect effect. `FIX-W10` (commit
+`4fad695`) adds `use-recovered-turns.test.ts` covering the interval-driven polling this banner
+relies on (refresh/filtering on mount, an interval tick picking up a newly-parked entry,
+`clearInterval` on unmount, session-change restarting exactly one interval, a rejected `loadAll`
+leaving prior state in place) — all six passed against the hook unmodified, pinning existing
+behaviour rather than fixing a defect.
+
+**Evidence.** Commits `95db2e8`, `b3a96cb` (oxfmt), `fee0ff1`, `4fad695`.
+
+- [x] A parked awaiting-confirmation send shows a banner with Resend/Discard
+- [x] Resend reuses the original `clientMessageId`, never minting a new one the dedupe cannot
+      correlate
+- [x] A rapid double Resend, or a reconnect racing a resend, sends once
+
+#### FIX-W9 — Compact-now restore no longer clobbers text typed during the send
+
+`labels: phase-9, area: web` · `depends-on: UI-W12` · `wave: P9-X`
+
+**What shipped.** Blocker: `UI-W12`/`FIX-W5`'s `pendingCompactRef` effect unconditionally restored
+the pre-compact draft once `submit()` settled, clobbering any newer text the user typed while the
+real, un-disable-gated send was still in flight. Fixed by gating the restore on
+`draftTextRef.current === ""` (the live-draft mirror) via a shared `restoreCapturedDraftIfBoxEmpty`
+helper used by both call sites. Also fixed in the same commit: a `.catch()` on the `submit().then()`
+chain, since a rejection from `outbox.enqueue`/`draftController.clear()`/`markSending` escaped
+`submit()`'s own internal catch — the restore now runs on that path too, surfaced via a new,
+narrow `compactSendError` status line. Disclosed rather than fixed: staged attachments are still
+lost one-way on a failed/interrupted compact send, since `use-attachments.ts` (out of this task's
+ownership) exposes no re-stage/cancel operation. A fast second click now preserves an
+already-captured restore text instead of silently discarding it.
+
+**Evidence.** Commit `038e1f3`, which records two new `Composer.test.tsx` cases (the
+typed-over-hang race sending exactly once, and the storage-rejection path via a new
+`FlakyStructuredStorage` test double) and `apps/web`: `vitest run src/features/composer` (275
+passed), typecheck clean, `oxfmt --check` clean, `oxlint` clean.
+
+- [x] Text typed during an in-flight Compact-now send is never overwritten by the restore
+- [x] A rejection escaping `submit()`'s own catch still restores the draft and surfaces an error
+- [x] The one-way loss of staged attachments on a failed compact send is disclosed, not silently
+      dropped
+
+### Lessons from this wave
+
+**`apps/web` tests must be run from `apps/web`, not the repository root.** The root
+`vitest.config.ts` sets no `environment`, so it defaults to Vitest's `node` environment; every web
+test file assumes a DOM (jsdom), which `apps/web/vitest.config.ts` supplies with
+`environment: "jsdom"`. Run the same test file from the root instead of `apps/web`, and it fails
+with `document is not defined` before a single assertion runs — a config-shape failure that reads
+like a real regression to anyone who has not first checked which `vitest.config.ts` picked it up.
+The fix is procedural, not code: use `npm test --workspace=@picompanion/web` or `cd apps/web &&
+npx vitest run ...`, never a bare `vitest run apps/web/...` from the repository root.
+
+**The root Vitest config now excludes `.pi/**`from discovery.** A background job's scratch
+worktree under`.pi/worktrees/`is a full checkout of this repository. The root config already
+excluded`node_modules`, `.dev`and`dist`but not`.pi`, so a run from the repository root
+discovered every test file once per live job worktree — and those copies have no built
+`packages/\*/dist`, so each one failed with `Failed to resolve entry for package
+"@picompanion/frontend-core"`. That noise reads exactly like a broken merge, and did: at commit
+`0c1ddb8` it was the first suspicion raised against the transcript-search removal (`UI-W1`), which
+was in fact green (confirmed the same way the lesson above requires: `apps/web`, 21 files / 231
+tests, run under `apps/web/vitest.config.ts`). The root config's `exclude`array now adds`"**/.pi/**"`, with a comment recording why.
