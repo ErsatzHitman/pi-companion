@@ -58,7 +58,10 @@ function createTestRegistries() {
     upsert: async (record: PersistedProjectRecord) => {
       projects.set(record.projectId, record);
     },
-    update: async (id: string, updater: (record: PersistedProjectRecord) => PersistedProjectRecord) => {
+    update: async (
+      id: string,
+      updater: (record: PersistedProjectRecord) => PersistedProjectRecord,
+    ) => {
       const existing = projects.get(id);
       if (!existing) return null;
       const next = updater(existing);

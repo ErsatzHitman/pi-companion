@@ -24,10 +24,7 @@ import {
   type CheckoutWorktreeState,
   type PullRequestStatusResult,
 } from "../utils/checkout-git.js";
-import type {
-  GitCommandOptions,
-  GitCommandResult,
-} from "../utils/run-git-command.js";
+import type { GitCommandOptions, GitCommandResult } from "../utils/run-git-command.js";
 import type { PaseoWorktreeInfo } from "../utils/worktree.js";
 import { runGitCommand as runGitCommandReal } from "../utils/run-git-command.js";
 import {
@@ -345,10 +342,7 @@ interface CreateServiceOptions {
     cwd: string,
     context?: CheckoutContext,
   ) => Promise<CheckoutSnapshotFacts>;
-  getCheckoutStatus?: (
-    cwd: string,
-    context?: CheckoutContext,
-  ) => Promise<CheckoutStatusResult>;
+  getCheckoutStatus?: (cwd: string, context?: CheckoutContext) => Promise<CheckoutStatusResult>;
   getCheckoutShortstat?: (cwd: string) => Promise<CheckoutShortstat | null>;
   getCheckoutWorktreeState?: (cwd: string) => Promise<CheckoutWorktreeState>;
   getPullRequestStatus?: (cwd: string) => Promise<PullRequestStatusResult>;

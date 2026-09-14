@@ -15,10 +15,7 @@ import type {
   CheckoutWorktreeState,
   PullRequestStatusResult,
 } from "../utils/checkout-git.js";
-import type {
-  GitCommandOptions,
-  GitCommandResult,
-} from "../utils/run-git-command.js";
+import type { GitCommandOptions, GitCommandResult } from "../utils/run-git-command.js";
 import {
   WorkspaceGitServiceImpl,
   type WorkspaceGitRuntimeSnapshot,
@@ -276,10 +273,7 @@ function createGitHubServiceStub(): ForgeService {
 
 interface CreateServiceTestOptions {
   subscribe?: typeof parcelWatcher.subscribe;
-  getCheckoutStatus?: (
-    cwd: string,
-    context?: CheckoutContext,
-  ) => Promise<CheckoutStatusResult>;
+  getCheckoutStatus?: (cwd: string, context?: CheckoutContext) => Promise<CheckoutStatusResult>;
   getCheckoutSnapshotFacts?: (
     cwd: string,
     context?: CheckoutContext,

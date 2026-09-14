@@ -146,9 +146,7 @@ test("Hub control waits for an in-flight create of the same execution", async ()
 test("Hub archives only the owned agent in a shared local checkout", async () => {
   const hub = await launchRelationship();
   hub.beginOwnedCreate("local-create", "execution-local", { prompt: "sleep 30" });
-  const created = (await hub.ownedCreateResult(
-    "local-create",
-  )) as HubExecutionAgentCreateResponse;
+  const created = (await hub.ownedCreateResult("local-create")) as HubExecutionAgentCreateResponse;
   await hub.ownedRunningUpdate(created.payload.agentId!);
 
   const archived = await hub.archiveExecution("execution-local", "archive-local");

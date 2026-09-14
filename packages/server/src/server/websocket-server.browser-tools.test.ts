@@ -154,7 +154,13 @@ describe("WebSocketServer browser tools wiring", () => {
     const resultPromise = harness.broker.execute({
       command: {
         command: "click",
-        args: { browserId: BROWSER_ID, ref: "@e1", button: "left", doubleClick: false, modifiers: [] },
+        args: {
+          browserId: BROWSER_ID,
+          ref: "@e1",
+          button: "left",
+          doubleClick: false,
+          modifiers: [],
+        },
       },
     });
     const request = await resumedBrowserHost.nextBrowserRequest();

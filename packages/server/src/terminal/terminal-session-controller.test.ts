@@ -93,10 +93,7 @@ describe("terminal-session-controller restore", () => {
       createTerminal: vi.fn(),
       registerCwdEnv: vi.fn(),
       validateTerminalActivityToken: vi.fn(
-        (
-          _terminalId: string,
-          _token: string,
-        ): "valid" | "unknown" | "invalid" => "unknown",
+        (_terminalId: string, _token: string): "valid" | "unknown" | "invalid" => "unknown",
       ),
       getTerminal: vi.fn(() => terminal),
       getTerminalState: getTerminalStateMock,
@@ -215,10 +212,7 @@ describe("terminal-session-controller legacy terminal creation", () => {
       createTerminal,
       registerCwdEnv: vi.fn(),
       validateTerminalActivityToken: vi.fn(
-        (
-          _terminalId: string,
-          _token: string,
-        ): "valid" | "unknown" | "invalid" => "unknown",
+        (_terminalId: string, _token: string): "valid" | "unknown" | "invalid" => "unknown",
       ),
       getTerminal: vi.fn(),
       getTerminalState: vi.fn(),
@@ -295,10 +289,7 @@ describe("terminal-session-controller legacy terminal creation", () => {
       createTerminal,
       registerCwdEnv: vi.fn(),
       validateTerminalActivityToken: vi.fn(
-        (
-          _terminalId: string,
-          _token: string,
-        ): "valid" | "unknown" | "invalid" => "unknown",
+        (_terminalId: string, _token: string): "valid" | "unknown" | "invalid" => "unknown",
       ),
       getTerminal: vi.fn(),
       getTerminalState: vi.fn(),
@@ -388,10 +379,7 @@ describe("terminal-session-controller wrap-flag gating", () => {
       createTerminal: vi.fn(),
       registerCwdEnv: vi.fn(),
       validateTerminalActivityToken: vi.fn(
-        (
-          _terminalId: string,
-          _token: string,
-        ): "valid" | "unknown" | "invalid" => "unknown",
+        (_terminalId: string, _token: string): "valid" | "unknown" | "invalid" => "unknown",
       ),
       getTerminal: vi.fn(() => terminal),
       getTerminalState,
@@ -469,10 +457,7 @@ describe("terminal-session-controller subdirectory aggregation", () => {
       createTerminal: vi.fn(),
       registerCwdEnv: vi.fn(),
       validateTerminalActivityToken: vi.fn(
-        (
-          _terminalId: string,
-          _token: string,
-        ): "valid" | "unknown" | "invalid" => "unknown",
+        (_terminalId: string, _token: string): "valid" | "unknown" | "invalid" => "unknown",
       ),
       getTerminal: vi.fn(),
       getTerminalState: vi.fn(),
@@ -551,10 +536,7 @@ describe("terminal-session-controller subdirectory aggregation", () => {
       createTerminal: vi.fn(),
       registerCwdEnv: vi.fn(),
       validateTerminalActivityToken: vi.fn(
-        (
-          _terminalId: string,
-          _token: string,
-        ): "valid" | "unknown" | "invalid" => "unknown",
+        (_terminalId: string, _token: string): "valid" | "unknown" | "invalid" => "unknown",
       ),
       getTerminal: vi.fn(),
       getTerminalState: vi.fn(),
@@ -640,10 +622,7 @@ describe("terminal-session-controller workspace-scoped subscriptions", () => {
       createTerminal: vi.fn(),
       registerCwdEnv: vi.fn(),
       validateTerminalActivityToken: vi.fn(
-        (
-          _terminalId: string,
-          _token: string,
-        ): "valid" | "unknown" | "invalid" => "unknown",
+        (_terminalId: string, _token: string): "valid" | "unknown" | "invalid" => "unknown",
       ),
       getTerminal: vi.fn(),
       getTerminalState: vi.fn(),

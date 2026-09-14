@@ -31,16 +31,12 @@ export function textByRole(
   items: AgentTimelineItem[],
   role: "user_message" | "assistant_message",
 ): string {
-  return items
-    .flatMap((item) => (item.type === role ? [item.text] : []))
-    .join("\n");
+  return items.flatMap((item) => (item.type === role ? [item.text] : [])).join("\n");
 }
 
 export function userMessageIdForToken(items: AgentTimelineItem[], token: string): string {
   const item = items.find(
-    (
-      candidate,
-    ): candidate is Extract<AgentTimelineItem, { type: "user_message" }> =>
+    (candidate): candidate is Extract<AgentTimelineItem, { type: "user_message" }> =>
       candidate.type === "user_message" && candidate.text.includes(token),
   );
   if (!item?.messageId) {

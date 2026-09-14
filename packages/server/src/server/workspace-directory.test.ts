@@ -609,7 +609,10 @@ describe("WorkspaceDirectory empty projects", () => {
     });
   }
 
-  function project(input: { projectId: string; customName?: string | null }): PersistedProjectRecord {
+  function project(input: {
+    projectId: string;
+    customName?: string | null;
+  }): PersistedProjectRecord {
     return {
       projectId: input.projectId,
       rootPath: `/workspace/${input.projectId}`,
