@@ -317,8 +317,12 @@ describe("files-and-terminal.yaml anchors exist in source", () => {
         "../../src/features/terminal/terminal-screen.tsx",
         "TerminalScreen",
       );
+      // UI-A5: this branch is now wrapped in `<View style={styles.screen}>{bar}`
+      // (the shared ScreenBar sits above the body as a fixed sibling, same as
+      // every other adopting screen) — the guard condition and the EmptyState
+      // it renders are otherwise unchanged, so this stays anchored to both.
       expect(code).toMatch(
-        /if \(!resolvedWebview\.isAvailable \|\| !resolvedWebview\.attachHost\) \{\s*return \(\s*<View style=\{styles\.container\} testID="terminal-screen">\s*<EmptyState\s+title="Terminal unavailable"\s+description="This build has no embedded terminal renderer installed yet\. Your session and its output are unaffected\."\s+testId="terminal-unavailable"/,
+        /if \(!resolvedWebview\.isAvailable \|\| !resolvedWebview\.attachHost\) \{\s*return \(\s*<View style=\{styles\.screen\}>\s*\{bar\}\s*<View style=\{styles\.container\} testID="terminal-screen">\s*<EmptyState\s+title="Terminal unavailable"\s+description="This build has no embedded terminal renderer installed yet\. Your session and its output are unaffected\."\s+testId="terminal-unavailable"/,
       );
     });
 
