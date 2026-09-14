@@ -1,0 +1,71 @@
+/**
+ * `/h/:serverId/sessions` screen styles (UI-W6 restyle): a compact
+ * header (eyebrow + small pill actions, not full-width bars) and a
+ * compact "Session tree" card, matching the rail's own vocabulary
+ * (`session-rail.css`, `docs/ui-reference/pi-companion-web.html`'s
+ * `.eyebrow`/`.newbtn`).
+ */
+
+.pc-sessions-screen__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  padding-bottom: var(--spacing-2);
+}
+
+.pc-sessions-screen__eyebrow {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+.pc-sessions-screen__header-actions {
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+.pc-sessions-screen__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--spacing-2);
+  border: none;
+  border-radius: 7px;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-btn);
+  color: var(--color-ink);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pc-sessions-screen__pill:hover {
+  background-color: var(--color-hover);
+}
+
+.pc-sessions-screen__pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pc-sessions-screen__pill--accent {
+  background-color: var(--color-accent);
+  color: var(--color-accent-ink, #fff);
+  box-shadow: none;
+}
+
+.pc-sessions-screen__tree-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-3);
+  padding: var(--spacing-3);
+  border-radius: var(--radius-control);
+  background-color: var(--color-canvas, var(--color-inset));
+  box-shadow: var(--shadow-hairline);
+}

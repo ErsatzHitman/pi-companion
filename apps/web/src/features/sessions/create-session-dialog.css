@@ -1,0 +1,206 @@
+/**
+ * Create-session dialog styles (T27B2 restyle, UI-W6). Reference
+ * vocabulary (`docs/ui-reference/pi-companion-web.html`'s `.eyebrow`,
+ * `.seg`, `.chip`, hairline footer) mapped onto `@picompanion/design-tokens`,
+ * the same convention `session-rail.css` already follows: colours,
+ * spacing, radii, type and shadows all come from `var(--...)` tokens.
+ */
+
+.pc-create-session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  width: min(420px, calc(100vw - 32px));
+  padding: var(--spacing-4);
+  border-radius: var(--radius-panel, 12px);
+  background-color: var(--color-canvas, var(--color-surface));
+  box-shadow: var(--shadow-panel, var(--shadow-card));
+}
+
+.pc-create-session__header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pc-create-session__eyebrow {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+.pc-create-session__title {
+  margin: 0;
+  font-size: var(--font-size-lg, 15px);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+}
+
+.pc-create-session__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.pc-create-session__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink-2);
+}
+
+/* Provider segmented control (≤4 providers; the reference's `.seg`). ---- */
+
+.pc-create-session__seg {
+  display: flex;
+  gap: 3px;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background-color: var(--color-field);
+}
+
+.pc-create-session__seg button {
+  flex: 1;
+  min-height: 26px;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 4px;
+  background-color: transparent;
+  color: var(--color-ink-2);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.pc-create-session__seg button[aria-pressed="true"] {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-btn);
+}
+
+.pc-create-session__seg button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Working directory: a mono field, matching the rail's own row/meta type. */
+
+.pc-create-session__cwd-field .pc-field__input {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm, 12px);
+}
+
+/* Quick-pick chips for real, already-known working directories. -------- */
+
+.pc-create-session__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-1);
+}
+
+.pc-create-session__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  max-width: 100%;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background-color: var(--color-inset, var(--color-field));
+  box-shadow: var(--shadow-hairline);
+  color: var(--color-ink-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pc-create-session__chip:hover {
+  background-color: var(--color-hover);
+}
+
+/* Honest progress: shown only while a create is actually in flight. ---- */
+
+.pc-create-session__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  border-radius: var(--radius-control);
+  background-color: var(--color-field);
+  color: var(--color-ink-2);
+  font-size: var(--font-size-xs);
+}
+
+.pc-create-session__spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--color-ink-3);
+  border-top-color: var(--color-accent);
+  animation: pc-create-session-spin 0.7s linear infinite;
+}
+
+@keyframes pc-create-session-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pc-create-session__elapsed {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-3);
+}
+
+/* Footer: hairline-separated, ghost cancel + accent create. ------------ */
+
+.pc-create-session__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+  padding-top: var(--spacing-3);
+  border-top: 1px solid var(--color-line);
+}
+
+.pc-create-session__cancel,
+.pc-create-session__create {
+  height: 30px;
+  padding: 0 var(--spacing-3);
+  border: none;
+  border-radius: var(--radius-control);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-sm, 12px);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.pc-create-session__cancel {
+  background-color: transparent;
+  color: var(--color-ink-2);
+}
+
+.pc-create-session__cancel:hover {
+  background-color: var(--color-hover);
+}
+
+.pc-create-session__create {
+  background-color: var(--color-accent);
+  color: var(--color-accent-ink, #fff);
+}
+
+.pc-create-session__create:hover {
+  filter: brightness(1.05);
+}
+
+.pc-create-session__create:disabled,
+.pc-create-session__cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
