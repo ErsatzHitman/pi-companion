@@ -202,6 +202,23 @@ describe("HostSessionScreen transcribe wiring (T277 web close, T282 pattern)", (
 });
 
 /**
+ * UI-W11: this route's raw `client` (the same live `DaemonClient` already
+ * threaded to `editorTextClient` above) must also reach `ComposerContainer`'s
+ * `sessionCostClient` prop, so `Composer`'s context-ring sheet can mount a
+ * live `SessionCostMeterContainer` next to `ContextMeter` — see
+ * `Composer.test.tsx`'s own coverage of that surface. A full render cannot
+ * observe this wiring line for the same reason the transcribe/attachment-image
+ * blocks above cannot: this route's `client` comes from a real
+ * `HostController` nothing in this suite can inject.
+ */
+describe("HostSessionScreen session-cost wiring (UI-W11)", () => {
+  it("passes the raw client straight through to ComposerContainer's sessionCostClient prop — deleting it must fail this assertion", () => {
+    const code = readHostSessionScreenCode();
+    expect(code).toMatch(/<ComposerContainer[\s\S]*?sessionCostClient=\{client \?\? undefined\}/);
+  });
+});
+
+/**
  * T284: proves this route's attachment-image wiring — a source-level
  * contract test, the same instrument `CLAUDE.md` names for a behavior
  * that cannot be exercised through a full render. Everything ABOUT the

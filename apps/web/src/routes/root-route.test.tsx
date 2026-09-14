@@ -99,8 +99,9 @@ describe("root route rail wiring (T53A3)", () => {
     // status strip and `PiExtensionRail`'s own cards. The context-window/
     // cache-hit numbers moved into the composer's own context-ring sheet
     // (`ContextMeter` reused there unchanged; see `Composer.test.tsx` for
-    // that surface's own coverage); session cost has no live mount
-    // anywhere in the app right now.
+    // that surface's own coverage). Session cost (UI-W11) mounts in that
+    // same sheet, directly after `ContextMeter` -- also not in this rail;
+    // see `Composer.test.tsx` for that surface's own coverage.
     expect(within(extensionRail).queryByRole("heading", { name: "Context" })).toBeNull();
     expect(within(extensionRail).queryByRole("heading", { name: "Cost" })).toBeNull();
   }, 20_000);
