@@ -98,9 +98,12 @@ test.describe("Pi extension bridge", () => {
       // -> `agent_stream` WS message -> DaemonClient -> ExtensionRailContent's
       // PiUiElementStore.ingestFullState -> usePiUiRailElements ->
       // PiExtensionRail -> RailElementCard -> PiUiElementView -> WidgetRenderer.
-      const railList = page.getByTestId("pi-extension-rail-list");
-      await expect(railList).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByTestId("pi-extension-rail-empty")).toHaveCount(0);
+      // `PiExtensionRail` (rebuilt into Subagents/Workflow cards alongside
+      // the generic per-kind cards) renders every pinned element straight
+      // into its own `.pi-extension-rail` container -- there is no separate
+      // "list" wrapper testid once elements exist, so the empty state's own
+      // testid going away is this container's "no longer empty" proof.
+      await expect(page.getByTestId("pi-extension-rail-empty")).toHaveCount(0, { timeout: 10_000 });
 
       const card = page.getByTestId("pi-rail-element-e2e-demo");
       await expect(card).toBeVisible();
@@ -147,13 +150,12 @@ test.describe("Pi extension bridge", () => {
       // loose `z.array(z.unknown())`, so DaemonClient's outbound-message
       // validation lets it through) — it reaches the rail as a real
       // pinned element, not a dropped message. The rail's structure
-      // survives intact around it: the list mounts, and it is this
-      // element's own card, not an empty rail or a blank pane.
-      const railList = page.getByTestId("pi-extension-rail-list");
-      await expect(railList).toBeVisible({ timeout: 10_000 });
-
+      // survives intact around it: it is this element's own card that
+      // appears, not an empty rail or a blank pane (`PiExtensionRail`
+      // renders every pinned element directly into its own container --
+      // there is no separate "list" wrapper testid to wait on).
       const card = page.getByTestId("pi-rail-element-e2e-demo-malformed");
-      await expect(card).toBeVisible();
+      await expect(card).toBeVisible({ timeout: 10_000 });
 
       // `normalizePiUiElement` lifts the legacy top-level `rows: ["not-an-
       // object"]` into a `widget` payload candidate, `PiUiWidgetPayloadSchema`
