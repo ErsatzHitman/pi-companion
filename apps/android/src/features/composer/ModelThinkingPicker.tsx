@@ -5,68 +5,75 @@
  * availability states, the round trip, the derived current-selection
  * labels, the selected model's own thinking-option derivation) already
  * has render-free behavioural proof in `model-thinking-model.test.ts`;
- * this file only wires that into the render tree. Same split as
- * `../sessions/session-tree-sheet.tsx`/`session-tree-sheet-model.ts`
- * (`react-native` cannot render under this workspace's plain `vitest`,
- * proven 27+ times — see that file's doc comment).
+ * this file only wires that into the render tree.
  *
- * ## Touch targets: composed only from already-audited primitives
+ * UI-A4: rebuilt off two `Select` dropdowns onto the reference
+ * artifact's own shape (`docs/ui-reference/pi-companion-app.html`'s
+ * `.pm-row`/`.tick` model list and `.seg` effort control):
  *
- * This file declares no `Pressable`/`Touchable*` of its own — every
- * interactive control is `../../ui/primitives`' `Select`, which is
- * already in `../../ui/primitives/touch-targets.test.ts`'s strict,
- * mutation-checked 48dp audit (`trigger: { minHeight: 48, ... }`,
- * `menuItem: { minHeight: 48, ... }`). Composing an already-audited
- * primitive rather than a bespoke `Pressable` is what keeps this file's
- * own 48dp guarantee real instead of a second, unaudited copy —
- * `model-thinking-model.test.ts`'s header names the exact style values
- * this relies on.
+ *  - Every model is an inline row with a leading tick (visible only on
+ *    the selected row) and a trailing "up to <ceiling>" value, instead
+ *    of being one collapsed `Select` option.
+ *  - The effort control is a segmented row of every reachable thinking
+ *    option **across every model this provider offers**, not only the
+ *    selected model's own list — the artifact's own `.seg` shows steps
+ *    beyond the selected model's ceiling rather than hiding them
+ *    (`button:disabled { opacity: .38 }`). `thinkingOptionsForSelection`
+ *    still decides the selected model's own reachable ceiling exactly as
+ *    before; what changed is that a step past it renders disabled
+ *    instead of being filtered out of the list entirely. A leading
+ *    "Default" segment (absent from the artifact, which always shows a
+ *    concrete effort) is kept so `onSelectThinking(null)` — clearing an
+ *    explicit choice — stays reachable, which no visual step in the mock
+ *    stands for.
  *
- * ## "The current selection is visible without opening the picker"
+ * ## Touch targets: still a single audited shape, now declared here
  *
- * `Select` already shows its own current value collapsed on its
- * trigger (`current?.label ?? "Select…"`), but this view additionally
- * renders an explicit summary line built from `currentModelLabel`/
- * `currentThinkingLabel` (`./model-thinking-model.ts`) ABOVE both
- * `Select`s — a value derivable, and asserted, straight from `state`
- * with no picker ever opened.
+ * The rows and segment buttons below are this file's own `Pressable`s
+ * (the composed `Select` this replaces is gone), so each carries
+ * `accessibilityRole="button"` and a style with `minHeight: 48` —
+ * `touch-targets.test.ts` discovers and audits this file itself (T378's
+ * directory walk), not only the primitives it used to compose.
  *
  * ## A truthful unavailable state, never an enabled control that can
  * only fail
  *
- * Whenever `state.availability !== "ready"` this renders
- * `state.unavailableReason`'s own truthful sentence instead of an
- * enabled `Select` pair — CLAUDE.md's "the failure mode this wave keeps
- * shipping". The production session route wires a live, capable client
- * into this feature since T353 (`app-shell/session-route-daemon-clients.ts`'s
- * `resolveModelThinkingClient`), so `"ready"` is a real shape on a
- * connected build; `"no-client"` is what a lab mount, a test harness,
- * or a disconnected build still gets.
- *
- * CORRECTED (T353, recorded here at T354): this said "No Android route
- * wires a live, capable client into this feature yet ... so
- * `"no-client"` is today's only real-build shape." Both clauses were
- * true when written and T353's resolver falsified them; that commit
- * corrected the two sibling doc comments and missed this one.
+ * Unchanged from the `Select` version: whenever
+ * `state.availability !== "ready"` this renders
+ * `state.unavailableReason`'s own truthful sentence instead of the
+ * model list and effort control.
  */
 import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Select, type SelectOption } from "../../ui/primitives";
 import { useTheme } from "../../ui/theme/theme-context";
+import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import {
   currentModelLabel,
   currentThinkingLabel,
+  selectedModelOption,
   thinkingOptionsForSelection,
+  type ModelThinkingOption,
   type ModelThinkingState,
 } from "./model-thinking-model";
 
-/** Sentinel `Select` value standing in for "no explicit thinking choice" (`thinkingOptionId: null`) — `Select`'s own `SelectOption.value` is a plain string, so `null` itself cannot be one of its option values. */
+/** Sentinel value standing in for "no explicit thinking choice" (`thinkingOptionId: null`). */
 const DEFAULT_THINKING_VALUE = "__default__";
+
+/** Every reachable thinking option across every model this provider offers, deduped by id and ordered by first appearance — the artifact's fixed `EFF` ladder, derived from real model data instead of a hardcoded list. */
+function allThinkingOptions(models: ModelThinkingState["models"]): readonly ModelThinkingOption[] {
+  const seen = new Map<string, ModelThinkingOption>();
+  for (const model of models) {
+    for (const option of model.thinkingOptions ?? []) {
+      if (!seen.has(option.id)) seen.set(option.id, option);
+    }
+  }
+  return [...seen.values()];
+}
 
 export interface ModelThinkingPickerProps {
   state: ModelThinkingState;
-  /** Fires with the tapped option's model id. No-op while `state.availability !== "ready"` (no `Select` is rendered in that case at all). */
+  /** Fires with the tapped option's model id. No-op while `state.availability !== "ready"` (no row is rendered in that case at all). */
   onSelectModel: (modelId: string) => void;
   /** Fires with the tapped thinking option's id, or `null` for "Default". */
   onSelectThinking: (thinkingOptionId: string | null) => void;
@@ -93,15 +100,11 @@ export function ModelThinkingPicker({
     );
   }
 
-  const modelOptions: SelectOption[] = state.models.map((model) => ({
-    value: model.id,
-    label: model.label,
-  }));
-  const { options: thinkingOptions, unsupportedReason } = thinkingOptionsForSelection(state);
-  const thinkingSelectOptions: SelectOption[] = [
-    { value: DEFAULT_THINKING_VALUE, label: "Default" },
-    ...thinkingOptions.map((option) => ({ value: option.id, label: option.label })),
-  ];
+  const { unsupportedReason } = thinkingOptionsForSelection(state);
+  const reachableIds = new Set(
+    (selectedModelOption(state)?.thinkingOptions ?? []).map((option) => option.id),
+  );
+  const effortSteps = allThinkingOptions(state.models);
   const thinkingValue = state.thinkingOptionId ?? DEFAULT_THINKING_VALUE;
 
   return (
@@ -109,27 +112,68 @@ export function ModelThinkingPicker({
       <Text style={styles.summary} testID={`${testId}-summary`}>
         {`Model: ${currentModelLabel(state)} · Thinking: ${currentThinkingLabel(state)}`}
       </Text>
-      <Select
-        label="Model"
-        options={modelOptions}
-        value={state.modelId ?? ""}
-        onValueChange={onSelectModel}
-        testId={`${testId}-model`}
-      />
+      {state.models.map((model) => {
+        const selected = model.id === state.modelId;
+        const ceiling = model.thinkingOptions?.[model.thinkingOptions.length - 1]?.label;
+        return (
+          <Pressable
+            key={model.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            style={styles.pmRow}
+            onPress={() => onSelectModel(model.id)}
+            testID={`${testId}-model-${model.id}`}
+          >
+            <Text style={[styles.tick, selected ? styles.tickOn : null]}>✓</Text>
+            <Text style={[styles.pmRowLabel, selected ? styles.pmRowLabelOn : null]}>
+              {model.label}
+            </Text>
+            {ceiling ? <Text style={styles.pmRowValue}>up to {ceiling}</Text> : null}
+          </Pressable>
+        );
+      })}
       {unsupportedReason ? (
         <Text style={styles.unavailable} testID={`${testId}-thinking-unavailable`}>
           {unsupportedReason}
         </Text>
       ) : (
-        <Select
-          label="Thinking level"
-          options={thinkingSelectOptions}
-          value={thinkingValue}
-          onValueChange={(value) =>
-            onSelectThinking(value === DEFAULT_THINKING_VALUE ? null : value)
-          }
-          testId={`${testId}-thinking`}
-        />
+        <View style={styles.seg} testID={`${testId}-thinking`}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: thinkingValue === DEFAULT_THINKING_VALUE }}
+            style={styles.segButton}
+            onPress={() => onSelectThinking(null)}
+            testID={`${testId}-thinking-default`}
+          >
+            <Text
+              style={[
+                styles.segButtonLabel,
+                thinkingValue === DEFAULT_THINKING_VALUE ? styles.segButtonLabelOn : null,
+              ]}
+            >
+              Default
+            </Text>
+          </Pressable>
+          {effortSteps.map((option) => {
+            const reachable = reachableIds.has(option.id);
+            const selected = thinkingValue === option.id;
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected, disabled: !reachable }}
+                disabled={!reachable}
+                style={[styles.segButton, !reachable ? styles.segButtonDisabled : null]}
+                onPress={() => reachable && onSelectThinking(option.id)}
+                testID={`${testId}-thinking-${option.id}`}
+              >
+                <Text style={[styles.segButtonLabel, selected ? styles.segButtonLabelOn : null]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       )}
       {state.changeError ? (
         <Text style={styles.error} testID={`${testId}-change-error`}>
@@ -151,6 +195,61 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     summary: {
       color: theme.colors["ink-2"],
       fontSize: theme.typography.variant.caption.fontSize,
+    },
+    pmRow: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing[2],
+      paddingHorizontal: theme.spacing[2],
+      borderRadius: theme.radii.md,
+    },
+    tick: {
+      width: 14,
+      color: "transparent",
+      fontSize: theme.typography.variant.bodySmall.fontSize,
+    },
+    tickOn: {
+      color: theme.colors.accent,
+    },
+    pmRowLabel: {
+      flex: 1,
+      minWidth: 0,
+      color: theme.colors.ink,
+      fontSize: theme.typography.variant.bodySmall.fontSize,
+    },
+    pmRowLabelOn: {
+      fontWeight: asFontWeight("600"),
+    },
+    pmRowValue: {
+      color: theme.colors["ink-3"],
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: theme.typography.variant.caption.fontSize,
+    },
+    seg: {
+      flexDirection: "row",
+      gap: theme.spacing[1],
+      padding: theme.spacing[1],
+      backgroundColor: theme.colors.inset,
+      borderRadius: theme.radii.md,
+    },
+    segButton: {
+      flex: 1,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: theme.radii.sm,
+    },
+    segButtonDisabled: {
+      opacity: 0.38,
+    },
+    segButtonLabel: {
+      color: theme.colors["ink-2"],
+      fontSize: theme.typography.variant.caption.fontSize,
+    },
+    segButtonLabelOn: {
+      color: theme.colors.ink,
+      fontWeight: asFontWeight("600"),
     },
     unavailable: {
       color: theme.colors["ink-2"],

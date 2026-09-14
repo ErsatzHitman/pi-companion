@@ -111,4 +111,34 @@ describe("PromptControlsMenu source", () => {
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(code).not.toMatch(/rgba?\(/);
   });
+
+  // UI-A4: the artifact's `.pm-lbl` is a two-part row (label + trailing
+  // mono value). These pin that every group's value is read back off
+  // real state this panel is handed, never invented.
+  it("gives each group label a trailing value read from that slot's own element state, never a literal", () => {
+    const code = readCode("PromptControlsMenu");
+    expect(code).toMatch(/function readControlState\(node: ReactNode\)/);
+    expect(code).toMatch(/value=\{modeGroupValue\(modeControl\)\}/);
+    expect(code).toMatch(/value=\{modelGroupValue\(modelControl\)\}/);
+    expect(code).toMatch(/value=\{queueGroupValue\(queueControl\)\}/);
+    expect(code).toMatch(/value=\{context\.summary\}/);
+  });
+
+  it("renders no group value at all when a slot's state can't be read, rather than a guess", () => {
+    const code = readCode("PromptControlsMenu");
+    expect(code).toMatch(/\{value \? \(/);
+  });
+
+  it("sizes the group label and its trailing value at the artifact's 9.5px, not the old 10px", () => {
+    const code = readCode("PromptControlsMenu");
+    expect(code).toMatch(/const GROUP_LABEL_SIZE = 9\.5;/);
+    expect(code).not.toMatch(/GROUP_LABEL_SIZE = 10;/);
+  });
+
+  it("draws a Compact now row at the end of the Context group, honestly disabled when no onCompactNow is given", () => {
+    const code = readCode("PromptControlsMenu");
+    expect(code).toMatch(/testID=\{`\$\{testId\}-context-compact`\}/);
+    expect(code).toMatch(/disabled=\{!onCompactNow\}/);
+    expect(code).toMatch(/no wire path — \/compact is a slash command, not a menu action/);
+  });
 });

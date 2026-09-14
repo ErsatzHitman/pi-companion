@@ -3,27 +3,28 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * `QueueModePicker.tsx` imports `react-native` (via `Select` from
- * `../../ui/primitives`), which cannot be rendered under this
- * workspace's plain `vitest` setup — the RolldownError on
- * `node_modules/react-native/index.js:1:0`, proven 27+ times across this
- * codebase (see `./ModelThinkingPicker.test.ts`'s identical constraint
- * and the `readCode()`/`readComponentCode()` pattern this file copies).
- * All real logic (availability derivation, mode labels, the round trip)
- * already has render-free behavioural proof in `./queue-mode-model.test.ts`;
- * this file only proves the `.tsx` actually wires that into the render
- * tree — the unavailable-state gate, the always-visible summary line,
- * both `Select`s' wiring, and the error/notice rows — rather than
- * silently dropping any of it.
+ * `QueueModePicker.tsx` imports `react-native`, which cannot be
+ * rendered under this workspace's plain `vitest` setup — the
+ * RolldownError on `node_modules/react-native/index.js:1:0`, proven
+ * 27+ times across this codebase (see `./ModelThinkingPicker.test.ts`'s
+ * identical constraint and the `readCode()`/`readComponentCode()`
+ * pattern this file copies). All real logic (availability derivation,
+ * mode labels, the round trip) already has render-free behavioural
+ * proof in `./queue-mode-model.test.ts`; this file only proves the
+ * `.tsx` actually wires that into the render tree — the
+ * unavailable-state gate, the always-visible summary line, both rows'
+ * wiring, and the error/notice rows — rather than silently dropping
+ * any of it.
+ *
+ * UI-A4 rewrote this file's assertions for the `Select`-free rebuild
+ * onto `docs/ui-reference/pi-companion-app.html`'s own `.pm-row`
+ * shape — two rows that cycle their own value in place on tap, instead
+ * of two dropdown menus.
  *
  * `readComponentCode()` anchors every assertion below to the one
  * top-level `QueueModePicker` function (CLAUDE.md's "a sibling
  * occurrence of the same code satisfying a whole-file toMatch" defect
  * class).
- *
- * Every assertion below was mutation-checked by hand (delete the real
- * construct, re-run this file, confirm the specific `it` fails, restore
- * byte-identically). See this task's (T39C) report for the run log.
  */
 function readSource(): string {
   return readFileSync(fileURLToPath(new URL("./QueueModePicker.tsx", import.meta.url)), "utf8");
@@ -49,16 +50,15 @@ function readComponentCode(): string {
   return body ?? "";
 }
 
-describe("QueueModePicker: composes only already-audited primitives, no bespoke Pressable", () => {
-  it("declares no raw Pressable/Touchable* of its own", () => {
-    const code = readCode();
-    expect(code).not.toMatch(/<(Pressable|TouchableOpacity|TouchableHighlight)\b/);
+describe("QueueModePicker: rebuilt off pm-row, no Select left", () => {
+  it("imports no Select from ../../ui/primitives", () => {
+    expect(readCode()).not.toMatch(/from "\.\.\/\.\.\/ui\/primitives"/);
   });
 
-  it("imports Select from ../../ui/primitives, the component already in touch-targets.test.ts's 48dp audit", () => {
-    expect(readCode()).toMatch(
-      /import \{ Select, type SelectOption \} from "\.\.\/\.\.\/ui\/primitives";/,
-    );
+  it("declares its own Pressable rows, each a real accessibility button", () => {
+    const code = readCode();
+    expect(code.match(/<Pressable\b/g)?.length).toBe(2);
+    expect(code).toMatch(/accessibilityRole="button"/);
   });
 });
 
@@ -75,17 +75,19 @@ describe("QueueModePicker: a truthful unavailable/loading state, never an enable
     expect(code).toMatch(/testID=\{`\$\{testId\}-unavailable`\}>\s*\{label\}/);
   });
 
-  it("never renders a Select at all while unavailable (the early return has no Select in its branch)", () => {
+  it("never renders a queue row at all while unavailable (the early return has no pm-row Pressable in its branch)", () => {
     const code = readComponentCode();
     const earlyReturnBranch = code.slice(
       code.indexOf('if (state.availability !== "ready") {'),
-      code.indexOf("const steeringValue"),
+      code.indexOf(
+        "return (\n    <View style={styles.root} testID={testId}>\n      <Text style={styles.help}>",
+      ),
     );
-    expect(earlyReturnBranch).not.toMatch(/<Select\b/);
+    expect(earlyReturnBranch).not.toMatch(/<Pressable\b/);
   });
 });
 
-describe("QueueModePicker: the current value is visible without opening either menu", () => {
+describe("QueueModePicker: the current value is visible without opening either row's own menu", () => {
   it("renders a summary line built from the model's own queueModeLabel, not inline derivation", () => {
     const code = readComponentCode();
     expect(code).toMatch(/testID=\{`\$\{testId\}-summary`\}/);
@@ -93,37 +95,37 @@ describe("QueueModePicker: the current value is visible without opening either m
       /\{`Steering: \$\{queueModeLabel\(state\.steeringMode\)\} · Follow-up: \$\{queueModeLabel\(state\.followUpMode\)\}`\}/,
     );
   });
+
+  it("each row shows its own current value as trailing text", () => {
+    const code = readComponentCode();
+    expect(code).toMatch(/\{queueModeLabel\(state\.steeringMode\)\} ›<\/Text>/);
+    expect(code).toMatch(/\{queueModeLabel\(state\.followUpMode\)\} ›<\/Text>/);
+  });
 });
 
 describe("QueueModePicker: no cancel/reorder affordance", () => {
-  it("offers no button at all beyond the two Selects — no cancel/reorder/remove wording anywhere in source", () => {
+  it("offers no button at all beyond the two cycling rows — no cancel/reorder/remove wording anywhere in source", () => {
     const code = readCode();
     expect(code).not.toMatch(/cancel|reorder|remove\b/i);
   });
 });
 
-describe("QueueModePicker: both Selects are wired to their own handler with the tapped option's raw mode", () => {
-  it("the steering Select's value falls back to the not-reported sentinel exactly when steeringMode is null", () => {
-    const code = readComponentCode();
-    expect(code).toMatch(/const steeringValue = state\.steeringMode \?\? NOT_REPORTED_VALUE;/);
-    expect(code).toMatch(/label="Steering queue delivery"/);
-  });
-
-  it("the steering Select only forwards a real QueueMode literal to onSelectSteeringMode", () => {
-    expect(readComponentCode()).toMatch(
-      /if \(value === "all" \|\| value === "one-at-a-time"\) onSelectSteeringMode\(value\);/,
+describe("QueueModePicker: both rows cycle in place and call their own handler with the concrete next mode", () => {
+  it("defines a two-value cycle shared by both rows", () => {
+    expect(readCode()).toMatch(
+      /function nextQueueMode\(current: QueueMode \| null\): QueueMode \{/,
     );
   });
 
-  it("the follow-up Select's value falls back to the not-reported sentinel exactly when followUpMode is null", () => {
-    const code = readComponentCode();
-    expect(code).toMatch(/const followUpValue = state\.followUpMode \?\? NOT_REPORTED_VALUE;/);
-    expect(code).toMatch(/label="Follow-up queue delivery"/);
+  it("the steering row calls onSelectSteeringMode with nextQueueMode(state.steeringMode)", () => {
+    expect(readComponentCode()).toMatch(
+      /onPress=\{\(\) => onSelectSteeringMode\(nextQueueMode\(state\.steeringMode\)\)\}/,
+    );
   });
 
-  it("the follow-up Select only forwards a real QueueMode literal to onSelectFollowUpMode", () => {
+  it("the follow-up row calls onSelectFollowUpMode with nextQueueMode(state.followUpMode)", () => {
     expect(readComponentCode()).toMatch(
-      /if \(value === "all" \|\| value === "one-at-a-time"\) onSelectFollowUpMode\(value\);/,
+      /onPress=\{\(\) => onSelectFollowUpMode\(nextQueueMode\(state\.followUpMode\)\)\}/,
     );
   });
 });
