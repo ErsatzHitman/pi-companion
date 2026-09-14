@@ -970,11 +970,32 @@ describe("session route: the session tree sheet mount", () => {
     );
   });
 
-  it("opens the sheet from a Session tree button beside TranscriptHeader in the header slot — ordinary header content, not a new shell slot", () => {
+  it("opens the sheet from the same Session tree Button, now row-merged with TranscriptHeader instead of a second row beneath it (UI-A3)", () => {
     const code = readCode();
     expect(code).toMatch(/label="Session tree"/);
     expect(code).toMatch(/onPress=\{openSessionTree\}/);
     expect(code).toMatch(/testId="session-tree-open"/);
+  });
+
+  // --- UI-A3: the mockup's S7 frame (docs/ui-reference/
+  // pi-companion-app.html, `.fr[data-frame="s7"]`) goes straight from
+  // `.bar` to the transcript with zero persistent chrome beneath it. The
+  // "Session tree" Button used to be stacked as its own full row beneath
+  // TranscriptHeader; it now shares TranscriptHeader's own row so the
+  // header slot's total rendered height is unchanged.
+
+  it("UI-A3: row-merges the Session tree trigger with TranscriptHeader, rather than stacking a second row beneath the bar", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /header=\{[\s\S]*?<View style=\{HEADER_ROW_STYLES\.row\}>[\s\S]*?<View style=\{HEADER_ROW_STYLES\.barSlot\}>[\s\S]*?<TranscriptHeader\b[\s\S]*?<\/View>[\s\S]*?<Button[\s\S]*?label="Session tree"[\s\S]*?<\/View>[\s\S]*?\}/,
+    );
+  });
+
+  it("UI-A3: defines HEADER_ROW_STYLES as a flex row with TranscriptHeader's own slot flexing to fill the remaining width", () => {
+    const code = readCode();
+    expect(code).toMatch(/const HEADER_ROW_STYLES = StyleSheet\.create\(\{/);
+    expect(code).toMatch(/row: \{ flexDirection: "row", alignItems: "stretch" \}/);
+    expect(code).toMatch(/barSlot: \{ flex: 1, minWidth: 0 \}/);
   });
 
   it("mounts SessionTreeSheet as a sibling of the shell with open/nodes/selectedAgentId/client/callbacks/testId — deleting any prop must fail", () => {

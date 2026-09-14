@@ -456,4 +456,22 @@ describe("SessionsScreen source: T385 A1 chrome, body and rows", () => {
       /newSessionButton: \{[\s\S]*?backgroundColor: theme\.colors\.surface[\s\S]*?ringShadow\(theme, "card"\)/,
     );
   });
+
+  // UI-A3: the artifact's `.chip { border-radius: 999px }` is a fully
+  // rounded pill. T385 drew "+ New session" at `radii.control` (8) behind
+  // a comment citing a 7px figure that appears nowhere in the artifact's
+  // CSS -- this pins the corrected token and that the stale figure is gone.
+  it("draws '+ New session' at the artifact's fully-rounded pill radius, not the 8dp control radius", () => {
+    // Bounded to just this block's own closing brace (the same technique
+    // the gear/create-chip case above uses) -- an unbounded `[\s\S]*?`
+    // would run straight through into `settingsButton`'s own, unrelated
+    // `borderRadius: theme.radii.control` a few lines below.
+    const newSessionButtonStyle = /newSessionButton: \{([\s\S]*?)\n    \},/.exec(code)?.[1] ?? "";
+    expect(newSessionButtonStyle).toMatch(/borderRadius: theme\.radii\.full/);
+    expect(newSessionButtonStyle).not.toMatch(/borderRadius: theme\.radii\.control/);
+    // The stale "7px" figure lived in a comment, so this must read the raw
+    // (unstripped) source -- `code` above already has comments removed and
+    // could never see it either way.
+    expect(readScreenSource()).not.toMatch(/7px/);
+  });
 });
