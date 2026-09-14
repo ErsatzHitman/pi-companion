@@ -61,9 +61,7 @@ import {
 const DEFAULT_THINKING_VALUE = "__default__";
 
 /** Every reachable thinking option across every model this provider offers, deduped by id and ordered by first appearance — the artifact's fixed `EFF` ladder, derived from real model data instead of a hardcoded list. */
-function allThinkingOptions(
-  models: ModelThinkingState["models"],
-): readonly ModelThinkingOption[] {
+function allThinkingOptions(models: ModelThinkingState["models"]): readonly ModelThinkingOption[] {
   const seen = new Map<string, ModelThinkingOption>();
   for (const model of models) {
     for (const option of model.thinkingOptions ?? []) {

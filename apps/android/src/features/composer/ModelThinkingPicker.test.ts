@@ -135,9 +135,7 @@ describe("ModelThinkingPicker: the effort segment shows every reachable step, di
 
   it("disables exactly the steps outside the selected model's own reachable set, rather than filtering them out", () => {
     const code = readComponentCode();
-    expect(code).toMatch(
-      /const reachable = reachableIds\.has\(option\.id\);/,
-    );
+    expect(code).toMatch(/const reachable = reachableIds\.has\(option\.id\);/);
     expect(code).toMatch(/disabled=\{!reachable\}/);
     expect(code).not.toMatch(/effortSteps\.filter/);
   });

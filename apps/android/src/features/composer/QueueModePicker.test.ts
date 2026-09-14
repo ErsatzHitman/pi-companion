@@ -79,7 +79,9 @@ describe("QueueModePicker: a truthful unavailable/loading state, never an enable
     const code = readComponentCode();
     const earlyReturnBranch = code.slice(
       code.indexOf('if (state.availability !== "ready") {'),
-      code.indexOf("return (\n    <View style={styles.root} testID={testId}>\n      <Text style={styles.help}>"),
+      code.indexOf(
+        "return (\n    <View style={styles.root} testID={testId}>\n      <Text style={styles.help}>",
+      ),
     );
     expect(earlyReturnBranch).not.toMatch(/<Pressable\b/);
   });
