@@ -83,6 +83,7 @@ describe("Pi history mapper", () => {
         item: {
           type: "user_message",
           text: "read this\n\nthen answer",
+          messageId: "pi-history-user-1",
           images: [image],
         },
       },
@@ -169,7 +170,11 @@ describe("Pi history mapper", () => {
       {
         type: "timeline",
         provider: "pi",
-        item: { type: "assistant_message", text: "Extension command output" },
+        item: {
+          type: "assistant_message",
+          text: "Extension command output",
+          messageId: "pi-history-custom-1",
+        },
       },
     ]);
   });
@@ -233,7 +238,11 @@ describe("Pi history mapper", () => {
       {
         type: "timeline",
         provider: "pi",
-        item: { type: "user_message", text: "just text, no pictures" },
+        item: {
+          type: "user_message",
+          text: "just text, no pictures",
+          messageId: "pi-history-user-1",
+        },
       },
     ]);
     const event = events[0];
@@ -241,6 +250,66 @@ describe("Pi history mapper", () => {
       throw new Error("Expected a user_message timeline item.");
     }
     expect("images" in event.item).toBe(false);
+  });
+
+  // FIX-S5 regression coverage: the production duplication bug was two
+  // independent importers (`AgentManager`'s RPC-based full-history replay
+  // and `PiLiveTailWatcher`'s own from-scratch read of the raw Pi session
+  // file, `pi-live-tail.ts`) racing to materialize the *same* underlying Pi
+  // session into the timeline after a daemon restart/resume. Both call this
+  // mapper (`PiHistoryMapper`, shared by `history-mapper.ts` and
+  // `pi-live-tail.ts`) with a fresh instance starting from the same origin,
+  // so `AgentManager.deriveHistoryTimelineDedupeKey` (agent-manager.ts) can
+  // only collapse a re-import onto the row already recorded if this mapper
+  // assigns the *same* item a stable, content-independent id every time.
+  // These two tests pin that guarantee directly at the mapper level, ahead
+  // of the store/agent-manager integration test in
+  // `agent-timeline-store.test.ts`.
+  test("FIX-S5: mapping the same session twice assigns identical messageIds to corresponding rows", async () => {
+    const messages: PiAgentMessage[] = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: [{ type: "text", text: "Hello! How can I help you today?" }] },
+      { role: "user", content: "Hi" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Hi there! What would you like to do?" }],
+      },
+    ];
+
+    const firstImport = await collectHistory(messages);
+    const secondImport = await collectHistory(messages);
+
+    expect(secondImport).toEqual(firstImport);
+    const messageIds = firstImport.map((event) =>
+      event.type === "timeline" &&
+      (event.item.type === "user_message" || event.item.type === "assistant_message")
+        ? event.item.messageId
+        : undefined,
+    );
+    expect(messageIds).toEqual([
+      "pi-history-user-1",
+      "pi-history-assistant-1", // no native responseId in this fixture, so the synthetic fallback
+      "pi-history-user-2",
+      "pi-history-assistant-2",
+    ]);
+  });
+
+  test("FIX-S5: two genuinely separate user messages with identical text still get distinct messageIds", async () => {
+    const events = await collectHistory([
+      { role: "user", content: "WAVE-OK" },
+      { role: "assistant", content: [{ type: "text", text: "ack" }] },
+      { role: "user", content: "WAVE-OK" },
+    ]);
+
+    const userMessageIds = events
+      .filter((event) => event.type === "timeline" && event.item.type === "user_message")
+      .map((event) =>
+        event.type === "timeline" && event.item.type === "user_message"
+          ? event.item.messageId
+          : undefined,
+      );
+    expect(userMessageIds).toEqual(["pi-history-user-1", "pi-history-user-2"]);
+    expect(userMessageIds[0]).not.toBe(userMessageIds[1]);
   });
 
   test("uses Pi tree entry ids for replayed user messages", async () => {

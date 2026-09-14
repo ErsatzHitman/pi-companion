@@ -18,6 +18,18 @@ interface AgentTimelineState {
   epoch: string;
   rows: AgentTimelineRow[];
   nextSeq: number;
+  /**
+   * Rows previously appended with a `dedupeKey` (see `append`), keyed by
+   * that key. Lets a second import of the same underlying source row —
+   * e.g. Pi's full-history replay and `pi-live-tail.ts`'s independent
+   * from-scratch bootstrap read racing each other after a daemon restart
+   * — collapse onto the row already recorded instead of appending a
+   * duplicate. Never consulted for an `append` call that omits
+   * `dedupeKey` (the overwhelming majority — live turn streaming), so
+   * this is purely additive: two genuinely distinct rows that happen to
+   * carry no dedupe key, or different keys, are never merged.
+   */
+  dedupeKeys: Map<string, AgentTimelineRow>;
 }
 
 const DEFAULT_TIMELINE_FETCH_LIMIT = 200;
@@ -152,6 +164,7 @@ export class InMemoryAgentTimelineStore {
       epoch: options?.epoch ?? randomUUID(),
       rows,
       nextSeq,
+      dedupeKeys: new Map(),
     });
   }
 
@@ -198,6 +211,17 @@ export class InMemoryAgentTimelineStore {
 
   getEpoch(agentId: string): string {
     return this.requireState(agentId).epoch;
+  }
+
+  /**
+   * True if `append(agentId, item, { dedupeKey })` with this exact key has
+   * already recorded a row for this agent, i.e. the next such call would be
+   * an idempotent no-op rather than a fresh append. Lets a caller (e.g.
+   * `AgentManager.appendHistoryBackfillTimelineItem`) decide whether to
+   * broadcast/persist without needing to infer it from a row-count diff.
+   */
+  wouldDedupe(agentId: string, dedupeKey: string): boolean {
+    return this.requireState(agentId).dedupeKeys.has(dedupeKey);
   }
 
   fetch(agentId: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {
@@ -264,9 +288,15 @@ export class InMemoryAgentTimelineStore {
   append(
     agentId: string,
     item: AgentTimelineItem,
-    options?: { timestamp?: string; providerMessageId?: string },
+    options?: { timestamp?: string; providerMessageId?: string; dedupeKey?: string },
   ): AgentTimelineRow {
     const state = this.requireState(agentId);
+    if (options?.dedupeKey) {
+      const existing = state.dedupeKeys.get(options.dedupeKey);
+      if (existing) {
+        return cloneRow(existing);
+      }
+    }
     const row: AgentTimelineRow = {
       seq: state.nextSeq,
       timestamp: options?.timestamp ?? new Date().toISOString(),
@@ -275,6 +305,9 @@ export class InMemoryAgentTimelineStore {
     };
     state.nextSeq += 1;
     state.rows.push(row);
+    if (options?.dedupeKey) {
+      state.dedupeKeys.set(options.dedupeKey, row);
+    }
     return cloneRow(row);
   }
 

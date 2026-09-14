@@ -43,6 +43,13 @@ function createFakeAgentManager(agent: ManagedAgent): FakeAgentManager {
       timeline.push(item);
       appendedItems.push(item);
     },
+    // FIX-S5: PiLiveTailWatcher now backfills through the dedupe-aware
+    // sibling method (see pi-live-tail.ts's emitEvents), so the fake must
+    // implement it too, not just appendTimelineItem.
+    appendHistoryBackfillTimelineItem: async (_agentId: string, item: AgentTimelineItem) => {
+      timeline.push(item);
+      appendedItems.push(item);
+    },
     appendedItems,
   } as unknown as FakeAgentManager;
 }
