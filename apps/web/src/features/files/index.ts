@@ -58,8 +58,21 @@ export { createPendingConnectionFileWriteClient } from "./pending-connection-fil
 export { explainFileOpsError, FILE_OPS_NOT_CONNECTED } from "./file-ops-client.js";
 export type { FileOpsClient, FileOpsErrorExplanation } from "./file-ops-client.js";
 export { createPendingConnectionFileOpsClient } from "./pending-connection-file-ops-client.js";
-export { FileOpsPanel } from "./file-ops-panel.js";
-export type { FileOpsPanelProps } from "./file-ops-panel.js";
+export {
+  FileDeleteAction,
+  FileNewFilePopover,
+  FileNewFolderPopover,
+  FileRenameAction,
+} from "./file-ops-panel.js";
+export type {
+  FileDeleteActionProps,
+  FileOpsActionProps,
+  FileRowOpsActionProps,
+} from "./file-ops-panel.js";
+export { FilePopoverButton } from "./file-popover-button.js";
+export type { FilePopoverButtonProps } from "./file-popover-button.js";
+export { FileToolbar } from "./file-toolbar.js";
+export type { FileToolbarProps } from "./file-toolbar.js";
 export { useFileOps } from "./use-file-ops.js";
 export type {
   FileOpsController,

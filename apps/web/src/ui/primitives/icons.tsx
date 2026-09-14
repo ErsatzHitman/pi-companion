@@ -19,7 +19,16 @@ export type IconName =
   | "edit"
   | "rewind"
   | "add"
-  | "stop";
+  | "stop"
+  // UI-W7 (files toolbar/row actions): appended, existing entries above
+  // are untouched.
+  | "search"
+  | "upload"
+  | "download"
+  | "folder-plus"
+  | "file-plus"
+  | "file"
+  | "trash";
 
 const paths: Record<IconName, ReactElement> = {
   close: <path d="M3 3l10 10M13 3L3 13" />,
@@ -65,6 +74,49 @@ const paths: Record<IconName, ReactElement> = {
   // the universal "halt" shape — distinct from Send's arrow so the two
   // never read as the same action.
   stop: <rect x="4" y="4" width="8" height="8" rx="1" />,
+  // Magnifying glass (files toolbar's search toggle): circle plus a
+  // short diagonal handle, the same single-path-family construction as
+  // every glyph above.
+  search: (
+    <g>
+      <circle cx="6.8" cy="6.8" r="4.3" />
+      <path d="M10.1 10.1 14 14" />
+    </g>
+  ),
+  // Arrow rising out of a tray (files toolbar's Upload trigger): mirrors
+  // `download` below vertically so the two never read as the same glyph.
+  upload: <path d="M8 11V3M4.5 6.5 8 3l3.5 3.5M2.5 13h11" />,
+  // Arrow settling into a tray (per-row Download action): the vertical
+  // mirror of `upload` above.
+  download: <path d="M8 3v8M4.5 8.5 8 12l3.5-3.5M2.5 13h11" />,
+  // Folder outline (`folder` above) plus a small plus mark (files
+  // toolbar's New folder trigger).
+  "folder-plus": (
+    <g>
+      <path d="M2 5.5h3.6l1.1 1.3H14v6.7H2v-8Z" />
+      <path d="M8.5 8.2v3M7 9.7h3" />
+    </g>
+  ),
+  // Plain file outline (dog-eared rectangle) plus a small plus mark
+  // (files toolbar's New file trigger).
+  "file-plus": (
+    <g>
+      <path d="M4 1.5h5l3 3v10H4v-13Z" />
+      <path d="M9 1.5v3h3" />
+      <path d="M6.8 9v3M5.3 10.5h3" />
+    </g>
+  ),
+  // Plain file outline with no plus mark (listing rows' file kind glyph,
+  // paired with `folder` above for directory rows).
+  file: (
+    <g>
+      <path d="M4 1.5h5l3 3v10H4v-13Z" />
+      <path d="M9 1.5v3h3" />
+    </g>
+  ),
+  // Waste bin (per-row Delete action): a lid line plus a tapered body,
+  // the same straight-line construction as every glyph above.
+  trash: <path d="M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5 5 13.5h6l.5-9" />,
 };
 
 export function Icon({ name, ...rest }: { name: IconName } & SVGProps<SVGSVGElement>) {

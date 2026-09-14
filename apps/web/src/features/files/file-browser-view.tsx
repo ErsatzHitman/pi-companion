@@ -9,14 +9,11 @@ import {
 } from "../../ui/primitives/index.js";
 import type { FileBrowserClient } from "./file-browser-client.js";
 import type { FileDownloadClient } from "./file-download-client.js";
-import { FileBrowserBreadcrumbs } from "./file-browser-breadcrumbs.js";
 import { FileBrowserEntryList } from "./file-browser-entry-list.js";
 import { FileEditorPanel } from "./file-editor-panel.js";
-import { FileOpsPanel } from "./file-ops-panel.js";
+import { FileToolbar } from "./file-toolbar.js";
 import type { FileOpsClient } from "./file-ops-client.js";
 import type { FileReadClient } from "./file-read-client.js";
-import { FileSearchPanel } from "./file-search-panel.js";
-import { FileUploadPanel } from "./file-upload-panel.js";
 import type { FileUploadClient } from "./file-upload-client.js";
 import type { FileWriteClient } from "./file-write-client.js";
 import { useFileDownload } from "./use-file-download.js";
@@ -49,16 +46,23 @@ export interface FileBrowserViewProps {
 }
 
 /**
- * The `/h/:serverId/session/:agentId/files/*` screen body. Breadcrumbs
- * are shown for every status (directory or file) so a file can always
- * be navigated back up to its folder; the body below them is one of
+ * The `/h/:serverId/session/:agentId/files/*` screen body. A compact
+ * `FileToolbar` (breadcrumbs plus upload/new-folder/new-file/search/
+ * refresh) sits above the body, which is one of
  * loading/error/empty-folder/directory-listing/file-editor, composed
  * entirely from `ui/primitives` (plan.md §10.1 — no new one-off styled
- * primitive here). Directory listing is T30B1's scope; the file body
+ * primitive here). The toolbar is shown for every status (directory or
+ * file) so its breadcrumbs can always navigate a file back up to its
+ * folder. Directory listing is T30B1's scope; the file body
  * (`FileEditorPanel`, wrapping T30B2's read-only `FileContentView` with
  * T30B3's edit/save path) is T30B2/T30B3's (plan.md §12.4). Saving
  * reloads through `controller.retry` so the file view always reflects
  * what the daemon actually persisted, not just the submitted buffer.
+ *
+ * UI-W7: the mutation affordances (`useFileOps`) and the upload
+ * affordance (`useFileUpload`) are still built once, here, and passed
+ * down — `FileToolbar` and `FileBrowserEntryList` only render UI for
+ * them, they don't own the controllers.
  */
 export function FileBrowserView({
   serverId,
@@ -81,15 +85,16 @@ export function FileBrowserView({
 
   return (
     <Section title="Files" className="pc-file-browser">
-      <FileUploadPanel controller={uploadController} />
-      <FileOpsPanel controller={opsController} />
-      <FileSearchPanel
+      <FileToolbar
         serverId={serverId}
         agentId={agentId}
         workspaceRoot={workspaceRoot}
+        path={state.path}
         client={client}
+        opsController={opsController}
+        uploadController={uploadController}
+        onRefresh={retry}
       />
-      <FileBrowserBreadcrumbs serverId={serverId} agentId={agentId} path={state.path} />
       {state.status === "loading" ? (
         <LoadingState
           title="Loading…"
@@ -123,6 +128,7 @@ export function FileBrowserView({
             workspaceRoot={workspaceRoot}
             entries={state.directory.entries}
             downloadController={downloadController}
+            opsController={opsController}
           />
         )
       ) : null}

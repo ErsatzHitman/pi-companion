@@ -101,7 +101,7 @@ describe("FileDownloadAction (T30B4)", () => {
   it("shows a Download button for each file, both enabled while idle", () => {
     render(<TestHarness client={{ requestDownloadToken: vi.fn() }} />);
 
-    const buttons = screen.getAllByRole("button", { name: "Download" });
+    const buttons = screen.getAllByRole("button", { name: /^Download /i });
     expect(buttons).toHaveLength(2);
     expect(buttons[0].hasAttribute("disabled")).toBe(false);
     expect(buttons[1].hasAttribute("disabled")).toBe(false);

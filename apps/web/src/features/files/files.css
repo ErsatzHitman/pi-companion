@@ -45,36 +45,54 @@
   overflow: hidden;
 }
 
-.pc-file-browser__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-2) var(--spacing-3);
+/**
+ * `.srow` row grammar (UI-W7, docs/ui-reference/pi-companion-web.html):
+ * the row wrapper is a plain flex container, not itself a link — the
+ * `<li>` holds one real `<a>` (kind glyph + name + meta, the click/nav
+ * target) plus a sibling `.pc-file-browser__row-actions` (rename/
+ * delete/download icon buttons), so an icon button never nests inside
+ * an anchor.
+ */
+.pc-file-browser__row-item {
+  display: flex;
+  align-items: stretch;
   border-bottom: 1px dashed var(--color-line);
-  color: var(--color-ink);
-  text-decoration: none;
   background-color: var(--color-surface);
 }
 
-.pc-file-browser__row--file {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  color: var(--color-ink-2);
+.pc-file-browser__row-item:hover {
+  background-color: var(--color-hover);
 }
 
-.pc-file-browser__list li:last-child .pc-file-browser__row {
+.pc-file-browser__list li:last-child .pc-file-browser__row-item {
   border-bottom: none;
 }
 
-a.pc-file-browser__row--directory:hover,
-a.pc-file-browser__row--file:hover {
-  background-color: var(--color-hover);
+.pc-file-browser__row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-2);
+  min-height: 36px;
+  padding: var(--spacing-2) var(--spacing-3);
+  color: var(--color-ink);
+  text-decoration: none;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pc-file-browser__row--file {
+  color: var(--color-ink-2);
 }
 
 a.pc-file-browser__row--directory:focus-visible,
 a.pc-file-browser__row--file:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
+}
+
+.pc-file-browser__row-glyph {
+  color: var(--color-ink-3);
 }
 
 .pc-file-browser__row-name {
@@ -92,12 +110,53 @@ a.pc-file-browser__row--file:focus-visible {
   letter-spacing: var(--letter-spacing-wide);
 }
 
+.pc-file-browser__row-meta-group {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
+  min-width: 9rem;
+}
+
 .pc-file-browser__row-meta {
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-size-xs);
   color: var(--color-ink-3);
   white-space: nowrap;
+  text-align: right;
+}
+
+/**
+ * Row actions (rename/delete/download): hidden until the row is
+ * hovered or a child has focus, so the listing reads as a browser, not
+ * a stack of buttons (plan.md §10.5 keeps them reachable, never
+ * `display:none`, for keyboard/touch — `opacity`+`pointer-events` here,
+ * and the `(hover: none)` override below forces them visible for touch,
+ * which reports no hover capability at all).
+ */
+.pc-file-browser__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-1);
+  padding: var(--spacing-2) var(--spacing-3) var(--spacing-2) 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pc-file-browser__row-item:hover .pc-file-browser__row-actions,
+.pc-file-browser__row-item:focus-within .pc-file-browser__row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .pc-file-browser__row-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .pc-file-browser__error {
@@ -249,18 +308,17 @@ a.pc-file-browser__row--file:focus-visible {
 }
 
 /**
- * Upload panel (T30B4). Sits above the breadcrumbs so it is available
- * from every browser state (directory or open file).
+ * Upload panel (T30B4). UI-W7: rendered inside the toolbar's Upload
+ * popover rather than standing above the breadcrumbs, so this no longer
+ * carries its own card framing — `.pc-file-popover__content` (above)
+ * supplies that.
  */
 
 .pc-file-upload {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  padding: var(--spacing-3);
-  margin-bottom: var(--spacing-3);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-hairline);
+  min-width: 16rem;
 }
 
 .pc-file-upload__row {
@@ -301,31 +359,16 @@ a.pc-file-browser__row--file:focus-visible {
 }
 
 /**
- * File mutation panel (mkdir/create-file/rename/delete). Sits directly
- * below the upload affordance and above the search field, so every
- * mutation entry point is available from every browser state just like
- * upload; each group is a small field/button row in the same language.
+ * File mutation forms (mkdir/create-file/rename), UI-W7: each now
+ * renders inside a `FilePopoverButton`'s content rather than a standing
+ * panel, but the field/button group language is unchanged.
  */
-
-.pc-file-ops {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3);
-  margin-bottom: var(--spacing-3);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-hairline);
-}
 
 .pc-file-ops__group {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  flex-direction: column;
   gap: var(--spacing-2);
-}
-
-.pc-file-ops__group > .pc-field {
-  flex: 1 1 12rem;
+  min-width: 16rem;
 }
 
 .pc-file-ops__hint {
@@ -335,17 +378,61 @@ a.pc-file-browser__row--file:focus-visible {
 }
 
 /**
- * File search panel (T30B5). Sits above the breadcrumbs, next to the
- * upload panel, so it is available from every browser state; results
- * reuse `.pc-file-browser__row` (defined above) so a hit reads exactly
- * like a listing row.
+ * Files toolbar (UI-W7, plan.md §12.4): one compact row above the
+ * listing — breadcrumbs on the left, icon-button affordances (upload,
+ * new folder, new file, search toggle, refresh) on the right. Replaces
+ * the always-open upload/ops/search panels that used to stack above the
+ * breadcrumbs.
+ */
+.pc-file-toolbar {
+  margin-bottom: var(--spacing-3);
+}
+
+.pc-file-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+}
+
+.pc-file-toolbar__row .pc-file-browser__breadcrumbs {
+  margin: 0;
+}
+
+.pc-file-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.pc-file-toolbar__search {
+  margin-top: var(--spacing-3);
+}
+
+/**
+ * Local icon-button popover (`file-popover-button.tsx`). Reuses
+ * `ui/primitives/primitives.css`'s `.pc-popover`/`.pc-popover__content`
+ * positioning; this only narrows the content width for the small
+ * single-field/button forms this feature opens in one, and right-aligns
+ * it so a trigger near the toolbar's right edge never opens off-screen.
+ */
+.pc-file-popover__content {
+  right: 0;
+  left: auto;
+  min-width: 18rem;
+}
+
+/**
+ * File search panel (T30B5). Toggled open from the toolbar's search
+ * icon (UI-W7); results reuse `.pc-file-browser__row` (defined above)
+ * so a hit reads exactly like a listing row.
  */
 
 .pc-file-search {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  margin-bottom: var(--spacing-3);
 }
 
 .pc-file-search__results {
