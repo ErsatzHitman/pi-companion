@@ -2,9 +2,8 @@
  * Wires a per-session `PiNoticeStore` to a live `client` (when given) and
  * renders `PiNoticeBanner` from it (T112, plan.md §8.3, §11.5).
  *
- * Mounted as a sibling of `ContextMeter`/`SessionCostMeterContainer`
- * inside `root-route.tsx`'s `ExtensionRailContent` — see that file's own
- * mount for the live wiring. A fresh `PiNoticeStore` is created per
+ * Mounted inside `root-route.tsx`'s `ExtensionRailContent` — see that
+ * file's own mount for the live wiring. A fresh `PiNoticeStore` is created per
  * `agentId` (not reused across a session switch), so a notice from one
  * session never leaks into another.
  */

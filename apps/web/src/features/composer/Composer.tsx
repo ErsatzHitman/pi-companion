@@ -17,6 +17,7 @@ import { ModelThinkingPicker } from "./ModelThinkingPicker.js";
 import { PromptRoutingPicker } from "./PromptRoutingPicker.js";
 import { QueueModePicker } from "./QueueModePicker.js";
 import { ReferenceSuggestions } from "./ReferenceSuggestions.js";
+import { ContextMeter } from "../rail/context-meter.js";
 import type { UseComposerOptions } from "./use-composer.js";
 import { useComposer } from "./use-composer.js";
 import { useComposerReferences } from "./use-composer-references.js";
@@ -733,6 +734,18 @@ export function Composer({
             onChange={setPromptRouting}
             testId={testId ? `${testId}-prompt-routing` : undefined}
           />
+          {/* T386 follow-up (UI-W9): the reference `#ctx-menu` popover's own
+              final `.menu-g` group is its "Context" readout
+              (`docs/ui-reference/pi-companion-web.html`) — the SAME
+              `ContextMeter` the right rail used to mount directly now
+              renders here instead, off the ring's own `contextTelemetry`
+              prop, so the two can never disagree. */}
+          {contextTelemetry ? (
+            <ContextMeter
+              telemetry={contextTelemetry}
+              testId={testId ? `${testId}-context-meter` : undefined}
+            />
+          ) : null}
         </div>
       </Sheet>
     </div>
