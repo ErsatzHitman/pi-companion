@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
 import { composer as coreComposer } from "@picompanion/frontend-core";
@@ -481,6 +481,17 @@ export function Composer({
   const paletteRef = useRef<HTMLDivElement>(null);
   /** Whether the context ring's session-controls sheet is showing. */
   const [controlsOpen, setControlsOpen] = useState(false);
+  /**
+   * FIX-W9: the most recent Compact-now send's failure, once it has
+   * escaped `submit()`'s (`use-composer.ts`) own internal catch around
+   * `client.sendAgentMessage` — an `outbox.enqueue` /
+   * `draftController.clear()` / `markSending` rejection, none of which
+   * `submit()` catches itself. `useComposer`'s own `sendError` cannot
+   * report this (it is set only inside that internal catch, and exposes
+   * no setter this component could call instead), so this is a second,
+   * narrower status line rather than a value routed into that one.
+   */
+  const [compactSendError, setCompactSendError] = useState<string | null>(null);
 
   // T293: mirrors the live draft into a ref rather than re-wiring on every
   // keystroke — `wireEditorTextResponder` reads `draftTextRef.current`
@@ -633,6 +644,36 @@ export function Composer({
     }
   }
 
+  /**
+   * FIX-W9 (BLOCKER): restores a captured draft only when the textarea is
+   * still empty. `submit()` (`use-composer.ts`) clears the draft
+   * synchronously but then awaits a real `outbox.enqueue` ->
+   * `draftController.clear()` -> `markSending` -> `client.sendAgentMessage`
+   * round trip before its returned promise settles, and `PromptBar` never
+   * disables the textarea while that is in flight — only the Send button
+   * does — so the user is free to type a whole new message during the
+   * wait. Restoring unconditionally would silently clobber that newer
+   * text with the stale pre-compact draft the instant the compact send
+   * lands. `draftTextRef` (the T293 editor-text responder mirror above)
+   * reads the LIVE draft as of the most recent commit, not any earlier
+   * closure's stale `draftText`, so a keystroke typed after the restore
+   * was scheduled is still seen. `setDraftText` (not `setDraftTextState`)
+   * so an actual restore also re-persists through the same
+   * `draftController.update` an ordinary keystroke uses, not just shown
+   * once and lost on reload; when the guard skips the restore, the
+   * visible text is already whatever the user typed, and it is already
+   * persisted the same way (their own `setDraftText` calls while typing
+   * did that), so the persisted and visible drafts agree either way.
+   */
+  const restoreCapturedDraftIfBoxEmpty = useCallback(
+    (restoreText: string | null): void => {
+      if (restoreText !== null && draftTextRef.current === "") {
+        setDraftText(restoreText);
+      }
+    },
+    [setDraftText],
+  );
+
   // UI-W12 (FIX-W5): a synchronous ref, not React state, carries the "a
   // compact send is queued" flag — plus what draft, if any, to restore once
   // it lands — across the render `setDraftText` below triggers, the same
@@ -649,24 +690,40 @@ export function Composer({
   // `null` means no compact send is pending. `handleCompactNow` below never
   // leaves a stale entry here: the one case that does not reach this
   // effect at all (the draft is already exactly `COMPACT_NOW_TEXT`) submits
-  // directly and clears this ref itself in the same tick (BUG 1, FIX-W5) —
-  // see that function's own doc comment.
+  // directly, preserving any already-captured entry (BUG 1, FIX-W5; FIX-W9
+  // NIT) — see that function's own doc comment.
   const pendingCompactRef = useRef<{ restoreText: string | null } | null>(null);
   useEffect(() => {
     const pending = pendingCompactRef.current;
     if (!pending || draftText !== COMPACT_NOW_TEXT) return;
     pendingCompactRef.current = null;
-    void submit().then(() => {
-      // BUG 2 (FIX-W5): restore the user's own in-progress draft once the
-      // compact send is durably enqueued — `submit()`'s `outbox.enqueue`
-      // always runs, and settles, before its own returned promise does —
-      // rather than silently discarding it. `setDraftText` (not
-      // `setDraftTextState`) so the restored text is also re-persisted
-      // through the same `draftController.update` an ordinary keystroke
-      // uses, not just shown once and lost on reload.
-      if (pending.restoreText !== null) setDraftText(pending.restoreText);
-    });
-  }, [draftText, submit, setDraftText]);
+    setCompactSendError(null);
+    void submit()
+      .then(() => {
+        // BUG 2 (FIX-W5), gated by FIX-W9: restore the user's own
+        // in-progress draft once the compact send is durably enqueued —
+        // `submit()`'s `outbox.enqueue` always runs, and settles, before
+        // its own returned promise does — rather than silently discarding
+        // it, but only when nothing newer has replaced it in the box; see
+        // `restoreCapturedDraftIfBoxEmpty`'s own doc comment above.
+        restoreCapturedDraftIfBoxEmpty(pending.restoreText);
+      })
+      .catch((error) => {
+        // FIX-W9 (SHOULD-FIX 1): `submit()` only catches a
+        // `client.sendAgentMessage` rejection internally; a rejection from
+        // `outbox.enqueue`, `draftController.clear()`, or `markSending`
+        // escapes it entirely. Because `handleCompactNow` already
+        // overwrote the PERSISTED draft with `/compact` before `submit()`
+        // ran, leaving this unhandled would lose the user's original
+        // message from both the UI and storage behind an unhandled
+        // rejection. Restore it the same guarded way a clean settle does,
+        // and surface the failure on its own status line
+        // (`compactSendError` below) since `useComposer` exposes no
+        // setter for its own `sendError` this component could reuse.
+        restoreCapturedDraftIfBoxEmpty(pending.restoreText);
+        setCompactSendError(error instanceof Error ? error.message : String(error));
+      });
+  }, [draftText, submit, setDraftText, restoreCapturedDraftIfBoxEmpty]);
 
   const compactNowUnavailableReason = describeCompactNowUnavailable(
     Boolean(composerOptions.client),
@@ -691,13 +748,18 @@ export function Composer({
    * fire the stale effect and auto-submit the truncated command, stealing
    * the rest of the sentence. This case submits directly instead of
    * depending on a state transition that may never happen, and clears the
-   * ref itself in the same tick so it can never outlive this click.
+   * ref itself in the same tick so it can never outlive this click — see
+   * FIX-W9's NIT paragraph below for what it now does when a DIFFERENT,
+   * earlier click's capture is still sitting there.
    *
    * FIX-W5 (BUG 2): whatever the user had actually typed — if anything,
    * and if it is not itself just `COMPACT_NOW_TEXT` again — is captured
    * before it is overwritten and restored into the draft once the compact
    * send is enqueued (see the effect above), rather than silently
-   * discarded.
+   * discarded. FIX-W9 (BLOCKER) gates that restore on the box still being
+   * empty — see `restoreCapturedDraftIfBoxEmpty`'s own doc comment — so a
+   * message typed while the compact send was still in flight survives
+   * instead of being clobbered by this stale text.
    *
    * FIX-W5 (BUG 3): staged attachments are cleared up front rather than
    * riding along with `/compact`. The daemon has no manual-compaction RPC
@@ -710,6 +772,21 @@ export function Composer({
    * currently staged and then clears it on every submission that proceeds,
    * so the sole way to keep those files off THIS particular send is to
    * clear them before calling `submit()`, not after.
+   *
+   * FIX-W9 (SHOULD-FIX 2, disclosed rather than fixed): unlike the text
+   * above, a cleared attachment has NO restore path — a submission failure
+   * loses every staged file one-way, and a file still `"uploading"` at
+   * click time is orphaned the same way (`useAttachments.upload()`,
+   * `use-attachments.ts`, has no cancellation, so its own in-flight
+   * `updateAttachment` call lands on an already-emptied array and quietly
+   * no-ops once this runs). This is deliberate, not incidental: restaging
+   * an already-uploaded reference, or cancelling/resuming an in-flight
+   * one, has no operation on `UseAttachmentsState` (`use-attachments.ts`)
+   * to call — the only two ways to add an attachment are a fresh
+   * `PickedFile` pick/drop/paste, never an already-uploaded reference —
+   * and that file is out of this task's ownership. A failed Compact-now
+   * send therefore leaves the user re-picking any file they had staged
+   * for it, same as today, while its TEXT (above) does not.
    */
   function handleCompactNow(): void {
     if (compactNowUnavailableReason) return;
@@ -719,8 +796,31 @@ export function Composer({
     const restoreText =
       trimmedDraft.length > 0 && trimmedDraft !== COMPACT_NOW_TEXT ? draftText : null;
     if (draftText === COMPACT_NOW_TEXT) {
+      // FIX-W9 (NIT): a fast second click can land here while an EARLIER
+      // click's own captured `restoreText` is still sitting in
+      // `pendingCompactRef`, waiting for that click's own effect to run —
+      // the draft already reads as `COMPACT_NOW_TEXT` because that earlier
+      // click's `setDraftText` call already committed, before its effect
+      // got a turn to run. Carry that capture into THIS click's own submit
+      // instead of discarding it: null the ref first so the earlier
+      // click's effect sees nothing pending and does not also call
+      // `submit()` (no duplicate send either way —
+      // `use-composer.ts`'s `submitLockRef` is a further backstop), then
+      // attach the same restore/error handling the effect above uses,
+      // closed over whatever was actually pending. That is `null`,
+      // unchanged, for the ordinary BUG-1 case of a draft typed as
+      // `/compact` by hand with nothing queued to restore.
+      const alreadyPending = pendingCompactRef.current;
       pendingCompactRef.current = null;
-      void submit();
+      setCompactSendError(null);
+      void submit()
+        .then(() => {
+          restoreCapturedDraftIfBoxEmpty(alreadyPending?.restoreText ?? null);
+        })
+        .catch((error) => {
+          restoreCapturedDraftIfBoxEmpty(alreadyPending?.restoreText ?? null);
+          setCompactSendError(error instanceof Error ? error.message : String(error));
+        });
       return;
     }
     pendingCompactRef.current = { restoreText };
@@ -742,6 +842,7 @@ export function Composer({
   const contextRingTestId = testId ? `${testId}-context-ring` : undefined;
   const controlsSheetTestId = testId ? `${testId}-session-controls` : undefined;
   const compactNowTestId = testId ? `${testId}-compact-now` : undefined;
+  const compactErrorTestId = testId ? `${testId}-compact-error` : undefined;
   const footerStateTestId = testId ? `${testId}-foot-state` : undefined;
   const referencesTestId = testId ? `${testId}-references` : undefined;
   const resolvedReferencesTestId = testId ? `${testId}-resolved-references` : undefined;
@@ -965,6 +1066,20 @@ export function Composer({
             />
           ) : null}
         </div>
+      ) : null}
+      {/* FIX-W9 (SHOULD-FIX 1): a Compact-now failure that escaped
+          `submit()`'s own internal catch — an `outbox.enqueue` /
+          `draftController.clear()` / `markSending` rejection, never a
+          `client.sendAgentMessage` one (that path already sets
+          `sendError` above). Its own status line: `useComposer` exposes
+          no setter for `sendError` this component could reuse instead. */}
+      {compactSendError ? (
+        <StatusIndicator
+          label="Compact"
+          tone="danger"
+          statusText={compactSendError}
+          testId={compactErrorTestId}
+        />
       ) : null}
       {queueDepth > 0 ? (
         <StatusIndicator

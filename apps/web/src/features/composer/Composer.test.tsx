@@ -4,6 +4,7 @@ import { axe } from "jest-axe";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { composer as coreComposer } from "@picompanion/frontend-core";
+import type { StructuredStorage, StructuredStorageListOptions } from "@picompanion/frontend-core";
 
 import { Composer } from "./Composer.js";
 import type { AgentModelOption } from "./agent-turn-client.js";
@@ -35,6 +36,46 @@ function baseProps() {
     structuredStorage: new InMemoryStructuredStorage(),
     filePicker: new FakeFilePicker(),
   };
+}
+
+/**
+ * FIX-W9 (SHOULD-FIX 1): wraps a real `InMemoryStructuredStorage` but lets
+ * a test make exactly the next `put()` call reject — standing in for an
+ * `outbox.enqueue` storage write failing mid-flight, a rejection
+ * `submit()` (`use-composer.ts`) does not catch itself. `update()` (the
+ * draft autosave) never reaches `put` in these tests: it is debounced
+ * through `Clock.setTimeout`, and `FakeClock` never fires a timer unless a
+ * test explicitly calls `advance()`, so arming `failNextPut` right before
+ * a click reliably targets `outbox.enqueue`'s own write, not an unrelated
+ * one.
+ */
+class FlakyStructuredStorage implements StructuredStorage {
+  private readonly inner = new InMemoryStructuredStorage();
+  failNextPut = false;
+
+  async get<T>(collection: string, id: string): Promise<T | null> {
+    return this.inner.get<T>(collection, id);
+  }
+
+  async put<T>(collection: string, id: string, value: T): Promise<void> {
+    if (this.failNextPut) {
+      this.failNextPut = false;
+      throw new Error("storage write failed");
+    }
+    return this.inner.put(collection, id, value);
+  }
+
+  async delete(collection: string, id: string): Promise<void> {
+    return this.inner.delete(collection, id);
+  }
+
+  async list<T>(collection: string, options?: StructuredStorageListOptions): Promise<T[]> {
+    return this.inner.list<T>(collection, options);
+  }
+
+  async clear(collection: string): Promise<void> {
+    return this.inner.clear(collection);
+  }
 }
 
 /**
@@ -1303,6 +1344,81 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect(client.sentMessages[0]?.text).toBe("/compact");
     expect(client.sentMessages[0]?.options?.attachments).toBeUndefined();
     expect(screen.queryByTestId("composer-attachments")).toBeNull();
+  });
+
+  it("FIX-W9 (BLOCKER): a message typed while the compact send is still in flight survives — the restore never clobbers newer text with the stale pre-compact draft", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    let releaseSend: (() => void) | undefined;
+    client.sendAgentMessageImpl = () =>
+      new Promise((resolve) => {
+        releaseSend = resolve;
+      });
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.type(input, "don't forget the deploy notes");
+    await openRingSheet(user);
+
+    await user.click(screen.getByTestId("composer-compact-now"));
+
+    // The compact send is now durably underway — recorded on the fake
+    // client — but hung inside client.sendAgentMessage (not yet released),
+    // and the draft has already been cleared to make room for it.
+    await waitFor(() => expect(client.sentMessages).toHaveLength(1));
+    expect(client.sentMessages[0]?.text).toBe("/compact");
+    await waitFor(() => expect(input.value).toBe(""));
+
+    // The textarea is never disabled while a send is in flight (only the
+    // Send button is, per PromptBar) — the user types a brand-new message
+    // during the wait.
+    await user.type(input, "NEW urgent message");
+    expect(input.value).toBe("NEW urgent message");
+
+    // Release the hung send; the compact submission now durably completes
+    // and its restore runs.
+    releaseSend?.();
+    await waitFor(() => expect(client.sentMessages).toHaveLength(1));
+    // Give a (buggy) unconditional restore a chance to fire before
+    // asserting its absence.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(input.value).toBe("NEW urgent message");
+    // Exactly one message was ever sent — the compact one; the newer text
+    // is still sitting in the draft, unsent.
+    expect(client.sentMessages).toHaveLength(1);
+  });
+
+  it("FIX-W9 (SHOULD-FIX 1): a rejection that escapes submit()'s own catch (an outbox.enqueue storage failure) restores the captured draft and surfaces its own error, rather than losing the text behind an unhandled rejection", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    const structuredStorage = new FlakyStructuredStorage();
+    render(
+      <Composer
+        {...baseProps()}
+        structuredStorage={structuredStorage}
+        client={client}
+        testId="composer"
+      />,
+    );
+
+    const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
+    await user.type(input, "don't lose this either");
+    await openRingSheet(user);
+
+    structuredStorage.failNextPut = true;
+    await user.click(screen.getByTestId("composer-compact-now"));
+
+    // outbox.enqueue's own storage.put rejected before ever reaching
+    // client.sendAgentMessage — no message was ever sent.
+    await waitFor(() => expect(screen.queryByTestId("composer-compact-error")).not.toBeNull());
+    expect(client.sentMessages).toEqual([]);
+    // The captured draft is restored rather than lost, and the failure is
+    // surfaced as its own visible, non-colour-only status text.
+    expect(input.value).toBe("don't lose this either");
+    expect(screen.getByTestId("composer-compact-error").textContent).toContain(
+      "storage write failed",
+    );
   });
 
   it("the Compact now row is disabled with a real explanation when there is no live client (UI-W12)", async () => {
