@@ -17,7 +17,8 @@ export type IconName =
   | "folder"
   | "terminal"
   | "edit"
-  | "rewind";
+  | "rewind"
+  | "add";
 
 const paths: Record<IconName, ReactElement> = {
   close: <path d="M3 3l10 10M13 3L3 13" />,
@@ -55,6 +56,10 @@ const paths: Record<IconName, ReactElement> = {
   // (anticlockwise) way — reads as "undo/rewind" rather than "reload",
   // never identical to `refresh` at a glance.
   rewind: <path d="M3 8A5 5 0 1 0 4.5 4.5M3 3v3h3" />,
+  // Terminal switcher's "New terminal" chip (UI-W8): a plain plus glyph,
+  // paired with the visible "New terminal" label the chip renders next
+  // to it -- the icon alone stays decorative/`aria-hidden`.
+  add: <path d="M8 2.5v11M2.5 8h11" />,
 };
 
 export function Icon({ name, ...rest }: { name: IconName } & SVGProps<SVGSVGElement>) {
