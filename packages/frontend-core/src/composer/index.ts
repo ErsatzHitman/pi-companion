@@ -18,8 +18,14 @@ export {
   DraftSessionController,
   DraftStore,
   draftKeyForSession,
+  isDraftAlreadySubmitted,
 } from "./drafts.js";
-export type { DraftSessionControllerOptions, DraftSessionTarget } from "./drafts.js";
+export type {
+  DraftOutboxEntryLike,
+  DraftSessionControllerOptions,
+  DraftSessionTarget,
+  OpenDraftOptions,
+} from "./drafts.js";
 
 export {
   detectReferenceToken,

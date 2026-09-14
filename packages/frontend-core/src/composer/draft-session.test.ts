@@ -164,3 +164,69 @@ describe("DraftSessionController", () => {
     await expect(controller.clear()).resolves.toBeUndefined();
   });
 });
+
+describe("DraftSessionController.open's isAlreadySubmitted guard (FIX-W2)", () => {
+  it("refuses to restore a persisted draft the caller reports as already submitted, and drops it", async () => {
+    const backing = new Map<string, unknown>();
+    const { controller, store } = makeController(backing);
+    await controller.open({ serverId: "s1", agentId: "a1" });
+    controller.update("already sent before reload");
+    await controller.flush();
+    expect((await store.load(draftKeyForSession({ serverId: "s1", agentId: "a1" })))?.text).toBe(
+      "already sent before reload",
+    );
+
+    // A fresh controller over the same storage (a "reload"), wired to an
+    // isAlreadySubmitted guard that reports the persisted text as already
+    // durably submitted for this session.
+    const relit = new DraftSessionController(
+      new DraftStore(new InMemoryStructuredStorage(backing), new FakeClock()),
+      new FakeClock(),
+    );
+    const restored = await relit.open(
+      { serverId: "s1", agentId: "a1" },
+      { isAlreadySubmitted: async (text) => text === "already sent before reload" },
+    );
+
+    expect(restored).toBe("");
+    // The now-known-stale persisted draft is dropped too, so it does not
+    // keep reappearing on every future mount for this target.
+    expect(await store.load(draftKeyForSession({ serverId: "s1", agentId: "a1" }))).toBeNull();
+  });
+
+  it("restores normally when isAlreadySubmitted reports false", async () => {
+    const backing = new Map<string, unknown>();
+    const { controller } = makeController(backing);
+    await controller.open({ serverId: "s1", agentId: "a1" });
+    controller.update("never sent");
+    await controller.flush();
+
+    const relit = new DraftSessionController(
+      new DraftStore(new InMemoryStructuredStorage(backing), new FakeClock()),
+      new FakeClock(),
+    );
+    const restored = await relit.open(
+      { serverId: "s1", agentId: "a1" },
+      { isAlreadySubmitted: async () => false },
+    );
+
+    expect(restored).toBe("never sent");
+  });
+
+  it("never calls isAlreadySubmitted for an empty draft", async () => {
+    const { controller } = makeController();
+    let called = false;
+    const restored = await controller.open(
+      { serverId: "s1", agentId: "a1" },
+      {
+        isAlreadySubmitted: async () => {
+          called = true;
+          return true;
+        },
+      },
+    );
+
+    expect(restored).toBe("");
+    expect(called).toBe(false);
+  });
+});

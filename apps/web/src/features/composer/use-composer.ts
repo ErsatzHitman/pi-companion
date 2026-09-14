@@ -242,6 +242,15 @@ export function useComposer(options: UseComposerOptions): ComposerState {
   );
   const draftController = draftControllerRef.current;
 
+  // One outbox per (sessionId, storage, clock) identity; those are
+  // expected to be stable for the lifetime of a mounted composer. Declared
+  // ahead of the mount-restore effect below (FIX-W2) since that effect
+  // reads it to guard against restoring an already-submitted draft.
+  const outbox = useMemo(
+    () => new coreComposer.OutboxController(structuredStorage, clock),
+    [structuredStorage, clock],
+  );
+
   // Restore on mount and whenever the target changes. The displayed draft is
   // cleared first so session B never briefly shows session A's text while the
   // load is in flight; the effect's cleanup flushes A's pending change.
@@ -249,7 +258,21 @@ export function useComposer(options: UseComposerOptions): ComposerState {
     let cancelled = false;
     setDraftTextState("");
     void draftController
-      .open({ serverId, agentId: sessionId })
+      .open(
+        { serverId, agentId: sessionId },
+        {
+          // FIX-W2: refuse to restore a persisted draft whose text was
+          // already durably submitted for this session (already sending,
+          // parked awaiting confirmation, or sent) — see
+          // `isDraftAlreadySubmitted`'s own doc comment in drafts.ts for
+          // why a silent restore here is exactly the reload-and-resend
+          // duplication this fix closes.
+          isAlreadySubmitted: async (text) => {
+            const entries = await outbox.loadAll(sessionId);
+            return coreComposer.isDraftAlreadySubmitted(text, sessionId, entries);
+          },
+        },
+      )
       .then((restored) => {
         if (!cancelled && restored !== "") setDraftTextState(restored);
       })
@@ -261,6 +284,15 @@ export function useComposer(options: UseComposerOptions): ComposerState {
       cancelled = true;
       void draftController.flush();
     };
+    // `outbox` is deliberately excluded: like `draftController` itself
+    // (built once via `??=` above and never rebuilt), it is expected to be
+    // stable for a mounted composer's lifetime, and this effect must only
+    // re-run when the conversation target actually changes — not on every
+    // render a `structuredStorage`/`clock` identity change would otherwise
+    // cause `outbox`'s own `useMemo` to recompute. The effect body always
+    // closes over whichever `outbox` was current when it last ran, which is
+    // what actually matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftController, serverId, sessionId]);
 
   const setDraftText = useCallback(
@@ -293,13 +325,6 @@ export function useComposer(options: UseComposerOptions): ComposerState {
     });
     return unsubscribe;
   }, [client, sessionId]);
-
-  // One outbox per (sessionId, storage, clock) identity; those are
-  // expected to be stable for the lifetime of a mounted composer.
-  const outbox = useMemo(
-    () => new coreComposer.OutboxController(structuredStorage, clock),
-    [structuredStorage, clock],
-  );
 
   const makeClientMessageId = useCallback(
     (): string => generateClientMessageId?.() ?? defaultGenerateClientMessageId(clock),
@@ -366,7 +391,13 @@ export function useComposer(options: UseComposerOptions): ComposerState {
           payload: { text, clientMessageId, attachments: uploadedAttachments },
         });
 
-        // The submission is durably recorded now, so the draft can go for good.
+        // FIX-W2: cleared in the very next step after the submission is
+        // durably recorded — immediately once `enqueue()` resolves, before
+        // the `if (!client)` branch below or any network send — so the
+        // window in which a reload could restore already-durably-queued
+        // text is as small as one storage write. `open()`'s own
+        // `isAlreadySubmitted` guard (drafts.ts) is the backstop for the
+        // remainder of that window (or a silently failed clear).
         await draftController.clear();
 
         // No live client (plan.md §12.4's "no client yet" seam): the
