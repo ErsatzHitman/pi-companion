@@ -199,7 +199,16 @@
 
 .pc-create-session__create {
   background-color: var(--color-accent);
-  color: var(--color-accent-ink, #fff);
+  /* FIX-A11Y1: was `--color-accent-ink`, a darker hover/active shade of
+     accent (`.pc-button--primary:hover`'s own use, in
+     `ui/primitives/primitives.css`) -- not a text-on-accent token, so it
+     rendered near-illegible near-blue-on-blue text against this same
+     accent background (same defect class as `sessions-screen.css`'s
+     `.pc-sessions-screen__pill--accent`, FIX-E1). `--color-accent-contrast`
+     is the token every other accent-background control in this app uses
+     for its label (`.pc-button--primary`'s own `color`), and is pinned at
+     AA against `--color-accent` by `contrast.test.ts`. */
+  color: var(--color-accent-contrast, #fff);
 }
 
 .pc-create-session__create:hover {
