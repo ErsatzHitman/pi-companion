@@ -45,9 +45,15 @@ export interface PiExtensionRailProps {
  *   fidelity (`RailElementCard` → `PiUiElementView`, T29R2) — plan.md §8.3:
  *   "A running subagent fleet, workflow, loop, or goal remains visible in
  *   the right rail. It does not disappear into a collapsed status chip."
- *   There is deliberately no summarizing/collapsing behavior in this
+ *   There is deliberately no summarizing/collapsing behavior WITHIN this
  *   component: one element in, one full card out, for as long as the
- *   element is live. This is what plan.md §11.7's documented shapes for
+ *   element is live and the rail is on screen at all. That is a separate
+ *   axis from `Shell`'s own manual rail collapse (`ui/shell.tsx`,
+ *   `ui/use-rail-collapse.ts`): a user can hide the whole rail as an
+ *   explicit, reversible choice, which is a full show/hide of the pane —
+ *   never a degraded status chip standing in for the live content this
+ *   component renders while the pane is shown. This is what plan.md §11.7's
+ *   documented shapes for
  *   `subagents` (fleet, `roster`), `workflow(s)` (`progress`/`roster`/
  *   `panel`/`log`), `loop` (`panel`), and `pi-goal` (`status`) actually look
  *   like once rendered — none of the four collapses into any other, because

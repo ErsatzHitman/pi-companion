@@ -17,6 +17,21 @@
  * once below as custom properties on `.shell` rather than repeated as
  * literals; every colour, spacing, type, and shadow value still comes
  * from `var(--...)` tokens.
+ *
+ * The three-region row layout's own widths are the design reference's
+ * fixed-width ladder (`.app`'s `--rail-l: 264px` / `--rail-r: 344px`,
+ * stepping to 232px / 312px below 1360px; `.live` — the right, extension
+ * rail — hidden below 1180px; `.rail` — the left, session rail — hidden
+ * below 860px; `.main` always `minmax(0, 1fr)`), declared below as two
+ * more custom properties (`--shell-rail-l` / `--shell-rail-r`) so the
+ * three tiers below 1360px/1180px/860px only ever change ONE thing each
+ * rather than restating the whole `grid-template-columns` value.
+ *
+ * The reference has no manual collapse affordance; this product's owner
+ * requires one for both rails (see `ui/use-rail-collapse.ts`), so this
+ * file also carries the `[data-rail-session]` / `[data-rail-extension]`
+ * override rules that make a manual choice win over every tier below,
+ * at every viewport width — not just the widest one.
  */
 
 .shell {
@@ -24,10 +39,21 @@
   --shell-header-gap: 10px;
   --shell-brand-tile-size: 20px;
   --shell-head-control-size: 30px;
+  /* The narrower step of the reference's ladder (below 1360px) is the
+     default; the `min-width: 1360px` tier below widens it. */
+  --shell-rail-l: 232px;
+  --shell-rail-r: 312px;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   background-color: var(--color-page);
+}
+
+@media (min-width: 1360px) {
+  .shell {
+    --shell-rail-l: 264px;
+    --shell-rail-r: 344px;
+  }
 }
 
 .shell__header {
@@ -87,9 +113,39 @@
 }
 
 .shell__nav-link {
+  /* "adopts the `.iconbtn` visual language" (owner requirement): same
+     transparent-by-default / `--color-hover`-on-hover / `--radius-control`
+     treatment as `.pc-icon-button`, but with room for the icon plus a
+     short label rather than an icon alone. */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  height: var(--shell-head-control-size);
   padding: 0 var(--spacing-2);
+  border-radius: var(--radius-control);
   font-size: var(--font-size-sm);
   white-space: nowrap;
+  color: var(--color-ink-2);
+  text-decoration: none;
+  transition: background-color var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+.shell__nav-link:hover,
+.shell__nav-link:focus-visible {
+  background-color: var(--color-hover);
+  color: var(--color-ink);
+}
+
+.shell__nav-link-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.shell__rail-toggle {
+  width: var(--shell-head-control-size);
+  height: var(--shell-head-control-size);
+  border-radius: var(--radius-control);
+  flex: none;
 }
 
 .shell__gear {
@@ -147,7 +203,7 @@
 
 .shell__rail--session {
   grid-area: session;
-  border-bottom: 1px dashed var(--color-line);
+  border-bottom: 1px solid var(--color-line);
   /* The rail's own content (`.pc-session-rail`) owns its inner padding so
      the head, search, list, and foot can each sit flush against the rail's
      edges, the way the design reference's `.rail` does. */
@@ -160,7 +216,7 @@
 
 .shell__rail--extension {
   grid-area: extension;
-  border-top: 1px dashed var(--color-line);
+  border-top: 1px solid var(--color-line);
 }
 
 .shell__center {
@@ -171,25 +227,95 @@
 }
 
 /*
+ * A manually collapsed rail hides unconditionally — no `@media` guard —
+ * so it stays hidden at every viewport width, including one the ladder
+ * below would otherwise show it at ("manual state must win over the
+ * media ladder"). Higher selector specificity than every plain
+ * `.shell__rail--*` rule below (an extra attribute selector on the
+ * ancestor `.shell`) is what makes the win unconditional rather than a
+ * source-order accident.
+ */
+.shell[data-rail-session="collapsed"] .shell__rail--session {
+  display: none;
+}
+
+.shell[data-rail-extension="collapsed"] .shell__rail--extension {
+  display: none;
+}
+
+/*
  * `--breakpoint-wide` (see `@picompanion/design-tokens`' `web.ts`) is a
  * CSS custom property and cannot be read inside a media *condition*, so
  * the pixel figure below is a literal that must track
  * `breakpoints.wide` — `shell.test.tsx` asserts the two stay equal so
  * this can never silently drift from the token.
+ *
+ * Above this breakpoint the reference's own ladder takes over (see the
+ * `860px` / `1180px` / `1360px` tiers below), stepping from "nothing but
+ * the centre column" up to the full fixed-width three-region row.
  */
 @media (min-width: 720px) {
   .shell__regions {
-    grid-template-columns: minmax(14rem, 18vw) minmax(0, 1fr) minmax(14rem, 18vw);
-    grid-template-areas: "session center extension";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "center";
+  }
+
+  .shell__rail--session,
+  .shell__rail--extension {
+    display: none;
   }
 
   .shell__rail--session {
     border-bottom: none;
-    border-inline-end: 1px dashed var(--color-line);
   }
 
   .shell__rail--extension {
     border-top: none;
-    border-inline-start: 1px dashed var(--color-line);
+  }
+}
+
+/* Reference: ".rail hidden below 860px" — the session rail rejoins the row. */
+@media (min-width: 860px) {
+  .shell__regions {
+    grid-template-columns: var(--shell-rail-l) minmax(0, 1fr);
+    grid-template-areas: "session center";
+  }
+
+  .shell__rail--session {
+    display: block;
+    border-inline-end: 1px solid var(--color-line);
+  }
+
+  .shell[data-rail-session="collapsed"] .shell__regions {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "center";
+  }
+}
+
+/* Reference: ".live hidden below 1180px" — the extension rail rejoins the row. */
+@media (min-width: 1180px) {
+  .shell__regions {
+    grid-template-columns: var(--shell-rail-l) minmax(0, 1fr) var(--shell-rail-r);
+    grid-template-areas: "session center extension";
+  }
+
+  .shell__rail--extension {
+    display: block;
+    border-inline-start: 1px solid var(--color-line);
+  }
+
+  .shell[data-rail-session="collapsed"] .shell__regions {
+    grid-template-columns: minmax(0, 1fr) var(--shell-rail-r);
+    grid-template-areas: "center extension";
+  }
+
+  .shell[data-rail-extension="collapsed"] .shell__regions {
+    grid-template-columns: var(--shell-rail-l) minmax(0, 1fr);
+    grid-template-areas: "session center";
+  }
+
+  .shell[data-rail-session="collapsed"][data-rail-extension="collapsed"] .shell__regions {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "center";
   }
 }
