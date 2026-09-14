@@ -5244,6 +5244,116 @@ test("FIX-S2: a cancelled turn's buffered event is dropped as a superseded run, 
   }
 });
 
+test("FIX-S4: a fast replacement turn's own reply is not dropped as a superseded-run straggler", async () => {
+  // Reproduces the FIX-S2 regression: a replacement turn with no tool call
+  // can have its provider emit "timeline"/"turn_completed" synchronously
+  // inside session.startTurn(...), strictly before the isReplacement
+  // generation bump (which only runs once that call's `await` resolves).
+  // Those events land in the replacement's own un-started
+  // pendingRun.stagedEvents, tagged with the pre-bump generation, so a
+  // generation-only staleness check cannot tell them apart from a genuine
+  // straggler once stagedEvents is replayed after the bump — see the
+  // FIX-S4 paragraphs on runGenerations/isSupersededRunEvent.
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-fast-replacement-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  const interruptStarted = deferred<void>();
+  const allowInterruptToFinish = deferred<void>();
+
+  class FastReplacementSession extends TestAgentSession {
+    private localTurnCounter = 0;
+
+    override async startTurn(): Promise<{ turnId: string }> {
+      const turnId = `turn-${++this.localTurnCounter}`;
+      const turnNum = this.localTurnCounter;
+
+      if (turnNum === 1) {
+        setTimeout(() => {
+          this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        }, 0);
+        return { turnId };
+      }
+
+      // Replacement turn: no await before these pushes, so they run
+      // synchronously as part of THIS call — before streamForwarder's
+      // `await agent.session.startTurn(...)` even yields control back, and
+      // therefore strictly before the isReplacement bump.
+      this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+      this.pushEvent({
+        type: "timeline",
+        provider: this.provider,
+        turnId,
+        item: { type: "assistant_message", text: "Hello world" },
+      });
+      this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+      return { turnId };
+    }
+
+    override async interrupt(): Promise<void> {
+      interruptStarted.resolve();
+      await allowInterruptToFinish.promise;
+      this.pushEvent({
+        type: "turn_canceled",
+        provider: this.provider,
+        reason: "Interrupted",
+        turnId: "turn-1",
+      });
+    }
+  }
+
+  class FastReplacementClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new FastReplacementSession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new FastReplacementClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000402",
+  });
+
+  try {
+    const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+
+    const firstRun = manager.streamAgent(snapshot.id, "first run");
+    const firstRunDrain = (async () => {
+      for await (const _event of firstRun) {
+        // Drain events so lifecycle updates are applied.
+      }
+    })();
+    await manager.waitForAgentRunStart(snapshot.id);
+
+    const secondRunPromise = manager.replaceAgentRun(snapshot.id, "replacement run");
+    await interruptStarted.promise;
+    allowInterruptToFinish.resolve();
+
+    const secondRun = await secondRunPromise;
+    const secondRunDrain = (async () => {
+      for await (const _event of secondRun) {
+        // Drain replacement run.
+      }
+    })();
+
+    await firstRunDrain;
+    await secondRunDrain;
+
+    const rows = manager.fetchTimeline(snapshot.id, { direction: "tail", limit: 0 }).rows;
+    const assistantTexts = rows
+      .filter((row) => row.item.type === "assistant_message")
+      .map((row) => (row.item.type === "assistant_message" ? row.item.text : ""));
+
+    // The replacement turn's own reply must reach the timeline even though
+    // it was produced (and tagged) before the generation bump.
+    expect(assistantTexts).toContain("Hello world");
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("FIX-S1: startAgentRun dispatch is idempotent by clientMessageId — same id keeps one turn, a different id still steers", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-client-message-idempotency-"));
   const storagePath = join(workdir, "agents");
