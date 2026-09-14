@@ -48,7 +48,11 @@ function CreatingProgress({ hostLabel }: { hostLabel: string }) {
   }, []);
 
   return (
-    <div className="pc-create-session__progress" role="status" data-testid="create-session-progress">
+    <div
+      className="pc-create-session__progress"
+      role="status"
+      data-testid="create-session-progress"
+    >
       <span className="pc-create-session__spinner" aria-hidden="true" />
       <span>
         Starting Pi on {hostLabel}…
