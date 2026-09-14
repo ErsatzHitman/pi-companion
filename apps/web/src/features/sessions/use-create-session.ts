@@ -29,6 +29,8 @@ export interface CreateSessionController {
   open: boolean;
   cwd: string;
   provider: string;
+  /** UI-W13: an optional first prompt sent with the create request; see `CreateSessionInput.initialPrompt`'s doc. */
+  initialPrompt: string;
   phase: CreateSessionPhase;
   errors: CreateSessionFormFieldErrors;
   /** The raw daemon error message from the last failed attempt, if any. */
@@ -37,6 +39,7 @@ export interface CreateSessionController {
   closeDialog: () => void;
   setCwd: (value: string) => void;
   setProvider: (value: string) => void;
+  setInitialPrompt: (value: string) => void;
   submit: () => Promise<void>;
 }
 
@@ -45,6 +48,7 @@ export function useCreateSession(options: UseCreateSessionOptions): CreateSessio
   const [open, setOpen] = useState(false);
   const [cwd, setCwd] = useState("");
   const [provider, setProvider] = useState(DEFAULT_SESSION_PROVIDER);
+  const [initialPrompt, setInitialPrompt] = useState("");
   const [phase, setPhase] = useState<CreateSessionPhase>("idle");
   const [errors, setErrors] = useState<CreateSessionFormFieldErrors>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -76,7 +80,7 @@ export function useCreateSession(options: UseCreateSessionOptions): CreateSessio
     // so guard the double-submit case here instead.
     if (submittingRef.current) return;
 
-    const result = validateCreateSessionForm({ provider, cwd });
+    const result = validateCreateSessionForm({ provider, cwd, initialPrompt });
     if (!result.ok) {
       setErrors(result.errors);
       setErrorMessage(null);
@@ -94,18 +98,20 @@ export function useCreateSession(options: UseCreateSessionOptions): CreateSessio
       setOpen(false);
       setCwd("");
       setProvider(DEFAULT_SESSION_PROVIDER);
+      setInitialPrompt("");
       onCreated?.(session);
     } catch (error) {
       submittingRef.current = false;
       setPhase("error");
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [client, cwd, onCreated, provider]);
+  }, [client, cwd, initialPrompt, onCreated, provider]);
 
   return {
     open,
     cwd,
     provider,
+    initialPrompt,
     phase,
     errors,
     errorMessage,
@@ -113,6 +119,7 @@ export function useCreateSession(options: UseCreateSessionOptions): CreateSessio
     closeDialog,
     setCwd,
     setProvider,
+    setInitialPrompt,
     submit,
   };
 }

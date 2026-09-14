@@ -9,6 +9,8 @@ import type { CreateSessionInput } from "./sessions-client.js";
 export interface CreateSessionFormValues {
   provider: string;
   cwd: string;
+  /** UI-W13: an optional first prompt; see `CreateSessionInput.initialPrompt`'s doc. */
+  initialPrompt?: string;
 }
 
 export interface CreateSessionFormFieldErrors {
@@ -41,5 +43,14 @@ export function validateCreateSessionForm(
     return { ok: false, errors };
   }
 
-  return { ok: true, draft: { provider, cwd } };
+  // Nothing beyond trimming is validated for `initialPrompt` (UI-W13): it
+  // is genuinely optional, so an empty (or whitespace-only) value is
+  // omitted from the draft entirely rather than sent as `""`, keeping a
+  // blank field byte-for-byte identical to today's create call.
+  const initialPrompt = (values.initialPrompt ?? "").trim();
+
+  return {
+    ok: true,
+    draft: { provider, cwd, ...(initialPrompt ? { initialPrompt } : {}) },
+  };
 }

@@ -56,7 +56,16 @@ export interface DaemonAgentSnapshot {
 }
 
 export interface DaemonAgentClient {
-  createAgent(options: { provider: string; cwd: string }): Promise<DaemonAgentSnapshot>;
+  /**
+   * Matches `DaemonClient.createAgent` (T27B2; `initialPrompt` added
+   * UI-W13, mirroring `CreateAgentRequestOptions.initialPrompt` on the
+   * real `DaemonClient`, `packages/client/src/daemon-client.ts`).
+   */
+  createAgent(options: {
+    provider: string;
+    cwd: string;
+    initialPrompt?: string;
+  }): Promise<DaemonAgentSnapshot>;
   /** Matches `DaemonClient.archiveAgent` (T27B4). */
   archiveAgent(agentId: string): Promise<{ archivedAt: string }>;
   /** Matches `DaemonClient.deleteAgent` (T27B4). */
@@ -183,7 +192,15 @@ export function toSessionSummary(agent: DaemonAgentSnapshot): SessionSummary {
 export function createDaemonSessionsClient(daemon: DaemonAgentClient): SessionsClient {
   return {
     async createSession(input: CreateSessionInput): Promise<SessionSummary> {
-      const agent = await daemon.createAgent({ provider: input.provider, cwd: input.cwd });
+      const agent = await daemon.createAgent({
+        provider: input.provider,
+        cwd: input.cwd,
+        // UI-W13: forwarded only when non-empty, matching the real
+        // `DaemonClient.createAgent`'s own `options.initialPrompt ? ... : {}`
+        // guard (`packages/client/src/daemon-client.ts`) so an omitted or
+        // blank prompt never sends a meaningless empty string over the wire.
+        ...(input.initialPrompt ? { initialPrompt: input.initialPrompt } : {}),
+      });
       return toSessionSummary(agent);
     },
     async archiveSession(sessionId: string): Promise<{ archivedAt: string }> {
