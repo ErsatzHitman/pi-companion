@@ -37,6 +37,21 @@ export interface PromptBarProps {
    * sentence the mockup's `.composer-foot` carries.
    */
   footer?: ReactNode;
+  /**
+   * Optional metadata chips (T388), rendered immediately after `footer`
+   * and before the spacer — the composer's Model/Routing/Queue popover
+   * triggers. Kept a separate slot from `footer` rather than folded into
+   * it because `footer`'s own wrapping `<span>` clips long content with
+   * `text-overflow: ellipsis`, which is wrong for a row of chip buttons.
+   */
+  metaChips?: ReactNode;
+  /**
+   * Optional trailing control, rendered after the keyboard-contract hint
+   * — the composer's Stop button. A second slot rather than reusing
+   * `footer`/`metaChips` because it belongs on the far right of the row,
+   * past the spacer.
+   */
+  footEnd?: ReactNode;
 }
 
 /**
@@ -77,6 +92,8 @@ export function PromptBar({
   contextControl,
   onEscape,
   footer,
+  metaChips,
+  footEnd,
 }: PromptBarProps) {
   const inputId = useId();
   const keysId = useId();
@@ -134,6 +151,7 @@ export function PromptBar({
       </div>
       <div className="pc-prompt-bar__foot">
         {footer ? <span className="pc-prompt-bar__foot-state">{footer}</span> : null}
+        {metaChips}
         <span className="pc-prompt-bar__foot-grow" />
         <span className="pc-prompt-bar__queued" aria-live="polite">
           {queuedCount > 0 ? `${queuedCount} queued` : ""}
@@ -144,6 +162,7 @@ export function PromptBar({
             Press Enter to send, Shift+Enter for a new line, Escape to interrupt the running turn.
           </span>
         </span>
+        {footEnd}
       </div>
     </div>
   );

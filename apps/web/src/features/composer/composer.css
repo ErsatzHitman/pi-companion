@@ -63,10 +63,79 @@
   }
 }
 
-.pc-composer__controls {
-  display: flex;
+/* Quiet send/abort status (T388): the same `StatusIndicator` primitive,
+ * scoped down to the mockup's `.composer-foot` mono/11px treatment so it
+ * reads as composer chrome, not a loud banner. */
+.pc-composer__status .pc-status {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* Metadata chips (T388): the mockup's `.chip` — mono, pill-radius,
+ * hairline border, a hover tint, and an accent tint while its popover is
+ * open. Each chip is a `Popover` trigger (unmodified primitive); these
+ * rules only restyle that trigger button, scoped to this wrapper so the
+ * primitive's own default (used elsewhere, e.g. `CommandSearch`) is
+ * untouched. */
+.pc-composer__meta {
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: var(--spacing-1);
+  min-width: 0;
+}
+.pc-composer__meta-chip {
+  display: inline-flex;
+}
+.pc-composer__meta-chip .pc-popover__trigger {
+  /* The reference's 11px has no matching type-scale token (10.5px/12.5px
+   * are the nearest); kept as a local custom property quoting the mockup
+   * value, the same treatment `.pc-context-ring__pct` already uses for its
+   * own off-scale 7.5px. */
+  --pc-composer-chip-font-size: 11px;
+  height: 1.375rem;
+  padding: 0 var(--spacing-2);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-hairline);
+  background-color: transparent;
+  color: var(--color-ink-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--pc-composer-chip-font-size);
+  white-space: nowrap;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc-composer__meta-chip .pc-popover__trigger:hover {
+  background-color: var(--color-hover);
+  color: var(--color-ink);
+}
+/* Popover's own `:active` press treatment (`primitives.css`) already
+ * applies here — not repeated. */
+.pc-composer__meta-chip .pc-popover__trigger[aria-expanded="true"] {
+  background-color: var(--color-accent-tint);
+  color: var(--color-ink);
+}
+.pc-composer__meta-chip .pc-popover__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pc-composer__meta-chip .pc-popover__content {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  white-space: normal;
+  min-width: 16rem;
+}
+
+/* The Stop icon button (T388): a fourth, danger-tinted glyph appended to
+ * the same foot row via `PromptBar`'s `footEnd` slot — sized like the
+ * primitive's own default, tinted so "halt" reads as a distinct, more
+ * serious action than the neutral chips beside it. */
+.pc-composer__meta-abort {
+  color: var(--status-danger-icon);
+}
+.pc-composer__meta-abort:hover:not(:disabled) {
+  background-color: var(--status-danger-background);
+  color: var(--status-danger-icon);
 }
 
 /* The context ring (T386) — the mockup's `.ctxbtn`: a 30x30 transparent
@@ -133,8 +202,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The session-controls sheet opened by the ring: the three existing
- * pickers stacked with the same spacing the composer used to give them. */
+/* The session-controls sheet opened by the ring (T388): context-usage
+ * summary text only — the model/routing/queue pickers moved out to the
+ * metadata-row chips above. */
 .pc-composer__session-controls {
   display: flex;
   flex-direction: column;

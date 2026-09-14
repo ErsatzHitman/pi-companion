@@ -37,12 +37,22 @@ function baseProps() {
 }
 
 /**
- * T386: the model/queue/routing pickers now live inside the context ring's
- * "Session controls" `Sheet` (the mockup's ring-opens-the-menu behaviour),
- * so a test that reads them must open the sheet first. The ring's
- * accessible name always starts with "Session controls".
+ * T388: model/effort, per-message routing, and the session-wide queue mode
+ * each live inside their own metadata-row chip's popover now (superseding
+ * T386's ring-opens-the-menu sheet), so a test that reads one of those
+ * pickers must open its own chip first.
  */
-async function openSessionControls(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+async function openModelChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByTestId("composer-model-chip"));
+}
+async function openRoutingChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByTestId("composer-routing-chip"));
+}
+async function openQueueChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByTestId("composer-queue-chip"));
+}
+/** The ring's own Sheet (T388): context-usage summary only, no pickers. */
+async function openRingSheet(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByRole("button", { name: /^Session controls/ }));
 }
 
@@ -106,15 +116,12 @@ describe("Composer", () => {
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
 
-  it("has a Stop control with a distinct accessible name from Send, disabled without a client", () => {
+  it("renders no Stop control at all without a client wired — it is shown only while abortable", () => {
     render(<Composer {...baseProps()} testId="composer" />);
-    const sendButton = screen.getByRole("button", { name: "Send" });
-    const stopButton = screen.getByRole("button", { name: "Stop" });
-    expect(stopButton).not.toBe(sendButton);
-    expect(stopButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
 
-  it("enables Stop once a turn-control client is wired, and it calls cancelAgent", async () => {
+  it("shows an enabled Stop control once a turn-control client is wired, and it calls cancelAgent", async () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     render(<Composer {...baseProps()} client={client} testId="composer" />);
@@ -127,7 +134,7 @@ describe("Composer", () => {
     await waitFor(() => expect(client.canceledAgentIds).toEqual(["session-1"]));
   });
 
-  it("reflects an in-flight abort promptly with visible, non-colour status text", async () => {
+  it("reflects an in-flight abort promptly with visible, non-colour status text, keeping Stop visible but disabled", async () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     let resolveCancel: () => void = () => {};
@@ -141,7 +148,7 @@ describe("Composer", () => {
 
     const status = await screen.findByRole("status");
     expect(status.textContent).toContain("Stopping");
-    expect(screen.getByRole("button", { name: "Stopping…" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Stop" }).hasAttribute("disabled")).toBe(true);
 
     resolveCancel();
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -256,8 +263,11 @@ describe("Composer slash-command completion (T28B4)", () => {
     const client = new FakeAgentTurnClient();
     client.commandsToReturn = DAEMON_COMMANDS;
     render(<Composer {...baseProps()} client={client} testId="composer" />);
+    await waitFor(() => expect(client.listCommandsCalls).toEqual(["session-1"]));
 
-    await userEvent.setup().click(screen.getByRole("button", { name: "Commands" }));
+    // No standalone "Commands" toggle (T388): typing the bare "/" prefix is
+    // the palette's only trigger now.
+    fireEvent.change(screen.getByLabelText("Message Pi"), { target: { value: "/" } });
 
     const listbox = await screen.findByRole("listbox", { name: "Slash commands" });
     const options = within(listbox).getAllByRole("option");
@@ -365,13 +375,15 @@ describe("Composer slash-command completion (T28B4)", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("the Commands toggle is disabled until the daemon's command list resolves, and stays keyboard reachable", async () => {
+  it('typing a bare "/" with no daemon-reported commands opens no palette (there is nothing to show)', async () => {
     const client = new FakeAgentTurnClient();
     client.commandsToReturn = [];
     render(<Composer {...baseProps()} client={client} testId="composer" />);
     await waitFor(() => expect(client.listCommandsCalls).toEqual(["session-1"]));
 
-    expect(screen.getByRole("button", { name: "Commands" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Message Pi"), { target: { value: "/" } });
+
+    expect(screen.queryByRole("listbox", { name: "Slash commands" })).toBeNull();
   });
 
   it("has no axe violations with the palette open", async () => {
@@ -402,7 +414,7 @@ describe("Composer model and thinking-level pickers (T28B5)", () => {
   it("is visible but disabled and explained, rather than silently missing, without a client wired", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
-    await openSessionControls(user);
+    await openModelChip(user);
     const modelSelect = screen.getByLabelText("Model") as HTMLSelectElement;
     const thinkingSelect = screen.getByLabelText("Thinking level") as HTMLSelectElement;
     expect(modelSelect.hasAttribute("disabled")).toBe(true);
@@ -422,7 +434,7 @@ describe("Composer model and thinking-level pickers (T28B5)", () => {
     };
     client.availableModelsByProvider.set("pi", { models: [MODEL_WITH_THINKING], error: null });
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openModelChip(user);
 
     const modelSelect = (await screen.findByLabelText("Model")) as HTMLSelectElement;
     await waitFor(() => expect(modelSelect.value).toBe("pi-default"), MODEL_THINKING_SETTLE_WAIT);
@@ -439,7 +451,7 @@ describe("Composer model and thinking-level pickers (T28B5)", () => {
       error: null,
     });
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openModelChip(user);
 
     const modelSelect = (await screen.findByLabelText("Model")) as HTMLSelectElement;
     await waitFor(
@@ -468,7 +480,7 @@ describe("Composer model and thinking-level pickers (T28B5)", () => {
     };
     client.availableModelsByProvider.set("pi", { models: [MODEL_WITH_THINKING], error: null });
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openModelChip(user);
 
     const thinkingSelect = (await screen.findByLabelText("Thinking level")) as HTMLSelectElement;
     await waitFor(
@@ -493,7 +505,7 @@ describe("Composer model and thinking-level pickers (T28B5)", () => {
     const client = new FakeAgentTurnClient();
     (client as { listAvailableModels?: unknown }).listAvailableModels = undefined;
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openModelChip(user);
 
     const status = await screen.findByTestId("composer-model-thinking-status");
     expect(status.textContent).toContain("cannot change the model");
@@ -512,7 +524,7 @@ describe("Composer model and thinking-level pickers (T28B5)", () => {
     };
     client.availableModelsByProvider.set("pi", { models: [MODEL_WITH_THINKING], error: null });
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openModelChip(user);
 
     const modelSelect = (await screen.findByLabelText("Model")) as HTMLSelectElement;
     await waitFor(
@@ -534,7 +546,7 @@ describe("Composer model and thinking-level pickers (T28B5)", () => {
     };
     client.availableModelsByProvider.set("pi", { models: [MODEL_WITH_THINKING], error: null });
     const { container } = render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openModelChip(user);
 
     const modelSelect = (await screen.findByLabelText("Model")) as HTMLSelectElement;
     await waitFor(() => expect(modelSelect.value).toBe("pi-default"), MODEL_THINKING_SETTLE_WAIT);
@@ -757,7 +769,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
   it("is visible but disabled and explained, rather than silently missing, without a client wired", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
     const steeringSelect = screen.getByLabelText("Steering queue delivery") as HTMLSelectElement;
     const followUpSelect = screen.getByLabelText("Follow-up queue delivery") as HTMLSelectElement;
     expect(steeringSelect.hasAttribute("disabled")).toBe(true);
@@ -771,7 +783,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     const client = new FakeAgentTurnClient();
     (client as { getQueueModes?: unknown }).getQueueModes = undefined;
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const status = await screen.findByTestId("composer-queue-modes-status");
     expect(status.textContent).toContain("cannot change the steer/follow-up mode");
@@ -784,7 +796,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     const client = new FakeAgentTurnClient();
     client.queueModes = { steeringMode: "all", followUpMode: "one-at-a-time" };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const steeringSelect = (await screen.findByLabelText(
       "Steering queue delivery",
@@ -799,7 +811,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     const client = new FakeAgentTurnClient();
     client.queueModes = { steeringMode: "one-at-a-time", followUpMode: "one-at-a-time" };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const steeringSelect = (await screen.findByLabelText(
       "Steering queue delivery",
@@ -826,7 +838,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     const client = new FakeAgentTurnClient();
     client.queueModes = { steeringMode: "one-at-a-time", followUpMode: "one-at-a-time" };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const steeringSelect = (await screen.findByLabelText(
       "Steering queue delivery",
@@ -854,7 +866,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
       message: "steering mode applies from the next turn",
     };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const steeringSelect = (await screen.findByLabelText(
       "Steering queue delivery",
@@ -882,7 +894,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
       message: "follow-up mode applies from the next turn",
     };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const followUpSelect = (await screen.findByLabelText(
       "Follow-up queue delivery",
@@ -908,7 +920,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     // `steeringNoticeToReturn` defaults to `null` — the common case, since
     // the daemon attaches a notice only sometimes.
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const steeringSelect = (await screen.findByLabelText(
       "Steering queue delivery",
@@ -930,7 +942,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
   it("states the mode-vs-per-message distinction in the rendered copy, not only in a comment", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
     const help = screen.getByTestId("composer-queue-modes");
     expect(help.textContent).toContain("do not decide whether a single message steers");
   });
@@ -940,7 +952,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     const client = new FakeAgentTurnClient();
     client.queueModes = { steeringMode: "all", followUpMode: "all" };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const control = screen.getByTestId("composer-queue-modes");
     // Deleting this assertion's guard (the query itself, not merely its
@@ -956,7 +968,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     const client = new FakeAgentTurnClient();
     client.queueModes = { steeringMode: "all", followUpMode: "one-at-a-time" };
     const { container } = render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openQueueChip(user);
 
     const steeringSelect = (await screen.findByLabelText(
       "Steering queue delivery",
@@ -971,7 +983,7 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
   it('shows "Auto (default)" as the visible, un-opened routing choice, with no client wired', async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
-    await openSessionControls(user);
+    await openRoutingChip(user);
     const select = screen.getByLabelText("Send this message as") as HTMLSelectElement;
     expect(select.value).toBe("auto");
     expect(select.hasAttribute("disabled")).toBe(false);
@@ -981,7 +993,7 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openRoutingChip(user);
 
     const select = screen.getByLabelText("Send this message as") as HTMLSelectElement;
     await user.selectOptions(select, "steer");
@@ -1006,7 +1018,7 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
     // selector back at "Auto", rather than silently steering the next,
     // unrelated message too. (The sheet unmounts its content on close, so
     // the value has to be re-read from a freshly opened sheet.)
-    await openSessionControls(user);
+    await openRoutingChip(user);
     expect((screen.getByLabelText("Send this message as") as HTMLSelectElement).value).toBe("auto");
   });
 
@@ -1014,7 +1026,7 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openRoutingChip(user);
 
     await user.selectOptions(screen.getByLabelText("Send this message as"), "followUp");
     await user.keyboard("{Escape}");
@@ -1047,7 +1059,7 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     render(<Composer {...baseProps()} sessionId="session-1" client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openRoutingChip(user);
 
     await user.selectOptions(screen.getByLabelText("Send this message as"), "steer");
     await user.keyboard("{Escape}");
@@ -1071,7 +1083,7 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     const { container } = render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openSessionControls(user);
+    await openRoutingChip(user);
 
     await user.selectOptions(screen.getByLabelText("Send this message as"), "followUp");
 
@@ -1102,7 +1114,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     const client = new FakeAgentTurnClient();
     render(<Composer {...baseProps()} client={client} testId="composer" />);
 
-    await openSessionControls(user);
+    await openRoutingChip(user);
     await user.selectOptions(screen.getByLabelText("Send this message as"), "steer");
     await user.keyboard("{Escape}");
 
@@ -1138,7 +1150,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect((input as HTMLTextAreaElement).value).toBe("kept");
   });
 
-  it("the context ring opens the session-controls sheet and reports its expanded state", async () => {
+  it("the context ring opens the session-controls sheet, showing only the context summary (T388: model/routing/queue moved to the metadata-row chips)", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
 
@@ -1149,8 +1161,12 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     await user.click(ring);
 
     expect(ring.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByTestId("composer-session-controls")).toBeTruthy();
-    expect(screen.getByLabelText("Model")).toBeTruthy();
+    const sheet = screen.getByTestId("composer-session-controls");
+    expect(sheet).toBeTruthy();
+    expect(screen.getByTestId("composer-context-summary").textContent).toContain(
+      "not been reported",
+    );
+    expect(screen.queryByLabelText("Model")).toBeNull();
   });
 
   it("draws the ring's percentage from the telemetry prop the route supplies", () => {
@@ -1182,7 +1198,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     const client = new FakeAgentTurnClient();
     const { container } = render(<Composer {...baseProps()} client={client} testId="composer" />);
 
-    await openSessionControls(user);
+    await openRingSheet(user);
 
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
