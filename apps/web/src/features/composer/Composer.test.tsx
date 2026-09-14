@@ -65,9 +65,7 @@ type FakeSessionCostAgent = {
 };
 type FakeSessionCostUpdateMessage = {
   type: "agent_update";
-  payload:
-    | { kind: "upsert"; agent: FakeSessionCostAgent }
-    | { kind: "remove"; agentId: string };
+  payload: { kind: "upsert"; agent: FakeSessionCostAgent } | { kind: "remove"; agentId: string };
 };
 
 /**
@@ -1210,9 +1208,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     // only `sessionId`, not `contextTelemetry`) directly after
     // `ContextMeter`, and with no live `sessionCostClient` shows its own
     // honest "not priced yet" state — never a fabricated $0.00.
-    expect(
-      within(sheet).getByTestId("composer-session-cost-meter-unknown"),
-    ).toBeTruthy();
+    expect(within(sheet).getByTestId("composer-session-cost-meter-unknown")).toBeTruthy();
     expect(screen.queryByLabelText("Model")).toBeNull();
   });
 
@@ -1249,6 +1245,8 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     const compactNow = screen.getByTestId("composer-compact-now");
     expect(compactNow.hasAttribute("disabled")).toBe(true);
     expect(compactNow.textContent).toContain("Connect to a session");
+  });
+
   it("UI-W11: reflects live agent_update cost pushes from a wired sessionCostClient inside the session-controls sheet", async () => {
     const user = userEvent.setup();
     const daemon = createFakeSessionCostDaemon();
