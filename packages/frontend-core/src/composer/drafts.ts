@@ -12,6 +12,7 @@
 
 import type { Clock, TimerHandle } from "../platform/clock.js";
 import type { StructuredStorage } from "../platform/storage.js";
+import type { OutboxEntryStatus } from "./outbox.js";
 
 /** Minimal, platform-neutral reference to an attachment staged on a draft. */
 export interface DraftAttachmentRef {
@@ -84,6 +85,81 @@ export const DEFAULT_DRAFT_SAVE_DEBOUNCE_MS = 300;
 export interface DraftSessionControllerOptions {
   /** Overridable for deterministic tests; defaults to `DEFAULT_DRAFT_SAVE_DEBOUNCE_MS`. */
   debounceMs?: number;
+}
+
+/**
+ * FIX-W2 (plan.md §12.5): the outbox statuses that make a persisted
+ * draft's text count as "already submitted" and therefore unsafe to
+ * silently restore. Every status an `OutboxEntry` can actually persist in
+ * is included — `pending` too, not just `sending`/`awaiting-confirmation`
+ * — because a `pending` entry is already a durably recorded submission the
+ * outbox itself owns getting sent; the exact race this fix closes (a
+ * reload between `enqueue()` resolving and the persisted draft's `clear()`
+ * resolving) is observed with the entry still `pending` (`markSending`
+ * only runs once `clear()` has already resolved), so excluding it would
+ * leave that race uncaught. `sent` is included for forward compatibility
+ * even though `OutboxController.markSent` deletes the entry outright today
+ * (`outbox.ts`) rather than ever persisting it in that status.
+ */
+const ALREADY_SUBMITTED_OUTBOX_STATUSES: ReadonlySet<OutboxEntryStatus> = new Set([
+  "pending",
+  "sent",
+  "sending",
+  "awaiting-confirmation",
+]);
+
+/** The minimal shape `isDraftAlreadySubmitted` needs from an `OutboxEntry` (outbox.ts). */
+export interface DraftOutboxEntryLike {
+  sessionId: string;
+  status: OutboxEntryStatus;
+  payload: unknown;
+}
+
+function outboxEntryTextMatches(payload: unknown, trimmedText: string): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const candidate = (payload as { text?: unknown }).text;
+  return typeof candidate === "string" && candidate.trim() === trimmedText;
+}
+
+/**
+ * FIX-W2: `true` when `text` (compared trimmed) matches an outbox entry
+ * already recorded for `sessionId` in one of
+ * `ALREADY_SUBMITTED_OUTBOX_STATUSES`. The mount-restore path
+ * (`DraftSessionController.open`) uses this to refuse to silently restore
+ * a persisted draft whose text has already gone out (or is already
+ * durably in flight, or parked awaiting confirmation): restoring it would
+ * let the user unknowingly resend it under a brand-new `clientMessageId`
+ * that no server-side idempotency check can correlate with the original
+ * submission (plan.md §12.5 "the user confirms uncertain sends" — a fresh,
+ * uncorrelated resend is exactly what that rule exists to prevent).
+ */
+export function isDraftAlreadySubmitted(
+  text: string,
+  sessionId: string,
+  entries: readonly DraftOutboxEntryLike[],
+): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return entries.some(
+    (entry) =>
+      entry.sessionId === sessionId &&
+      ALREADY_SUBMITTED_OUTBOX_STATUSES.has(entry.status) &&
+      outboxEntryTextMatches(entry.payload, trimmed),
+  );
+}
+
+/** Options accepted by `DraftSessionController.open`. */
+export interface OpenDraftOptions {
+  /**
+   * FIX-W2: called with a freshly loaded, non-empty persisted draft's text
+   * before it is shown. Return (or resolve to) `true` to refuse the
+   * restore — `open` then resolves to `""` and drops the now-known-stale
+   * persisted draft, the same way a successful `clear()` does, instead of
+   * silently re-showing already-submitted text on every future mount for
+   * this target. Typically backed by `isDraftAlreadySubmitted` above, fed
+   * from the caller's own `OutboxController.loadAll(sessionId)`.
+   */
+  isAlreadySubmitted?: (text: string) => boolean | Promise<boolean>;
 }
 
 /**
@@ -196,7 +272,7 @@ export class DraftSessionController {
    * so an edit made while the load is still in flight is attributed to the
    * right session rather than dropped.
    */
-  async open(target: DraftSessionTarget): Promise<string> {
+  async open(target: DraftSessionTarget, options?: OpenDraftOptions): Promise<string> {
     const generation = (this.generation += 1);
     const previous = this.target;
     const previousText = this.pendingText;
@@ -218,7 +294,25 @@ export class DraftSessionController {
     // An edit that arrived while the load was in flight is newer than the
     // saved draft and must win — otherwise a fast typist's first keystrokes
     // would be silently replaced by (and never persisted over) old text.
-    if (!this.dirty) this.pendingText = saved ?? "";
+    if (!this.dirty) {
+      const restoredText = saved ?? "";
+      // FIX-W2: ask the caller whether this text was already durably
+      // submitted *before* showing it. This is itself an extra await, so
+      // re-check both guards above again once it resolves: a newer `open`
+      // or a keystroke that arrived during this check must still win.
+      const alreadySubmitted =
+        restoredText !== ""
+          ? ((await options?.isAlreadySubmitted?.(restoredText)) ?? false)
+          : false;
+      if (generation === this.generation && !this.dirty) {
+        if (alreadySubmitted) {
+          this.pendingText = "";
+          await this.clear();
+        } else {
+          this.pendingText = restoredText;
+        }
+      }
+    }
     this.hydrated = true;
     return this.pendingText;
   }

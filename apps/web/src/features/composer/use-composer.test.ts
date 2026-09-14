@@ -472,6 +472,58 @@ describe("useComposer", () => {
     expect(result.current.queueDepth).toBe(0);
   });
 
+  it("FIX-W1: two synchronous submit() calls in one tick (double-tap/ghost click) send exactly once", async () => {
+    const storage = new InMemoryStructuredStorage();
+    const client = new FakeAgentTurnClient();
+    let resolveSend: () => void = () => {};
+    client.sendAgentMessageImpl = () =>
+      new Promise((resolve) => {
+        resolveSend = resolve;
+      });
+    const { result } = renderHook(() =>
+      useComposer({
+        sessionId: "session-1",
+        clock: new FakeClock(1_000),
+        structuredStorage: storage,
+        filePicker: new FakeFilePicker(),
+        generateClientMessageId: () => "client-1",
+        client,
+      }),
+    );
+
+    act(() => result.current.setDraftText("double tap"));
+
+    let firstSubmit!: Promise<void>;
+    let secondSubmit!: Promise<void>;
+    await act(async () => {
+      // Both calls fire in the same tick, without awaiting between them —
+      // the exact re-entrancy shape a double-tap/ghost click or double
+      // Enter produces: both observe `isSubmitting === false` before either
+      // has had a chance to re-render.
+      firstSubmit = result.current.submit();
+      secondSubmit = result.current.submit();
+      // Let the outbox write settle (but not the still-pending send), so the
+      // assertions below observe a stable mid-flight state instead of racing
+      // `enqueue`'s own microtask.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Only one call ever reached the client, and exactly one outbox entry
+    // was durably recorded — the second call was rejected by the lock before
+    // it could mint its own `clientMessageId` or outbox entry.
+    expect(client.sentMessages).toHaveLength(1);
+    expect(await storage.list("composer/outbox")).toHaveLength(1);
+
+    resolveSend();
+    await act(async () => {
+      await Promise.all([firstSubmit, secondSubmit]);
+    });
+
+    expect(client.sentMessages).toHaveLength(1);
+    expect(result.current.visibleRows).toHaveLength(1);
+  });
+
   it("keeps distinct optimistic rows in submission order across two sends", async () => {
     let idCounter = 0;
     const { result } = renderHook(() =>
@@ -648,5 +700,88 @@ describe("useComposer per-session draft persistence (T389)", () => {
     expect(
       await new coreComposer.DraftStore(storage, clock).load(draftKey("session-1")),
     ).toBeNull();
+  });
+
+  it("FIX-W2: a reload between enqueue() resolving and the persisted draft's clear() resolving does not restore the already-queued text", async () => {
+    const clock = new FakeClock(1_000);
+    const backing = new InMemoryStructuredStorage();
+    // Delays only the drafts collection's `delete` (what `DraftSessionController.clear()`
+    // ultimately calls) so a real, unavoidable async-storage race can be produced
+    // deterministically: `outbox.enqueue()` (a different collection) resolves
+    // normally, but the persisted draft's own clear write hangs — modelling a
+    // reload that happens before that write ever reaches disk. It is never
+    // released, matching a real reload: the JS heap that was awaiting it is gone,
+    // so that write never completes at all.
+    const storage = {
+      get: backing.get.bind(backing),
+      put: backing.put.bind(backing),
+      list: backing.list.bind(backing),
+      clear: backing.clear.bind(backing),
+      delete: async (collection: string, id: string) => {
+        if (collection === "composer/drafts") {
+          await new Promise<void>(() => {
+            // Deliberately never resolves.
+          });
+        }
+        await backing.delete(collection, id);
+      },
+    };
+    const client = new FakeAgentTurnClient();
+    const first = renderHook(() =>
+      useComposer({
+        sessionId: "session-1",
+        serverId: "server-1",
+        clock,
+        structuredStorage: storage,
+        filePicker: new FakeFilePicker(),
+        generateClientMessageId: () => "client-1",
+        client,
+      }),
+    );
+    await waitFor(() => expect(first.result.current.draftText).toBe(""));
+
+    act(() => first.result.current.setDraftText("survives a reload"));
+    act(() => clock.advance(300));
+    await act(async () => {
+      await settle();
+    });
+    expect(
+      (await new coreComposer.DraftStore(backing, clock).load(draftKey("session-1")))?.text,
+    ).toBe("survives a reload");
+
+    act(() => {
+      // Fire-and-forget: this promise hangs forever on the drafts delete
+      // above, exactly like a real submission whose page reloads mid-flight.
+      void first.result.current.submit();
+    });
+    // Let `outbox.enqueue()` (and everything synchronous up to the hung
+    // `draftController.clear()` call) settle, without ever reaching it.
+    await act(async () => {
+      await settle();
+    });
+
+    // The race is real: the persisted draft is still on disk, unmodified,
+    // at the moment of "reload" — clear() never got to run.
+    expect(
+      (await new coreComposer.DraftStore(backing, clock).load(draftKey("session-1")))?.text,
+    ).toBe("survives a reload");
+    // ...but the submission itself was durably recorded before the hang.
+    expect(await backing.list("composer/outbox")).toHaveLength(1);
+
+    first.unmount();
+
+    // A fresh hook instance over the same storage (a genuine reload) must
+    // NOT show the already-queued text: `isAlreadySubmitted` (drafts.ts)
+    // finds the matching outbox entry and refuses the restore.
+    const second = renderHook(() =>
+      useComposer({
+        sessionId: "session-1",
+        serverId: "server-1",
+        clock,
+        structuredStorage: storage,
+        filePicker: new FakeFilePicker(),
+      }),
+    );
+    await waitFor(() => expect(second.result.current.draftText).toBe(""));
   });
 });

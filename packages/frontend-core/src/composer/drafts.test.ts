@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DraftStore } from "./drafts.js";
+import { DraftStore, isDraftAlreadySubmitted } from "./drafts.js";
 import { FakeClock, InMemoryStructuredStorage } from "./test-doubles.js";
 
 describe("DraftStore", () => {
@@ -82,5 +82,51 @@ describe("DraftStore", () => {
 
     expect((await store.load("session-1"))?.text).toBe("draft one");
     expect((await store.load("session-2"))?.text).toBe("draft two");
+  });
+});
+
+describe("isDraftAlreadySubmitted (FIX-W2)", () => {
+  it("is false for a blank draft, regardless of outbox contents", () => {
+    expect(
+      isDraftAlreadySubmitted("   ", "session-1", [
+        { sessionId: "session-1", status: "sending", payload: { text: "   " } },
+      ]),
+    ).toBe(false);
+  });
+
+  it("is false when no outbox entry matches the session", () => {
+    expect(
+      isDraftAlreadySubmitted("already sent", "session-1", [
+        { sessionId: "session-2", status: "sending", payload: { text: "already sent" } },
+      ]),
+    ).toBe(false);
+  });
+
+  it("is false when the matching entry's text differs", () => {
+    expect(
+      isDraftAlreadySubmitted("a different draft", "session-1", [
+        { sessionId: "session-1", status: "sending", payload: { text: "already sent" } },
+      ]),
+    ).toBe(false);
+  });
+
+  it.each(["pending", "sending", "awaiting-confirmation", "sent"] as const)(
+    "is true when a same-session entry in status %s matches, comparing trimmed text",
+    (status) => {
+      expect(
+        isDraftAlreadySubmitted("  already sent  ", "session-1", [
+          { sessionId: "session-1", status, payload: { text: "already sent" } },
+        ]),
+      ).toBe(true);
+    },
+  );
+
+  it("ignores a malformed payload rather than throwing", () => {
+    expect(
+      isDraftAlreadySubmitted("already sent", "session-1", [
+        { sessionId: "session-1", status: "sending", payload: null },
+        { sessionId: "session-1", status: "sending", payload: "not an object" },
+      ]),
+    ).toBe(false);
   });
 });
