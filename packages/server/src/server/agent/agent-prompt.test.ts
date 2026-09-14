@@ -257,6 +257,84 @@ test("FIX-S1: startAgentRun is idempotent by clientMessageId — a duplicate dis
   expect(secondResult).toEqual({ outOfBand: false, duplicate: true });
 });
 
+test("FIX-S2: startAgentRun's clientMessageId guard covers the out-of-band dispatch path, not just the new-turn path", async () => {
+  const agent: ManagedAgent = Object.create(null);
+  Reflect.set(agent, "id", "agent-1");
+  Reflect.set(agent, "provider", "codex");
+
+  const accepted = new Set<string>();
+  let tryRunOutOfBandCalls = 0;
+
+  const agentManager: AgentManager = Object.create(AgentManager.prototype);
+  Reflect.set(
+    agentManager,
+    "getAgent",
+    vi.fn(() => agent),
+  );
+  Reflect.set(
+    agentManager,
+    "tryRunOutOfBand",
+    vi.fn(() => {
+      // Stands in for a live session accepting the prompt as a steer into
+      // an already-running turn — the exact path HOLE 1 left unguarded.
+      tryRunOutOfBandCalls += 1;
+      return true;
+    }),
+  );
+  Reflect.set(agentManager, "hasInFlightRun", vi.fn().mockReturnValue(false));
+  Reflect.set(
+    agentManager,
+    "hasAcceptedClientMessage",
+    vi.fn((_agentId: string, clientMessageId: string) => accepted.has(clientMessageId)),
+  );
+  Reflect.set(
+    agentManager,
+    "recordAcceptedClientMessage",
+    vi.fn((_agentId: string, clientMessageId: string) => {
+      accepted.add(clientMessageId);
+    }),
+  );
+  Reflect.set(
+    agentManager,
+    "streamAgent",
+    vi.fn(() => {
+      throw new Error("streamAgent must not run when tryRunOutOfBand accepts the prompt");
+    }),
+  );
+  Reflect.set(
+    agentManager,
+    "replaceAgentRun",
+    vi.fn(async () => {
+      throw new Error("replaceAgentRun must not run when tryRunOutOfBand accepts the prompt");
+    }),
+  );
+
+  const logger = createTestLogger();
+
+  const sameIdFirst = await startAgentRun(agentManager, "agent-1", "steer once", logger, {
+    runOptions: { clientMessageId: "steer-1" },
+  });
+  const sameIdSecond = await startAgentRun(agentManager, "agent-1", "steer once", logger, {
+    runOptions: { clientMessageId: "steer-1" },
+  });
+
+  // Same clientMessageId: tryRunOutOfBand must run exactly once, and the
+  // repeat short-circuits with the duplicate shape instead of dispatching
+  // a second out-of-band run.
+  expect(tryRunOutOfBandCalls).toBe(1);
+  expect(sameIdFirst).toEqual({ outOfBand: true });
+  expect(sameIdSecond).toEqual({ outOfBand: false, duplicate: true });
+
+  const differentIdFirst = await startAgentRun(agentManager, "agent-1", "steer two", logger, {
+    runOptions: { clientMessageId: "steer-2" },
+  });
+
+  // A genuinely different clientMessageId is a new accepted dispatch, not a
+  // duplicate — tryRunOutOfBand must be invoked again for it.
+  expect(tryRunOutOfBandCalls).toBe(2);
+  expect(differentIdFirst).toEqual({ outOfBand: true });
+});
+
 test("finish notifications tell the parent the child's last assistant message", async () => {
   const scenario = createFinishNotificationScenario({
     childLastAssistantMessage: "Implemented the cleanup and all checks pass.",

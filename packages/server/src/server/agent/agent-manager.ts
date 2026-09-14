@@ -635,6 +635,22 @@ export class AgentManager {
   // initializers) does not crash inheriting these two real methods.
   private acceptedClientMessageIds: Map<string, Set<string>> | undefined;
   private static readonly ACCEPTED_CLIENT_MESSAGE_ID_LIMIT = 50;
+  // FIX-S2: per-agent monotonic "run generation", bumped each time
+  // replaceAgentRun's streamAgent call confirms a replacement turn's
+  // turnId (see the `isReplacement` branch in streamAgent's
+  // streamForwarder). `eventRunGeneration` tags every event AgentManager
+  // receives from a session (subscribeToSession's callback, the single
+  // funnel for every real session-emitted event) with the generation that
+  // was current at the moment the session produced it. A cancelled turn's
+  // trailing "timeline" event carries no turnId of its own (unlike
+  // turn_started/turn_completed/turn_failed/turn_canceled), so nothing
+  // upstream can otherwise tell it apart from the replacement turn's own
+  // content once both are sitting in the same pendingRun.stagedEvents
+  // buffer — enqueueSessionEvent drops an event whose tagged generation is
+  // older than the agent's current one before it can be staged or
+  // dispatched, closing exactly that window.
+  private readonly runGenerations = new Map<string, number>();
+  private readonly eventRunGeneration = new WeakMap<AgentStreamEvent, number>();
   private readonly agentsAwaitingInitialSnapshotPersist = new Set<string>();
   private readonly sessionEventTails = new Map<string, Promise<void>>();
   private readonly runs = new AgentRunState();
@@ -2270,6 +2286,11 @@ export class AgentManager {
 
       if (isReplacement) {
         agent.pendingReplacement = false;
+        // FIX-S2: this turn's turnId is now confirmed, so any event tagged
+        // with an older generation (the just-cancelled turn's own trailing
+        // output) is a superseded-run straggler from here on — see the
+        // runGenerations/eventRunGeneration doc comment above.
+        this.bumpRunGeneration(agent.id);
       }
       const turnStartedAt = new Date();
       pendingRun.started = true;
@@ -3590,12 +3611,48 @@ export class AgentManager {
     }
     const agentId = agent.id;
     const unsubscribe = agent.session.subscribe((event: AgentStreamEvent) => {
+      // FIX-S2: tag at the true production moment — this callback is the
+      // single funnel every real session-emitted event passes through
+      // exactly once, unlike enqueueSessionEvent below (re-entered when a
+      // staged event is flushed). Tagging here, not there, means the tag
+      // reflects the generation active when the session actually produced
+      // the event, not whatever generation happens to be current when it's
+      // later flushed.
+      this.eventRunGeneration.set(event, this.getRunGeneration(agentId));
       this.enqueueSessionEvent(agentId, event);
     });
     agent.unsubscribeSession = unsubscribe;
   }
 
+  private getRunGeneration(agentId: string): number {
+    return this.runGenerations.get(agentId) ?? 0;
+  }
+
+  private bumpRunGeneration(agentId: string): void {
+    this.runGenerations.set(agentId, this.getRunGeneration(agentId) + 1);
+  }
+
+  /**
+   * FIX-S2: true when `event` was produced by a run generation older than
+   * the agent's current one — i.e. it originated from a turn that has since
+   * been superseded by a replacement (see bumpRunGeneration's call site).
+   * Events with no recorded generation (nothing tagged them — e.g. the
+   * force-canceled synthetic events cancelAgentRun dispatches directly,
+   * bypassing this funnel) are never considered superseded.
+   */
+  private isSupersededRunEvent(agentId: string, event: AgentStreamEvent): boolean {
+    const taggedGeneration = this.eventRunGeneration.get(event);
+    return taggedGeneration !== undefined && taggedGeneration < this.getRunGeneration(agentId);
+  }
+
   private enqueueSessionEvent(agentId: string, event: AgentStreamEvent): void {
+    if (this.isSupersededRunEvent(agentId, event)) {
+      this.logger.trace(
+        { agentId, provider: event.provider, turnId: getAgentStreamEventTurnId(event), event },
+        "agent.manager.enqueue.superseded_run_event_dropped",
+      );
+      return;
+    }
     this.logger.trace(
       {
         agentId,
