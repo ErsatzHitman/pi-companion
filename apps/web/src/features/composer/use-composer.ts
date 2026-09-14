@@ -219,6 +219,17 @@ export function useComposer(options: UseComposerOptions): ComposerState {
 
   const timelineRef = useRef<coreTimeline.TimelineState>(coreTimeline.createEmptyTimelineState());
 
+  // FIX-W1: a synchronous re-entrancy lock for `submit()`. `isSubmitting`
+  // (React state) is only observable after a re-render, so two synchronous
+  // calls in the same tick (a double-tap/ghost click, or two Enter
+  // keydowns) both read it as `false` and both proceed, each minting its
+  // own `clientMessageId` and outbox entry. A ref is mutated immediately,
+  // in place, so the second call sees the lock the first call just set —
+  // checked before every other guard in `submit()`, set synchronously on
+  // entry, and cleared in `finally` so a thrown/early-returned submission
+  // never leaves the composer stuck unable to send again.
+  const submitLockRef = useRef(false);
+
   // T389: drafts are persisted per conversation target (server + session).
   // `DraftSessionController` owns the debounce and the switch-safety rules;
   // this hook only feeds it. Constructed once (the platform storage/clock
@@ -296,88 +307,99 @@ export function useComposer(options: UseComposerOptions): ComposerState {
   );
 
   const submit = useCallback(async () => {
-    const text = draftText.trim();
-    const uploadedAttachments = attachments.uploadedAttachments;
-    // Nothing to send, already sending, or an attachment upload is still
-    // in flight (T28B6: a submission always waits for every staged
-    // upload to resolve or fail before it can go out, so the daemon never
-    // receives a half-uploaded reference).
-    if (
-      (!text && uploadedAttachments.length === 0) ||
-      isSubmitting ||
-      attachments.hasPendingUploads
-    ) {
-      return;
-    }
-
-    const clientMessageId = makeClientMessageId();
-    const timestamp = new Date(clock.now()).toISOString();
-    // Captured before the reset below (T38B1b): this submission carries
-    // whatever routing was selected at the moment Send was invoked.
-    const streamingBehavior = promptRouting ?? undefined;
-
-    setIsSubmitting(true);
-    setSendError(null);
-    // Add the optimistic row and clear the draft immediately: the user's
-    // own message must not wait on the outbox write (let alone a daemon
-    // round trip) to appear.
-    timelineRef.current = coreTimeline.addOptimisticUserMessage(timelineRef.current, {
-      clientMessageId,
-      text,
-      timestamp,
-    });
-    setVisibleRows(coreTimeline.getVisibleTimelineRows(timelineRef.current));
-    // Clear the visible draft immediately (the optimistic row above must not
-    // wait), but keep the persisted draft until the submission is durably in
-    // the outbox: a crash between here and the enqueue leaves it restorable.
-    setDraftTextState("");
-    // Clear staged attachments now: they travel with this specific
-    // submission's outbox entry and `sendAgentMessage` call below, not as
-    // ambient state a later, unrelated submission could pick up.
-    attachments.clear();
-    // Same reasoning for the per-message routing choice (T38B1b): it is
-    // consumed by this submission alone, so it resets to "Auto" rather
-    // than silently steering (or queuing) every later, unrelated send.
-    setPromptRouting(null);
-
+    // FIX-W1: checked before every other guard below. Set synchronously
+    // (no `await` between this line and the assignment), so a second
+    // synchronous `submit()` call in the same tick sees the lock already
+    // held and returns immediately, instead of racing the state-based
+    // `isSubmitting` guard that only updates after a render.
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     try {
-      const entry = await outbox.enqueue({
-        sessionId,
-        kind: "prompt",
-        payload: { text, clientMessageId, attachments: uploadedAttachments },
+      const text = draftText.trim();
+      const uploadedAttachments = attachments.uploadedAttachments;
+      // Nothing to send, already sending, or an attachment upload is still
+      // in flight (T28B6: a submission always waits for every staged
+      // upload to resolve or fail before it can go out, so the daemon never
+      // receives a half-uploaded reference).
+      if (
+        (!text && uploadedAttachments.length === 0) ||
+        isSubmitting ||
+        attachments.hasPendingUploads
+      ) {
+        return;
+      }
+
+      const clientMessageId = makeClientMessageId();
+      const timestamp = new Date(clock.now()).toISOString();
+      // Captured before the reset below (T38B1b): this submission carries
+      // whatever routing was selected at the moment Send was invoked.
+      const streamingBehavior = promptRouting ?? undefined;
+
+      setIsSubmitting(true);
+      setSendError(null);
+      // Add the optimistic row and clear the draft immediately: the user's
+      // own message must not wait on the outbox write (let alone a daemon
+      // round trip) to appear.
+      timelineRef.current = coreTimeline.addOptimisticUserMessage(timelineRef.current, {
+        clientMessageId,
+        text,
+        timestamp,
       });
+      setVisibleRows(coreTimeline.getVisibleTimelineRows(timelineRef.current));
+      // Clear the visible draft immediately (the optimistic row above must not
+      // wait), but keep the persisted draft until the submission is durably in
+      // the outbox: a crash between here and the enqueue leaves it restorable.
+      setDraftTextState("");
+      // Clear staged attachments now: they travel with this specific
+      // submission's outbox entry and `sendAgentMessage` call below, not as
+      // ambient state a later, unrelated submission could pick up.
+      attachments.clear();
+      // Same reasoning for the per-message routing choice (T38B1b): it is
+      // consumed by this submission alone, so it resets to "Auto" rather
+      // than silently steering (or queuing) every later, unrelated send.
+      setPromptRouting(null);
 
-      // The submission is durably recorded now, so the draft can go for good.
-      await draftController.clear();
-
-      // No live client (plan.md §12.4's "no client yet" seam): the
-      // submission stays durably `pending` in the outbox and this hook
-      // does not attempt a network send.
-      if (!client) return;
-
-      await outbox.markSending(entry.id);
       try {
-        // Whether the daemon treats this as a fresh prompt, a mid-turn
-        // steer, or a queued follow-up is its own decision by default
-        // (`agent-turn-client.ts`) unless `streamingBehavior` explicitly
-        // overrides it for this one message (T38B1b) — the call is
-        // otherwise identical either way.
-        await client.sendAgentMessage(sessionId, text, {
-          messageId: clientMessageId,
-          ...(uploadedAttachments.length > 0 ? { attachments: uploadedAttachments } : {}),
-          ...(streamingBehavior ? { streamingBehavior } : {}),
+        const entry = await outbox.enqueue({
+          sessionId,
+          kind: "prompt",
+          payload: { text, clientMessageId, attachments: uploadedAttachments },
         });
-        await outbox.markSent(entry.id);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        // Idempotency is not verified here, so a failed send is parked
-        // in `awaiting-confirmation` (plan.md §12.5) rather than
-        // auto-resent.
-        await outbox.markFailed(entry.id, message);
-        setSendError(message);
+
+        // The submission is durably recorded now, so the draft can go for good.
+        await draftController.clear();
+
+        // No live client (plan.md §12.4's "no client yet" seam): the
+        // submission stays durably `pending` in the outbox and this hook
+        // does not attempt a network send.
+        if (!client) return;
+
+        await outbox.markSending(entry.id);
+        try {
+          // Whether the daemon treats this as a fresh prompt, a mid-turn
+          // steer, or a queued follow-up is its own decision by default
+          // (`agent-turn-client.ts`) unless `streamingBehavior` explicitly
+          // overrides it for this one message (T38B1b) — the call is
+          // otherwise identical either way.
+          await client.sendAgentMessage(sessionId, text, {
+            messageId: clientMessageId,
+            ...(uploadedAttachments.length > 0 ? { attachments: uploadedAttachments } : {}),
+            ...(streamingBehavior ? { streamingBehavior } : {}),
+          });
+          await outbox.markSent(entry.id);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          // Idempotency is not verified here, so a failed send is parked
+          // in `awaiting-confirmation` (plan.md §12.5) rather than
+          // auto-resent.
+          await outbox.markFailed(entry.id, message);
+          setSendError(message);
+        }
+      } finally {
+        setIsSubmitting(false);
       }
     } finally {
-      setIsSubmitting(false);
+      submitLockRef.current = false;
     }
   }, [
     draftText,
