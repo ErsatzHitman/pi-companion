@@ -20588,3 +20588,227 @@ discovered every test file once per live job worktree — and those copies have 
 `0c1ddb8` it was the first suspicion raised against the transcript-search removal (`UI-W1`), which
 was in fact green (confirmed the same way the lesson above requires: `apps/web`, 21 files / 231
 tests, run under `apps/web/vitest.config.ts`). The root config's `exclude`array now adds`"**/.pi/**"`, with a comment recording why.
+
+## Wave 5 — live-validation follow-up: a real daemon, a real browser, five defects (2026-09-15)
+
+Wave 4 shipped against unit tests, component tests and a mocked Playwright fixture set. This
+follow-up wave instead deployed the whole thing to a real Linux host running a real daemon and
+drove it from a real browser. That live pass found five defects no unit test had caught, plus one
+stale Playwright testid the Live-pane rebuild (`UI-W5`) had already broken by the time this wave
+ran. Every commit named below is in `git log 3ffde06..085cea7`; merge commits are not cited
+individually since none carries its own content beyond the merge.
+
+### Messaging pipeline: two more defects the real daemon exposed
+
+#### FIX-S4 — A steer's replacement turn stopped rendering its own reply; the session rail stuck on "Running…"
+
+`labels: phase-9, area: server` · `depends-on: FIX-S2` · `wave: P9-Y`
+
+**What shipped.** A regression in this wave's own predecessor: `FIX-S2`'s per-agent
+`runGeneration` counter (bumped once a replacement turn's `turnId` is confirmed, to drop a
+cancelled turn's buffered trailing straggler event) assumed every event staged before that bump
+belonged to the turn being superseded. For a replacement turn with no tool call, a provider can
+instead emit that turn's OWN `timeline`/`turn_completed` events synchronously inside
+`session.startTurn(...)` itself, strictly before the bump runs — those events land in the same
+un-started `pendingRun.stagedEvents` buffer the straggler does, tagged with the same pre-bump
+generation, so the guard dropped the replacement turn's own assistant reply and `turn_completed`
+along with the straggler it was built to catch. That is also why the session rail showed a stuck
+"Running…" row for the same session: with `turn_completed` silently dropped, the agent's own
+server-side lifecycle never left `running`. Confirmed as the same root cause rather than a
+separate web-side bug, so no `apps/web` change was made. A `turnId`-based exemption was
+considered and rejected first — a plain `timeline` event never carries a `turnId` at this point
+(`attachManagedTurnIdentity`'s default case leaves it undefined until later), and `FIX-S2`'s own
+regression test injects its straggler in the identical timing window, so no fixed bump time can
+tell the two apart by timing alone. The real Playwright spec is what caught that the first,
+turnId-keyed approach did not work; the shipped fix instead tracks, per agent, whether
+`AgentManager` is currently inside the synchronous span of its own `session.startTurn(...)` call,
+and treats any event produced during that span as unconditionally never superseded regardless of
+its generation tag.
+
+**Evidence.** Commit `62d4662`, whose own new regression test hangs against the pre-fix code (the
+dropped `turn_completed` left the run's async generator never completing) and passes in the fix;
+`agent-manager.test.ts`/`agent-prompt.test.ts` pass together with the pre-existing `FIX-S2`
+straggler-drop test unchanged. The real `apps/web/e2e/session-steer-and-follow-up.spec.ts`
+Playwright spec went from failing on both attempt and retry to passing with no retry needed.
+
+- [x] A replacement turn with no tool call renders its own assistant reply and completes, not
+      just the turn it replaced
+- [x] The session rail no longer shows a session stuck on "Running…" after a steer replaces a
+      turn
+- [x] `FIX-S2`'s own straggler-drop regression test still passes, unmodified
+
+#### FIX-S5 / FIX-S6 — Two independent Pi history importers double-materialised the same transcript; assistant rows deduped first, then user rows
+
+`labels: phase-9, area: server` · `depends-on: FIX-S5` · `wave: P9-Y`
+
+**What shipped.** The owner's headline duplication bug, root-caused: two independent importers
+materialise the same underlying Pi session into one agent timeline with no coordination, and race
+each other right after a daemon restart — `AgentManager.primeTimelineFromLegacyProviderHistory`
+(a full replay driven by `PiRpcAgentSession.streamHistory()`'s RPC `getMessages()` call) and
+`PiLiveTailWatcher.bootstrapTail` (an independent, from-scratch read of the raw Pi session
+`.jsonl` file, gated only by a racy `getCurrentTimelineCount()` snapshot taken with no locking).
+Both append the same historical rows with no dedup. `FIX-S5` (commit `90acbbb`) gives every
+Pi-history-derived timeline item a stable, non-text-based identity (`PiHistoryMapper`, shared by
+both importers, always sets `messageId` from Pi's native `responseId` or a positional fallback)
+and adds an optional `dedupeKey` to `InMemoryAgentTimelineStore.append`, wired only at the
+history-replay call sites; a genuinely identical message sent twice by the user still produces two
+rows, since identity is derived from a row's own position in Pi's history, never from its text.
+
+Measured live after `FIX-S5` shipped, this was only a partial fix: the live retest collapsed the
+duplicated transcript from 12 rows to 9, not 6 — assistant rows deduped correctly, user rows still
+doubled. `FIX-S6` (commit `064653a`) found the real divergence by reading both importers directly:
+`PiHistoryMapper.mapUserMessage` preferred a captured Pi tree-entry id whenever one was supplied,
+and only the RPC importer (`AgentManager`'s replay, via a `requestEntryCapture()` round trip
+through the live `pi` process) can ever obtain one — the live-tail watcher reads the raw `.jsonl`
+directly with no RPC access at all, so it always fell back to the positional id. The two importers
+therefore computed two different, mutually non-derivable `messageId`s for the same logical user
+row every time. The fix makes user identity always positional, never the captured entry id, so
+both importers derive an identical value from a property intrinsic to the row itself; ordering is
+then fixed by construction, since the store's existing dedupe collapses the second importer's row
+onto the first's slot rather than appending it out of order. `PiRpcAgentSession.revertConversation`
+gained a resolver (`resolveCapturedEntryForRewind`) so rewind still works against a
+history-replayed positional `messageId`, falling back to Pi's live captured entry by position.
+
+**Evidence.** Commits `90acbbb`, `064653a`. `FIX-S5`'s own `agent-timeline-store.test.ts` imports
+a fixture Pi session twice and asserts the timeline holds each message once, in order, plus a
+same-text-twice case yielding two rows; its `history-mapper.test.ts` pins that mapping the same
+session twice assigns identical `messageId`s. `FIX-S6`'s `agent-timeline-store.test.ts` drives the
+same logical session through both real importer shapes end to end — the RPC shape with captured
+entries, and the raw-file shape via `pi-live-tail.ts`'s real `parseMessagesFromText`, now exported
+and fed `.jsonl` text interleaving real noise rows — in both race orderings, asserting every
+message survives exactly once, in original order; `history-mapper.test.ts` replaces the test that
+had pinned the buggy captured-id preference with one proving it never overrides the positional
+`messageId`.
+
+- [x] Two independent Pi history importers racing after a daemon restart produce each message
+      exactly once, not once per importer
+- [x] Identity is derived from a message's position in Pi's history, never from its text, so two
+      genuinely identical sends still produce two rows
+- [x] User-row identity no longer depends on RPC-only side-channel state the live-tail importer
+      can never supply
+- [x] Rewind still resolves a history-replayed message back to Pi's live captured entry
+
+### Web UI defects a real browser exposed
+
+#### FIX-L1 — Composer metadata chips painted over the keyboard hint and the Stop button
+
+`labels: phase-9, area: web` · `wave: P9-Y`
+
+**What shipped.** A live audit of the composer footer at 1440×900 found the Routing/Queue chip
+text visibly overlapping the "⏎ send · ⇧⏎ newline · Esc interrupt" hint and the Stop button, in
+three independent screenshots. `getBoundingClientRect` showed no box overlap, which pointed at
+unclipped overflow rather than a positioning bug: `.pc-composer__meta-chip` is a flex item with no
+`min-width` override, so flexbox's automatic-minimum-size rule kept it at its button's min-content
+width and it never actually shrank — the button's own `overflow: hidden; text-overflow: ellipsis`
+(already correct) never got the chance to engage, and once the three chips' combined natural width
+exceeded what `.pc-composer__meta` was allotted, the excess painted past this chip's own box
+(default `overflow: visible`) over its neighbours. `min-width: 0` is the same fix already applied
+one level up on `.pc-prompt-bar__foot-state` and `.pc-composer__meta`; this propagates it one
+level deeper.
+
+**Evidence.** Commit `6e09c07`; `Composer.test.tsx` passes unchanged. No `jsdom` test can exercise
+real CSS overflow/ellipsis layout, so none was added for this fix — disclosed rather than claimed.
+
+- [x] The meta-chip row's own flex item can shrink below its min-content width instead of
+      painting over its neighbours
+- [x] No `jsdom`-provable regression coverage is claimed for a CSS-overflow fix `jsdom` cannot
+      exercise
+
+#### FIX-L2 — Stop rendered on every connected session, idle or not
+
+`labels: phase-9, area: web` · `wave: P9-Y`
+
+**What shipped.** Composer's Stop button (`.pc-composer__meta-abort`) rendered enabled on a live,
+idle session with completed turns. `showAbort` was `canAbort || isAborting`, and `useComposer`'s
+`canAbort` was defined as `Boolean(client) && !isAborting` — true for the entire lifetime of any
+live daemon connection, regardless of whether a turn had ever run; nothing in that chain read the
+agent's own turn state. `Composer.test.tsx`'s existing idle coverage never caught this because
+every test reproducing "idle" did so by omitting the `client` prop entirely, which is not what an
+idle, connected session looks like — a long-lived session that already completed several turns
+stays wired for the rest of its life, exactly the live-audit scenario. The fix adds a new
+`AgentTurnClient` capability (`getAgentTurnStatus`/`onAgentTurnStatusChange`) sourced from the
+daemon's own `AgentSnapshotPayload.status` through a real adapter over the existing
+`fetchAgent`/`agent_update` wiring, plus a `use-agent-turn-status.ts` hook; `Composer.tsx` becomes
+`showAbort = (canAbort && agentTurnStatus.hasActiveTurn) || isAborting`. `canAbort` itself is
+unchanged — it still only answers whether pressing Stop would attempt a real `cancelAgent` call.
+
+**Evidence.** Commit `be45254`, whose new `Composer.test.tsx` case reproduces the exact live
+condition (a wired client with no active turn) and is recorded failing before the fix (Stop
+rendered) and passing after; the two existing tests that click Stop were updated to opt into an
+active turn instead of relying on "client wired" alone.
+
+- [x] Stop is absent on a wired, connected session with no active turn
+- [x] Stop still renders, and still works, once a turn is actually running
+- [x] The regression test is recorded failing before the fix and passing after, not merely added
+
+#### FIX-L3 — Header stuck on "Connecting…" while the same page was demonstrably connected
+
+`labels: phase-9, area: web` · `wave: P9-Y`
+
+**What shipped.** The header badge (`connection-status.tsx`) read `useConnectionState()`, backed
+by `real-core-adapter.ts`'s `RealCoreAdapter`, which `daemon-client-context.tsx`'s
+`DaemonClientProvider` only fed from inside a `useEffect` republishing its own
+`HostControllerConnectionInfo` — one render behind every direct `useDaemonClientContext()` reader
+(e.g. `root-route.tsx`'s `SessionRailContent`, whose session-rail foot correctly showed connected
+at the same moment the header stayed on "Connecting…"). Header and body were reading two
+independent reactive chains fed by the same underlying info, one hop further from the source than
+the other. The fix makes `ConnectionStatus` read `useDaemonClientContext()` directly, the same
+info every other live consumer already reads, mapped through the existing
+`toDaemonConnectionState`, and deletes the now-dead `use-connection-state.ts`.
+
+Recorded honestly rather than as a hidden gap: the new `connection-status.test.tsx`, driving a
+real `HostController`'s `subscribeConnectionInfo`/`emitInfo` shape through a hand-written fake,
+passed against both the pre-fix and the post-fix component — the commit message records swapping
+`connection-status.tsx` back to its pre-fix content and rerunning the same test to confirm this;
+synchronously driving that shape through Testing Library's `act()` could not force the old
+two-hop mechanism to visibly lag in `jsdom`, so this test does not by itself prove the mechanism.
+The fix was verified live instead: deployed to the real host and driven in the real browser, the
+header changed from "Connecting…" to "Connected" against the actual running daemon, matching the
+direct-context-read fix rather than the deleted republish hop.
+
+**Evidence.** Commit `f8c6ea2`.
+
+- [x] The header reads the same connection-state source the rest of the page already reads, with
+      no second, effect-lagged hop
+- [x] The dead `use-connection-state.ts` republish path is deleted, not merely unused
+- [x] The new component test's own pre-fix/post-fix result is recorded honestly, not claimed as
+      proof it does not have; live-browser verification is recorded separately
+
+### Test-suite reconciliation
+
+#### FIX-E3 — A stale Playwright testid from the Live-pane rebuild was reconciled, not weakened
+
+`labels: phase-9, area: web` · `depends-on: UI-W5` · `wave: P9-Y`
+
+**What shipped.** `extension-bridge.spec.ts` asserted a `pi-extension-rail-list` testid that
+`UI-W5`'s Live-pane rebuild had already removed — `PiExtensionRail` renders every pinned element
+directly into its own container, with no separate "list" wrapper testid once elements exist. Both
+assertions that depended on it are reconciled to an equally strong check, not deleted or loosened:
+the first now asserts `pi-extension-rail-empty` has a count of 0 (the container is no longer
+empty) with the same 10s timeout the removed assertion carried; the second drops the wait on the
+no-longer-existing list testid and moves its own 10s timeout onto the element card's visibility
+assertion instead, so neither case waits less than it did before.
+
+**Evidence.** Commit `ee13b17`.
+
+- [x] Both assertions the removed testid used to gate still wait for an equally strong signal, not
+      a weaker one
+- [x] No test was deleted or its coverage narrowed to make it pass
+
+### Lessons from this wave
+
+**A read-only subagent has no shell, and live validation needs one that does.** A read-only
+subagent in this harness cannot drive a browser or run a test — live validation against a real
+daemon and a real browser requires handing the work to an execution-capable agent instead.
+
+**Compare three independent sources before blaming the client for a server-side duplication bug.**
+The decisive evidence for `FIX-S5`/`FIX-S6` was comparing the rendered DOM, the daemon's own
+`paseo logs` output, and the underlying Pi session's `.jsonl` file directly: the `.jsonl` held
+each message exactly once, which is what proved the daemon was materialising rows twice rather
+than the client rendering the same rows twice.
+
+**Disclosed, not a product defect: the host's Pi agent stopped producing assistant replies partway
+through the night.** Checked directly rather than assumed: the Pi session's own `.jsonl` contains
+no assistant message for those turns, the timeline renders exactly what the file contains, the
+daemon log is clean, and the model id and credential both still resolve on that host — the gap is
+upstream of anything this repository's code touches.
