@@ -135,6 +135,7 @@ export class PiHistoryMapper {
   private readonly pendingToolCalls = new Map<string, PiTrackedToolCall>();
   private userIndex = 0;
   private assistantIndex = 0;
+  private customIndex = 0;
 
   constructor(
     private readonly provider: string,
@@ -180,6 +181,18 @@ export class PiHistoryMapper {
       return [];
     }
     const userEntry = this.userEntries[this.userIndex - 1];
+    // T-FIX-S5: always assign a stable, non-text identity derived from this
+    // message's native position in Pi's own history (`userIndex`, a running
+    // counter over `user`-role rows in encounter order), falling back from a
+    // captured live entry's id when one exists. Two independent importers of
+    // the *same* underlying Pi session file (a full RPC-history replay and
+    // `pi-live-tail.ts`'s own from-scratch bootstrap read) both process rows
+    // in the same order starting from the same origin, so they compute the
+    // identical id for the same source row every time — which is exactly the
+    // key `AgentManager`'s history-import dedupe (see `agent-manager.ts`'s
+    // `deriveHistoryTimelineDedupeKey`) needs to collapse a re-imported row
+    // back onto the one already recorded instead of appending a duplicate.
+    const messageId = userEntry ? userEntry.id : `${this.provider}-history-user-${this.userIndex}`;
     return [
       {
         type: "timeline",
@@ -187,7 +200,7 @@ export class PiHistoryMapper {
         item: {
           type: "user_message",
           text,
-          ...(userEntry ? { messageId: userEntry.id } : {}),
+          messageId,
           ...(images.length > 0 ? { images } : {}),
         },
       },
@@ -202,6 +215,7 @@ export class PiHistoryMapper {
     }
     const text = getUserMessageText(message.content);
     const images = materializeUserMessageImages(getUserMessageImages(message.content));
+    this.customIndex += 1;
     const mappedEvent = text ? this.hooks.mapCustomMessage?.(text, this.provider) : null;
     if (mappedEvent) {
       return [mappedEvent];
@@ -209,6 +223,7 @@ export class PiHistoryMapper {
     if (!text && images.length === 0) {
       return [];
     }
+    // T-FIX-S5: same stable-identity rationale as `mapUserMessage` above.
     return [
       {
         type: "timeline",
@@ -216,6 +231,7 @@ export class PiHistoryMapper {
         item: {
           type: "assistant_message",
           text,
+          messageId: `${this.provider}-history-custom-${this.customIndex}`,
           ...(images.length > 0 ? { images } : {}),
         },
       },

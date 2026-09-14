@@ -2238,6 +2238,48 @@ export class AgentManager {
     await this.persistSnapshot(agent);
   }
 
+  /**
+   * FIX-S5: dedupe-aware sibling of `appendTimelineItem`, for a caller that
+   * independently re-derives provider history from its own source (today,
+   * only `PiLiveTailWatcher`'s from-scratch bootstrap read of the raw Pi
+   * session file — `pi-live-tail.ts`) and can race
+   * `primeTimelineFromLegacyProviderHistory`'s RPC-based full-history
+   * replay for the same agent right after a resume/reconnect, when neither
+   * importer yet knows the other has already recorded a given row. Plain
+   * `appendTimelineItem` is intentionally left untouched for every other
+   * caller (live turn streaming, worktree bootstrap, tool timeline
+   * entries, ...): those appends are never a replay of a source row that
+   * could already be present, so adding dedupe semantics there would only
+   * add risk for no benefit.
+   */
+  async appendHistoryBackfillTimelineItem(agentId: string, item: AgentTimelineItem): Promise<void> {
+    const agent = this.requireAgent(agentId);
+    item = limitAgentTimelineItemContent(item);
+    const dedupeKey = this.deriveHistoryTimelineDedupeKey(item);
+    const alreadyRecorded = dedupeKey ? this.timelineStore.wouldDedupe(agentId, dedupeKey) : false;
+    this.touchUpdatedAt(agent);
+    const row = this.recordTimeline(agentId, item, { dedupeKey });
+    if (alreadyRecorded) {
+      // Idempotent no-op: this exact source row was already recorded by the
+      // other importer. Nothing new to broadcast or persist.
+      return;
+    }
+    this.dispatchStream(
+      agentId,
+      {
+        type: "timeline",
+        item,
+        provider: agent.provider,
+      },
+      {
+        seq: row.seq,
+        epoch: this.timelineStore.getEpoch(agentId),
+        timestamp: row.timestamp,
+      },
+    );
+    await this.persistSnapshot(agent);
+  }
+
   async emitLiveTimelineItem(agentId: string, item: AgentTimelineItem): Promise<void> {
     const agent = this.requireAgent(agentId);
     this.touchUpdatedAt(agent);
@@ -3944,11 +3986,10 @@ export class AgentManager {
       }
     }
     for (const event of historyEvents) {
-      const row = this.recordTimeline(
-        agent.id,
-        event.item,
-        event.timestamp ? { timestamp: event.timestamp } : undefined,
-      );
+      const row = this.recordTimeline(agent.id, event.item, {
+        ...(event.timestamp ? { timestamp: event.timestamp } : undefined),
+        dedupeKey: this.deriveHistoryTimelineDedupeKey(event.item),
+      });
       if (broadcast) {
         this.dispatchStream(agent.id, event, {
           seq: row.seq,
@@ -3990,11 +4031,10 @@ export class AgentManager {
         if (event.item.type === "user_message" && isSystemInjectedEnvelope(event.item.text)) {
           continue;
         }
-        const row = this.recordTimeline(
-          agent.id,
-          event.item,
-          event.timestamp ? { timestamp: event.timestamp } : undefined,
-        );
+        const row = this.recordTimeline(agent.id, event.item, {
+          ...(event.timestamp ? { timestamp: event.timestamp } : undefined),
+          dedupeKey: this.deriveHistoryTimelineDedupeKey(event.item),
+        });
         if (deferredBroadcast) {
           timelineEvents.push({ event, row });
         } else if (broadcast) {
@@ -4660,12 +4700,40 @@ export class AgentManager {
   private recordTimeline(
     agentId: string,
     item: AgentTimelineItem,
-    options?: { timestamp?: string; providerMessageId?: string },
+    options?: { timestamp?: string; providerMessageId?: string; dedupeKey?: string },
   ): AgentTimelineRow {
     item = limitAgentTimelineItemContent(item);
     const row = this.timelineStore.append(agentId, item, options);
     this.enqueueDurableTimelineAppend(agentId, row);
     return row;
+  }
+
+  /**
+   * FIX-S5: stable, non-text identity for a provider-history-derived
+   * timeline item, used to make re-importing the same underlying source
+   * row idempotent (`InMemoryAgentTimelineStore.append`'s `dedupeKey`).
+   *
+   * Derived only from fields that already carry a source-native identity
+   * (`messageId` — Pi's own `responseId`, or `history-mapper.ts`'s
+   * positional fallback when replaying without a live-captured entry;
+   * `callId` — Pi's native tool-call id) rather than from message text, so
+   * two genuinely distinct rows that happen to share identical text (the
+   * user sending "Hello" twice) still get two different keys — their
+   * `messageId`s differ because `PiHistoryMapper` assigns them from each
+   * row's own position in the source history, never from its content.
+   * Item kinds with no native id (`reasoning`) return `undefined`, i.e. no
+   * dedupe for them — deliberately conservative: an item this can't
+   * identify is never at risk of being wrongly collapsed with another one,
+   * it just isn't protected against the re-import race either.
+   */
+  private deriveHistoryTimelineDedupeKey(item: AgentTimelineItem): string | undefined {
+    if ((item.type === "user_message" || item.type === "assistant_message") && item.messageId) {
+      return `msg:${item.messageId}`;
+    }
+    if (item.type === "tool_call") {
+      return `call:${item.callId}`;
+    }
+    return undefined;
   }
 
   private emitState(agent: ManagedAgent, options?: { persist?: boolean }): void {

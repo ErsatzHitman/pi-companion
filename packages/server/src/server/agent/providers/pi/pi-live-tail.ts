@@ -325,8 +325,17 @@ export class PiLiveTailWatcher {
       // Skip system injected envelopes
       if (item.type === "user_message" && isSystemInjected(item.text)) continue;
       try {
-        // Use appendTimelineItem which records and broadcasts via agent_state / agent_stream
-        await this.agentManager.appendTimelineItem(state.agentId, item);
+        // FIX-S5: this is a from-scratch re-read of the whole Pi session file
+        // (`bootstrapTail`) or an incremental continuation of one, run
+        // independently of — and racing — `AgentManager`'s own RPC-based
+        // history replay for the same agent right after a resume/reconnect
+        // (see `agent-manager.ts`'s `primeTimelineFromLegacyProviderHistory`).
+        // `appendHistoryBackfillTimelineItem` dedupes by each item's stable
+        // source identity so whichever importer runs second for a given row
+        // is a no-op instead of a duplicate; plain `appendTimelineItem`
+        // (used everywhere else) has no such protection and would double
+        // the row the way `emitEvents` used to.
+        await this.agentManager.appendHistoryBackfillTimelineItem(state.agentId, item);
       } catch (error) {
         this.logger.warn({ err: error, agentId: state.agentId }, "Failed to append live tail item");
       }
