@@ -76,48 +76,6 @@
   padding-bottom: var(--spacing-3);
 }
 
-/* Transcript find (`transcript-search-bar.tsx`, `transcript.tsx`'s
- * search state). The bar sticks to the top of the scroll container so it
- * stays reachable without costing rows any of their measured height — it
- * is outside the virtualizer's sizer, never a `[data-index]` item. Every
- * value below is a `@picompanion/design-tokens` token (repository
- * invariant: no raw colour, space, or radius under `apps/web`). The
- * matched-row treatment mirrors the work-group head's own vocabulary
- * below: a dashed hairline for "has a hit somewhere in here", the accent
- * for the one active hit — colour is never the only signal either way
- * (plan.md §10.5), since the count label (`role="status"`) always names
- * which match is active. */
-.pc-transcript-search {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  flex-wrap: wrap;
-  padding: var(--spacing-2);
-  background: var(--color-canvas);
-  border-bottom: 1px solid var(--color-line);
-}
-.pc-transcript-search__count {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-xs);
-  color: var(--color-ink-3);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.pc-transcript__row--search-match {
-  outline: 1px dashed var(--color-line);
-  outline-offset: -1px;
-  border-radius: var(--radius-control);
-}
-.pc-transcript__row--search-active {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-  border-radius: var(--radius-control);
-  background: var(--color-accent-tint);
-}
-
 /* The turn meta line the mockup draws above every block
  * (`.meta { display: flex; align-items: center; gap: 7px; font-family:
  * var(--mono); font-size: 10.5px; color: var(--ink-3); margin-bottom:

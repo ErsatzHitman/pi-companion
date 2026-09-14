@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   measureElement as measureElementDefault,
   observeElementRect,
@@ -23,7 +23,6 @@ import type { RetryTranscriptEntry } from "./retry-row.js";
 import { isThinkingEntry, TranscriptThinkingRow } from "./thinking-row.js";
 import { isTodoEntry, TranscriptTodoRow } from "./todo-row.js";
 import { isToolCallEntry, TranscriptToolCallRow } from "./tool-call-row.js";
-import { TranscriptSearchBar } from "./transcript-search-bar.js";
 import { isUnknownEntry, TranscriptUnknownRow } from "./unknown-row.js";
 import { TranscriptWorkGroupHead } from "./work-group-row.js";
 import "./transcript.css";
@@ -438,16 +437,6 @@ interface TranscriptListItem {
  * is paged on the wire, not sent whole, before this component ever sees
  * it.
  *
- * **Find in transcript.** A sticky search bar (`transcript-search-bar.tsx`)
- * sits above the rows: plain-text find over the renderable core entries
- * (`timeline.findTranscriptSearchMatches`, `@picompanion/frontend-core` —
- * case-insensitive, no regex, no filters, no persistence), with the shared
- * count label and previous/next navigation that scrolls the virtualizer to
- * the active match (`align: "center"`, expanding its work group first when
- * collapsed) and marks it with `.pc-transcript__row--search-active`. The
- * bar renders only once a transcript has rows — an empty transcript keeps
- * its bare `EmptyState`, with nothing to search.
- *
  * `role="log"`: an ARIA live region whose implicit `aria-live="polite"`
  * and `aria-relevant="additions"` announce newly appended messages to
  * assistive tech without re-announcing settled rows on every keystroke of
@@ -545,63 +534,6 @@ export function Transcript({
     return next;
   }, [renderable, grouping, collapseState]);
 
-  /** Plain-text find over the transcript (`timeline.findTranscriptSearchMatches`,
-   * `@picompanion/frontend-core` — no regex, no filters, no persistence).
-   * The searchable list is the renderable core entries: a web-local
-   * `"retry"` row has no core searchable text, so it never matches rather
-   * than matching wrongly. The query and cursor live here — next to the
-   * virtualizer that scrolls to a match — and `TranscriptSearchBar` renders
-   * only the field, the shared count label, and the two navigation buttons. */
-  const searchableEntries = useMemo<timeline.TranscriptEntry[]>(() => {
-    const next: timeline.TranscriptEntry[] = [];
-    for (const entry of renderable) {
-      if (!isRetryEntry(entry)) {
-        next.push(entry);
-      }
-    }
-    return next;
-  }, [renderable]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchMatches = useMemo(
-    () => timeline.findTranscriptSearchMatches(searchableEntries, searchQuery),
-    [searchableEntries, searchQuery],
-  );
-  const [searchIndex, setSearchIndex] = useState(0);
-  const handleSearchQueryChange = useCallback((query: string) => {
-    setSearchQuery(query);
-    // A new query is a new result list: restart at its first match rather
-    // than keeping a cursor into the previous list.
-    setSearchIndex(0);
-  }, []);
-  const goToNextSearchMatch = useCallback(() => {
-    setSearchIndex((current) => {
-      const clamped =
-        searchMatches.length === 0 ? -1 : Math.min(Math.max(0, current), searchMatches.length - 1);
-      return timeline.nextTranscriptSearchIndex(clamped, searchMatches.length);
-    });
-  }, [searchMatches.length]);
-  const goToPreviousSearchMatch = useCallback(() => {
-    setSearchIndex((current) => {
-      const clamped =
-        searchMatches.length === 0 ? -1 : Math.min(Math.max(0, current), searchMatches.length - 1);
-      return timeline.previousTranscriptSearchIndex(clamped, searchMatches.length);
-    });
-  }, [searchMatches.length]);
-  const searchCurrent =
-    searchMatches.length === 0 ? -1 : Math.min(searchIndex, searchMatches.length - 1);
-  const activeSearchMatch = searchCurrent >= 0 ? (searchMatches[searchCurrent] ?? null) : null;
-  const activeSearchEntryKey = activeSearchMatch?.entryKey ?? null;
-  const searchMatchKeys = useMemo(
-    () => new Set(searchMatches.map((match) => match.entryKey)),
-    [searchMatches],
-  );
-  /** Stable across streaming re-derivations that leave the match itself
-   * untouched: a new row elsewhere rebuilds `searchMatches` (new object
-   * identities) without moving this match, and the scroll effect below must
-   * not re-fire for that — only for a genuinely different match. */
-  const activeSearchMatchKey =
-    activeSearchMatch === null ? null : `${activeSearchMatch.entryKey}\n${activeSearchMatch.start}`;
-
   const containerRef = useRef<HTMLDivElement | null>(null);
   /** Becomes `true` after the first successful tail-anchor, so an
    * as-yet-unmounted transcript always opens at its most recent message
@@ -654,37 +586,6 @@ export function Transcript({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastIndex, tailEntry, rowVirtualizer]);
 
-  /** Scrolls the virtualizer to the active search match. Runs on the
-   * stable `activeSearchMatchKey` (not the match object), so a streaming
-   * delta elsewhere — which rebuilds `searchMatches` without moving this
-   * match — never yanks the reader back to it. A match hidden inside a
-   * collapsed work group expands that group first, so navigation never
-   * lands on a row that is not on screen. Follows the same direct-
-   * `scrollTop` path (`instantScrollTo`) as follow-tail scrolling, for the
-   * same reduced-motion reason. */
-  useEffect(() => {
-    if (activeSearchMatchKey === null) {
-      return;
-    }
-    const separator = activeSearchMatchKey.lastIndexOf("\n");
-    const entryKey = activeSearchMatchKey.slice(0, separator);
-    const group = grouping.groupByMemberKey.get(entryKey) ?? null;
-    if (group !== null && timeline.isWorkGroupCollapsed(collapseState, group)) {
-      setCollapseState((current) => timeline.toggleWorkGroupCollapsed(current, group));
-    }
-    const itemIndex = items.findIndex(
-      (item) => timeline.transcriptEntryListKey(item.entry) === entryKey,
-    );
-    if (itemIndex >= 0) {
-      rowVirtualizer.scrollToIndex(itemIndex, { align: "center" });
-    }
-    // `activeSearchMatchKey` already identifies the match; the lists it is
-    // resolved against (`items`, `grouping`, `collapseState`) are read fresh
-    // each run rather than tracked, so an unrelated collapse toggle does not
-    // re-scroll on its own.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSearchMatchKey, rowVirtualizer]);
-
   if (renderable.length === 0) {
     return (
       <EmptyState
@@ -705,15 +606,6 @@ export function Transcript({
       aria-label="Conversation transcript"
       data-testid={testId}
     >
-      <TranscriptSearchBar
-        query={searchQuery}
-        onQueryChange={handleSearchQueryChange}
-        currentIndex={searchCurrent}
-        totalCount={searchMatches.length}
-        onNext={goToNextSearchMatch}
-        onPrevious={goToPreviousSearchMatch}
-        testId={testId ? `${testId}-search` : undefined}
-      />
       <div className="pc-transcript__sizer" style={{ height: rowVirtualizer.getTotalSize() }}>
         {virtualItems.map((virtualRow) => {
           const item = items[virtualRow.index];
@@ -721,25 +613,13 @@ export function Transcript({
             return null;
           }
           const rendersBody = item.group === null || !item.isGroupHead || !item.groupCollapsed;
-          const itemKey = timeline.transcriptEntryListKey(item.entry);
-          const isSearchActive = activeSearchEntryKey !== null && itemKey === activeSearchEntryKey;
-          const isSearchMatch = isSearchActive || searchMatchKeys.has(itemKey);
-          const rowClasses = [
-            "pc-transcript__row",
-            isSearchMatch ? "pc-transcript__row--search-match" : null,
-            isSearchActive ? "pc-transcript__row--search-active" : null,
-          ]
-            .filter((part) => part !== null)
-            .join(" ");
           return (
             <div
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={rowVirtualizer.measureElement}
-              className={rowClasses}
+              className="pc-transcript__row"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
-              data-search-match={isSearchMatch || undefined}
-              data-search-active={isSearchActive || undefined}
             >
               {item.group !== null && item.isGroupHead ? (
                 <TranscriptWorkGroupHead
