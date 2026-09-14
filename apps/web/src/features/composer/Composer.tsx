@@ -127,6 +127,44 @@ function describeContextSummary(
   return `${percent}% of context used (${contextWindow.usedTokens.toLocaleString()} of ${contextWindow.maxTokens.toLocaleString()} tokens).`;
 }
 
+/**
+ * UI-W12: the literal chat text the Context group's "Compact now" row
+ * (below) sends. There is no manual-compaction RPC on the wire to call
+ * instead: `compact` is one of Pi's 32 RPC commands plan.md §11.1 lists,
+ * but `apps/web/src/features/sessions/rpc-command-web-parity.ts`'s own
+ * `"compact"` entry — a live command-parity ledger, not a reference-only
+ * doc — records the grep-verified fact grounding this: no `compact`-shaped
+ * request literal exists anywhere in `packages/protocol/src/messages.ts`,
+ * only the observational `compaction` timeline-entry type and
+ * `compaction_start`/`compaction_end` events. The only real path to a
+ * manual compaction is sending this string as ordinary chat text, exactly
+ * as if a user had typed it and pressed Enter — so the row reuses
+ * `useComposer`'s own `submit()` (via `setDraftText` plus the effect
+ * below) rather than a fabricated client method.
+ */
+const COMPACT_NOW_TEXT = "/compact";
+
+/**
+ * Why the "Compact now" row can't send right now, or `null` when it can.
+ * Mirrors `useComposer`'s own `canSend` gating — a live client, no
+ * submission already in flight, no attachment upload still pending — minus
+ * its "there is text to send" clause, since this row supplies its own text
+ * (`COMPACT_NOW_TEXT` above) rather than reading the draft. Always read
+ * into visible text on the row itself: a `disabled` row with no reason
+ * shown would be the "colour/attribute alone" failure plan.md §10.5
+ * forbids, and a press that silently did nothing would be worse.
+ */
+function describeCompactNowUnavailable(
+  hasClient: boolean,
+  isSubmitting: boolean,
+  hasPendingUploads: boolean,
+): string | null {
+  if (!hasClient) return "Connect to a session to send /compact.";
+  if (isSubmitting) return "Wait for the current message to finish sending.";
+  if (hasPendingUploads) return "Wait for attachments to finish uploading.";
+  return null;
+}
+
 export interface ComposerProps extends UseComposerOptions {
   /** Accessible label for the input; also its visible-on-focus hint text. */
   label?: string;
@@ -358,6 +396,7 @@ export function Composer({
     canSend,
     setDraftText,
     submit,
+    isSubmitting,
     isAborting,
     canAbort,
     abort,
@@ -576,6 +615,46 @@ export function Composer({
     }
   }
 
+  // UI-W12: a synchronous ref, not React state, carries the "a compact
+  // send is queued" flag across the render `setDraftText` below triggers —
+  // the same reason `use-composer.ts`'s own `submitLockRef` (FIX-W1) is a
+  // ref rather than state. `submit` is recreated each render closed over
+  // that render's OWN `draftText` (`use-composer.ts`'s `useCallback` deps),
+  // so calling the `submit` already in scope in the same tick as
+  // `setDraftText(COMPACT_NOW_TEXT)` would still send whatever text was in
+  // the draft before this click, not `COMPACT_NOW_TEXT`. This effect fires
+  // after the render that follows that state update — the one where
+  // `submit`'s closure actually sees `COMPACT_NOW_TEXT` — and calls it
+  // exactly once.
+  const pendingCompactRef = useRef(false);
+  useEffect(() => {
+    if (!pendingCompactRef.current || draftText !== COMPACT_NOW_TEXT) return;
+    pendingCompactRef.current = false;
+    void submit();
+  }, [draftText, submit]);
+
+  const compactNowUnavailableReason = describeCompactNowUnavailable(
+    Boolean(composerOptions.client),
+    isSubmitting,
+    attachments.hasPendingUploads,
+  );
+
+  /**
+   * Replaces the current draft with `COMPACT_NOW_TEXT` and lets the effect
+   * above submit it once that text has actually landed in state — the same
+   * `submit()` a user who typed `/compact` and pressed Enter would
+   * trigger, never a second, fabricated send path. Whatever the user had
+   * drafted is overwritten, the same outcome typing over it by hand would
+   * have had; nothing here duplicates `submit()`'s own outbox write,
+   * optimistic-timeline row, or error handling.
+   */
+  function handleCompactNow(): void {
+    if (compactNowUnavailableReason) return;
+    pendingCompactRef.current = true;
+    setDraftText(COMPACT_NOW_TEXT);
+    setControlsOpen(false);
+  }
+
   const statusTestId = testId ? `${testId}-status` : undefined;
   const abortTestId = testId ? `${testId}-abort` : undefined;
   const queueStatusTestId = testId ? `${testId}-queue-status` : undefined;
@@ -590,6 +669,7 @@ export function Composer({
   const dropHintTestId = testId ? `${testId}-drop-hint` : undefined;
   const contextRingTestId = testId ? `${testId}-context-ring` : undefined;
   const controlsSheetTestId = testId ? `${testId}-session-controls` : undefined;
+  const compactNowTestId = testId ? `${testId}-compact-now` : undefined;
   const footerStateTestId = testId ? `${testId}-foot-state` : undefined;
   const referencesTestId = testId ? `${testId}-references` : undefined;
   const resolvedReferencesTestId = testId ? `${testId}-resolved-references` : undefined;
@@ -843,6 +923,25 @@ export function Composer({
               testId={testId ? `${testId}-context-meter` : undefined}
             />
           ) : null}
+          {/* UI-W12: the reference `#ctx-menu` popover's Context group ends
+              with its `.mrow`-styled `#row-compact`
+              (`docs/ui-reference/pi-companion-web.html`) — "Compact now"
+              sends the literal `COMPACT_NOW_TEXT` chat message through the
+              same submit path any typed message takes; see that constant's
+              own doc comment above for why there is no RPC to call
+              instead. */}
+          <button
+            type="button"
+            className="pc-composer__compact-now"
+            onClick={handleCompactNow}
+            disabled={compactNowUnavailableReason !== null}
+            data-testid={compactNowTestId}
+          >
+            <span className="pc-composer__compact-now-label">Compact now</span>
+            <span className="pc-composer__compact-now-value">
+              {compactNowUnavailableReason ?? "Sends /compact as a message"}
+            </span>
+          </button>
         </div>
       </Sheet>
     </div>

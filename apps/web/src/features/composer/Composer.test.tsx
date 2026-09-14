@@ -1169,6 +1169,41 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect(screen.queryByLabelText("Model")).toBeNull();
   });
 
+  it("draws a 'Compact now' row at the end of the Context group, in the ring's own sheet (UI-W12)", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} testId="composer" />);
+    await openRingSheet(user);
+
+    const compactNow = screen.getByTestId("composer-compact-now");
+    expect(compactNow.textContent).toContain("Compact now");
+  });
+
+  it("the Compact now row sends the literal '/compact' message through the same submit path a typed message takes, exactly once (UI-W12)", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+    await openRingSheet(user);
+
+    await user.click(screen.getByTestId("composer-compact-now"));
+
+    await waitFor(() => expect(client.sentMessages).toHaveLength(1));
+    expect(client.sentMessages[0]?.text).toBe("/compact");
+    expect(client.sentMessages[0]?.agentId).toBe("session-1");
+    // Closes on press rather than waiting on the round trip, and nothing
+    // else re-opens it, so a second click can't double-send.
+    expect(screen.queryByTestId("composer-session-controls")).toBeNull();
+  });
+
+  it("the Compact now row is disabled with a real explanation when there is no live client (UI-W12)", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} testId="composer" />);
+    await openRingSheet(user);
+
+    const compactNow = screen.getByTestId("composer-compact-now");
+    expect(compactNow.hasAttribute("disabled")).toBe(true);
+    expect(compactNow.textContent).toContain("Connect to a session");
+  });
+
   it("draws the ring's percentage from the telemetry prop the route supplies", () => {
     render(
       <Composer
