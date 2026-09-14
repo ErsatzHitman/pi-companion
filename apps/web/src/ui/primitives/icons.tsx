@@ -18,7 +18,8 @@ export type IconName =
   | "terminal"
   | "edit"
   | "rewind"
-  | "add";
+  | "add"
+  | "stop";
 
 const paths: Record<IconName, ReactElement> = {
   close: <path d="M3 3l10 10M13 3L3 13" />,
@@ -60,6 +61,10 @@ const paths: Record<IconName, ReactElement> = {
   // paired with the visible "New terminal" label the chip renders next
   // to it -- the icon alone stays decorative/`aria-hidden`.
   add: <path d="M8 2.5v11M2.5 8h11" />,
+  // Stop control (UI-W4's composer metadata row): a plain square glyph,
+  // the universal "halt" shape — distinct from Send's arrow so the two
+  // never read as the same action.
+  stop: <rect x="4" y="4" width="8" height="8" rx="1" />,
 };
 
 export function Icon({ name, ...rest }: { name: IconName } & SVGProps<SVGSVGElement>) {

@@ -4,7 +4,15 @@ import type { KeyboardEvent } from "react";
 import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
-import { Button, Chip, ChipGroup, Sheet, StatusIndicator } from "../../ui/primitives/index.js";
+import {
+  Button,
+  Chip,
+  ChipGroup,
+  IconButton,
+  Popover,
+  Sheet,
+  StatusIndicator,
+} from "../../ui/primitives/index.js";
 import type { ChipTone } from "../../ui/primitives/index.js";
 import { CommandSearch, PromptBar } from "../../ui/recipes/index.js";
 import type { CommandSearchItem } from "../../ui/recipes/index.js";
@@ -24,7 +32,9 @@ import type { ComposerAttachment } from "./use-attachments.js";
 import { formatAttachmentSize } from "./use-attachments.js";
 import { useComposerPaste } from "./use-clipboard-paste.js";
 import { useDragAndDrop } from "./use-drag-and-drop.js";
+import type { ModelThinkingState } from "./use-model-thinking.js";
 import { useModelThinking } from "./use-model-thinking.js";
+import type { QueueModesState } from "./use-queue-modes.js";
 import { useQueueModes } from "./use-queue-modes.js";
 import { useSlashCommands } from "./use-slash-commands.js";
 import type { VoiceTranscriptionClient } from "./voice-transcribe-client.js";
@@ -61,6 +71,59 @@ function describeRouting(routing: PromptStreamingBehavior | null): string {
   if (routing === "steer") return "Steering — this goes to the turn already running";
   if (routing === "followUp") return "Follow-up — sent once the running turn finishes";
   return "Auto — steers the turn in flight, or starts a new one when idle";
+}
+
+/**
+ * Compact metadata-chip labels (T388). Each is a short, glanceable
+ * summary of what its popover holds — never a substitute for the full
+ * picker (which still carries every explained-unavailable state), just
+ * the collapsed value shown without opening anything, matching the
+ * mockup's `.chip` treatment.
+ */
+function describeModelChipLabel(state: ModelThinkingState): string {
+  if (state.availability === "no-client" || state.availability === "unsupported") {
+    return "Model — unavailable";
+  }
+  if (state.availability === "loading") return "Model — loading…";
+  if (state.availability === "error") return "Model — error";
+  const model = state.models.find((option) => option.id === state.modelId);
+  const modelName = model?.label ?? state.modelId ?? "None";
+  const effectiveId = state.thinkingOptionId ?? state.effectiveThinkingOptionId;
+  const thinking = state.thinkingOptions.find((option) => option.id === effectiveId);
+  return thinking ? `${modelName} · ${thinking.label}` : modelName;
+}
+
+function describeRoutingChipLabel(routing: PromptStreamingBehavior | null): string {
+  if (routing === "steer") return "Routing: Steer";
+  if (routing === "followUp") return "Routing: Follow-up";
+  return "Routing: Auto";
+}
+
+/** `QueueMode` -> short label. A plain string parameter (not the `QueueMode` type) so this needs no extra type-only import. */
+function queueModeChipLabel(mode: string | null): string {
+  if (mode === "all") return "All";
+  if (mode === "one-at-a-time") return "One at a time";
+  return mode ?? "—";
+}
+
+function describeQueueChipLabel(state: QueueModesState): string {
+  if (state.availability === "no-client" || state.availability === "unsupported") {
+    return "Queue — unavailable";
+  }
+  if (state.availability === "loading") return "Queue — loading…";
+  if (state.availability === "error") return "Queue — error";
+  return `Queue: ${queueModeChipLabel(state.steeringMode)} steer · ${queueModeChipLabel(state.followUpMode)} follow-up`;
+}
+
+/** The ring's Sheet body (T388): the same known/unknown split `ContextRing` itself draws, in words. */
+function describeContextSummary(
+  telemetry: coreTelemetry.ContextWindowTelemetry | undefined,
+): string {
+  const contextWindow = telemetry?.contextWindow;
+  if (contextWindow?.status !== "known")
+    return "Context usage has not been reported for this session yet.";
+  const percent = Math.round(contextWindow.usedFraction * 100);
+  return `${percent}% of context used (${contextWindow.usedTokens.toLocaleString()} of ${contextWindow.maxTokens.toLocaleString()} tokens).`;
 }
 
 export interface ComposerProps extends UseComposerOptions {
@@ -146,38 +209,48 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * `PromptBar` already supplies the labelled `<textarea>`, the
  * Enter-to-send / Shift+Enter-for-newline / Escape-to-interrupt keyboard
  * contract, the attach and context slots and the visible footer; the
- * `Button` primitive supplies the Stop control's native keyboard
+ * `IconButton` primitive supplies the Stop control's native keyboard
  * operation and `disabled` state; and `StatusIndicator` pairs any
  * send/abort problem with visible text, not colour alone (plan.md §10.5).
  *
  * **Prompt-row layout (T386 fidelity work).** The row itself is the
  * mockup's `.prompt`: attach `+`, the context ring, the mono textarea and
- * the accent send control on one raised surface, with the mockup's visible
- * `.composer-foot` line below it. Three capabilities are unchanged and
- * stay reachable: `Attach files` is the `+` (same accessible name and
- * testId as its old text button), and `Commands` / `Stop` remain real
- * labelled buttons in the compact control line under the row. There is no
- * mic/dictate control: the mockup draws one, but web has no real dictation
- * path, and a dead button is worse than a missing one — the same call
+ * the accent send control on one raised surface. There is no mic/dictate
+ * control: the mockup draws one, but web has no real dictation path, and
+ * a dead button is worse than a missing one — the same call
  * `use-drag-and-drop.ts`'s own docs make for capabilities that are not
  * really there.
  *
- * **The context ring opens the session controls.** `ModelThinkingPicker`,
- * `QueueModePicker` and `PromptRoutingPicker` now live inside the existing
- * `Sheet` primitive, opened by the ring, matching the mockup's
- * ring-opens-the-menu behaviour. They are still the same components with
- * the same testIds and labels; only their mount point moved, so a reader
- * cannot mistake these session-wide controls for ambient composer chrome.
- * Escape inside the sheet closes it (the primitive's own focus trap);
- * Escape in the prompt bar interrupts the running turn instead, exactly as
- * the mockup's footer says.
+ * **The metadata row (T388, superseding T386's ring-opens-the-menu
+ * design).** Model/effort, per-message routing, and the session-wide
+ * queue-delivery mode are no longer inside the context ring's popover —
+ * the ring now opens only a context-usage summary. Instead they render
+ * as three compact chips (the mockup's `.chip`) on ONE metadata row
+ * directly under the prompt row, immediately after the state sentence:
+ * `state sentence · [Model] [Routing] [Queue] · keyboard hint · Stop`.
+ * `PromptBar` owns that single foot row already (`.pc-prompt-bar__foot`),
+ * so this component fills it through `PromptBar`'s `metaChips`/`footEnd`
+ * slots rather than rendering a second row of its own — there is exactly
+ * one foot row in the DOM. Each chip is a real button
+ * (`aria-haspopup`/`aria-expanded`, via the unmodified `Popover`
+ * primitive) opening the SAME picker component T386 mounted in the
+ * sheet — `ModelThinkingPicker`, `PromptRoutingPicker`, `QueueModePicker`
+ * — unchanged, just re-anchored. The chip's own visible text
+ * (`describeModelChipLabel`/`describeRoutingChipLabel`/
+ * `describeQueueChipLabel` below) is a live, collapsed summary of
+ * whatever that picker currently reports, including its own explained
+ * unavailable/loading/error states — never a static label.
  *
  * "Stop" (T28B2) is a second, distinctly-labelled control from "Send" —
  * cancelling the agent's active turn rather than submitting the draft —
- * so it renders below the prompt bar rather than replacing Send's label
- * while a turn runs (plan.md §12.2/§12.3 keep those two actions
- * separate; the daemon, not this button, decides whether a submission
- * made while a turn is active becomes a steer or a queued follow-up).
+ * so it is a separate icon-only control in the metadata row rather than
+ * replacing Send's label while a turn runs (plan.md §12.2/§12.3 keep
+ * those two actions separate; the daemon, not this button, decides
+ * whether a submission made while a turn is active becomes a steer or a
+ * queued follow-up). It renders only while there is something for it to
+ * do — a wired client, whether or not an abort is already in flight —
+ * rather than sitting permanently in the row, disabled, when there is no
+ * turn to interrupt at all.
  *
  * Queue depth and mode (T28B3): `PromptBar`'s existing `queuedCount`
  * counter now reflects the live queue (`useComposer`'s `queueDepth`),
@@ -185,25 +258,31 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * in text (plan.md §10.5: never colour alone) whenever the daemon's own
  * live `pi_queue_update` reports one — the daemon decides steer vs.
  * follow-up (`agent-turn-client.ts`), so this is a display of that
- * decision, not a client-side control over it.
+ * decision, not a client-side control over it. This is a different thing
+ * from the Queue chip above: the chip summarises the session-wide
+ * *delivery mode* `QueueModePicker` edits, this status line is the live
+ * *contents* of the queue right now.
  *
- * Slash-command completion (T28B4): typing "/" as the entire draft (or
- * pressing the "Commands" toggle) opens the `CommandSearch` recipe
- * (plan.md §10.4) filled with the daemon's own `listCommands` result
- * (`use-slash-commands.ts`) — never a hard-coded set. `CommandSearch`
- * already supplies its own full keyboard contract (ArrowUp/ArrowDown to
- * move, Enter to choose, Escape to dismiss) as a labelled
- * combobox/listbox pair, so this component only wires selection
- * (inserting `/name ` into the draft and refocusing the message
- * textarea) and dismissal into it, rather than forking it. Because
- * `useComposer.submit` sends whatever text is in the draft verbatim, an
- * unrecognized slash command — whether typed past the palette or left
- * over after Escape — submits as ordinary text rather than being
- * rejected client-side.
+ * Slash-command completion (T28B4): typing "/" as the entire draft opens
+ * the `CommandSearch` recipe (plan.md §10.4) filled with the daemon's
+ * own `listCommands` result (`use-slash-commands.ts`) — never a
+ * hard-coded set. There is no separate "Commands" toggle button: the
+ * auto-open trigger (`useSlashCommands`'s `isBareSlashPrefix`) already
+ * covers discoverability, and `useSlashCommands.open()` remains available
+ * to a future affordance without this component needing a dedicated
+ * button for it today. `CommandSearch` already supplies its own full
+ * keyboard contract (ArrowUp/ArrowDown to move, Enter to choose, Escape
+ * to dismiss) as a labelled combobox/listbox pair, so this component
+ * only wires selection (inserting `/name ` into the draft and
+ * refocusing the message textarea) and dismissal into it, rather than
+ * forking it. Because `useComposer.submit` sends whatever text is in the
+ * draft verbatim, an unrecognized slash command — whether typed past the
+ * palette or left over after Escape — submits as ordinary text rather
+ * than being rejected client-side.
  *
  * Model/thinking pickers (T28B5, plan.md §11.1 "model and reasoning"):
  * `ModelThinkingPicker` composes two `Select` primitives fed by
- * `useModelThinking`, mounted below the send/abort controls. Reads and
+ * `useModelThinking`, mounted inside the Model chip's popover. Reads and
  * changes go through the same optional-method seam on `client` that
  * `onQueueUpdate`/`listCommands` already use — a client that omits the
  * four model/thinking methods leaves the picker in its own explained
@@ -211,31 +290,25 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  *
  * Steer/follow-up mode control (T38B1a, plan.md §11.1 "queues and
  * automation"): `QueueModePicker` composes two more `Select` primitives
- * fed by `useQueueModes`, mounted below the model/thinking pickers. This
+ * fed by `useQueueModes`, mounted inside the Queue chip's popover. This
  * is the session-wide *mode* (deliver several queued messages together,
  * or one at a time) — distinct from which queue a single message enters
  * in the first place; `QueueModePicker`'s own copy states that
  * distinction directly, since the two are easy to conflate.
  *
- * CORRECTED (P6-W6 merge gate): an earlier version of this paragraph
- * said no real `DaemonClient` implemented the three methods this needs,
- * so the picker rendered its explained "unsupported" state. T110 landed
- * FIRST in this same wave (`5806cff`, before this file's `a3c3c82`), so
- * that is backwards at HEAD: `useQueueModes`'s support check finds all
- * three methods on a real `DaemonClient` and the picker renders **ready
- * and functional**. The `"unsupported"` state is still reachable — and
- * still tested — for a turn client that omits the trio; it is simply no
- * longer what a real session shows.
+ * T110 gave every real `DaemonClient` all three `useQueueModes` methods,
+ * so `"unsupported"` is reachable — and still tested — only for a turn
+ * client that omits the trio; it is not what a real session shows.
  *
- * Per-message steer/follow-up routing (T38B1b, the control the previous
- * paragraph used to describe as "not yet built"): `PromptRoutingPicker`,
- * mounted just below `QueueModePicker`, is the actual per-message choice
- * — plain local state (`useComposer`'s `promptRouting`/`setPromptRouting`)
- * that rides along on the *next* `submit()` call as
- * `SendAgentMessageOptions.streamingBehavior`, then resets to its "Auto"
- * default once that submission consumes it. See `PromptRoutingPicker.tsx`
- * and `use-composer.ts`'s own doc comments for the full contract and for
- * exactly how this differs from `QueueModePicker` above it.
+ * Per-message steer/follow-up routing (T38B1b): `PromptRoutingPicker`,
+ * mounted inside the Routing chip's popover, is the actual per-message
+ * choice — plain local state (`useComposer`'s
+ * `promptRouting`/`setPromptRouting`) that rides along on the *next*
+ * `submit()` call as `SendAgentMessageOptions.streamingBehavior`, then
+ * resets to its "Auto" default once that submission consumes it. See
+ * `PromptRoutingPicker.tsx` and `use-composer.ts`'s own doc comments for
+ * the full contract and for exactly how this differs from
+ * `QueueModePicker` above it.
  *
  * Attachments (T28B6, plan.md §12.4, §7.3): an "Attach files" `Button`
  * opens the platform-neutral `FilePicker` (never a raw DOM file input
@@ -503,8 +576,12 @@ export function Composer({
   const abortTestId = testId ? `${testId}-abort` : undefined;
   const queueStatusTestId = testId ? `${testId}-queue-status` : undefined;
   const slashCommandsTestId = testId ? `${testId}-slash-commands` : undefined;
-  const slashCommandsToggleTestId = testId ? `${testId}-slash-commands-toggle` : undefined;
   const attachTestId = testId ? `${testId}-attach` : undefined;
+  const modelChipTestId = testId ? `${testId}-model-chip` : undefined;
+  const routingChipTestId = testId ? `${testId}-routing-chip` : undefined;
+  const queueChipTestId = testId ? `${testId}-queue-chip` : undefined;
+  const contextSummaryTestId = testId ? `${testId}-context-summary` : undefined;
+  const showAbort = canAbort || isAborting;
   const attachmentsTestId = testId ? `${testId}-attachments` : undefined;
   const dropHintTestId = testId ? `${testId}-drop-hint` : undefined;
   const contextRingTestId = testId ? `${testId}-context-ring` : undefined;
@@ -584,6 +661,55 @@ export function Composer({
           </button>
         }
         footer={<span data-testid={footerStateTestId}>{describeRouting(promptRouting)}</span>}
+        metaChips={
+          <span className="pc-composer__meta">
+            <span className="pc-composer__meta-chip">
+              <Popover
+                triggerLabel={describeModelChipLabel(modelThinking)}
+                testId={modelChipTestId}
+              >
+                <ModelThinkingPicker
+                  state={modelThinking}
+                  testId={testId ? `${testId}-model-thinking` : undefined}
+                />
+              </Popover>
+            </span>
+            <span className="pc-composer__meta-chip">
+              <Popover
+                triggerLabel={describeRoutingChipLabel(promptRouting)}
+                testId={routingChipTestId}
+              >
+                <PromptRoutingPicker
+                  value={promptRouting}
+                  onChange={setPromptRouting}
+                  testId={testId ? `${testId}-prompt-routing` : undefined}
+                />
+              </Popover>
+            </span>
+            <span className="pc-composer__meta-chip">
+              <Popover triggerLabel={describeQueueChipLabel(queueModes)} testId={queueChipTestId}>
+                <QueueModePicker
+                  state={queueModes}
+                  testId={testId ? `${testId}-queue-modes` : undefined}
+                />
+              </Popover>
+            </span>
+          </span>
+        }
+        footEnd={
+          showAbort ? (
+            <IconButton
+              icon="stop"
+              accessibleName="Stop"
+              className="pc-composer__meta-abort"
+              disabled={isAborting}
+              onClick={() => {
+                void abort();
+              }}
+              data-testid={abortTestId}
+            />
+          ) : null
+        }
         testId={testId}
       />
       {slashCommands.isOpen ? (
@@ -658,52 +784,32 @@ export function Composer({
           </ChipGroup>
         </div>
       ) : null}
-      <div className="pc-composer__controls">
-        <Button
-          kind="secondary"
-          aria-haspopup="listbox"
-          aria-expanded={slashCommands.isOpen}
-          disabled={slashCommands.commands.length === 0}
-          onClick={() => {
-            if (slashCommands.isOpen) {
-              slashCommands.dismiss();
-              focusMessageInput();
-            } else {
-              slashCommands.open();
-            }
-          }}
-          data-testid={slashCommandsToggleTestId}
-        >
-          Commands
-        </Button>
-        <Button
-          kind="danger"
-          disabled={!canAbort}
-          onClick={() => {
-            void abort();
-          }}
-          data-testid={abortTestId}
-        >
-          {isAborting ? "Stopping…" : "Stop"}
-        </Button>
-        {isAborting ? (
-          <StatusIndicator label="Turn" tone="info" statusText="Stopping…" testId={statusTestId} />
-        ) : abortError ? (
-          <StatusIndicator
-            label="Stop"
-            tone="danger"
-            statusText={abortError}
-            testId={statusTestId}
-          />
-        ) : sendError ? (
-          <StatusIndicator
-            label="Send"
-            tone="danger"
-            statusText={sendError}
-            testId={statusTestId}
-          />
-        ) : null}
-      </div>
+      {isAborting || abortError || sendError ? (
+        <div className="pc-composer__status">
+          {isAborting ? (
+            <StatusIndicator
+              label="Turn"
+              tone="info"
+              statusText="Stopping…"
+              testId={statusTestId}
+            />
+          ) : abortError ? (
+            <StatusIndicator
+              label="Stop"
+              tone="danger"
+              statusText={abortError}
+              testId={statusTestId}
+            />
+          ) : sendError ? (
+            <StatusIndicator
+              label="Send"
+              tone="danger"
+              statusText={sendError}
+              testId={statusTestId}
+            />
+          ) : null}
+        </div>
+      ) : null}
       {queueDepth > 0 ? (
         <StatusIndicator
           label="Queue"
@@ -715,24 +821,12 @@ export function Composer({
       <Sheet
         open={controlsOpen}
         title="Session controls"
-        description="Mode, model and effort, and queue delivery for this session."
+        description="This session's context-window usage."
         onClose={() => setControlsOpen(false)}
         testId={controlsSheetTestId}
       >
         <div className="pc-composer__session-controls">
-          <ModelThinkingPicker
-            state={modelThinking}
-            testId={testId ? `${testId}-model-thinking` : undefined}
-          />
-          <QueueModePicker
-            state={queueModes}
-            testId={testId ? `${testId}-queue-modes` : undefined}
-          />
-          <PromptRoutingPicker
-            value={promptRouting}
-            onChange={setPromptRouting}
-            testId={testId ? `${testId}-prompt-routing` : undefined}
-          />
+          <p data-testid={contextSummaryTestId}>{describeContextSummary(contextTelemetry)}</p>
         </div>
       </Sheet>
     </div>
