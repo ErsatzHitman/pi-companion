@@ -10,12 +10,14 @@ import {
 import { PiNoticeBannerContainer } from "../features/notices/index.js";
 import { ContextMeter, PiExtensionRail, PiExtensionStatusStrip } from "../features/rail/index.js";
 import {
+  CreateSessionDialog,
   SESSIONS_NOT_CONNECTED,
   SessionRail,
   SessionStatusPill,
   SessionWorkspaceCrumb,
   createDaemonSessionsClient,
   createPendingConnectionSessionsClient,
+  useCreateSession,
   useSessionListSync,
   useSessionSnapshot,
 } from "../features/sessions/index.js";
@@ -131,23 +133,40 @@ function SessionRailContent({ serverId, selectedSessionId }: SessionRailContentP
     });
   }
 
-  // The create-session dialog is `SessionsScreen`'s own
-  // (`features/sessions/SessionsScreen.tsx`'s `create-session-trigger`),
-  // and that screen is what `/h/:serverId/sessions` mounts. This rail's
-  // `New session` action navigates there rather than duplicating a create
-  // controller in the shell — the honest wiring, not a second dialog.
-  function openCreateSession(): void {
-    void navigate({ to: "/h/$serverId/sessions", params: { serverId } });
-  }
+  // UI-W6: the create-session dialog used to live only on
+  // `/h/:serverId/sessions` (`SessionsScreen`'s own trigger), so the
+  // rail's `New session` had to navigate there first. It now opens in
+  // place from wherever the rail is mounted — this component already
+  // holds the live `DaemonClient` (via `sessionsClient`) and the open
+  // session list, the smallest ancestor that can drive a real create
+  // without a route change. `SessionsScreen` keeps its own, separate
+  // `useCreateSession` instance for its own trigger; the two never
+  // share state, matching `useCreateSession`'s per-mount design.
+  const createSession = useCreateSession({
+    client: sessionsClient,
+    onCreated: (session) => openSession(session.id),
+  });
+
+  // Quick-pick chips (`CreateSessionDialog`'s `recentCwds`): no dedicated
+  // recent-cwd/workspace-listing API exists on `DaemonClient` today (see
+  // that dialog's own report) — `fetchWorkspaces` is the GitHub-backed
+  // multi-workspace/project surface, a different concept. Offer the
+  // cwds of this host's own currently known sessions instead: real,
+  // already-fetched directories, never fabricated.
+  const knownSessions = state.kind === "ready" ? state.sessions : [];
+  const recentCwds = [...new Set(knownSessions.map((session) => session.cwd))].slice(0, 5);
 
   return (
-    <SessionRail
-      state={listState}
-      selectedSessionId={selectedSessionId}
-      onSelectSession={openSession}
-      onNewSession={openCreateSession}
-      connection={{ status: info.status, kind: info.kind }}
-    />
+    <>
+      <SessionRail
+        state={listState}
+        selectedSessionId={selectedSessionId}
+        onSelectSession={openSession}
+        onNewSession={createSession.openDialog}
+        connection={{ status: info.status, kind: info.kind }}
+      />
+      <CreateSessionDialog controller={createSession} recentCwds={recentCwds} />
+    </>
   );
 }
 

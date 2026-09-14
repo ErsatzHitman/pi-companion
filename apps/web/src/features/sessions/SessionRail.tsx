@@ -12,10 +12,12 @@
  *
  * Honest wiring, stated rather than implied:
  *
- * - `New session` navigates to the host's sessions route, because that is
- *   where the real create-session dialog (`SessionsScreen`'s
- *   `CreateSessionDialog`) lives and this rail has no controller for it.
- *   It is not a second dialog implementation.
+ * - `New session` (`onNewSession`) opens the real create-session dialog
+ *   in place (UI-W6): the caller (`root-route.tsx`'s `SessionRailContent`,
+ *   the smallest ancestor already holding the live `DaemonClient`) owns
+ *   a `useCreateSession` controller and renders `CreateSessionDialog`
+ *   itself. This rail stays a pure callback — it renders no dialog of
+ *   its own and navigates nowhere on click.
  * - The search field filters the rail's own session rows (title and
  *   `cwd` substring) and never leaves the selected session's row hidden
  *   silently: the selected row is always kept visible, and when the
