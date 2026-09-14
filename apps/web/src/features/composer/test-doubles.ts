@@ -26,6 +26,7 @@ import type {
   AgentQueueUpdate,
   AgentSlashCommand,
   AgentTurnClient,
+  AgentTurnStatus,
   AgentUploadedAttachment,
   QueueMode,
   SendAgentMessageOptions,
@@ -130,6 +131,45 @@ export class FakeAgentTurnClient implements AgentTurnClient {
   emitQueueUpdate(agentId: string, update: AgentQueueUpdate): void {
     for (const handler of this.queueUpdateHandlers.get(agentId) ?? []) {
       handler(update);
+    }
+  }
+
+  // --- Turn-activity signal (FIX-L2) ---------------------------------
+
+  /**
+   * Canned `getAgentTurnStatus` result. Defaults to "no active turn" —
+   * an idle agent, matching the live-session defect this fixture exists
+   * to reproduce — never to an active turn, so a test that wires this
+   * fake and forgets to opt in to a running turn gets the honest,
+   * idle-by-default behaviour rather than accidentally masking a
+   * regression the way the pre-fix `canAbort` used to for every caller.
+   */
+  turnStatus: AgentTurnStatus = { hasActiveTurn: false };
+  readonly getAgentTurnStatusCalls: string[] = [];
+  private readonly turnStatusHandlers = new Map<string, Set<(status: AgentTurnStatus) => void>>();
+
+  async getAgentTurnStatus(agentId: string): Promise<AgentTurnStatus | null> {
+    this.getAgentTurnStatusCalls.push(agentId);
+    return this.turnStatus;
+  }
+
+  onAgentTurnStatusChange(agentId: string, handler: (status: AgentTurnStatus) => void): () => void {
+    let handlers = this.turnStatusHandlers.get(agentId);
+    if (!handlers) {
+      handlers = new Set();
+      this.turnStatusHandlers.set(agentId, handlers);
+    }
+    handlers.add(handler);
+    return () => {
+      handlers?.delete(handler);
+    };
+  }
+
+  /** Test helper: simulates the daemon pushing a live `agent_update` turn-status change for `agentId`. */
+  emitAgentTurnStatus(agentId: string, status: AgentTurnStatus): void {
+    this.turnStatus = status;
+    for (const handler of this.turnStatusHandlers.get(agentId) ?? []) {
+      handler(status);
     }
   }
 

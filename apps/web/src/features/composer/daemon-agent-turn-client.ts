@@ -72,6 +72,7 @@ import type {
   AgentQueueUpdate,
   AgentSlashCommand,
   AgentTurnClient,
+  AgentTurnStatus,
   AgentUploadedAttachment,
   QueueMode,
   SendAgentMessageOptions,
@@ -110,6 +111,16 @@ export interface DaemonAgentModelFields {
   model: string | null;
   thinkingOptionId?: string | null;
   effectiveThinkingOptionId?: string | null;
+  /**
+   * The live turn-activity slice of the same `AgentSnapshotPayload`
+   * (`getAgentTurnStatus`/`onAgentTurnStatusChange`, T-Stop-idle-fix):
+   * `"running"` means a turn is genuinely in progress. Optional so a
+   * narrower fixture that only fills in the model/thinking fields this
+   * adapter used to read still satisfies this type; missing means
+   * "unknown", which `toAgentTurnStatus` below treats as no active turn
+   * — the safe default that never shows Stop when the signal is absent.
+   */
+  status?: string;
   /**
    * The slice of `AgentSnapshotPayload.runtimeInfo` this adapter reads for
    * the steer/follow-up mode (T38B1a). The Pi provider carries
@@ -268,6 +279,18 @@ function isQueueUpdateEvent(
   return event.type === "pi_queue_update";
 }
 
+/**
+ * `DaemonAgentModelFields.status` -> `AgentTurnStatus`. `"running"` is the
+ * one `AgentStatusSchema` (`packages/protocol/src/messages.ts`) value that
+ * means a turn is actually in progress; every other lifecycle value
+ * (`"initializing"`, `"idle"`, `"error"`, `"closed"`) and a missing/unknown
+ * `status` all mean "nothing to abort" — the safe default this adapter
+ * resolves toward when the signal is absent, never the reverse.
+ */
+function toAgentTurnStatus(agent: DaemonAgentModelFields): AgentTurnStatus {
+  return { hasActiveTurn: agent.status === "running" };
+}
+
 /** Builds an `AgentTurnClient` backed by a real (or fixture-driven fake) `DaemonClient`. */
 export function createDaemonAgentTurnClient(daemon: DaemonTurnClient): AgentTurnClient {
   return {
@@ -380,6 +403,30 @@ export function createDaemonAgentTurnClient(daemon: DaemonTurnClient): AgentTurn
       daemon.setFollowUpMode &&
       (async (agentId: string, mode: QueueMode): Promise<AgentProviderNotice | null> =>
         daemon.setFollowUpMode!(agentId, mode)),
+
+    // Turn-activity signal (Stop-button idle fix): independent of the
+    // model/thinking method group above — gated only on `fetchAgent`
+    // being present, the same single method `getAgentModelSnapshot`
+    // already depends on, not the whole four-method group
+    // `useModelThinking` requires before it calls itself "supported".
+    getAgentTurnStatus:
+      daemon.fetchAgent &&
+      (async (agentId: string): Promise<AgentTurnStatus | null> => {
+        const result = await daemon.fetchAgent!(agentId);
+        return result ? toAgentTurnStatus(result.agent) : null;
+      }),
+
+    // Reads the identical `agent_update` push `onAgentModelSnapshotChange`
+    // already subscribes to — one daemon event, two independent readers.
+    onAgentTurnStatusChange: (
+      agentId: string,
+      handler: (status: AgentTurnStatus) => void,
+    ): (() => void) =>
+      daemon.on("agent_update", (message) => {
+        if (message.payload.kind !== "upsert") return;
+        if (message.payload.agent.id !== agentId) return;
+        handler(toAgentTurnStatus(message.payload.agent));
+      }),
 
     // Unlike the three methods above, this needs only `daemon.on`
     // (required, not optional, on `DaemonTurnClient`), so it works against
