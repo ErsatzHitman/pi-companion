@@ -104,16 +104,34 @@ test.describe("keyboard-only navigation", () => {
       // order, each with a visible `:focus-visible` outline (the shared
       // motion/outline token every primitive in `apps/web/src/ui` uses --
       // plan.md §10.5's "visible focus treatment"), and each is a real,
-      // named, keyboard-operable button.
+      // named, keyboard-operable button. There is no standalone "Commands"
+      // toggle any more: `Composer.tsx`'s own doc comment records that
+      // typing "/" as the entire draft already opens the slash palette
+      // (`useSlashCommands`'s `isBareSlashPrefix`), so after "Attach files"
+      // Tab instead reaches the metadata row's three popover-trigger chips
+      // (Model, Routing, Queue -- each a real button with
+      // `aria-haspopup`/`aria-expanded`, opening the same picker the old
+      // UI kept in a sheet) and then the "Stop" icon button, which renders
+      // whenever a client is wired (`useComposer`'s `canAbort`), not only
+      // mid-turn.
       await composerInput.focus();
       await page.keyboard.press("Tab"); // PromptBar's own "Send" button comes right after the textarea in DOM order
       await expect(page.getByRole("button", { name: "Send", exact: true })).toBeFocused();
       await page.keyboard.press("Tab"); // -> "Attach files"
       await expect(page.getByRole("button", { name: "Attach files" })).toBeFocused();
-      await page.keyboard.press("Tab"); // -> "Commands"
-      await expect(page.getByRole("button", { name: "Commands" })).toBeFocused();
+      await page.keyboard.press("Tab"); // -> the Model chip (opens `ModelThinkingPicker`)
+      const modelChip = page.getByRole("button", { name: "E2E Fake Model" });
+      await expect(modelChip).toBeFocused();
+      await expect(modelChip).toHaveAttribute("aria-haspopup", "dialog");
+      await expect(modelChip).toHaveAttribute("aria-expanded", "false");
+      await page.keyboard.press("Tab"); // -> the Routing chip (opens `PromptRoutingPicker`)
+      await expect(page.getByRole("button", { name: "Routing: Auto" })).toBeFocused();
+      await page.keyboard.press("Tab"); // -> the Queue chip (opens `QueueModePicker`)
+      await expect(
+        page.getByRole("button", { name: "Queue: — steer · — follow-up" }),
+      ).toBeFocused();
       await page.keyboard.press("Tab"); // -> "Stop"
-      await expect(page.getByRole("button", { name: /^(Stop|Stopping\u2026)$/ })).toBeFocused();
+      await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeFocused();
 
       // The left session rail's own row is a real, named button too --
       // reachable and activatable without a pointer. Hard assertion,
