@@ -101,6 +101,17 @@ const SWEEPS: Record<SweptRoutePath, RouteSweep> = {
     await page.goto(`${daemonConnection.webBaseUrl}/h/e2e-host/sessions`);
     await expect(page.getByRole("heading", { level: 1, name: "Session list" })).toBeVisible();
     await expectNoAxeViolations(page);
+
+    // FIX-A11Y1: the create-session dialog (`CreateSessionDialog.tsx`,
+    // `create-session-dialog.css`) only mounts behind the "New session"
+    // trigger -- the base sessions-list sweep above never renders it, so
+    // its accent-fill "Create" button (the site this task fixed) had no
+    // real-browser axe coverage at all. Opening it here, on the same
+    // settled route, closes that gap without a second SWEEPS entry (this
+    // route path is already the dialog's only mount point).
+    await page.getByTestId("create-session-trigger").click();
+    await expect(page.getByTestId("create-session-dialog")).toBeVisible();
+    await expectNoAxeViolations(page);
   },
 
   "/h/$serverId/session/$agentId": async ({ page, daemonConnection }) => {
