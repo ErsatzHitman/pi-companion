@@ -395,9 +395,21 @@ function SessionTranscript({
   // install: `AppCore.vibrationPlatform` (T32S9, `app-shell/core.ts`)
   // already wraps React Native's own `Vibration`, and the visible signal
   // this haptic accompanies (`TranscriptStatusStrip`, rendered by
-  // `SessionRoute`'s `statusStrip` slot off this same `status`) is
-  // already on screen - which is what `fireHaptic`'s `visibleSignal`
-  // contract requires.
+  // `SessionRoute`'s `statusStrip` slot off this same `status`) is on
+  // screen for every state that fires a haptic except one, disclosed
+  // rather than left silently inconsistent: UI-A3 made that strip
+  // collapse to nothing at rest ("connected", `features/transcript/
+  // status-strip.tsx`'s `isRestingTranscriptStatus`), which is exactly
+  // the status the "finished" trigger (`transcript-status-haptics-
+  // model.ts`) fires on the instant a streaming turn settles.
+  // `fireHaptic` only requires `visibleSignal` to be a non-empty name,
+  // not a render proof (`platform/haptics/haptic.ts` -- "it cannot see
+  // whether the named surface really renders"), so nothing throws; the
+  // transcript's own now-settled final message is the real visible cue
+  // at that instant. `transcript-status-haptics-model.ts` is outside
+  // this task's `Owns` grant, so its doc comment still names the strip
+  // as that trigger's visible signal -- flagged here rather than fixed
+  // silently.
   //
   // T32S11 (P5-W16): `hapticsEnabled` used to be hardcoded `true`,
   // matching the identical convention `features/approvals/
@@ -738,6 +750,23 @@ function SessionStatusExtensions({ agentId }: { agentId: string }) {
 
 /** plan.md §9.3's touch floor, in dp — measured by `touch-targets.test.ts`. */
 const MIN_TOUCH_TARGET = 48;
+
+/**
+ * UI-A3: the header slot's own row. `docs/ui-reference/
+ * pi-companion-app.html`'s `.fr[data-frame="s7"]` goes straight from
+ * `.bar` to the transcript with zero persistent chrome beneath it, so
+ * the "Session tree" trigger T79 first stacked as its own full row
+ * beneath `TranscriptHeader` now shares that bar's own 48dp band
+ * instead — see this file's "Session tree mount" doc comment.
+ * `barSlot` gives `TranscriptHeader` a resolvable width to flex within
+ * (it renders no `style` of its own — `header.tsx`), so its title and
+ * subtitle keep ellipsising exactly as before, now within the row's
+ * remaining width rather than the whole slot's.
+ */
+const HEADER_ROW_STYLES = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "stretch" },
+  barSlot: { flex: 1, minWidth: 0 },
+});
 
 /**
  * T395: the long-press target around a user turn. The row itself is the
@@ -1112,12 +1141,36 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * rendered it. This route mounts it as a sibling of
  * `SessionApprovals`/`SessionSheetExtensions` (a `Sheet` renders through
  * the Portal path, so it needs no shell slot of its own — the same
- * reasoning those two mounts document), opened by the "Session tree"
- * `Button` beside `TranscriptHeader` in the `header` slot (ordinary
- * header content, not a new slot — T79's own reasoning for the same
- * placement). The sheet follows the rewind sheet's prop shape: nodes
- * built at the mount (`sessionTreeNodes` below), the action client, the
- * result/error callbacks, and its own `testId`.
+ * reasoning those two mounts document), opened by the same "Session
+ * tree" `Button` T79 first placed in the `header` slot beside
+ * `TranscriptHeader` (ordinary header content, not a new slot — T79's
+ * own reasoning for the placement, unchanged by UI-A3 below). The sheet
+ * follows the rewind sheet's prop shape: nodes built at the mount
+ * (`sessionTreeNodes` below), the action client, the result/error
+ * callbacks, and its own `testId`.
+ *
+ * **UI-A3 changed how that trigger sits in the slot, not what it opens
+ * or where.** `docs/ui-reference/pi-companion-app.html`'s
+ * `.fr[data-frame="s7"]` goes straight from `.bar` to the transcript
+ * with zero persistent chrome between them, so the `Button` stacked as
+ * its own full row beneath `TranscriptHeader` read as a second header
+ * row the artifact never draws — the identical complaint this task's
+ * brief made about the old always-mounted `TranscriptStatusStrip` (see
+ * `features/transcript/status-strip.tsx`'s own doc comment for that
+ * half of the fix). The `header` slot now wraps `TranscriptHeader` in
+ * its own `flex: 1` `View` (`HEADER_ROW_STYLES.barSlot`) beside the
+ * trigger inside one `flexDirection: "row"` container
+ * (`HEADER_ROW_STYLES.row`), so the trigger shares `TranscriptHeader`'s
+ * own 48dp bar band instead of adding a row under it — this slot's
+ * total rendered height is unchanged from before this task, and
+ * `TranscriptHeader`'s title/subtitle keep the exact same ellipsis
+ * behaviour, now flexing within `barSlot`'s width instead of the whole
+ * header slot's. The more precise fit for the artifact's own chrome — a
+ * third `ScreenBarAction` mark inside `TranscriptHeader`'s own
+ * `ScreenBar`, beside `☰`/`⌑` — needs `header.tsx`/
+ * `ui/recipes/ScreenBar.tsx`, both outside this task's `Owns` grant;
+ * this row is the compliant approximation from outside them, disclosed
+ * rather than silently offered as the final shape.
  *
  * Three deliberate limits, all documented rather than hidden: the nodes
  * are this session as its own root (the daemon's session list carries no
@@ -1437,23 +1490,25 @@ export default function SessionRoute() {
         composerContentMinHeight={composerContentMinHeight}
         composerMaxHeight={composerMaxHeight}
         header={
-          <>
-            <TranscriptHeader
-              hostLabel={serverId ?? ""}
-              sessionTitle={agentId ?? ""}
-              cwd={cwd}
-              status={status}
-              activity={activity}
-              onOpenSessions={openSessions}
-              onOpenLive={openLive}
-            />
+          <View style={HEADER_ROW_STYLES.row}>
+            <View style={HEADER_ROW_STYLES.barSlot}>
+              <TranscriptHeader
+                hostLabel={serverId ?? ""}
+                sessionTitle={agentId ?? ""}
+                cwd={cwd}
+                status={status}
+                activity={activity}
+                onOpenSessions={openSessions}
+                onOpenLive={openLive}
+              />
+            </View>
             <Button
               kind="secondary"
               label="Session tree"
               onPress={openSessionTree}
               testId="session-tree-open"
             />
-          </>
+          </View>
         }
         statusStrip={
           <>

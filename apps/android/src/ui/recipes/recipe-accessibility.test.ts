@@ -318,4 +318,20 @@ describe("§10.4 recipes: TalkBack roles, states, and non-colour status text", (
     const code = readRecipeCode("SelectionActions");
     expect(code).toMatch(/accessibilityRole="toolbar"/);
   });
+
+  // UI-A3: the mockup's `.blk`/`.blk.usr` (docs/ui-reference/
+  // pi-companion-app.html) distinguishes a turn's speaker by tint alone
+  // and draws no "You"/"Pi" label -- this recipe used to render one
+  // unconditionally. TalkBack must keep announcing the speaker either way.
+  it("StreamingMessage always announces the speaker via accessibilityLabel, and only draws it as visible text when a caller opts in", () => {
+    const code = readRecipeCode("StreamingMessage");
+    expect(code).toMatch(
+      /accessibilityLabel=\{`\$\{speakerLabel\}\$\{streaming \? " \(responding\)" : ""\}: \$\{text\}`\}/,
+    );
+    expect(code).toMatch(/showSpeakerLabel\?: boolean;/);
+    expect(code).toMatch(/showSpeakerLabel = false,/);
+    expect(code).toMatch(
+      /\{showSpeakerLabel \? <Text style=\{styles\.speaker\}>\{speakerLabel\}<\/Text> : null\}/,
+    );
+  });
 });

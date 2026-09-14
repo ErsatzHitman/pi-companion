@@ -82,6 +82,26 @@ export function buildTranscriptStatusViewModel(
   };
 }
 
+/**
+ * Whether `status` is the connection's resting state — a live socket
+ * with nothing wrong and nothing active. `TranscriptStatusStrip`
+ * (`./status-strip.tsx`) uses this to decide whether to render at all:
+ * the mockup's S7 frame (`docs/ui-reference/pi-companion-app.html`,
+ * `.fr[data-frame="s7"]`) goes straight from `.bar` to the transcript
+ * with zero persistent chrome beneath it while the connection is fine,
+ * so the strip collapses to nothing in exactly this one status and
+ * renders normally for every other one — including "streaming", which
+ * is still a healthy connection but not the artifact's resting frame.
+ *
+ * Mirrors `app-shell/compact-shell.tsx`'s existing `liveExtension` slot
+ * convention (collapse entirely when there is nothing worth showing,
+ * rather than reserving empty space or printing an uninformative
+ * "Connected" line nobody needs to read at rest).
+ */
+export function isRestingTranscriptStatus(status: TranscriptStatus): boolean {
+  return status === "connected";
+}
+
 export interface DeriveTranscriptStatusInput {
   connection: "idle" | "connecting" | "connected" | "disconnected" | "disposed";
   /** `DaemonClient`'s `{status: "connecting"; attempt: number}` payload; `1` (or absent) is the first attempt. */

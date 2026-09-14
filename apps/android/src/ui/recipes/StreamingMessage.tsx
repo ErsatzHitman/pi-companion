@@ -43,6 +43,16 @@ export interface StreamingMessageProps {
   speaker: "assistant" | "user";
   text: string;
   streaming: boolean;
+  /**
+   * Draws a visible "You"/"Pi" caption above the turn. Defaults to
+   * `false` (UI-A3): the mockup's `.blk`/`.blk.usr`
+   * (`docs/ui-reference/pi-companion-app.html`) distinguishes a turn's
+   * speaker by tint alone and draws no label at all, and every shipped
+   * caller composes this recipe over that same transcript. TalkBack is
+   * unaffected either way — `accessibilityLabel` always states the
+   * speaker, whether or not this prop also draws it as visible text.
+   */
+  showSpeakerLabel?: boolean;
   testId?: string;
 }
 
@@ -56,6 +66,16 @@ export interface StreamingMessageProps {
  * visible "Pi is still responding" caption repeats that as on-screen text
  * (not just the blinking cursor) so the state survives without colour or
  * animation. The cursor pulse respects `reduceMotion` by staying static.
+ *
+ * **UI-A3: no visible "You"/"Pi" caption by default.** This recipe used
+ * to draw one above every turn unconditionally; the mockup's `.blk`/
+ * `.blk.usr` draws no such label anywhere — tint alone tells a user turn
+ * from the model's own prose. `showSpeakerLabel` (default `false`) is
+ * the caller-opt-in escape hatch this task's brief asked for "only if
+ * some caller genuinely needs it"; none does today, so it stays unset
+ * everywhere this recipe is mounted. `accessibilityLabel` is unaffected
+ * either way — it is built from the same `speakerLabel` regardless of
+ * whether this prop also renders it as text.
  *
  * **T356: the turn is now the redesign's `.blk`** — the one block shape
  * the whole session screen draws in (`../theme/block-shape.ts`). A user
@@ -86,7 +106,13 @@ export interface StreamingMessageProps {
  * block is a box rather than a floating tint; `usr` is the one kind the
  * artifact turns that ring off for.
  */
-export function StreamingMessage({ speaker, text, streaming, testId }: StreamingMessageProps) {
+export function StreamingMessage({
+  speaker,
+  text,
+  streaming,
+  showSpeakerLabel = false,
+  testId,
+}: StreamingMessageProps) {
   const { theme, motion, reduceMotion } = useTheme();
   const styles = useMemo(() => createStyles(theme, speaker), [theme, speaker]);
   const opacity = useSharedValue(1);
@@ -132,7 +158,7 @@ export function StreamingMessage({ speaker, text, streaming, testId }: Streaming
       accessibilityLabel={`${speakerLabel}${streaming ? " (responding)" : ""}: ${text}`}
       testID={testId}
     >
-      <Text style={styles.speaker}>{speakerLabel}</Text>
+      {showSpeakerLabel ? <Text style={styles.speaker}>{speakerLabel}</Text> : null}
       <View style={styles.textRow}>
         <Text style={styles.text}>{text}</Text>
         {streaming ? (

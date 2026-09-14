@@ -4,6 +4,7 @@ import {
   TRANSCRIPT_STATUSES,
   buildTranscriptStatusViewModel,
   deriveTranscriptStatus,
+  isRestingTranscriptStatus,
 } from "./status-model";
 
 /**
@@ -56,6 +57,20 @@ describe("buildTranscriptStatusViewModel", () => {
   it("always announces as '<label>: <statusText>'", () => {
     const model = buildTranscriptStatusViewModel("streaming");
     expect(model.accessibilityAnnouncement).toBe(`${model.label}: ${model.statusText}`);
+  });
+});
+
+describe("isRestingTranscriptStatus (UI-A3)", () => {
+  it("treats only 'connected' as the resting state TranscriptStatusStrip collapses on", () => {
+    expect(isRestingTranscriptStatus("connected")).toBe(true);
+  });
+
+  it("keeps every other declared status non-resting, including streaming", () => {
+    const nonResting = TRANSCRIPT_STATUSES.filter((status) => status !== "connected");
+    expect(nonResting.length).toBe(TRANSCRIPT_STATUSES.length - 1);
+    for (const status of nonResting) {
+      expect(isRestingTranscriptStatus(status)).toBe(false);
+    }
   });
 });
 

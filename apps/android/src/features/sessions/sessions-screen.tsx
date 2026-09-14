@@ -1078,8 +1078,12 @@ function createStyles(theme: NativeTheme) {
       paddingBottom: ACTION_ROW_PADDING_BOTTOM,
     },
     // A1's `+ New session`: the `newbtn` look — a raised surface chip at
-    // the artifact's 7px radius, drawn at `radii.control` (8), the
-    // nearest named step. `flex: 1` takes the row's remaining width.
+    // the artifact's `.chip { border-radius: 999px }`, a fully rounded
+    // pill. T385 drew it at `radii.control` (8) instead, behind a comment
+    // citing a small fixed corner radius that appears nowhere in the
+    // artifact's own CSS; UI-A3 corrected the token to `radii.full`, the
+    // same fully-round step the filter chips below already use.
+    // `flex: 1` takes the row's remaining width.
     newSessionButton: {
       minHeight: ACTION_BUTTON_SIZE,
       minWidth: ACTION_BUTTON_SIZE,
@@ -1087,7 +1091,7 @@ function createStyles(theme: NativeTheme) {
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: theme.spacing[3],
-      borderRadius: theme.radii.control,
+      borderRadius: theme.radii.full,
       backgroundColor: theme.colors.surface,
       ...ringShadow(theme, "card"),
     },
