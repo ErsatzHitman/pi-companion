@@ -130,6 +130,18 @@ export interface AgentQueueUpdate {
 }
 
 /**
+ * Whether an agent has a turn genuinely in progress right now (the slice
+ * of `AgentSnapshotPayload` that answers that question:
+ * `status === "running"`, `packages/protocol/src/messages.ts`'s
+ * `AgentStatusSchema`/`AGENT_LIFECYCLE_STATUSES`). See
+ * `AgentTurnClient.getAgentTurnStatus`'s own doc comment for why this is
+ * a separate question from whether `cancelAgent` can be called at all.
+ */
+export interface AgentTurnStatus {
+  readonly hasActiveTurn: boolean;
+}
+
+/**
  * The session-wide steering/follow-up **mode** (T38B1a, `QueueModeSchema` in
  * `packages/protocol/src/messages.ts`, mirroring Pi's `set_steering_mode`/
  * `set_follow_up_mode` RPC commands, plan.md §11.1's "queues and
@@ -258,6 +270,38 @@ export interface AgentTurnClient {
    * running).
    */
   cancelAgent(agentId: string): Promise<void>;
+
+  /**
+   * Reads whether this agent has a turn actually in progress right now
+   * (`AgentSnapshotPayload.status === "running"`,
+   * `packages/protocol/src/messages.ts`). This is a DIFFERENT question
+   * from whether `cancelAgent` above can be *called* — a wired client can
+   * always be asked to cancel, and the daemon itself is the one that
+   * rejects a cancel with no turn running (this interface's own
+   * `cancelAgent` doc comment) — this is whether there is genuinely
+   * something for it to cancel. The composer's Stop control needs both:
+   * a wired, non-aborting client is necessary but not sufficient, since a
+   * long-lived session that already finished its turns is still
+   * "wired" for the rest of its life. Optional, matching this
+   * interface's established "no client yet" seam: a client that omits
+   * this leaves the caller unable to distinguish idle from running, so
+   * `use-agent-turn-status.ts` treats that absence as "no turn" (the safe
+   * direction — hiding Stop when unknown, never showing it when unknown).
+   */
+  getAgentTurnStatus?(agentId: string): Promise<AgentTurnStatus | null>;
+
+  /**
+   * Subscribes to a live change in `getAgentTurnStatus`'s answer — the
+   * daemon's own `agent_update` push (T28B5's `onAgentModelSnapshotChange`
+   * reads the same event for the model/thinking slice of the identical
+   * `AgentSnapshotPayload`) — so a turn started or finished by *another*
+   * connected client, or by this session resuming with a turn already in
+   * flight, is reflected without a manual refresh. Optional and
+   * independent of `getAgentTurnStatus`, matching
+   * `onAgentModelSnapshotChange`'s own independence from its paired
+   * getter. Returns an unsubscribe function.
+   */
+  onAgentTurnStatusChange?(agentId: string, handler: (status: AgentTurnStatus) => void): () => void;
 
   /**
    * Subscribes to this agent's live queue-depth updates (T28B3).

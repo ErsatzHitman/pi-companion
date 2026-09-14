@@ -30,6 +30,7 @@ import type { DaemonSessionCostClient } from "../telemetry/daemon-session-cost-c
 import { SessionCostMeterContainer } from "../telemetry/SessionCostMeterContainer.js";
 import type { UseComposerOptions } from "./use-composer.js";
 import { useComposer } from "./use-composer.js";
+import { useAgentTurnStatus } from "./use-agent-turn-status.js";
 import { useComposerReferences } from "./use-composer-references.js";
 import type { ComposerAttachment } from "./use-attachments.js";
 import { formatAttachmentSize } from "./use-attachments.js";
@@ -443,6 +444,15 @@ export function Composer({
     client: composerOptions.client,
   });
 
+  // FIX-L2: the composer's Stop control needs to know not just that a
+  // client is wired (`canAbort` below), but that a turn is genuinely in
+  // progress right now — see `use-agent-turn-status.ts`'s own doc comment
+  // for the live-idle-session defect this closes.
+  const agentTurnStatus = useAgentTurnStatus({
+    sessionId: composerOptions.sessionId,
+    client: composerOptions.client,
+  });
+
   const dragAndDrop = useDragAndDrop({ onFiles: attachments.addFiles });
   const handlePaste = useComposerPaste({
     onFiles: attachments.addFiles,
@@ -836,7 +846,13 @@ export function Composer({
   const routingChipTestId = testId ? `${testId}-routing-chip` : undefined;
   const queueChipTestId = testId ? `${testId}-queue-chip` : undefined;
   const contextSummaryTestId = testId ? `${testId}-context-summary` : undefined;
-  const showAbort = canAbort || isAborting;
+  // FIX-L2: `canAbort` alone (`use-composer.ts`) is only "a client is
+  // wired and no abort is already in flight" — true for the entire
+  // lifetime of any live connection, including long after every turn has
+  // finished. Showing Stop also requires `agentTurnStatus.hasActiveTurn`,
+  // the daemon's own live turn-state signal, so the control disappears
+  // once a session goes idle instead of staying enabled forever.
+  const showAbort = (canAbort && agentTurnStatus.hasActiveTurn) || isAborting;
   const attachmentsTestId = testId ? `${testId}-attachments` : undefined;
   const dropHintTestId = testId ? `${testId}-drop-hint` : undefined;
   const contextRingTestId = testId ? `${testId}-context-ring` : undefined;

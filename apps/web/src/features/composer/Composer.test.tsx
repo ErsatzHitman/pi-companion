@@ -200,12 +200,26 @@ describe("Composer", () => {
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
 
-  it("shows an enabled Stop control once a turn-control client is wired, and it calls cancelAgent", async () => {
-    const user = userEvent.setup();
+  it("FIX-L2: hides Stop on an idle session even though a turn-control client is wired — the live-browser-audit defect (canAbort used to mean only 'a client is wired', true for a session's whole life after its turns finish)", async () => {
     const client = new FakeAgentTurnClient();
+    // A long-lived session that already ran and completed a turn: the
+    // client stays wired for the rest of the session's life, and the
+    // fake's own turn status defaults to idle, exactly like a real daemon
+    // reporting `status: "idle"` after a turn ends.
+    client.turnStatus = { hasActiveTurn: false };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
 
-    const stopButton = screen.getByRole("button", { name: "Stop" });
+    await waitFor(() => expect(client.getAgentTurnStatusCalls).toEqual(["session-1"]));
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it("shows an enabled Stop control once a turn is actually active, and it calls cancelAgent", async () => {
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    client.turnStatus = { hasActiveTurn: true };
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const stopButton = await screen.findByRole("button", { name: "Stop" });
     expect(stopButton.hasAttribute("disabled")).toBe(false);
 
     await user.click(stopButton);
@@ -216,12 +230,15 @@ describe("Composer", () => {
   it("reflects an in-flight abort promptly with visible, non-colour status text, keeping Stop visible but disabled", async () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
+    client.turnStatus = { hasActiveTurn: true };
     let resolveCancel: () => void = () => {};
     client.cancelAgentImpl = () =>
       new Promise((resolve) => {
         resolveCancel = resolve;
       });
     render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    await screen.findByRole("button", { name: "Stop" });
 
     await user.click(screen.getByRole("button", { name: "Stop" }));
 
