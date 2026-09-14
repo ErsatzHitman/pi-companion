@@ -55,7 +55,15 @@
 
 .pc-sessions-screen__pill--accent {
   background-color: var(--color-accent);
-  color: var(--color-accent-ink, #fff);
+  /* FIX-E1: was `--color-accent-ink`, a darker hover/active shade of
+     accent (`.pc-button--primary:hover`'s own use a few files over, in
+     `ui/primitives/primitives.css`) -- not a text-on-accent token, so it
+     rendered near-illegible near-blue-on-blue text (a real 1.33:1 axe
+     `color-contrast` violation against this same accent background, WCAG
+     AA needs 4.5:1). `--color-accent-contrast` is the token every other
+     accent-background control in this app already uses for its label
+     (`.pc-button--primary`'s own `color` above). */
+  color: var(--color-accent-contrast, #fff);
   box-shadow: none;
 }
 
