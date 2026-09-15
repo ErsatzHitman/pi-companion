@@ -20906,3 +20906,337 @@ re-apply it to the file.
 - [x] Both reference documents are byte-identical to the owner's supplied copies
 - [x] The real JavaScript observation is preserved in a citable location rather than in the snapshot
 - [x] No other reference-only document was modified
+
+## Wave 6 — the headline duplication bug found by instrumentation, a second UI parity pass, and a CI repair (2026-09-15)
+
+Two more owner reports drove this wave: the send-duplication bug Wave 4/5's `FIX-S1`–`FIX-S6` had
+narrowed but not eliminated was still reproducing live, and continued review against the same two
+reference mockups found a further round of pixel deltas. Every commit named below is in `git log
+e64901b..fc7ae62`; merge commits are not cited individually since none carries its own content.
+`FIX-CI5` (`0b744bf`, `e64901b`), the two commits immediately before that range, are the tail of
+Wave 5's own CI cleanup — out of this entry's scope, noted only so the range boundary above is
+explained rather than silently chosen. Two host-side environment findings the wave surfaced,
+neither a defect in this repository, are recorded at the end.
+
+### Messaging pipeline: the duplication bug, fixed after five wrong attempts
+
+#### FIX-S8 — An unsupported `extension_ui_request` was dropped without a reply, leaving Pi awaiting one forever
+
+`labels: phase-9, area: server` · `wave: P9-Z`
+
+**What shipped.** `PiRpcAgentSession`'s `extension_ui_request` handler warned once and returned,
+without ever calling `respondToExtensionUiRequest`/`cancelExtensionUiRequest`, whenever a method
+did not map to a known dialog (`mapExtensionUiRequestToPermission` returning `null` — either a
+truly unrecognised method, or a recognised one whose payload failed to map). Pi's own pending
+promise for that request id was left unresolved forever, matching the production symptom: a turn
+starts, records its extension entries, and never produces a reply. `cancelExtensionUiRequest`
+already existed on the runtime interface but was dead code — nothing called it. The fix routes
+every event reaching the unmapped branch through `cancelExtensionUiRequest` (a declined response),
+the same mechanism the dialog's own deny path already used; the once-per-method `console.warn` is
+unchanged.
+
+**Evidence.** Commit `868b335`; its new `agent.test.ts` case is recorded failing against the
+pre-fix code (the cancelled-request list stayed empty) and passing after, and confirms an
+unsupported `setStatus` call is answered while a handled dialog method (`select`) is unaffected.
+
+- [x] An unsupported or malformed `extension_ui_request` is always answered, never left pending
+- [x] `cancelExtensionUiRequest` is reachable dead code no longer
+
+#### FIX-S9 — The real cause of replies stopping: an unguarded `event.message.role` read crashed the whole worker
+
+`labels: phase-9, area: server` · `wave: P9-Z`
+
+**What shipped.** `rpc-types.ts` typed `message_update`/`message_start`/`message_end`'s `message`
+field as always present; a live daemon observed a real Pi-compatible runtime emit `message_update`
+with no `message` at all, and `PiRpcAgentSession.handleMessageUpdate`'s unguarded
+`event.message.role` read threw `TypeError: Cannot read properties of undefined (reading 'role')`
+uncaught, propagating through `handleSessionEvent` → `handleRuntimeEvent` →
+`PiCliRuntimeSession.emit` → `JsonlRpcProcess.handleLine` and killing the daemon worker outright
+(`DaemonRunner: Worker exited, code 1`) on every turn that hit it — the actual reason replies had
+stopped, not `FIX-S8`'s dropped-request symptom. The field is now `message?: PiAgentMessage`,
+matching observed wire behaviour; `handleMessageUpdate` still forwards a `text_delta`/
+`thinking_delta` to an already-streaming assistant message when one is active (dropping it would
+silently truncate the reply), and returns as a no-op otherwise, matching `handleMessageStart`/
+`handleMessageEnd`'s identical guard. `handleRuntimeEvent` (renamed from a plain dispatch) is now a
+try/catch boundary around every runtime event, logging `{ err, eventType }` and swallowing the
+throw instead of letting any single malformed event reach `PiCliRuntimeSession.emit`'s subscriber
+loop and take the worker down with it.
+
+**Evidence.** Commit `0968775`; its three new `agent.test.ts` regression cases are each recorded
+failing against the pre-fix source (the exact reported `TypeError`, in both the active-stream and
+no-active-stream cases, plus a forced-handler-throw escaping `emit()` uncaught) before passing
+against the fix.
+
+- [x] `message_update`/`message_start`/`message_end` with no `message` no longer crashes the worker
+- [x] An in-progress assistant stream still receives its delta when the event itself has no message
+- [x] One malformed runtime event can no longer take the whole daemon worker down
+
+#### FIX-S10 – FIX-S13 — Four attempts that hardened a real FIFO-merge mechanism without ever reproducing the owner's live repro
+
+`labels: phase-9, area: server` · `depends-on: FIX-S9` · `wave: P9-Z`
+
+**What shipped.** With the worker no longer crashing, live retesting kept showing the same
+duplicate user row, and each of these four commits found and fixed a real, independently verified
+race in the same family — a live-sent user row not being claimed by whichever importer
+independently re-derives it later — without that live repro actually clearing. `FIX-S10` (`ca2b9d5`)
+found that `AgentManager.recordSubmittedPrompt`, the live-turn append path, recorded a sent
+`user_message` with no `dedupeKey`, so `PiLiveTailWatcher`'s continuous raw-`.jsonl` watch (which
+independently re-derives the same row via `PiHistoryMapper.mapUserMessage`'s positional id) never
+found a match and appended a duplicate the instant the turn completed; the fix queues the live
+row's sequence (`registerPendingLiveUserMessage`) and has `appendHistoryBackfillTimelineItem` claim
+the oldest queued row FIFO (`mergePendingLiveUserMessage`) before treating an unseen id as new,
+identity staying strictly order-based, never text-based. `FIX-S11` (`f58611b`) found the same gap
+on the OTHER importer path — the RPC full-history replay (`primeTimelineFromLegacyProviderHistory`/
+`forceHydrateTimelineFromLegacyProviderHistory`) called `recordTimeline` directly, bypassing the
+FIFO entirely — and routed it through the same mechanism via a shared
+`recordReplayedTimelineItem` helper, walking the buffered replay backward
+(`computeReplayMergeEligibleIndices`) so only a provably-trailing run of unrecorded rows can ever
+claim a pending slot. `FIX-S12` (`bfb51b3`, `35624c8`, `810d6fb`, `04574ba`) extended the same FIFO
+to a second, independently-keyed echo racing a first one for the same pending row, added an
+at-scale regression test for that race, and widened the merge-eligibility window so a second racer
+still reaches the fallback. **None of it was the owner's actual bug.** `FIX-S13` (`9647b8f`) had by
+then formed a further theory — that `PiHistoryMapper`'s `userIndex` diverged between the two
+importers for `custom_message` rows — and disproved it directly: a new `history-mapper.test.ts`
+case proves `mapCustomMessage` never touches `userIndex` (only the `user` switch arm does) and that
+a `custom_message` row has no `message`-typed twin either feed disagrees on, both before and after
+the change; its own commit records the result plainly ("Root cause of the exact owner repro is NOT
+fully confirmed within the time budget"). `FIX-S13` still shipped one real, separate correctness
+fix found while investigating: `PiLiveTailWatcher.bootstrapTail` compared two different enumeration
+bases (a from-scratch mapper event count against the timeline store's current row count) via a
+positional `events.slice(knownCount)`; items with a stable, dedupe-derivable identity
+(`user_message`/`assistant_message` with a `messageId`, `tool_call`) are now always offered to the
+dedupe-aware `appendHistoryBackfillTimelineItem` regardless of position, and only identity-less
+items (`reasoning`) still rely on the positional count.
+
+**Evidence.** Commits `ca2b9d5`, `f58611b`, `bfb51b3`, `35624c8`, `810d6fb`, `04574ba` (oxfmt),
+`9647b8f`. Each of `FIX-S10`/`FIX-S11`/`FIX-S12`'s regression tests is recorded observed failing
+against a stash of the pre-fix source (reproducing the reported `toHaveLength(1)` got `2` shape)
+before passing against its own fix; `FIX-S13`'s new test is recorded passing BEFORE its own change,
+which is what falsified the theory rather than confirmed it.
+
+- [x] Every known import path (live tail-watch, RPC full-history replay, a second racing echo) now
+      claims a pending live row FIFO instead of appending a duplicate
+- [x] A falsified theory is reported as falsified, with the test that disproved it, not silently
+      dropped or shipped as if it were the fix
+- [x] `bootstrapTail`'s real, separate enumeration-basis mismatch is fixed and disclosed as a
+      finding made while investigating a different hypothesis, not conflated with it
+
+#### FIX-S14 — The actual fix: an unkeyed live-stream echo, found by instrumenting the live daemon
+
+`labels: phase-9, area: server` · `depends-on: FIX-S13` · `wave: P9-Z`
+
+**What shipped.** Found by instrumenting the live daemon — a temporary probe logging every
+`user_message` append with its `messageId`, `dedupeKey` and call stack — not by further reasoning
+from the timeline-store tests every prior attempt had been reasoning from. One send produced two
+real appends: the live composer row from `recordSubmittedPrompt` (id
+`composer-<clientMessageId>-N`), and the agent stream's OWN echo of the same message via
+`onStreamTimelineEvent`, carrying Pi's native entry id — NEITHER call site passed a `dedupeKey`.
+`onStreamTimelineEvent`'s existing reconciliation matched only on `clientMessageId`, which Pi's own
+echo frequently omits, so the two rows never merged. The fix routes a live stream `user_message`
+through the same order-only pending FIFO `FIX-S10` built (`mergePendingLiveUserMessage`), rather
+than adding a fifth, independently-keyed dedupe path.
+
+**Evidence.** Commits `261fbd1`, `ffa8aa7` (regression tests). Verified live, not only against unit
+tests: two real sends produced exactly two rows, one append each, stable across a page reload.
+
+- [x] A live-sent message and the agent stream's own echo of it merge onto one row, with no
+      `dedupeKey` required on either side
+- [x] Verified against a real, live daemon and a real reload, not only unit tests
+
+### Web/Android UI reference-parity, round two
+
+#### UI-P0 — The frozen Android UI reference restored to the owner's byte-exact original
+
+`labels: ui-reference, frozen-snapshot` · `wave: P9-Z`
+
+**What shipped.** `docs/ui-reference/pi-companion-app.html` had drifted from the owner's supplied
+copy by one line in the mockup's own inline script (`ctxRing.className = ...` changed to
+`ctxRing.setAttribute("class", ...)`, introduced by an earlier commit). The change is correct as
+JavaScript — `ctx-ring` is an `<svg>` element and `SVGElement.className` is a read-only
+`SVGAnimatedString`, so the original assignment was a no-op — but this repository's rule for a
+reference-only document is that it must not be edited even to fix something wrong in it, or the
+next reader can no longer tell the owner's content from ours without git blame. The file is
+restored to the owner's byte-exact original; the real observation is recorded citably in this
+ledger instead of being layered onto the snapshot.
+
+**Evidence.** Commit `30183d3`.
+
+- [x] Both reference documents are byte-identical to the owner's supplied copies
+- [x] The real JavaScript observation is preserved in a citable location, not the snapshot
+
+#### UI-P1 – UI-P4 — Composer chip overlap, the tall empty composer box, the shell's dead area, and a two-row composer foot
+
+`labels: phase-9, area: web` · `depends-on: UI-P0` · `wave: P9-Z`
+
+**What shipped.** `UI-P1` (`648cbbb`, `fbb3fb4`) fixed two defects: metadata chips still overlapped
+despite an earlier `min-width: 0` because the flex item flooring at its content width was actually
+the shared `Popover` primitive's own wrapper (`.pc-popover`, `display: inline-block`, no
+`min-width`) one DOM level below where that earlier fix landed — scoped under
+`.pc-composer__meta-chip` rather than in the shared primitive, since `Popover` has other callers;
+and `PromptBar`'s `<textarea>` set no `rows` attribute, so HTML's default of 2 applied against a
+reference shipping `rows="1"`, producing a tall, mostly-empty box — fixed with an explicit
+height/min-height computed from the element's own font size and line height, scoped to
+`.pc-composer .pc-prompt-bar__input` only. It also corrected the metadata chip's own radius/fill
+(`var(--radius-full)`/transparent) to the reference `.chip` rule's 6px radius and filled `--inset`
+background — a full pill belongs to a different reference class (`.pill`), not `.chip`. `UI-P0`
+here is the Android reference-restore above, landed between `FIX-S9` and this composer work as the
+same push's next commit rather than a `UI-P*` composer fix itself. `UI-P3` (`817793c`) made
+`.shell__center` a flex column: it had never been one, so `.pc-transcript`'s existing
+`flex: 1 1 auto; min-height: 0` never activated and it fell back to its literal `height: 60vh`,
+leaving a dead gap below the composer instead of the reference's transcript-fills-the-rest,
+composer-pinned-to-bottom layout. `UI-P4` (`4789fa1`) splits the composer foot into two CSS rows
+(chips, then `PromptBar`'s own state/hint/Stop row) via `flex-wrap` and `order`/`flex-basis: 100%`
+on the chip group, with no DOM change — the metadata chips, state sentence, queued count, keyboard
+hint and Stop button had all been truncating in one shared row at 1461×785.
+
+**Evidence.** Commits `648cbbb`, `fbb3fb4`, `817793c`, `30183d3`, `4789fa1`.
+
+- [x] The metadata-chip row's own flex items can shrink below their content width instead of
+      painting over their neighbours, at every DOM level the shared `Popover` wrapper sits at
+- [x] The composer textarea starts at one line, matching the reference, not HTML's two-line default
+- [x] `.pc-transcript` fills the remaining centre-column height and the composer sits pinned to the
+      bottom, with no dead gap
+- [x] The composer foot reads as two rows (chips, then state/hint/Stop), truncating nothing at
+      1461×785
+
+#### UI-P5 / UI-P6 — A regression test pinning the user bubble to the node the CSS actually targets; the assistant meta line dropped
+
+`labels: phase-9, area: web` · `wave: P9-Z`
+
+**What shipped.** `UI-P5` (`e2c123f`) found that a reported live measurement had queried
+`.pc-message--user`'s own text child for background/radius/padding, properties the reference
+deliberately declares on the PARENT node (`.turn-user .body`/`.prose` in the mockup,
+`.pc-message--user` here) — `recipes.css` and `StreamingMessage.tsx` already carried the correct,
+token-sourced treatment on the right node, it was the earlier check that queried the wrong one. A
+throwaway `jsdom` probe additionally proved this suite's `jsdom` environment does not resolve
+`var(...)` in `getComputedStyle` at all, the same _check that cannot fail_ gap `recipes.test.ts`
+already documents for a sibling rule — the most plausible way an earlier pass called the bubble
+already correct without the real DOM ever proving it. The new `message-row.test.tsx` coverage
+instead reads the real `recipes.css` text for the token-sourced rule and asserts the row's own
+stable `data-testid` node carries `pc-message--user`, with `.pc-message__text` a descendant of
+that exact node. `UI-P6` (`697cbe3`) stops rendering the mono `PI hh:mm:ss` meta line the app had
+been showing above every assistant message: the reference's `blockHtml` renders a `.meta` line
+(who+time) for a user turn, who-only for a `think` turn, and NO meta line at all for assistant text
+— just `<div class="prose">`. `TranscriptMeta`/`message-row.tsx` gain a `visible` prop (default
+`true`); assistant rows pass `visible={false}`, which suppresses the visible box but still renders
+a visually-hidden `<time>` — nothing else on the row conveys send time, but the existing
+`role=group` `aria-label` already carries speaker identity regardless of this line's visibility, so
+nothing is lost for assistive technology.
+
+**Evidence.** Commits `e2c123f`, `697cbe3`; the latter's `message-row.test.tsx` update asserts the
+visible `.pc-transcript__who` label's absence on assistant rows, that the same `-timestamp` testid
+still exists but now carries `pc-visually-hidden`, and that the user row's timestamp stays visible.
+
+- [x] The user-bubble regression test queries the node the CSS actually targets, with a documented
+      `jsdom` `var()`-resolution gap disclosed rather than papered over
+- [x] Assistant turns render no visible meta line; the timestamp remains for screen readers via the
+      existing accessible name
+
+#### UI-P8 — Android: the per-message timestamp caption hidden, not deleted
+
+`labels: phase-9, area: android` · `wave: P9-Z`
+
+**What shipped.** `docs/ui-reference/pi-companion-app.html`'s transcript replay draws no timestamp
+or speaker label on any turn kind — user bubble, assistant prose, `think`, or a tool block —
+unlike Android's `message-row.tsx`, which showed a visible caption under every row. The caption is
+visually hidden (the RN equivalent of web's `.pc-visually-hidden`) rather than removed: the full
+dated time stays the row's accessible name via `accessibilityLabel`, and every existing `testID`
+and assertion is unchanged.
+
+**Evidence.** Commit `2a94bc9`.
+
+- [x] No visible timestamp or speaker label renders on any Android transcript row
+- [x] The full timestamp remains available to assistive technology via `accessibilityLabel`
+
+#### UI-P7 / UI-P9 / UI-P10 / UI-P11 — Header typography, the right rail's box model, the centre column's box model, and a `+` icon on New session
+
+`labels: phase-9, area: web` · `wave: P9-Z`
+
+**What shipped.** `UI-P7` (`499dc6b`) matches `.pc-session-head`'s background, title
+`text-wrap: balance` and letter-spacing, and the session status pill's content gap/padding/tracking
+to the reference's `.main-head`/`.pill`, each untokened literal added as a rule-scoped custom
+property in the pattern `session-resume.css` already uses. `UI-P9` (`51639c9`) matches the right
+rail's box model to the reference's `.live`/`.live-head`/`.live-scroll`: `.shell__rail--extension`
+becomes `display: grid` with its own padding/overflow (left/session rail untouched), a new
+`.shell__live-head` carries the reference's exact head padding, and a new `.shell__live-scroll`
+class (wrapping the rail's non-head content in `root-route.tsx`/`shell.tsx`) mirrors the
+reference's scroll region — every `data-testid`, `aria-label` and keyboard/collapse behaviour
+preserved, since every existing query is subtree-scoped. `UI-P10` (`72f7591`) matches the centre
+column's box model: `.shell__center` had `padding: 16px` and a transparent background against the
+reference's `.main`'s `padding: 0` on `var(--page)`; the column now insets nothing and paints
+`--color-page`, each child owning its own padding from the reference's own rules, with the
+composer split into a full-width band and a centred, `max-width`-grown inner column so the prompt
+bar's content measure does not shrink under the new side padding. `UI-P11` (`755c59f`, `7e82ee8`)
+adds a leading `+` icon to the New Session button and states the composer's page backdrop
+(`var(--page)`) explicitly, matching the one field a live re-measurement still showed differing
+after `UI-P10` — visually identical today since `.shell__center` already paints the same token
+behind it, stated anyway so the bar stays opaque if scrolling content is ever allowed beneath it.
+
+**`UI-P11` notably REFUSED four of five requested chrome items rather than faking them**, as
+reported at the time rather than shipped silently: no version constant reaches the web bundle, so a
+version readout has nothing real to display; no lightweight payload carries a HEAD commit SHA to
+the client; the web app has no working dictation path, so a mic button would be a dead control with
+nothing behind it; and the context-usage ring turned out to be already wired to live telemetry, so
+the request to wire it was already satisfied. Only the `+` icon and the explicit backdrop shipped.
+
+**Evidence.** Commits `499dc6b`, `51639c9`, `72f7591`, `755c59f`, `7e82ee8`.
+
+- [x] Header title tracking/wrap and status-pill spacing match the reference's exact (untokened)
+      values via rule-scoped custom properties
+- [x] The right rail's head and scroll regions match `.live`/`.live-head`/`.live-scroll`, with every
+      existing testid, label and keyboard behaviour preserved
+- [x] The centre column insets nothing at the column level; each child owns its own padding
+- [x] New Session shows a leading `+` icon; the composer states its backdrop explicitly
+- [x] Four of five requested chrome items are declined in writing, each for a stated reason, rather
+      than shipped as a fake control or a fabricated payload
+
+### CI
+
+#### FIX-CI6 — Repairing the two red jobs on CI run 34946326247
+
+`labels: ci, guard-repair` · `wave: P9-Z`
+
+**What shipped.** Two independent red jobs, each repaired at its real cause. The `npm audit`
+baseline guard failed because four already-baselined `@react-navigation` advisories (`bottom-tabs`,
+`elements`, `native`, `native-stack`), each already carrying a named owner and reason, had their
+version RANGES drift upward (e.g. `bottom-tabs` `<=7.18.18` → `<=7.19.0`) — the same shape an
+earlier `image-size` repair had already fixed once. The baseline's ranges are re-synced to match;
+the guard's matching is deliberately NOT widened, and no new advisory is hidden by the change.
+`server-tests (windows-latest)` failed on `src/utils/checkout-git.commits.test.ts` with `EBUSY:
+resource busy or locked, rmdir` plus a 30s timeout and zero assertion failures, at a commit
+touching only `apps/web` CSS — this repository's documented contention signature, not a
+regression. Measured from the file's own source: it drives real `git` subprocesses
+(`execFileSync`/`execSync`/`spawnSync`) inside a `mkdtempSync` temp directory it then `rmSync`s
+recursively, the identical shape its own sibling `checkout-git.test.ts` was already isolated in the
+serial test lane for. Run alone, it takes 15.73s against CI's 30s budget — a thin margin while
+racing roughly 250 sibling files for CPU and, on Windows, file-handle release — so it moves to the
+serial lane beside its sibling; no timeout was raised, for the reason this repository's guidance
+already gives about every other member of that lane.
+
+**Evidence.** Commit `fc7ae62`. Locally: every advisory `npm audit` reports is covered by the
+re-synced baseline; both `checkout-git` files pass together in the serial lane (155 passed, 1
+skipped); `oxfmt --check` clean.
+
+- [x] The `@react-navigation` baseline's ranges are re-synced, with matching not widened and no
+      advisory newly hidden
+- [x] `checkout-git.commits.test.ts` moved to the serial lane beside its sibling, for the same,
+      measured real-subprocess-plus-temp-directory shape, with no timeout raised
+
+### Host-side environment findings — not defects in this repository
+
+**The host's `pi-dynamic-workflows` extension was looping, driving thousands of model calls over
+hours.** It injected an empty, `display: false` `workflow-delivery-probe` custom message, which
+provoked an assistant turn, which triggered the next probe — a self-sustaining loop external to
+this repository's own code. Recorded here as a finding for the owner, not filed as a task against
+any package in this tree.
+
+**The host's model provider is consequently returning assistant messages with empty content.**
+Measured, not assumed: 2062 assistant rows with zero content parts (`content: []`) across multiple
+sessions and multiple models on this host. This is upstream of anything this repository's code
+touches, the same category of disclosed-not-fixed finding Wave 5's own "Lessons from this wave"
+section recorded for the host's Pi agent falling silent partway through a night — checked directly
+against the underlying session data rather than assumed to be a rendering defect in `apps/web` or
+`apps/android`.
+
+- [x] Both findings are recorded as host/environment conditions, separate from the product defects
+      above, with the measurement that grounds each one stated plainly
