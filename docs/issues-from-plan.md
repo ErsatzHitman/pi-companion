@@ -20812,3 +20812,61 @@ through the night.** Checked directly rather than assumed: the Pi session's own 
 no assistant message for those turns, the timeline renders exactly what the file contains, the
 daemon log is clean, and the model id and credential both still resolve on that host — the gap is
 upstream of anything this repository's code touches.
+
+### `FIX-CI1` – `FIX-CI4`: repairing the first CI run this wave was allowed to finish
+
+labels: ci, guard-repair
+depends-on: `UI-A5`, `UI-W5`, `FIX-L3`
+wave: P9-Y
+
+**What shipped.** Every CI run earlier in this wave was cancelled by the next push before it
+could report, so the first run to actually finish exposed four independent red jobs at once.
+Each was repaired at its real cause rather than by relaxing the check that caught it:
+
+- `FIX-CI1` — `guard / import-graph orphan count ceiling` reported 27 orphans against a
+  committed ceiling of 26. The 27th was `apps/web/src/features/telemetry/index.ts`, a real,
+  documented feature barrel that nothing imported because `Composer` reached past it straight to
+  the container module. `run-orphan-modules.mjs`'s own comment records the identical case for
+  `apps/web/src/features/settings/index.ts` and the resolution chosen for it — wire the barrel —
+  and explicitly forbids raising the ceiling to make a red build green, so the barrel was wired
+  the same way.
+- `FIX-CI2` — `android-tests` failed on a source-regex contract test in
+  `apps/android/e2e/flows/files-and-terminal.contract.test.ts`. `UI-A5`'s adoption of the shared
+  `ScreenBar` recipe wrapped `TerminalScreen`'s returned JSX in an outer view, moving the node
+  the regex anchored on. The guarded behaviour itself — the `resolvedWebview.isAvailable`
+  branch and the `EmptyState` it renders — was verified byte-for-byte intact first, so the pin
+  was re-anchored to the current wrapper without loosening any of its literals.
+- `FIX-CI3` — `web-tests` and `web-unit-tests (windows-latest)` failed on the same assertion, a
+  per-element rail testid. `UI-W5`'s Live-pane rebuild deliberately routes a workflow-namespaced
+  progress element into the Workflow card as a phase row rather than through the generic
+  progress renderer, which the reference mockup confirms is the intended shape. The regression
+  hypothesis was checked before the staleness one: the element, its honest step counter and its
+  payload-derived status all reach the DOM. The test was rewritten against the real current DOM
+  with its original guarantees kept, including the "never fabricate a total" assertion.
+- `FIX-CI4` — `guard / npm audit findings stay inside the documented baseline` failed because a
+  baselined `image-size` advisory's range had narrowed from `*` to `<=2.0.2`, which the guard
+  reports as a stale entry and an unbaselined advisory at once. `npm audit fix` without
+  `--force` does not resolve it (`fixAvailable` names a semver-major Expo bump, the same blocker
+  every other Android-toolchain entry in that file already carries), so the existing entry's
+  range was re-synced rather than a finding silenced.
+
+**Evidence.** `guard / import-graph orphan count ceiling` and `guard / npm audit findings stay
+inside the documented baseline` both reported green on the real CI runs following their fixes.
+Locally: the orphan walker reports the count back at its ceiling, the audit runner exits 0, the
+Android contract file passes in full, and the web extensions/rail/routes suites pass together.
+
+**A disclosed, deliberately unrepaired failure.** The same run flagged
+`guard / format:check per commit (this run's own range)` at commit `b373824`, which was
+format-red as of its own content; the job that authored it corrected the formatting in a
+_follow-up_ commit. That guard deliberately does not accept a later repair — it compares every
+commit against its own parent and never reads a subsequent one, which is its stated acceptance
+criterion, not an oversight. Its prescribed remedy is to amend or squash "while the range is
+still local", and that window had already closed: the commit was on `main`, and this repository
+forbids force-pushing `main`. Because CI scopes this guard to each push's own range
+(`github.event.before..HEAD`), later runs do not re-examine that commit, so it is recorded here
+rather than quietly left for a future reader to rediscover.
+
+- [x] Every red job was repaired at its cause, with no check relaxed to obtain green
+- [x] The two guards whose fixes had already reached CI were confirmed green there, not inferred
+- [x] The one failure that could not be repaired without rewriting pushed history is disclosed
+      above, with the reason it cannot be
