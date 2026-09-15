@@ -259,6 +259,8 @@ interface StartTurnResult {
 
 interface PiRpcAgentSessionOptions {
   runtimeSession: PiRuntimeSession;
+  /** FIX-S9: used by `handleRuntimeEvent`'s error boundary -- see there. */
+  logger: Logger;
   config: AgentSessionConfig;
   initialState: PiSessionState;
   /**
@@ -1424,6 +1426,7 @@ export class PiRpcAgentSession implements AgentSession {
 
   constructor(options: PiRpcAgentSessionOptions) {
     this.runtimeSession = options.runtimeSession;
+    this.logger = options.logger;
     this.config = options.config;
     this.state = options.initialState;
     this.capabilities = options.capabilities;
@@ -1499,6 +1502,7 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private readonly runtimeSession: PiRuntimeSession;
+  private readonly logger: Logger;
   private readonly config: AgentSessionConfig;
   private readonly cleanup?: () => void;
   private readonly extensionTimeoutMs: number;
@@ -2741,6 +2745,30 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private handleRuntimeEvent(event: PiRuntimeEvent): void {
+    // FIX-S9: one malformed event from the Pi subprocess must not be able
+    // to kill the daemon worker. This is the narrowest boundary that still
+    // sees every event type this session dispatches on (so it can log
+    // which one failed) while stopping a throw before it reaches
+    // `PiCliRuntimeSession.emit`'s subscriber loop and the transport layers
+    // beneath it (`JsonlRpcProcess.handleLine`, the raw stdout socket
+    // handler) -- none of those have any notion of what a "session event"
+    // even is, so recovering there would put domain-specific error
+    // handling in generic plumbing instead of here, where it belongs. A
+    // throw is never re-thrown and never swallowed silently: it is logged
+    // loudly (error level, with the event type) so a genuine protocol
+    // violation stays visible, and the session -- and worker -- stays
+    // alive to process the next event.
+    try {
+      this.dispatchRuntimeEvent(event);
+    } catch (error) {
+      this.logger.error(
+        { err: error, eventType: event.type },
+        "Pi runtime event handler threw; dropping this event and continuing",
+      );
+    }
+  }
+
+  private dispatchRuntimeEvent(event: PiRuntimeEvent): void {
     if (isExtensionUiRequestEvent(event)) {
       this.handleExtensionUiRequest(event);
       return;
@@ -3043,12 +3071,32 @@ export class PiRpcAgentSession implements AgentSession {
     event: Extract<PiAgentSessionEvent, { type: "message_update" }>,
     turnId: string | undefined,
   ): void {
-    if (event.message.role !== "assistant") {
+    // FIX-S9: `event.message` can be absent -- a live daemon observed a
+    // real Pi-compatible runtime emit `message_update` with no `message`
+    // at all, which crashed the previously-unguarded `event.message.role`
+    // read below and took the whole worker down (see rpc-types.ts's
+    // comment on `PiAgentSessionEvent`). Two cases, chosen deliberately
+    // rather than optional-chaining this into silence:
+    //  - `message` absent but an assistant message is ALREADY streaming
+    //    (`activeAssistantMessageId` set): a text/thinking delta
+    //    unambiguously belongs to that stream regardless of whether this
+    //    particular event carries a message, so it is still emitted below
+    //    -- dropping it would silently truncate the reply, which is its
+    //    own bug.
+    //  - `message` absent and no active stream: there is no role to check
+    //    and nothing to attribute the delta to, so this returns.
+    const message = event.message;
+    if (message !== undefined && message.role !== "assistant") {
       return;
     }
+    if (message === undefined && this.activeAssistantMessageId === null) {
+      return;
+    }
+    const assistantMessage =
+      message !== undefined && message.role === "assistant" ? message : undefined;
     if (event.assistantMessageEvent.type === "text_delta") {
       // Pi-compatible runtimes may emit updates without a preceding message_start.
-      this.activeAssistantMessageId ??= event.message.responseId || randomUUID();
+      this.activeAssistantMessageId ??= assistantMessage?.responseId || randomUUID();
       const delta = event.assistantMessageEvent.delta ?? "";
       const key = this.activeAssistantMessageId;
       if (key) {
@@ -3081,8 +3129,13 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private handleMessageStart(event: Extract<PiAgentSessionEvent, { type: "message_start" }>): void {
-    if (event.message.role === "assistant") {
-      this.activeAssistantMessageId = event.message.responseId || null;
+    // FIX-S9: `event.message` can be absent (see rpc-types.ts's comment on
+    // `PiAgentSessionEvent`). With no message there is no role to key a
+    // stream off of, so this is a no-op -- the same way every other
+    // message role already falls through this function untouched.
+    const message = event.message;
+    if (message?.role === "assistant") {
+      this.activeAssistantMessageId = message.responseId || null;
       if (
         this.activeAssistantMessageId &&
         !this.assistantTextByResponseId.has(this.activeAssistantMessageId)
@@ -3096,20 +3149,23 @@ export class PiRpcAgentSession implements AgentSession {
     event: Extract<PiAgentSessionEvent, { type: "message_end" }>,
     turnId: string | undefined,
   ): void {
-    if (event.message.role === "assistant") {
+    // FIX-S9: `event.message` can be absent (see rpc-types.ts's comment on
+    // `PiAgentSessionEvent`). Binding it to a local lets both branches
+    // below narrow on `message?.role` without re-reading a possibly
+    // undefined `event.message` -- with no message, neither branch
+    // matches and this is a no-op, same as any other unhandled role.
+    const message = event.message;
+    if (message?.role === "assistant") {
       const streamedId = this.activeAssistantMessageId;
       const accumulated = streamedId ? (this.assistantTextByResponseId.get(streamedId) ?? "") : "";
       if (streamedId) {
         this.assistantTextByResponseId.delete(streamedId);
       }
-      const responseId = (event.message as Extract<PiAgentMessage, { role: "assistant" }>)
-        .responseId;
+      const responseId = message.responseId;
       if (responseId && responseId !== streamedId) {
         this.assistantTextByResponseId.delete(responseId);
       }
-      const finalText = getAssistantMessageText(
-        event.message as Extract<PiAgentMessage, { role: "assistant" }>,
-      );
+      const finalText = getAssistantMessageText(message);
       if (finalText.length > 0 && streamedId && accumulated !== finalText) {
         const newId = responseId || randomUUID();
         this.emit({
@@ -3128,12 +3184,12 @@ export class PiRpcAgentSession implements AgentSession {
       this.activeAssistantMessageId = null;
       return;
     }
-    if (event.message.role === "custom") {
-      if (Reflect.get(event.message, "display") === false) {
+    if (message?.role === "custom") {
+      if (Reflect.get(message, "display") === false) {
         this.completeTurn(turnId, []);
         return;
       }
-      const text = getUserMessageText(event.message.content);
+      const text = getUserMessageText(message.content);
       if (text) {
         this.emit({
           type: "timeline",
@@ -3346,6 +3402,7 @@ export class PiRpcAgentClient implements AgentClient {
       const supportsFileRewind = await this.checkpoints.isSupported(config.cwd);
       const session = new PiRpcAgentSession({
         runtimeSession,
+        logger: this.logger,
         config,
         initialState,
         agentId: launchContext?.agentId,
@@ -3413,6 +3470,7 @@ export class PiRpcAgentClient implements AgentClient {
       const supportsFileRewind = await this.checkpoints.isSupported(resumeConfig.config.cwd);
       const session = new PiRpcAgentSession({
         runtimeSession,
+        logger: this.logger,
         config: resumeConfig.config,
         initialState,
         agentId: launchContext?.agentId,

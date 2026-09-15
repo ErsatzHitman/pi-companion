@@ -820,6 +820,93 @@ describe("PiRpcAgentSession", () => {
     });
   });
 
+  // FIX-S9 regression: a live daemon observed a real message_update event
+  // with NO `message` field at all, which threw inside the previously
+  // unguarded `event.message.role` read and killed the whole worker.
+  test("FIX-S9: emits a message_update delta with no message while a stream is active", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("hello");
+    fakeSession.emit({
+      type: "message_start",
+      message: { role: "assistant", content: [], responseId: "response-1" },
+    });
+
+    // No `message` at all on this update -- only the active stream
+    // identifies whose delta this is.
+    expect(() =>
+      fakeSession.emit({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "chunk" },
+      }),
+    ).not.toThrow();
+
+    expect(events.timelineItems()).toEqual([
+      { type: "assistant_message", text: "chunk", messageId: "response-1" },
+    ]);
+  });
+
+  test("FIX-S9: drops a message_update with no message and no active stream without throwing", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("hello");
+
+    // No message_start preceded this, so there is no active stream to
+    // attribute the delta to and no role to check -- must be a safe no-op.
+    expect(() =>
+      fakeSession.emit({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "chunk" },
+      }),
+    ).not.toThrow();
+
+    expect(events.timelineItems()).toEqual([]);
+  });
+
+  test("FIX-S9: contains a throw from one runtime event and still processes the next one", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    await session.startTurn("hello");
+
+    // Force the very next session-event dispatch to throw, simulating a
+    // handler bug on a malformed/unexpected event -- proving the error
+    // boundary in handleRuntimeEvent, not just this one message_update fix.
+    const sessionInternals = session as unknown as {
+      handleSessionEvent: (event: unknown) => void;
+    };
+    const originalHandleSessionEvent = sessionInternals.handleSessionEvent;
+    let callCount = 0;
+    sessionInternals.handleSessionEvent = (event: unknown) => {
+      callCount += 1;
+      if (callCount === 1) {
+        throw new Error("FIX-S9 regression test: simulated handler throw");
+      }
+      originalHandleSessionEvent.call(session, event);
+    };
+
+    // The forced throw must not escape emit() (i.e. must not propagate into
+    // the runtime/socket layer) and must not wedge the session.
+    expect(() => fakeSession.emit({ type: "turn_start" })).not.toThrow();
+
+    fakeSession.emit({
+      type: "message_start",
+      message: { role: "assistant", content: [], responseId: "response-1" },
+    });
+    fakeSession.emit({
+      type: "message_update",
+      message: { role: "assistant", content: [], responseId: "response-1" },
+      assistantMessageEvent: { type: "text_delta", delta: "still alive" },
+    });
+    fakeSession.finishTurn();
+
+    await events.nextTurnCompletion();
+    expect(events.timelineItems()).toEqual([
+      { type: "assistant_message", text: "still alive", messageId: "response-1" },
+    ]);
+  });
+
   test("uses a response id that first appears on the assistant update", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();

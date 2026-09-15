@@ -357,11 +357,19 @@ export type PiAgentSessionEvent =
   | { type: "agent_start" }
   | { type: "turn_start" }
   | { type: "turn_end"; message?: PiAgentMessage; toolResults?: unknown[] }
-  | { type: "message_start"; message: PiAgentMessage }
-  | { type: "message_end"; message: PiAgentMessage }
+  // FIX-S9: `message` is optional on these three, not required as the
+  // shape below would otherwise suggest -- a live daemon observed a real
+  // Pi-compatible runtime emit at least one `message_update` with no
+  // `message` at all. Nothing upstream of `cli-runtime.ts`'s raw
+  // `as PiRuntimeEvent` cast validates a subprocess line's shape before it
+  // reaches `agent.ts`'s `handleMessageStart`/`handleMessageEnd`/
+  // `handleMessageUpdate`, so every one of those tolerates the absence
+  // rather than assuming the shape below.
+  | { type: "message_start"; message?: PiAgentMessage }
+  | { type: "message_end"; message?: PiAgentMessage }
   | {
       type: "message_update";
-      message: PiAgentMessage;
+      message?: PiAgentMessage;
       assistantMessageEvent: PiAssistantMessageEvent;
     }
   | {
