@@ -282,24 +282,34 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * really there.
  *
  * **The metadata row (T388, superseding T386's ring-opens-the-menu
- * design).** Model/effort, per-message routing, and the session-wide
- * queue-delivery mode are no longer inside the context ring's popover —
- * the ring now opens only a context-usage summary. Instead they render
- * as three compact chips (the mockup's `.chip`) on ONE metadata row
- * directly under the prompt row, immediately after the state sentence:
- * `state sentence · [Model] [Routing] [Queue] · keyboard hint · Stop`.
- * `PromptBar` owns that single foot row already (`.pc-prompt-bar__foot`),
- * so this component fills it through `PromptBar`'s `metaChips`/`footEnd`
- * slots rather than rendering a second row of its own — there is exactly
- * one foot row in the DOM. Each chip is a real button
- * (`aria-haspopup`/`aria-expanded`, via the unmodified `Popover`
- * primitive) opening the SAME picker component T386 mounted in the
- * sheet — `ModelThinkingPicker`, `PromptRoutingPicker`, `QueueModePicker`
- * — unchanged, just re-anchored. The chip's own visible text
- * (`describeModelChipLabel`/`describeRoutingChipLabel`/
- * `describeQueueChipLabel` below) is a live, collapsed summary of
- * whatever that picker currently reports, including its own explained
- * unavailable/loading/error states — never a static label.
+ * design; split into two visual lines by UI-P4).** Model/effort,
+ * per-message routing, and the session-wide queue-delivery mode are no
+ * longer inside the context ring's popover — the ring now opens only a
+ * context-usage summary. The owner's explicit web divergence from the
+ * reference (unlike Android, which keeps them in the ring) is to render
+ * them as three compact chips (the mockup's `.chip`) directly under the
+ * prompt row instead — still through `PromptBar`'s `metaChips` slot, so
+ * there is exactly one foot row in the DOM (`.pc-prompt-bar__foot`), but
+ * `composer.css` (UI-P4) now reflows that one row into two VISUAL lines
+ * with `flex-wrap` plus `order`/`flex-basis` on the chip group, rather
+ * than one crowded line: line 1 is the three chips, left-aligned, each
+ * showing its full label and value; line 2 is `PromptBar`'s own
+ * `footer`/queued-count/keyboard-hint/`footEnd` content, unchanged — the
+ * mockup's own `.composer-foot` (state sentence · spacer ·
+ * `⏎ send · ⇧⏎ newline · Esc interrupt`) plus this repo's queued-count
+ * and Stop additions. Cramming all five onto one line truncated nearly
+ * every one of them at 1461x785 (measured live, see `composer.css`'s
+ * UI-P4 comment for the exact figures); see that file for the width
+ * arithmetic behind why two lines fit without truncation at 1461x785 and
+ * 1280 wide. Each chip is a real button (`aria-haspopup`/`aria-expanded`,
+ * via the unmodified `Popover` primitive) opening the SAME picker
+ * component T386 mounted in the sheet — `ModelThinkingPicker`,
+ * `PromptRoutingPicker`, `QueueModePicker` — unchanged, just re-anchored.
+ * The chip's own visible text (`describeModelChipLabel`/
+ * `describeRoutingChipLabel`/`describeQueueChipLabel` below) is a live,
+ * collapsed summary of whatever that picker currently reports, including
+ * its own explained unavailable/loading/error states — never a static
+ * label.
  *
  * "Stop" (T28B2) is a second, distinctly-labelled control from "Send" —
  * cancelling the agent's active turn rather than submitting the draft —

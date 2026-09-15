@@ -108,11 +108,84 @@
  * (unmodified primitive); these rules only restyle that trigger button,
  * scoped to this wrapper so the primitive's own default (used elsewhere,
  * e.g. `CommandSearch`) is untouched. */
+
+/* UI-P4: the owner's explicit web divergence from the reference keeps
+ * these chips OUTSIDE the context ring (unlike Android), but crammed onto
+ * `PromptBar`'s single foot row beside the state sentence, queued count,
+ * keyboard hint and Stop, five competing items truncated every one of
+ * them at 1461x785 (measured live: a 129px model chip, a 59px routing
+ * chip whose value was entirely cut off, a 129px queue chip, and a
+ * shortcut hint missing its own leading "⏎ send ·"). `PromptBar.tsx` is a
+ * shared recipe (`ui/recipes/`, also used by `dev/recipe-lab.tsx` and its
+ * own `recipes.test.tsx`) outside this task's `features/composer/`
+ * ownership, so the fix is CSS-only, entirely from this file: the DOM is
+ * still ONE `.pc-prompt-bar__foot` flex row (no new element, no testid
+ * change), reflowed into two VISUAL lines with `flex-wrap` plus one
+ * child (`.pc-composer__meta` below) forced onto its own full-width line
+ * via `order`/`flex-basis`. `.pc-prompt-bar__foot`'s own font/size/colour/
+ * padding/gap (`recipes.css`) already port the reference `.composer-foot`
+ * verbatim — untouched — so line 2 (state sentence, spacer, the full
+ * `⏎ send · ⇧⏎ newline · Esc interrupt`, and this repo's own queued-count/
+ * Stop additions) is exactly that rule already was, just no longer
+ * sharing its line with the chips.
+ *
+ * Width arithmetic (no live browser in this task's sandbox — reasoned
+ * from `shell.css`'s own rail widths/breakpoints and the design tokens,
+ * both read, not guessed): at 1461px, `.shell__regions` is past every
+ * breakpoint (>1360/1180/860px), so the session/extension rails are
+ * 264px/344px and the centre column is 1461-264-344=853px; `.shell__center`
+ * subtracts its own `padding: var(--spacing-4)` (16px each side, 32px
+ * total) to 821px, under `.pc-composer`'s 53.5rem (856px) max-width, so
+ * `.pc-composer` renders at ~821px; `.pc-prompt-bar__foot`'s own
+ * `padding: 0 var(--spacing-1)` (4px each side) leaves ~813px for both
+ * lines. At 1280px (between the 1180px/1360px breakpoints, so the
+ * narrower 232px/312px rail step applies) the same chain gives
+ * 1280-232-312=736px, -32px padding=704px, -8px foot padding=~696px. Line
+ * 1's three chips, even at an assumed worst case (mono ~6.5px/character
+ * at this chip text's 11px font-size, matching the ratio the live-measured
+ * 129px/20-character truncated model chip in the defect report implies):
+ * model+thinking ("Muse Spark 1.3 · Continuous"-shaped, ~28 chars ≈182px),
+ * routing ("Routing: Follow-up", the longest of the three routing labels,
+ * ~19 chars ≈95px), queue ("Queue: One at a time steer · One at a time
+ * follow-up", the longest realistic pairing, ~52 chars ≈338px) — sum
+ * ≈615px plus two 4px gaps (`--spacing-1`) and this box's own padding
+ * ≤88px ≈703px total, under 813px at 1461px with ~110px to spare; at
+ * 696px it is the one case close enough to be worth flagging — by the
+ * same per-character estimate it is ~7px over on one line, which is
+ * exactly the case `.pc-composer__meta`'s own `flex-wrap: wrap` above
+ * exists for: the queue chip (last in DOM order) moves to its own
+ * second chip-line instead of any chip's text truncating, so line 1 can
+ * still occupy two lines and nothing is cut. Line 2's own content (the
+ * longest state sentence, "Auto — steers the turn in flight, or starts a
+ * new one when idle", ~63 chars ≈397px; the full keyboard hint, ~35
+ * chars ≈220px; the Stop button, ~30px; three 8px gaps and the 8px foot
+ * padding ≈32px) totals ≈687px — under 813px at 1461px, and under 696px
+ * at 1280px with a real but narrow ~9px margin at this same pessimistic
+ * per-character estimate; `.pc-prompt-bar__foot-state`'s pre-existing
+ * `overflow: hidden; text-overflow: ellipsis` (untouched, `recipes.css`)
+ * remains as that line's own last-resort fallback if a future, even
+ * longer state sentence ever needs it. */
+.pc-composer .pc-prompt-bar__foot {
+  flex-wrap: wrap;
+}
 .pc-composer__meta {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-1);
   min-width: 0;
+  /* Forces this onto its own full-width first line (line 1: the chips),
+   * pushing the state-sentence/spacer/keys/Stop group (all default
+   * `order: 0`, unchanged DOM order) onto a wrapped second line (line 2:
+   * the reference's own `.composer-foot`) — see the UI-P4 comment above.
+   * `flex-shrink: 0` keeps this from being squeezed smaller than its own
+   * three chips' natural width; if a future narrower viewport can't fit
+   * them on one line, `flex-wrap: wrap` below lets a chip move to its own
+   * line instead of shrinking, so wrapping — never shrinking — is what
+   * absorbs a narrow viewport. */
+  flex-basis: 100%;
+  flex-shrink: 0;
+  order: -1;
+  flex-wrap: wrap;
 }
 .pc-composer__meta-chip {
   display: inline-flex;
@@ -137,8 +210,15 @@
    * `.pc-popover` directly below, scoped to this wrapper rather than
    * `primitives.css` because `Popover` is also used unrelated to the
    * composer (`features/files/file-popover-button.tsx`,
-   * `features/sessions/session-row-actions-button.tsx`). */
+   * `features/sessions/session-row-actions-button.tsx`).
+   *
+   * UI-P4: `flex-shrink: 0` — now that `.pc-composer__meta` (above) has
+   * its own dedicated, uncontested line, nothing forces this chip to
+   * shrink below its content size any more; kept explicit rather than
+   * relying on that circumstantially, so a shrink-caused truncation can
+   * never silently come back if a future sibling is added to that line. */
   min-width: 0;
+  flex-shrink: 0;
 }
 .pc-composer__meta-chip .pc-popover {
   /* The actual fix: bypasses the automatic-minimum computation above by
@@ -166,7 +246,17 @@
   font-family: var(--font-family-mono);
   font-size: var(--pc-composer-chip-font-size);
   white-space: nowrap;
-  max-width: 14rem;
+  /* UI-P4: raised from 14rem — that cap was sized for the old crowded
+   * single row, where every chip HAD to truncate to fit. On its own line
+   * (`.pc-composer__meta` above) the worst realistic content (the queue
+   * chip's "Queue: One at a time steer · One at a time follow-up", ~52
+   * mono characters, well under 28rem at this chip's font-size) fits
+   * without ellipsis at both 1461px and 1280px — see `Composer.tsx`'s
+   * UI-P4 doc comment for the full width arithmetic. This cap stays, at a
+   * generous size, as the last-resort fallback the task allows: only a
+   * single chip whose own content is pathologically long would ever hit
+   * it. */
+  max-width: 28rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }
