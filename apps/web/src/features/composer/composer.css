@@ -30,6 +30,13 @@
   --pc-composer-pad-bottom: 14px;
   max-width: calc(53.5rem + 2 * var(--spacing-5));
   padding: 0 var(--spacing-5) var(--pc-composer-pad-bottom);
+  /* Reference `.composer` paints `var(--page)` explicitly. Today this is
+   * visually identical to inheriting, because `.shell__center` paints the
+   * same token behind it and the composer sits in normal flex flow rather
+   * than over the scrolling transcript. It is stated anyway so the bar
+   * stays opaque if content is ever allowed to scroll beneath it — the
+   * situation the reference's own backdrop exists to handle. */
+  background-color: var(--color-page);
   margin: 0 auto;
   border-radius: var(--radius-window);
   transition: box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
