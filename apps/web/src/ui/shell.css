@@ -219,11 +219,30 @@
   border-top: 1px solid var(--color-line);
 }
 
+/*
+ * Reference `.main`: `display: grid; grid-template-rows: auto
+ * minmax(0, 1fr) auto` — a fixed-height header, a scrolling middle
+ * region, and the composer pinned to the bottom. This column's actual
+ * children (the session header, `features/transcript`'s `.pc-transcript`
+ * and `features/composer`'s `.pc-composer`) are rendered flat, with no
+ * wrapping element, by `routes/screens/host-session-screen.tsx` — a
+ * plain flex column here makes each of them a direct flex item, so
+ * `.pc-transcript`'s own `flex: 1 1 auto; min-height: 0` (already written
+ * to expect exactly this) grows to consume the remaining space and
+ * scrolls internally, while `.pc-composer` (no `flex-grow`) keeps its
+ * natural height and sits last — pinned to the bottom, the reference's
+ * `auto` third row. This element must never set its own `overflow`: two
+ * independent scroll containers would fight over the same content the
+ * way the pre-fix `overflow-y: auto` here did, leaving a dead gap below
+ * the composer instead of letting the transcript fill it.
+ */
 .shell__center {
   grid-area: center;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
   padding: var(--spacing-4);
-  overflow-y: auto;
 }
 
 /*
