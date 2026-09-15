@@ -2,9 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { Link, useMatches, useNavigate, useParams } from "@tanstack/react-router";
 
-import { ConnectionStatus } from "../features/connection/connection-status.js";
-import { NEW_TERMINAL_ROUTE_SEGMENT } from "../features/terminal/terminal-route-params.js";
-import { EmptyState, Icon, IconButton } from "./primitives/index.js";
+import { EmptyState, IconButton } from "./primitives/index.js";
 import { useRailCollapse } from "./use-rail-collapse.js";
 import "./shell.css";
 
@@ -125,20 +123,29 @@ function useRouteHeading(): string {
  * read `root-route.tsx` uses) and renders only when a host is genuinely
  * in context — on `/connect` there is no host to open settings for.
  *
- * The `Files` and `Terminal` links are the session-scoped counterparts
- * of that gear: they render only when an `agentId` is also in context
- * (i.e. on a session route), and point at the two session-tool routes
- * plan.md §8.2 declares. The terminal link targets
- * `NEW_TERMINAL_ROUTE_SEGMENT`; the terminal screen lists the session's
- * real terminals and creates one when the requested id does not match
- * an existing one, so the link always lands on a live terminal.
+ * UI-X3: the header's right side matches the design reference
+ * (`docs/ui-reference/pi-companion-web.html`'s `.bar-tools`, which holds
+ * only `#settings-btn`) pixel for pixel — it now renders the settings
+ * gear alone. The `Files`/`Terminal` session-tool links and the
+ * connection badge that used to sit here moved into
+ * `HostSettingsScreen` (`routes/screens/host-settings-screen.tsx`,
+ * `/h/$serverId/settings` — the same route this gear already opened, so
+ * no second settings surface was created); their `data-testid`s
+ * (`shell-files-link`/`shell-terminal-link`) moved with them onto the
+ * elements now performing that role. The two manual rail-collapse
+ * toggles are a separately-documented owner requirement with no
+ * reference equivalent at all (see `shell.css`'s own header comment:
+ * "The reference has no manual collapse affordance") and keep their
+ * direct, one-click/one-keystroke reach — both now sit together left of
+ * the spacer instead of split across it, so the reference's own
+ * right-of-spacer position stays gear-only without losing either
+ * toggle's immediacy or its Ctrl/Cmd+B / Ctrl/Cmd+. shortcut.
  */
 export function Shell({ sessionRail, extensionRail, headerWorkspace, children }: ShellProps) {
   const hasExtensionContent = extensionRail != null;
   const heading = useRouteHeading();
-  const params = useParams({ strict: false }) as { serverId?: string; agentId?: string };
+  const params = useParams({ strict: false }) as { serverId?: string };
   const serverId = params.serverId;
-  const agentId = params.agentId;
   const navigate = useNavigate();
   const { sessionCollapsed, extensionCollapsed, toggleSessionRail, toggleExtensionRail } =
     useRailCollapse();
@@ -175,8 +182,8 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
       <header className="shell__header">
         {/*
           Visually hidden rather than rendered: the header already carries
-          the brand mark and the connection badge, and §10.5 accepts a
-          visually-hidden heading so long as it reaches a screen reader.
+          the brand mark, and §10.5 accepts a visually-hidden heading so
+          long as it reaches a screen reader.
           Reuses the existing `.pc-visually-hidden` primitive utility rather
           than adding a second one in `shell.css` (plan.md §10: one approved
           treatment per concern).
@@ -204,41 +211,18 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
           data-testid="shell-toggle-session-rail"
           onClick={toggleSessionRail}
         />
+        <IconButton
+          icon="panel-right"
+          accessibleName={extensionCollapsed ? "Show live pane" : "Hide live pane"}
+          aria-expanded={!extensionCollapsed}
+          aria-controls={EXTENSION_RAIL_ID}
+          title={`${extensionCollapsed ? "Show live pane" : "Hide live pane"} (Ctrl/Cmd+.)`}
+          className="shell__rail-toggle"
+          data-testid="shell-toggle-extension-rail"
+          onClick={toggleExtensionRail}
+        />
         <div className="shell__header-spacer" />
         <div className="shell__header-tools">
-          {serverId && agentId ? (
-            <>
-              <Link
-                className="shell__nav-link"
-                to="/h/$serverId/session/$agentId/files/$"
-                params={{ serverId, agentId, _splat: "" }}
-                data-testid="shell-files-link"
-              >
-                <Icon name="folder" className="shell__nav-link-icon" />
-                <span>Files</span>
-              </Link>
-              <Link
-                className="shell__nav-link"
-                to="/h/$serverId/session/$agentId/terminal/$terminalId"
-                params={{ serverId, agentId, terminalId: NEW_TERMINAL_ROUTE_SEGMENT }}
-                data-testid="shell-terminal-link"
-              >
-                <Icon name="terminal" className="shell__nav-link-icon" />
-                <span>Terminal</span>
-              </Link>
-            </>
-          ) : null}
-          <IconButton
-            icon="panel-right"
-            accessibleName={extensionCollapsed ? "Show live pane" : "Hide live pane"}
-            aria-expanded={!extensionCollapsed}
-            aria-controls={EXTENSION_RAIL_ID}
-            title={`${extensionCollapsed ? "Show live pane" : "Hide live pane"} (Ctrl/Cmd+.)`}
-            className="shell__rail-toggle"
-            data-testid="shell-toggle-extension-rail"
-            onClick={toggleExtensionRail}
-          />
-          <ConnectionStatus />
           {serverId ? (
             <IconButton
               icon="settings"
