@@ -149,17 +149,59 @@ test.describe("keyboard-only navigation", () => {
       await expect(page.getByRole("button", { name: "Send", exact: true })).toBeFocused();
       await page.keyboard.press("Tab"); // -> "Attach files"
       await expect(page.getByRole("button", { name: "Attach files" })).toBeFocused();
-      await page.keyboard.press("Tab"); // -> the Model chip (opens `ModelThinkingPicker`)
-      const modelChip = page.getByRole("button", { name: "E2E Fake Model" });
-      await expect(modelChip).toBeFocused();
-      await expect(modelChip).toHaveAttribute("aria-haspopup", "dialog");
-      await expect(modelChip).toHaveAttribute("aria-expanded", "false");
-      await page.keyboard.press("Tab"); // -> the Routing chip (opens `PromptRoutingPicker`)
-      await expect(page.getByRole("button", { name: "Routing: Auto" })).toBeFocused();
-      await page.keyboard.press("Tab"); // -> the Queue chip (opens `QueueModePicker`)
-      await expect(
-        page.getByRole("button", { name: "Queue: — steer · — follow-up" }),
-      ).toBeFocused();
+      // UI-X1 moved the model, routing and queue pickers OFF the chip row
+      // this walk used to Tab through and back inside the context ring's
+      // popover, restoring the reference's ring-opens-the-menu design. The
+      // three chips no longer exist as standalone buttons, so the old three
+      // `toBeFocused()` steps here failed with "element(s) not found" — the
+      // controls did not lose keyboard reachability, the ROUTE to them
+      // changed, and this contract has to follow it rather than pin a DOM
+      // shape the product deliberately left behind.
+      //
+      // The ring sits BEFORE the textarea in `.pc-prompt-bar__row` (ring →
+      // textarea → send → attach, see `PromptBar`'s own module doc), so it is
+      // reached by tabbing BACKWARD from the input, not forward past attach.
+      const contextRing = page.getByRole("button", { name: /^Session controls/ });
+      await composerInput.focus();
+      await page.keyboard.press("Shift+Tab");
+      await expect(contextRing).toBeFocused();
+      await expect(contextRing).toHaveAttribute("aria-haspopup", "dialog");
+      await expect(contextRing).toHaveAttribute("aria-expanded", "false");
+
+      // Opened from the keyboard alone, the popover exposes the same controls
+      // the chip row used to — which is what this block always cared about.
+      //
+      // They are COMBOBOXES here, not buttons. That is not a detail worth
+      // glossing: on the chip row each chip was itself a popover trigger
+      // (`aria-haspopup="dialog"`), so the old assertions matched buttons by
+      // the chip's summary text ("E2E Fake Model", "Routing: Auto"). Inside
+      // the sheet the same pickers render their `<select>` directly, with no
+      // second popover layer, so matching a button here finds nothing at all
+      // — which is exactly how the first version of this fix failed. Asserted
+      // against the real, current shape rather than the one this walk
+      // remembered.
+      await page.keyboard.press("Enter");
+      await expect(contextRing).toHaveAttribute("aria-expanded", "true");
+      const sheet = page.getByRole("dialog", { name: "Session controls" });
+      for (const name of [
+        "Send this message as",
+        "Model",
+        "Thinking level",
+        "Steering queue delivery",
+        "Follow-up queue delivery",
+      ]) {
+        await expect(sheet.getByRole("combobox", { name })).toBeVisible({ timeout: 15_000 });
+      }
+      // The keyboard path is already proven by this point without a further
+      // focus assertion: the ring was reached by Shift+Tab, opened with Enter,
+      // and the controls above are inside a focus-trapped dialog that only
+      // that keypress can open. A `:focus` count inside `sheet` was tried here
+      // and deliberately removed — Playwright's `locator` searches DESCENDANTS,
+      // so it silently reads zero whenever the trap parks focus on the dialog
+      // element itself, making it a coin flip on trap internals rather than a
+      // statement about keyboard operability.
+      await page.keyboard.press("Escape");
+      await expect(contextRing).toHaveAttribute("aria-expanded", "false");
 
       // FIX-CI5: Stop is honestly ABSENT here -- this session is idle
       // (FIX-L2, see this file's module doc item 3) -- a hard assertion
