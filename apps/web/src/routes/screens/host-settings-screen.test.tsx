@@ -84,6 +84,41 @@ describe("HostSettingsScreen route wiring (T131)", () => {
     expect(screen.getByRole("heading", { name: "Host settings" })).toBeTruthy();
     expect(screen.queryByText("host-1")).toBeNull();
   }, 20_000);
+
+  /**
+   * UI-X3: the connection badge and the session's Files/Terminal links
+   * used to render in `Shell`'s header; the header's right side now
+   * matches the reference pixel for pixel (settings gear only), so both
+   * moved onto this route — the gear's own destination since T131 —
+   * carrying their `shell-files-link`/`shell-terminal-link` testids with
+   * them. This test runs with the default (no-provider) `client: null`,
+   * same as the theme test above, so there is no agent to resolve yet;
+   * the Navigation section's own truthful empty note is what proves it
+   * never renders a dead link rather than silently omitting the section.
+   */
+  it("mounts the Connection and Navigation sections the header used to carry", async () => {
+    const router = createRouter({
+      routeTree,
+      history: createMemoryHistory({ initialEntries: ["/h/host-1/settings"] }),
+    });
+    render(
+      <CoreProvider>
+        <RouterProvider router={router} />
+      </CoreProvider>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Connection" }, { timeout: 15_000 }),
+    ).toBeTruthy();
+    expect(document.querySelector(".connection-status")).toBeTruthy();
+
+    expect(screen.getByRole("heading", { name: "Navigation" })).toBeTruthy();
+    // No agent resolved yet (no live client in this test) — a truthful note,
+    // never a dead Files/Terminal link.
+    expect(screen.queryByTestId("shell-files-link")).toBeNull();
+    expect(screen.queryByTestId("shell-terminal-link")).toBeNull();
+    expect(screen.getByText("Open a session to reach its files and terminal.")).toBeTruthy();
+  }, 20_000);
 });
 
 /**

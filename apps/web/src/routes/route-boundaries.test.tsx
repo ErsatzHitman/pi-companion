@@ -37,8 +37,9 @@ import { routeTree } from "./route-tree.js";
  * boundary actually delivers rendered content and not just a resolved
  * route id (route-tree.test.tsx only asserts the latter).
  *
- * `Shell` (T27S1) renders `ConnectionStatus`, which needs `CoreProvider`
- * (see `app/App.tsx`); every render of the real `routeTree` here is
+ * The settings route (`HostSettingsScreen`, reachable via `Shell`'s
+ * settings gear) renders `ConnectionStatus` (UI-X3), which needs
+ * `CoreProvider` (see `app/App.tsx`); every render of the real `routeTree` here is
  * wrapped the same way `App` wraps it, or the root route's own
  * `errorComponent` boundary would (correctly, but confusingly for these
  * tests) catch that missing-provider error instead of what each test is

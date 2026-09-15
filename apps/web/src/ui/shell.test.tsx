@@ -166,7 +166,16 @@ describe("Shell", () => {
     expect(await screen.findByTestId("settings-route")).toBeTruthy();
   });
 
-  it("links the open session to its files and terminal routes", async () => {
+  // UI-X3: the header's right side now matches the reference
+  // (`docs/ui-reference/pi-companion-web.html`'s `.bar-tools`, which holds
+  // only `#settings-btn`) pixel for pixel — Files/Terminal navigation and
+  // the connection badge no longer render in `Shell` at all, on ANY route,
+  // including a session route where they used to appear. Their reachability
+  // (now via `HostSettingsScreen`'s own "Navigation"/"Connection" sections,
+  // reusing these same `data-testid`s) is proven in
+  // `host-settings-screen.test.tsx` instead — this is the shell-side half
+  // of that move: proving they are gone from here.
+  it("no longer renders Files/Terminal links or the connection badge, even on an open session route", async () => {
     const sessionRootRoute = createRootRoute({
       component: () => (
         <Shell>
@@ -179,21 +188,10 @@ describe("Shell", () => {
       path: "/h/$serverId/session/$agentId",
       component: () => null,
     });
-    const filesRoute = createRoute({
-      getParentRoute: () => sessionRootRoute,
-      path: "/h/$serverId/session/$agentId/files/$",
-      component: () => <div data-testid="files-route" />,
-    });
-    const terminalRoute = createRoute({
-      getParentRoute: () => sessionRootRoute,
-      path: "/h/$serverId/session/$agentId/terminal/$terminalId",
-      component: () => null,
-    });
     const router = createRouter({
-      routeTree: sessionRootRoute.addChildren([sessionRoute, filesRoute, terminalRoute]),
+      routeTree: sessionRootRoute.addChildren([sessionRoute]),
       history: createMemoryHistory({ initialEntries: ["/h/srv-1/session/agt-1"] }),
     });
-    const user = userEvent.setup();
     render(
       <CoreProvider>
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- test-local router, not the app's registered one */}
@@ -201,23 +199,33 @@ describe("Shell", () => {
       </CoreProvider>,
     );
 
-    const filesLink = await screen.findByTestId("shell-files-link");
-    expect(filesLink.getAttribute("href")).toMatch(/\/h\/srv-1\/session\/agt-1\/files\/?$/);
-    const terminalLink = screen.getByTestId("shell-terminal-link");
-    expect(terminalLink.getAttribute("href")).toBe("/h/srv-1/session/agt-1/terminal/new");
-
-    await user.click(filesLink);
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe("/h/srv-1/session/agt-1/files"),
-    );
-    expect(await screen.findByTestId("files-route")).toBeTruthy();
-  });
-
-  it("shows no session links where there is no open session", async () => {
-    renderShell({}, { pattern: "/h/$serverId/diagnostics", href: "/h/srv-1/diagnostics" });
     await screen.findByTestId("shell-settings-trigger");
     expect(screen.queryByTestId("shell-files-link")).toBeNull();
     expect(screen.queryByTestId("shell-terminal-link")).toBeNull();
+    expect(document.querySelector(".connection-status")).toBeNull();
+  });
+
+  it("reduces the header's right side (past the spacer) to the settings gear alone, both rail toggles sitting before it", async () => {
+    const { container } = renderShell(
+      {},
+      { pattern: "/h/$serverId/diagnostics", href: "/h/srv-1/diagnostics" },
+    );
+    await screen.findByTestId("shell-settings-trigger");
+
+    const tools = container.querySelector(".shell__header-tools")!;
+    expect(tools.children).toHaveLength(1);
+    expect(tools.firstElementChild!.getAttribute("data-testid")).toBe("shell-settings-trigger");
+
+    // Both manual rail-collapse toggles (no reference equivalent — see
+    // `shell.css`'s own header comment) stay reachable, just regrouped left
+    // of the spacer instead of split across it.
+    const header = container.querySelector(".shell__header")!;
+    const headerChildren = [...header.children].map((el) => el.getAttribute("data-testid"));
+    expect(headerChildren).toContain("shell-toggle-session-rail");
+    expect(headerChildren).toContain("shell-toggle-extension-rail");
+    expect(headerChildren.indexOf("shell-toggle-extension-rail")).toBeLessThan(
+      headerChildren.indexOf("shell-toggle-session-rail") + 2,
+    );
   });
 
   it("declares a compact-fallback media query pinned to the design-tokens wide breakpoint", () => {
