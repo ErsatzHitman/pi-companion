@@ -67,7 +67,7 @@ describe("isCoreMessageEntry", () => {
 });
 
 describe("TranscriptMessageRow", () => {
-  it("distinguishes user and assistant messages by a visible label, not colour alone", () => {
+  it("distinguishes a user message by a visible label, not colour alone — and draws no visible label at all for assistant text (UI-P6)", () => {
     render(
       <>
         <TranscriptMessageRow entry={userEntry()} streaming={false} testId="row-user" />
@@ -76,19 +76,28 @@ describe("TranscriptMessageRow", () => {
     );
     // T386: the visible speaker moved out of the bubble into the meta line
     // above it (the mockup's `.meta`), so the DOM carries the mockup's own
-    // lowercase `you`/`pi` — uppercased by CSS, never by a different string.
+    // lowercase `you` — uppercased by CSS, never by a different string.
     const userRow = screen.getByTestId("row-user");
     const assistantRow = screen.getByTestId("row-assistant");
     // `testId` sits on the bubble (the `role="group"` element); the meta
     // line is its sibling inside the row wrapper.
     expect(userRow.parentElement?.querySelector(".pc-transcript__who")?.textContent).toBe("you");
-    expect(assistantRow.parentElement?.querySelector(".pc-transcript__who")?.textContent).toBe(
-      "pi",
-    );
-    // The bubble's `role="group"` aria-label is still the accessible name,
-    // which is what actually keeps the two distinguishable without colour.
+    // UI-P6: the reference's `b.t === "text"` case renders no `.meta` line
+    // at all — no `who`, no time — so an assistant row must carry no
+    // *visible* `.pc-transcript__who` (the old defect stamped a mono
+    // `PI <time>` label above every assistant message, flattening a long
+    // transcript into a log of labels). Confirmed absent, not merely
+    // differently labelled.
+    expect(assistantRow.parentElement?.querySelector(".pc-transcript__who")).toBeNull();
+    expect(assistantRow.parentElement?.querySelector(".pc-transcript__meta")).toBeNull();
+    // The bubble's `role="group"` aria-label is still the accessible name
+    // for BOTH rows regardless of the visible label's presence — this is
+    // what keeps assistant speaker identity from being silently dropped
+    // now that its visible label is gone (see the a11y describe block
+    // below for the timestamp half of that same guarantee).
     expect(userRow.getAttribute("role")).toBe("group");
     expect(userRow.getAttribute("aria-label")).toBe("You");
+    expect(assistantRow.getAttribute("role")).toBe("group");
     expect(assistantRow.getAttribute("aria-label")).toBe("Pi");
   });
 
@@ -286,7 +295,15 @@ describe("message timestamp (T308)", () => {
    * (`packages/frontend-core/src/timeline/message-timestamp.test.ts`) pins
    * the formatting itself against a fixed zone.
    */
-  it("renders a timestamp under an assistant message", () => {
+  it("UI-P6: an assistant message's timestamp still exists in the DOM but is visually hidden, not deleted", () => {
+    // The reference draws no meta line — visible or otherwise — for an
+    // assistant text turn, but nothing else on this row conveys *when* it
+    // was sent (unlike speaker identity, which the bubble's own
+    // `role="group"` aria-label still carries regardless). Deleting this
+    // element outright would silently take that information away from
+    // screen-reader users while sighted users simply never had it, so it
+    // stays in the DOM, clipped off-screen with the repository's standard
+    // `.pc-visually-hidden` treatment, rather than being dropped.
     render(
       <TranscriptMessageRow
         entry={assistantEntry({ timestamp: "2026-09-09T12:12:08.000Z" })}
@@ -299,9 +316,14 @@ describe("message timestamp (T308)", () => {
     expect(stamp.tagName).toBe("TIME");
     expect(stamp.getAttribute("datetime")).toBe("2026-09-09T12:12:08.000Z");
     expect(stamp.textContent).toMatch(/\d{1,2}:\d{2}:\d{2}/);
+    expect(stamp.className).toBe("pc-visually-hidden");
+    // It also carries no visible `.pc-transcript__timestamp` sibling — the
+    // hidden `<time>` above is the ONLY timestamp node this row renders.
+    const rowRoot = screen.getByTestId("row-stamp-a").parentElement;
+    expect(rowRoot?.querySelector(".pc-transcript__timestamp")).toBeNull();
   });
 
-  it("renders a timestamp under a user message too", () => {
+  it("renders a visible timestamp under a user message", () => {
     render(
       <TranscriptMessageRow
         entry={userEntry({ timestamp: "2026-09-09T12:12:08.000Z" })}
@@ -310,9 +332,11 @@ describe("message timestamp (T308)", () => {
       />,
     );
 
-    expect(screen.getByTestId("row-stamp-u-timestamp").getAttribute("datetime")).toBe(
-      "2026-09-09T12:12:08.000Z",
-    );
+    const stamp = screen.getByTestId("row-stamp-u-timestamp");
+    expect(stamp.getAttribute("datetime")).toBe("2026-09-09T12:12:08.000Z");
+    // Unlike the assistant case above, a user turn's meta line (who + time)
+    // stays visible, exactly matching the reference's `b.t === "user"` case.
+    expect(stamp.className).toBe("pc-transcript__timestamp");
   });
 
   it("carries the full dated time as a title, since the visible label may omit the date", () => {

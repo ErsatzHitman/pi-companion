@@ -128,14 +128,23 @@ function boundedText(text: string): string {
 
 /**
  * Renders one `user-message`/`assistant-message` transcript entry by
- * composing the `StreamingMessage` recipe (T28A2, plan.md §10.4). The
- * visible speaker distinction now lives above the block in
- * `TranscriptMeta` (`you`/`pi`, the mockup's `.meta` treatment) rather
- * than inside the bubble, exactly as the design reference draws it; the
- * bubble's own `role="group"` `aria-label` remains the accessible name,
- * so speaker identity is still never colour-only. The recipe supplies the
- * reduced-motion-safe streaming treatment; this component only maps the
- * framework-neutral `TranscriptEntry` onto that recipe's props.
+ * composing the `StreamingMessage` recipe (T28A2, plan.md §10.4).
+ *
+ * UI-P6: the visible `.meta` line above the block (`TranscriptMeta`, the
+ * mockup's `you 23:36`/`pi` treatment) is asymmetric in the reference —
+ * see `transcript-meta.tsx`'s module doc for the exact per-`b.t` citation
+ * — so it is only visible here for a `user-message` row (`who + time`);
+ * an `assistant-message` row passes `visible={false}` and gets no visible
+ * meta line at all, matching the reference's `b.t === "text"` case, which
+ * renders bare `<div class="prose">` with no `.meta` sibling whatsoever.
+ * The bubble's own `role="group"` `aria-label` remains the accessible
+ * name for both rows regardless of `visible`, so speaker identity is
+ * still never colour-only or dropped for assistive technology — see
+ * `TranscriptMeta`'s own doc comment for why its timestamp specifically
+ * still renders (visually hidden) even when `visible` is `false`. The
+ * recipe supplies the reduced-motion-safe streaming treatment; this
+ * component only maps the framework-neutral `TranscriptEntry` onto that
+ * recipe's props.
  *
  * Memoized on the fields that actually change a rendered row (`text`,
  * `corrected`, `pending`, `streaming`) so a live update to the newest
@@ -165,13 +174,19 @@ function TranscriptMessageRowImpl({
 
   return (
     <div className="pc-message-row" data-render-count={renderCount.current}>
-      {/* The mockup's `.meta` line, above the block rather than inside it:
-          the visible speaker (`you`/`pi`) plus this row's own time. The
-          bubble below keeps its `role="group"` `aria-label` as the
-          accessible name, so nothing here is colour- or label-only. */}
+      {/* The mockup's `.meta` line, above the block rather than inside it —
+          but only for a user row (`who` + time). An assistant TEXT turn
+          gets no visible meta line in the reference at all (UI-P6, see
+          `transcript-meta.tsx`'s module doc for the exact citation), so
+          `visible` is `false` here for `assistant-message`; the bubble
+          below keeps its `role="group"` `aria-label` as the accessible
+          name either way, so nothing here is colour- or label-only, and
+          `TranscriptMeta` still emits a visually-hidden timestamp for the
+          assistant case since nothing else on the row carries one. */}
       <TranscriptMeta
         who={entry.kind === "assistant-message" ? "pi" : "you"}
         timestamp={entry.timestamp}
+        visible={entry.kind !== "assistant-message"}
         testId={testId}
       />
       <StreamingMessage
