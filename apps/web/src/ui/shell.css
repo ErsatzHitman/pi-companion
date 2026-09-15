@@ -307,13 +307,24 @@
  * way the pre-fix `overflow-y: auto` here did, leaving a dead gap below
  * the composer instead of letting the transcript fill it.
  */
+/*
+ * Reference `.main`: `padding: 0` with `background: var(--page)`. The
+ * column itself insets nothing — each child owns its own padding against
+ * the page backdrop, which is what lets `.main-head`'s bottom border span
+ * the full column width edge to edge (a column-level inset would pull that
+ * rule 20px in on both sides, which is visible). Measured against the
+ * reference at 1461px and 1280px: every other region already matched and
+ * this column was the last delta, at `padding: 16px` and a transparent
+ * background.
+ */
 .shell__center {
   grid-area: center;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: var(--spacing-4);
+  padding: 0;
+  background-color: var(--color-page);
 }
 
 /*

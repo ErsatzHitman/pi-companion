@@ -44,9 +44,21 @@
   padding: var(--spacing-3) var(--spacing-2);
 }
 
+/*
+ * Reference `.scroller`: `overflow-y: auto; min-height: 0; padding: 18px
+ * 20px 26px`. The 20px sides are `--spacing-5`; 18px and 26px have no
+ * token on this scale, so they are scoped custom properties on this rule,
+ * the pattern `features/sessions/session-resume.css` already uses for its
+ * own 10px head padding rather than rounding to a visibly different step.
+ * These land on the scroll box itself (not the column) because the
+ * reference pads its scroller, and `.pc-transcript__thread` below keeps
+ * the centred 860px measure the reference's `.thread` sets inside it.
+ */
 @media (min-width: 720px) {
   .pc-transcript {
-    padding: var(--spacing-4);
+    --pc-transcript-pad-top: 18px;
+    --pc-transcript-pad-bottom: 26px;
+    padding: var(--pc-transcript-pad-top) var(--spacing-5) var(--pc-transcript-pad-bottom);
   }
 }
 

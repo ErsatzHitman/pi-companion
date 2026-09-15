@@ -14,7 +14,22 @@
    * transcript centres on, so the prompt bar lines up with the prose above
    * it. */
   width: 100%;
-  max-width: 53.5rem;
+  /*
+   * Reference splits this in two: `.composer` is full-width with
+   * `padding: 0 20px 14px`, and `.composer-inner` is the centred
+   * `max-width: 860px` measure. This element is both, so the side padding
+   * is added here and `max-width` grows by exactly that padding — with
+   * `global.css`'s `* { box-sizing: border-box }`, max-width includes
+   * padding, so the CONTENT column stays 53.5rem (856px) and only the
+   * gutter outside it changes. Without the widening, the prompt bar would
+   * be 40px narrower than the transcript measure above it and the two
+   * would visibly fail to line up. 14px has no token on this scale, so it
+   * is a scoped custom property, as `.pc-session-head` does for its own
+   * 10px block padding.
+   */
+  --pc-composer-pad-bottom: 14px;
+  max-width: calc(53.5rem + 2 * var(--spacing-5));
+  padding: 0 var(--spacing-5) var(--pc-composer-pad-bottom);
   margin: 0 auto;
   border-radius: var(--radius-window);
   transition: box-shadow var(--motion-duration-fast) var(--motion-easing-standard);

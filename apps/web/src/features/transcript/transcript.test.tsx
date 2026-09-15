@@ -569,8 +569,19 @@ describe("Transcript compact layout (T28A7)", () => {
       /\.pc-transcript\s*{[^}]*padding:\s*var\(--spacing-3\)\s+var\(--spacing-2\)/,
     );
     // The wide-only override, inside the media query, restores the
-    // roomier token — a real value change, not a no-op re-declaration.
-    expect(afterMediaQueryStart).toMatch(/\.pc-transcript\s*{[^}]*padding:\s*var\(--spacing-4\)/);
+    // roomier padding — a real value change, not a no-op re-declaration.
+    // UI-P10 repointed this from the flat `var(--spacing-4)` (16px on every
+    // edge) to the design reference's own `.scroller` rule, `padding: 18px
+    // 20px 26px`: the sides are `--spacing-5` and the asymmetric top and
+    // bottom are scoped custom properties, since neither has a token on
+    // this scale. The assertion still pins what this test exists to prove —
+    // that the wide override is roomier than the compact default above,
+    // which it remains on every edge (18/20/26 against 12/8).
+    expect(afterMediaQueryStart).toMatch(
+      /\.pc-transcript\s*{[^}]*padding:\s*var\(--pc-transcript-pad-top\)\s+var\(--spacing-5\)\s+var\(--pc-transcript-pad-bottom\)/,
+    );
+    expect(afterMediaQueryStart).toMatch(/--pc-transcript-pad-top:\s*18px/);
+    expect(afterMediaQueryStart).toMatch(/--pc-transcript-pad-bottom:\s*26px/);
   });
 
   it("renders every included row kind together without a crash when the transcript's own scroll container measures a compact (sub-wide) height", () => {
