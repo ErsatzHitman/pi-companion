@@ -50,6 +50,29 @@ interface AgentTimelineState {
    * separate seqs and are claimed in the order they were queued.
    */
   pendingLiveUserMessageSeqs: number[];
+  /**
+   * FIX-S12: seqs already claimed once by `mergePendingLiveUserMessage`,
+   * newest last. `PiHistoryMapper`'s positional `userIndex` (see
+   * `history-mapper.ts`) is a running count of every `user`-role row a
+   * given producer's own feed contains; at scale, two producers racing to
+   * reconcile the *same* live send (e.g. `PiLiveTailWatcher`'s tail append
+   * and a concurrent full-history replay) can each compute a *different*
+   * count for that same underlying row, because nothing guarantees the two
+   * feeds advance that counter in lockstep forever. `pendingLiveUserMessageSeqs`
+   * alone only protects the *first* producer to arrive (it claims the one
+   * queued seq); the second producer, computing a different `messageId`/
+   * dedupeKey for the same row, previously found the queue already drained
+   * and fell back to a plain append — a genuine duplicate. This ledger lets
+   * that second (or third) producer's echo collapse onto the same
+   * already-claimed row instead, without ever comparing the two producers'
+   * keys or positions: see `mergePendingLiveUserMessage`'s fallback, which
+   * only ever considers the single most-recently-claimed seq, and only
+   * while no *newer* `user_message` row exists — the instant another live
+   * send registers its own pending seq, this fallback stops applying to the
+   * previous one, so two distinct sends (identical text or not) can never
+   * collapse onto a single row.
+   */
+  resolvedLiveUserMessageSeqs: number[];
 }
 
 const DEFAULT_TIMELINE_FETCH_LIMIT = 200;
@@ -186,6 +209,7 @@ export class InMemoryAgentTimelineStore {
       nextSeq,
       dedupeKeys: new Map(),
       pendingLiveUserMessageSeqs: [],
+      resolvedLiveUserMessageSeqs: [],
     });
   }
 
@@ -293,16 +317,55 @@ export class InMemoryAgentTimelineStore {
       if (index === -1) continue;
       const row = state.rows[index];
       if (row.item.type !== "user_message") continue;
-      const mergedItem: AgentTimelineItem = {
-        ...row.item,
-        ...(incoming.messageId ? { messageId: incoming.messageId } : {}),
-      };
-      const merged: AgentTimelineRow = { ...row, item: mergedItem };
-      state.rows[index] = merged;
-      state.dedupeKeys.set(dedupeKey, merged);
-      return cloneRow(merged);
+      const merged = this.applyLiveUserMessageMerge(state, index, row, dedupeKey, incoming);
+      state.resolvedLiveUserMessageSeqs.push(seq as number);
+      return merged;
+    }
+    // FIX-S12: the primary FIFO is empty, i.e. every live send registered so
+    // far has already been claimed once — but this may be a *second*,
+    // independently-keyed observation of the very same row (a concurrent
+    // full-history replay racing the tail watcher's own echo of the
+    // identical send, each computing a different position-derived
+    // `messageId` for it) rather than a genuinely new row. Only the single
+    // most-recently-claimed seq is eligible, and only while it is still the
+    // newest `user_message` row in the timeline: the moment a later live
+    // send registers its own pending seq, that seq becomes strictly newer
+    // and this fallback no longer applies to the earlier one, so two
+    // distinct sends can never collapse onto one row (see
+    // `resolvedLiveUserMessageSeqs`'s own doc comment for the full
+    // rationale, and the FIX-S12 regression test for the at-scale race this
+    // closes).
+    const lastResolvedSeq = state.resolvedLiveUserMessageSeqs.at(-1);
+    if (lastResolvedSeq !== undefined) {
+      const hasNewerUserMessage = state.rows.some(
+        (row) => row.item.type === "user_message" && row.seq > lastResolvedSeq,
+      );
+      if (!hasNewerUserMessage) {
+        const index = state.rows.findIndex((row) => row.seq === lastResolvedSeq);
+        const row = state.rows[index];
+        if (row && row.item.type === "user_message") {
+          return this.applyLiveUserMessageMerge(state, index, row, dedupeKey, incoming);
+        }
+      }
     }
     return null;
+  }
+
+  private applyLiveUserMessageMerge(
+    state: AgentTimelineState,
+    index: number,
+    row: AgentTimelineRow,
+    dedupeKey: string,
+    incoming: Extract<AgentTimelineItem, { type: "user_message" }>,
+  ): AgentTimelineRow {
+    const mergedItem: AgentTimelineItem = {
+      ...row.item,
+      ...(incoming.messageId ? { messageId: incoming.messageId } : {}),
+    };
+    const merged: AgentTimelineRow = { ...row, item: mergedItem };
+    state.rows[index] = merged;
+    state.dedupeKeys.set(dedupeKey, merged);
+    return cloneRow(merged);
   }
 
   fetch(agentId: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {
