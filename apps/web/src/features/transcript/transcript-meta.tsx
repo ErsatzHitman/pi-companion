@@ -4,17 +4,30 @@ import { timeline } from "@picompanion/frontend-core";
  * The turn meta line the web transcript draws above a block (T386 family
  * fidelity work; the mockup's `.meta`).
  *
- * The mockup precedes every turn with
+ * **UI-P6 correction: the mockup does NOT precede every turn with this
+ * line.** Read directly from the reference's own `blockHtml` function, its
+ * three turn kinds are asymmetric:
  *
  * ```html
+ * <!-- b.t === "user": who + time -->
  * <div class="meta"><span class="who u">you</span><span>23:36</span></div>
+ * <!-- b.t === "think": who only, no time -->
+ * <div class="meta"><span class="who a">thinking</span></div>
+ * <!-- b.t === "text" (assistant): no .meta at all, just <div class="prose"> -->
  * ```
  *
- * and styles it as `font-family: var(--mono); font-size: 10.5px; color:
- * var(--ink-3)` with `.who` at `font-size: 9.5px; font-weight: 700;
+ * This component itself still renders the shared `.meta` box (its
+ * `visible` prop, default `true`, covers the first two cases: user rows
+ * pass a `timestamp`, `thinking-row.tsx` omits one). Assistant message
+ * rows are the third case, and are the one caller that passes
+ * `visible={false}` (see `message-row.tsx`) to suppress the visible box
+ * entirely rather than draw one the reference never draws.
+ *
+ * The visible box is styled `font-family: var(--mono); font-size: 10.5px;
+ * color: var(--ink-3)` with `.who` at `font-size: 9.5px; font-weight: 700;
  * letter-spacing: .06em; text-transform: uppercase` — `.who.u` reading
  * `var(--accent-ink)` for the user and `.who.a` reading `var(--ink-2)` for
- * everything the agent did. Before this, the web speaker was a
+ * everything the agent did. Before T386, the web speaker was a
  * `.pc-message__speaker` label *inside* the bubble and the message time
  * rendered *below* the row (T308), so a reader saw "23:36" detached from
  * whoever said it.
@@ -24,7 +37,8 @@ import { timeline } from "@picompanion/frontend-core";
  * (`text-transform`), never a different string, so a screen reader hears
  * the words the mockup's own markup carries. The speaker's *accessible*
  * name still comes from the message bubble's `role="group"` `aria-label`
- * ("You"/"Pi") — this line is the visible, shared treatment both rows use.
+ * ("You"/"Pi") — this line is the visible, shared treatment the two rows
+ * that use it share.
  *
  * The optional `timestamp` is passed only by message rows: reasoning,
  * tool-call and compaction rows are process detail rather than something
@@ -47,10 +61,55 @@ export interface TranscriptMetaProps {
   timestamp?: string;
   /** Prefix for the `<time>`'s `data-testid` (`${testId}-timestamp`), the same suffix T308 shipped. */
   testId?: string;
+  /**
+   * UI-P6 (plan.md §10.1/§10.4, the reference's own `blockHtml`): the
+   * mockup's three turn kinds are NOT symmetric. Read from the reference
+   * file itself —
+   *
+   * ```js
+   * if (b.t === "user")  '<div class="turn turn-user fade"><div class="meta">…you…23:36</div>…'
+   * if (b.t === "think") '<div class="turn turn-think fade"><div class="meta">…thinking…</div>…' // no time
+   * if (b.t === "text")  '<div class="turn fade"><div class="prose">…</div></div>' // no .meta at all
+   * ```
+   *
+   * — a user turn gets `who` + time, a thinking turn gets `who` only, and
+   * an assistant TEXT turn gets no meta line whatsoever. `false` reproduces
+   * that third case: no visible `.pc-transcript__meta` box (so nothing
+   * pushes the bubble down or leaves a stray margin where the line used to
+   * be), while still emitting a visually-hidden `<time>` — see this
+   * component's own doc comment below for why the timestamp, specifically,
+   * still renders. Defaults to `true` (the visible line every other
+   * caller — user rows, `thinking-row.tsx` — still wants).
+   */
+  visible?: boolean;
 }
 
-export function TranscriptMeta({ who, timestamp, testId }: TranscriptMetaProps) {
+export function TranscriptMeta({ who, timestamp, testId, visible = true }: TranscriptMetaProps) {
   const stamp = timestamp === undefined ? null : timeline.formatMessageTimestamp(timestamp);
+
+  if (!visible) {
+    // UI-P6: the visible `who` text is safe to drop entirely here — the
+    // message bubble's own `role="group"` `aria-label` (`StreamingMessage`,
+    // "Pi"/"You") already names the speaker to assistive technology, so
+    // repeating it in a hidden node would only double-announce it. The
+    // *timestamp* has no such fallback anywhere else on the row — dropping
+    // it outright would silently take a per-message time away from screen
+    // reader users that a sighted reader of the live app previously had, so
+    // it still renders, clipped off-screen with the repository's standard
+    // `.pc-visually-hidden` treatment (`ui/primitives/primitives.css`),
+    // whenever one is available.
+    return stamp ? (
+      <time
+        className="pc-visually-hidden"
+        dateTime={stamp.iso}
+        title={stamp.title}
+        data-testid={testId ? `${testId}-timestamp` : undefined}
+      >
+        {stamp.text}
+      </time>
+    ) : null;
+  }
+
   return (
     <div className="pc-transcript__meta">
       <span className={`pc-transcript__who pc-transcript__who--${who}`}>{SPEAKER_LABEL[who]}</span>
