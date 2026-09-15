@@ -79,21 +79,24 @@ class FlakyStructuredStorage implements StructuredStorage {
 }
 
 /**
- * T388: model/effort, per-message routing, and the session-wide queue mode
- * each live inside their own metadata-row chip's popover now (superseding
- * T386's ring-opens-the-menu sheet), so a test that reads one of those
- * pickers must open its own chip first.
+ * UI-X1 (restoring T386's ring-opens-the-menu sheet, reversing T388's
+ * metadata-row chips): model/effort, per-message routing, and the
+ * session-wide queue mode each live inside their own labelled group in
+ * the context ring's own `Sheet` again, so a test that reads one of
+ * those pickers opens the ring, exactly like `openRingSheet` below —
+ * these three names stay so every call site below reads the same as it
+ * did before, without touching each of the (many) individual tests.
  */
 async function openModelChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(screen.getByTestId("composer-model-chip"));
+  await openRingSheet(user);
 }
 async function openRoutingChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(screen.getByTestId("composer-routing-chip"));
+  await openRingSheet(user);
 }
 async function openQueueChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.click(screen.getByTestId("composer-queue-chip"));
+  await openRingSheet(user);
 }
-/** The ring's own Sheet (T388): context-usage summary only, no pickers. */
+/** The ring's own Sheet (UI-X1): Mode, Model & effort, Queue and Context. */
 async function openRingSheet(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByRole("button", { name: /^Session controls/ }));
 }
@@ -1280,7 +1283,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect((input as HTMLTextAreaElement).value).toBe("kept");
   });
 
-  it("the context ring opens the session-controls sheet, showing the context summary and an honest cost readout, never pickers (T388/UI-W11)", async () => {
+  it("the context ring opens the session-controls sheet, showing the context summary, an honest cost readout, and the Mode/Model/Queue pickers (UI-X1, UI-W11)", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
 
@@ -1301,7 +1304,9 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     // `ContextMeter`, and with no live `sessionCostClient` shows its own
     // honest "not priced yet" state — never a fabricated $0.00.
     expect(within(sheet).getByTestId("composer-session-cost-meter-unknown")).toBeTruthy();
-    expect(screen.queryByLabelText("Model")).toBeNull();
+    // UI-X1: Mode, Model & effort and Queue moved back into this sheet
+    // (reversing T388's metadata-row chips), so the picker IS here now.
+    expect(within(sheet).getByLabelText("Model")).toBeTruthy();
   });
 
   it("draws a 'Compact now' row at the end of the Context group, in the ring's own sheet (UI-W12)", async () => {

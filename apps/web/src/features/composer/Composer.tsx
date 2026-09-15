@@ -9,7 +9,6 @@ import {
   Chip,
   ChipGroup,
   IconButton,
-  Popover,
   Sheet,
   StatusIndicator,
 } from "../../ui/primitives/index.js";
@@ -36,9 +35,7 @@ import type { ComposerAttachment } from "./use-attachments.js";
 import { formatAttachmentSize } from "./use-attachments.js";
 import { useComposerPaste } from "./use-clipboard-paste.js";
 import { useDragAndDrop } from "./use-drag-and-drop.js";
-import type { ModelThinkingState } from "./use-model-thinking.js";
 import { useModelThinking } from "./use-model-thinking.js";
-import type { QueueModesState } from "./use-queue-modes.js";
 import { useQueueModes } from "./use-queue-modes.js";
 import { useSlashCommands } from "./use-slash-commands.js";
 import type { VoiceTranscriptionClient } from "./voice-transcribe-client.js";
@@ -77,49 +74,7 @@ function describeRouting(routing: PromptStreamingBehavior | null): string {
   return "Auto — steers the turn in flight, or starts a new one when idle";
 }
 
-/**
- * Compact metadata-chip labels (T388). Each is a short, glanceable
- * summary of what its popover holds — never a substitute for the full
- * picker (which still carries every explained-unavailable state), just
- * the collapsed value shown without opening anything, matching the
- * mockup's `.chip` treatment.
- */
-function describeModelChipLabel(state: ModelThinkingState): string {
-  if (state.availability === "no-client" || state.availability === "unsupported") {
-    return "Model — unavailable";
-  }
-  if (state.availability === "loading") return "Model — loading…";
-  if (state.availability === "error") return "Model — error";
-  const model = state.models.find((option) => option.id === state.modelId);
-  const modelName = model?.label ?? state.modelId ?? "None";
-  const effectiveId = state.thinkingOptionId ?? state.effectiveThinkingOptionId;
-  const thinking = state.thinkingOptions.find((option) => option.id === effectiveId);
-  return thinking ? `${modelName} · ${thinking.label}` : modelName;
-}
-
-function describeRoutingChipLabel(routing: PromptStreamingBehavior | null): string {
-  if (routing === "steer") return "Routing: Steer";
-  if (routing === "followUp") return "Routing: Follow-up";
-  return "Routing: Auto";
-}
-
-/** `QueueMode` -> short label. A plain string parameter (not the `QueueMode` type) so this needs no extra type-only import. */
-function queueModeChipLabel(mode: string | null): string {
-  if (mode === "all") return "All";
-  if (mode === "one-at-a-time") return "One at a time";
-  return mode ?? "—";
-}
-
-function describeQueueChipLabel(state: QueueModesState): string {
-  if (state.availability === "no-client" || state.availability === "unsupported") {
-    return "Queue — unavailable";
-  }
-  if (state.availability === "loading") return "Queue — loading…";
-  if (state.availability === "error") return "Queue — error";
-  return `Queue: ${queueModeChipLabel(state.steeringMode)} steer · ${queueModeChipLabel(state.followUpMode)} follow-up`;
-}
-
-/** The ring's Sheet body (T388): the same known/unknown split `ContextRing` itself draws, in words. */
+/** The ring's Sheet body (UI-X1, restoring the reference's ring-opens-the-menu design): the same known/unknown split `ContextRing` itself draws, in words. */
 function describeContextSummary(
   telemetry: coreTelemetry.ContextWindowTelemetry | undefined,
 ): string {
@@ -281,35 +236,23 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * `use-drag-and-drop.ts`'s own docs make for capabilities that are not
  * really there.
  *
- * **The metadata row (T388, superseding T386's ring-opens-the-menu
- * design; split into two visual lines by UI-P4).** Model/effort,
- * per-message routing, and the session-wide queue-delivery mode are no
- * longer inside the context ring's popover — the ring now opens only a
- * context-usage summary. The owner's explicit web divergence from the
- * reference (unlike Android, which keeps them in the ring) is to render
- * them as three compact chips (the mockup's `.chip`) directly under the
- * prompt row instead — still through `PromptBar`'s `metaChips` slot, so
- * there is exactly one foot row in the DOM (`.pc-prompt-bar__foot`), but
- * `composer.css` (UI-P4) now reflows that one row into two VISUAL lines
- * with `flex-wrap` plus `order`/`flex-basis` on the chip group, rather
- * than one crowded line: line 1 is the three chips, left-aligned, each
- * showing its full label and value; line 2 is `PromptBar`'s own
- * `footer`/queued-count/keyboard-hint/`footEnd` content, unchanged — the
- * mockup's own `.composer-foot` (state sentence · spacer ·
+ * **The context ring's session-controls sheet (UI-X1, restoring T386's
+ * ring-opens-the-menu design after T388/UI-P4 had moved it out into a
+ * chip row under the prompt bar).** The owner reversed that divergence:
+ * the reference (`docs/ui-reference/pi-companion-web.html`'s `#ctx-menu`)
+ * keeps Mode, Model & effort, Queue and Context inside the ring's own
+ * popover, and Android's `PromptControlsMenu` already matched that: web
+ * now does too, closing the last deliberate web/Android split over where
+ * these controls live. `ModelThinkingPicker`, `PromptRoutingPicker` and
+ * `QueueModePicker` are unchanged, just re-anchored back inside the
+ * `Sheet` the ring opens, each in its own labelled `.pc-composer__ring-
+ * group` (`composer.css`'s UI-X1 comment), in the reference's own order.
+ * There is exactly one foot row left under the prompt bar —
+ * `PromptBar`'s own `footer`/queued-count/keyboard-hint/`footEnd`
+ * content, the mockup's own `.composer-foot` (state sentence · spacer ·
  * `⏎ send · ⇧⏎ newline · Esc interrupt`) plus this repo's queued-count
- * and Stop additions. Cramming all five onto one line truncated nearly
- * every one of them at 1461x785 (measured live, see `composer.css`'s
- * UI-P4 comment for the exact figures); see that file for the width
- * arithmetic behind why two lines fit without truncation at 1461x785 and
- * 1280 wide. Each chip is a real button (`aria-haspopup`/`aria-expanded`,
- * via the unmodified `Popover` primitive) opening the SAME picker
- * component T386 mounted in the sheet — `ModelThinkingPicker`,
- * `PromptRoutingPicker`, `QueueModePicker` — unchanged, just re-anchored.
- * The chip's own visible text (`describeModelChipLabel`/
- * `describeRoutingChipLabel`/`describeQueueChipLabel` below) is a live,
- * collapsed summary of whatever that picker currently reports, including
- * its own explained unavailable/loading/error states — never a static
- * label.
+ * and Stop additions — with no chip row above it and no `metaChips` slot
+ * used.
  *
  * "Stop" (T28B2) is a second, distinctly-labelled control from "Send" —
  * cancelling the agent's active turn rather than submitting the draft —
@@ -852,9 +795,10 @@ export function Composer({
   const queueStatusTestId = testId ? `${testId}-queue-status` : undefined;
   const slashCommandsTestId = testId ? `${testId}-slash-commands` : undefined;
   const attachTestId = testId ? `${testId}-attach` : undefined;
-  const modelChipTestId = testId ? `${testId}-model-chip` : undefined;
-  const routingChipTestId = testId ? `${testId}-routing-chip` : undefined;
-  const queueChipTestId = testId ? `${testId}-queue-chip` : undefined;
+  const routingGroupTestId = testId ? `${testId}-mode-group` : undefined;
+  const modelGroupTestId = testId ? `${testId}-model-group` : undefined;
+  const queueGroupTestId = testId ? `${testId}-queue-group` : undefined;
+  const contextGroupTestId = testId ? `${testId}-context-group` : undefined;
   const contextSummaryTestId = testId ? `${testId}-context-summary` : undefined;
   // FIX-L2: `canAbort` alone (`use-composer.ts`) is only "a client is
   // wired and no abort is already in flight" — true for the entire
@@ -944,41 +888,6 @@ export function Composer({
           </button>
         }
         footer={<span data-testid={footerStateTestId}>{describeRouting(promptRouting)}</span>}
-        metaChips={
-          <span className="pc-composer__meta">
-            <span className="pc-composer__meta-chip">
-              <Popover
-                triggerLabel={describeModelChipLabel(modelThinking)}
-                testId={modelChipTestId}
-              >
-                <ModelThinkingPicker
-                  state={modelThinking}
-                  testId={testId ? `${testId}-model-thinking` : undefined}
-                />
-              </Popover>
-            </span>
-            <span className="pc-composer__meta-chip">
-              <Popover
-                triggerLabel={describeRoutingChipLabel(promptRouting)}
-                testId={routingChipTestId}
-              >
-                <PromptRoutingPicker
-                  value={promptRouting}
-                  onChange={setPromptRouting}
-                  testId={testId ? `${testId}-prompt-routing` : undefined}
-                />
-              </Popover>
-            </span>
-            <span className="pc-composer__meta-chip">
-              <Popover triggerLabel={describeQueueChipLabel(queueModes)} testId={queueChipTestId}>
-                <QueueModePicker
-                  state={queueModes}
-                  testId={testId ? `${testId}-queue-modes` : undefined}
-                />
-              </Popover>
-            </span>
-          </span>
-        }
         footEnd={
           showAbort ? (
             <IconButton
@@ -1118,56 +1027,96 @@ export function Composer({
       <Sheet
         open={controlsOpen}
         title="Session controls"
-        description="This session's context-window usage."
+        description="Mode, model and effort, queue delivery, and this session's context-window usage."
         onClose={() => setControlsOpen(false)}
         testId={controlsSheetTestId}
       >
         <div className="pc-composer__session-controls">
-          <p data-testid={contextSummaryTestId}>{describeContextSummary(contextTelemetry)}</p>
-          {/* UI-W9: the reference `#ctx-menu` popover's own
-              final `.menu-g` group is its "Context" readout
-              (`docs/ui-reference/pi-companion-web.html`) — the SAME
-              `ContextMeter` the right rail used to mount directly now
-              renders here instead, off the ring's own `contextTelemetry`
-              prop, so the two can never disagree. */}
-          {contextTelemetry ? (
-            <ContextMeter
-              telemetry={contextTelemetry}
-              testId={testId ? `${testId}-context-meter` : undefined}
+          {/* UI-X1: restores the reference `#ctx-menu` popover's own
+              grouping and ordering (`docs/ui-reference/pi-companion-web.html`
+              — Mode, then Model & effort, then Queue, then Context), which
+              T388 had moved out into a chip row under the prompt bar. The
+              owner has since reversed that divergence: these three pickers
+              — `PromptRoutingPicker`, `ModelThinkingPicker`, `QueueModePicker`
+              — are unchanged, just re-anchored back inside this sheet,
+              keeping their own testIds and labels exactly as the chip row
+              left them. The reference's own "Mode" group is a Build/Plan
+              agent-mode toggle this codebase has no provider-backed feature
+              for (mirrored by Android's own `PromptControlsMenu`, whose
+              `modeControl` slot renders a DIFFERENT component,
+              `SessionControlsPicker`, for that same reason); the nearest
+              real web control is `PromptRoutingPicker`'s per-message
+              steer/follow-up routing, so it fills this group instead. */}
+          <div className="pc-composer__ring-group" data-testid={routingGroupTestId}>
+            <div className="pc-composer__ring-group-label">Mode</div>
+            <PromptRoutingPicker
+              value={promptRouting}
+              onChange={setPromptRouting}
+              testId={testId ? `${testId}-prompt-routing` : undefined}
             />
-          ) : null}
-          {/* UI-W11: the reference `#ctx-menu` group also carries a Cost
-              readout — `SessionCostMeterContainer` (`features/telemetry/`)
-              mounts directly after `ContextMeter` so the ring's popover
-              carries the full context/cost group. Unlike `ContextMeter`
-              above, this always mounts (it needs only `sessionId`, not
-              `contextTelemetry`) and shows its own honest "not priced
-              yet" state whenever there is no live `sessionCostClient` or
-              no priced turn — never a fabricated `$0.00`. */}
-          <SessionCostMeterContainer
-            agentId={composerOptions.sessionId}
-            client={sessionCostClient}
-            testId={testId ? `${testId}-session-cost-meter` : undefined}
-          />
-          {/* UI-W12: the reference `#ctx-menu` popover's Context group ends
-              with its `.mrow`-styled `#row-compact`
-              (`docs/ui-reference/pi-companion-web.html`) — "Compact now"
-              sends the literal `COMPACT_NOW_TEXT` chat message through the
-              same submit path any typed message takes; see that constant's
-              own doc comment above for why there is no RPC to call
-              instead. */}
-          <button
-            type="button"
-            className="pc-composer__compact-now"
-            onClick={handleCompactNow}
-            disabled={compactNowUnavailableReason !== null}
-            data-testid={compactNowTestId}
-          >
-            <span className="pc-composer__compact-now-label">Compact now</span>
-            <span className="pc-composer__compact-now-value">
-              {compactNowUnavailableReason ?? "Sends /compact as a message"}
-            </span>
-          </button>
+          </div>
+          <div className="pc-composer__ring-group" data-testid={modelGroupTestId}>
+            <div className="pc-composer__ring-group-label">Model &amp; effort</div>
+            <ModelThinkingPicker
+              state={modelThinking}
+              testId={testId ? `${testId}-model-thinking` : undefined}
+            />
+          </div>
+          <div className="pc-composer__ring-group" data-testid={queueGroupTestId}>
+            <div className="pc-composer__ring-group-label">Queue</div>
+            <QueueModePicker
+              state={queueModes}
+              testId={testId ? `${testId}-queue-modes` : undefined}
+            />
+          </div>
+          <div className="pc-composer__ring-group" data-testid={contextGroupTestId}>
+            <div className="pc-composer__ring-group-label">Context</div>
+            <p data-testid={contextSummaryTestId}>{describeContextSummary(contextTelemetry)}</p>
+            {/* UI-W9: the reference `#ctx-menu` popover's own
+                final `.menu-g` group is its "Context" readout
+                (`docs/ui-reference/pi-companion-web.html`) — the SAME
+                `ContextMeter` the right rail used to mount directly now
+                renders here instead, off the ring's own `contextTelemetry`
+                prop, so the two can never disagree. */}
+            {contextTelemetry ? (
+              <ContextMeter
+                telemetry={contextTelemetry}
+                testId={testId ? `${testId}-context-meter` : undefined}
+              />
+            ) : null}
+            {/* UI-W11: the reference `#ctx-menu` group also carries a Cost
+                readout — `SessionCostMeterContainer` (`features/telemetry/`)
+                mounts directly after `ContextMeter` so the ring's popover
+                carries the full context/cost group. Unlike `ContextMeter`
+                above, this always mounts (it needs only `sessionId`, not
+                `contextTelemetry`) and shows its own honest "not priced
+                yet" state whenever there is no live `sessionCostClient` or
+                no priced turn — never a fabricated `$0.00`. */}
+            <SessionCostMeterContainer
+              agentId={composerOptions.sessionId}
+              client={sessionCostClient}
+              testId={testId ? `${testId}-session-cost-meter` : undefined}
+            />
+            {/* UI-W12: the reference `#ctx-menu` popover's Context group ends
+                with its `.mrow`-styled `#row-compact`
+                (`docs/ui-reference/pi-companion-web.html`) — "Compact now"
+                sends the literal `COMPACT_NOW_TEXT` chat message through the
+                same submit path any typed message takes; see that constant's
+                own doc comment above for why there is no RPC to call
+                instead. */}
+            <button
+              type="button"
+              className="pc-composer__compact-now"
+              onClick={handleCompactNow}
+              disabled={compactNowUnavailableReason !== null}
+              data-testid={compactNowTestId}
+            >
+              <span className="pc-composer__compact-now-label">Compact now</span>
+              <span className="pc-composer__compact-now-value">
+                {compactNowUnavailableReason ?? "Sends /compact as a message"}
+              </span>
+            </button>
+          </div>
         </div>
       </Sheet>
     </div>

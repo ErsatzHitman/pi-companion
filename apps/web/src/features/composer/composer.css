@@ -120,193 +120,18 @@
   font-size: var(--font-size-xs);
 }
 
-/* Metadata chips (T388, values corrected UI-P1): the reference's own
- * `.chip { height: 22px; padding: 0 8px; border-radius: 6px; background:
- * var(--inset); box-shadow: var(--sh-hairline); font-family: var(--mono);
- * font-size: 11px; color: var(--ink-2) }` — mono, a filled `--inset` tint,
- * `--radius-chip` (6px), NOT the pill radius this comment previously
- * (wrongly) claimed the mockup used; `.pill` is the mockup's pill-radius
- * class, a different element. Each chip is a `Popover` trigger
- * (unmodified primitive); these rules only restyle that trigger button,
- * scoped to this wrapper so the primitive's own default (used elsewhere,
- * e.g. `CommandSearch`) is untouched. */
+/* UI-X1: reverses UI-P4/T388's chip row. The reference has only the
+ * mockup's own `.composer-foot` under the prompt row — no chip row above
+ * it — so nothing here overrides `.pc-prompt-bar__foot`'s layout any
+ * more; `PromptBar`'s `metaChips` slot is simply unused. Mode, Model &
+ * effort and Queue moved back into the ring's own `Sheet`; see this
+ * file's `.pc-composer__ring-group` rules, below `.pc-composer__session-
+ * controls`. */
 
-/* UI-P4: the owner's explicit web divergence from the reference keeps
- * these chips OUTSIDE the context ring (unlike Android), but crammed onto
- * `PromptBar`'s single foot row beside the state sentence, queued count,
- * keyboard hint and Stop, five competing items truncated every one of
- * them at 1461x785 (measured live: a 129px model chip, a 59px routing
- * chip whose value was entirely cut off, a 129px queue chip, and a
- * shortcut hint missing its own leading "⏎ send ·"). `PromptBar.tsx` is a
- * shared recipe (`ui/recipes/`, also used by `dev/recipe-lab.tsx` and its
- * own `recipes.test.tsx`) outside this task's `features/composer/`
- * ownership, so the fix is CSS-only, entirely from this file: the DOM is
- * still ONE `.pc-prompt-bar__foot` flex row (no new element, no testid
- * change), reflowed into two VISUAL lines with `flex-wrap` plus one
- * child (`.pc-composer__meta` below) forced onto its own full-width line
- * via `order`/`flex-basis`. `.pc-prompt-bar__foot`'s own font/size/colour/
- * padding/gap (`recipes.css`) already port the reference `.composer-foot`
- * verbatim — untouched — so line 2 (state sentence, spacer, the full
- * `⏎ send · ⇧⏎ newline · Esc interrupt`, and this repo's own queued-count/
- * Stop additions) is exactly that rule already was, just no longer
- * sharing its line with the chips.
- *
- * Width arithmetic (no live browser in this task's sandbox — reasoned
- * from `shell.css`'s own rail widths/breakpoints and the design tokens,
- * both read, not guessed): at 1461px, `.shell__regions` is past every
- * breakpoint (>1360/1180/860px), so the session/extension rails are
- * 264px/344px and the centre column is 1461-264-344=853px; `.shell__center`
- * subtracts its own `padding: var(--spacing-4)` (16px each side, 32px
- * total) to 821px, under `.pc-composer`'s 53.5rem (856px) max-width, so
- * `.pc-composer` renders at ~821px; `.pc-prompt-bar__foot`'s own
- * `padding: 0 var(--spacing-1)` (4px each side) leaves ~813px for both
- * lines. At 1280px (between the 1180px/1360px breakpoints, so the
- * narrower 232px/312px rail step applies) the same chain gives
- * 1280-232-312=736px, -32px padding=704px, -8px foot padding=~696px. Line
- * 1's three chips, even at an assumed worst case (mono ~6.5px/character
- * at this chip text's 11px font-size, matching the ratio the live-measured
- * 129px/20-character truncated model chip in the defect report implies):
- * model+thinking ("Muse Spark 1.3 · Continuous"-shaped, ~28 chars ≈182px),
- * routing ("Routing: Follow-up", the longest of the three routing labels,
- * ~19 chars ≈95px), queue ("Queue: One at a time steer · One at a time
- * follow-up", the longest realistic pairing, ~52 chars ≈338px) — sum
- * ≈615px plus two 4px gaps (`--spacing-1`) and this box's own padding
- * ≤88px ≈703px total, under 813px at 1461px with ~110px to spare; at
- * 696px it is the one case close enough to be worth flagging — by the
- * same per-character estimate it is ~7px over on one line, which is
- * exactly the case `.pc-composer__meta`'s own `flex-wrap: wrap` above
- * exists for: the queue chip (last in DOM order) moves to its own
- * second chip-line instead of any chip's text truncating, so line 1 can
- * still occupy two lines and nothing is cut. Line 2's own content (the
- * longest state sentence, "Auto — steers the turn in flight, or starts a
- * new one when idle", ~63 chars ≈397px; the full keyboard hint, ~35
- * chars ≈220px; the Stop button, ~30px; three 8px gaps and the 8px foot
- * padding ≈32px) totals ≈687px — under 813px at 1461px, and under 696px
- * at 1280px with a real but narrow ~9px margin at this same pessimistic
- * per-character estimate; `.pc-prompt-bar__foot-state`'s pre-existing
- * `overflow: hidden; text-overflow: ellipsis` (untouched, `recipes.css`)
- * remains as that line's own last-resort fallback if a future, even
- * longer state sentence ever needs it. */
-.pc-composer .pc-prompt-bar__foot {
-  flex-wrap: wrap;
-}
-.pc-composer__meta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1);
-  min-width: 0;
-  /* Forces this onto its own full-width first line (line 1: the chips),
-   * pushing the state-sentence/spacer/keys/Stop group (all default
-   * `order: 0`, unchanged DOM order) onto a wrapped second line (line 2:
-   * the reference's own `.composer-foot`) — see the UI-P4 comment above.
-   * `flex-shrink: 0` keeps this from being squeezed smaller than its own
-   * three chips' natural width; if a future narrower viewport can't fit
-   * them on one line, `flex-wrap: wrap` below lets a chip move to its own
-   * line instead of shrinking, so wrapping — never shrinking — is what
-   * absorbs a narrow viewport. */
-  flex-basis: 100%;
-  flex-shrink: 0;
-  order: -1;
-  flex-wrap: wrap;
-}
-.pc-composer__meta-chip {
-  display: inline-flex;
-  /* Needed, but NOT sufficient on its own (defect 1, UI-P1) — this alone
-   * was tried before and did not stop the overlap. It lets THIS box
-   * shrink inside `.pc-composer__meta`'s row, but the box that actually
-   * refuses to shrink sits one level deeper: `Popover` (`ui/primitives/
-   * Popover.tsx`) renders its trigger inside its own wrapper,
-   * `<div class="pc-popover">` (`display: inline-block`, no `min-width`),
-   * which is THIS element's one child and therefore the real flex item
-   * `.pc-composer__meta`'s row has to size around. Because that div's
-   * `min-width` computes to `auto` and its `overflow` is the default
-   * `visible`, the flexbox "automatic minimum size" rule gives it a floor
-   * equal to its button's own min-content size (the button's text is
-   * `white-space: nowrap`, so that floor is the FULL, un-truncated label
-   * width) — it never actually shrinks. Every box in the chain up to the
-   * button already has `overflow: visible`, so once the outer chips are
-   * squeezed to slivers by `.pc-composer__meta`'s own flex-shrink, each
-   * one's un-shrunk `.pc-popover` child paints its full-width label past
-   * that sliver — several adjacent slivers' full-width labels landing in
-   * the same band is defect 1's overlapping text. See the fix on
-   * `.pc-popover` directly below, scoped to this wrapper rather than
-   * `primitives.css` because `Popover` is also used unrelated to the
-   * composer (`features/files/file-popover-button.tsx`,
-   * `features/sessions/session-row-actions-button.tsx`).
-   *
-   * UI-P4: `flex-shrink: 0` — now that `.pc-composer__meta` (above) has
-   * its own dedicated, uncontested line, nothing forces this chip to
-   * shrink below its content size any more; kept explicit rather than
-   * relying on that circumstantially, so a shrink-caused truncation can
-   * never silently come back if a future sibling is added to that line. */
-  min-width: 0;
-  flex-shrink: 0;
-}
-.pc-composer__meta-chip .pc-popover {
-  /* The actual fix: bypasses the automatic-minimum computation above by
-   * giving this specific box an explicit `min-width`, so the flex
-   * algorithm is finally free to size it down. Once it does, the
-   * `.pc-popover__trigger` rule below — `overflow: hidden;
-   * text-overflow: ellipsis; white-space: nowrap` — is finally clipping
-   * against a real, shrunk containing width instead of the button's own
-   * unconstrained shrink-to-fit width, and the label truncates instead of
-   * overlapping its neighbours. */
-  min-width: 0;
-}
-.pc-composer__meta-chip .pc-popover__trigger {
-  /* The reference's 11px has no matching type-scale token (10.5px/12.5px
-   * are the nearest); kept as a local custom property quoting the mockup
-   * value, the same treatment `.pc-context-ring__pct` already uses for its
-   * own off-scale 7.5px. */
-  --pc-composer-chip-font-size: 11px;
-  height: 1.375rem;
-  padding: 0 var(--spacing-2);
-  border-radius: var(--radius-chip);
-  box-shadow: var(--shadow-hairline);
-  background-color: var(--color-inset);
-  color: var(--color-ink-2);
-  font-family: var(--font-family-mono);
-  font-size: var(--pc-composer-chip-font-size);
-  white-space: nowrap;
-  /* UI-P4: raised from 14rem — that cap was sized for the old crowded
-   * single row, where every chip HAD to truncate to fit. On its own line
-   * (`.pc-composer__meta` above) the worst realistic content (the queue
-   * chip's "Queue: One at a time steer · One at a time follow-up", ~52
-   * mono characters, well under 28rem at this chip's font-size) fits
-   * without ellipsis at both 1461px and 1280px — see `Composer.tsx`'s
-   * UI-P4 doc comment for the full width arithmetic. This cap stays, at a
-   * generous size, as the last-resort fallback the task allows: only a
-   * single chip whose own content is pathologically long would ever hit
-   * it. */
-  max-width: 28rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.pc-composer__meta-chip .pc-popover__trigger:hover {
-  background-color: var(--color-hover);
-  color: var(--color-ink);
-}
-/* Popover's own `:active` press treatment (`primitives.css`) already
- * applies here — not repeated. */
-.pc-composer__meta-chip .pc-popover__trigger[aria-expanded="true"] {
-  background-color: var(--color-accent-tint);
-  color: var(--color-ink);
-}
-.pc-composer__meta-chip .pc-popover__trigger:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.pc-composer__meta-chip .pc-popover__content {
-  font-family: var(--font-family-sans);
-  font-size: var(--font-size-base);
-  white-space: normal;
-  min-width: 16rem;
-}
-
-/* The Stop icon button (T388): a fourth, danger-tinted glyph appended to
+/* The Stop icon button (T388): a second, danger-tinted glyph appended to
  * the same foot row via `PromptBar`'s `footEnd` slot — sized like the
  * primitive's own default, tinted so "halt" reads as a distinct, more
- * serious action than the neutral chips beside it. */
+ * serious action than the neutral state sentence beside it. */
 .pc-composer__meta-abort {
   color: var(--status-danger-icon);
 }
@@ -379,13 +204,40 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The session-controls sheet opened by the ring (T388): context-usage
- * summary text only — the model/routing/queue pickers moved out to the
- * metadata-row chips above. */
+/* The session-controls sheet opened by the ring (UI-X1, restoring T386):
+ * Mode, Model & effort, Queue and Context all live here again, each its
+ * own `.pc-composer__ring-group` below, in the reference `#ctx-menu`'s
+ * own order (`docs/ui-reference/pi-companion-web.html`). */
 .pc-composer__session-controls {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-4);
+}
+
+/* One ring-menu group (the reference's `.menu-g`/`.menu-l`): a small
+ * uppercase mono label — `font-size: 9.5px; font-weight: 600;
+ * letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3)`
+ * in the reference — above its control. `--font-size-xs` is the nearest
+ * scale token to the reference's off-scale 9.5px, the same treatment this
+ * file already gives other mockup-exact values with no matching token.
+ * `border-top` on every group after the first mirrors the reference's
+ * `.menu-g + .menu-g` divider. */
+.pc-composer__ring-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.pc-composer__ring-group + .pc-composer__ring-group {
+  border-top: 1px solid var(--color-line);
+  margin-top: var(--spacing-1);
+  padding-top: var(--spacing-3);
+}
+.pc-composer__ring-group-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
 }
 
 /* "Compact now" (UI-W12): the reference `#ctx-menu` popover's Context
