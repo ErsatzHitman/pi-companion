@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { cpus } from "node:os";
 
 import react from "@vitejs/plugin-react";
@@ -14,8 +15,18 @@ import { defineConfig } from "vitest/config";
  */
 const maxWorkers = Math.max(1, Math.min(6, cpus().length - 1));
 
+/*
+ * UI-X5: mirrors `vite.config.ts`'s `__APP_VERSION__` define so the rail
+ * foot's version chip resolves under vitest exactly as it does in the
+ * bundle. Without it the global is undefined in jsdom and the test would
+ * be asserting on a different value than users see.
+ */
+const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"))
+  .version as string;
+
 export default defineConfig({
   plugins: [react()],
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],

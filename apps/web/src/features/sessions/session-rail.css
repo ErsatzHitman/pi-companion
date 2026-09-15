@@ -261,6 +261,17 @@
 
 /* Foot -------------------------------------------------------------------- */
 
+/*
+ * UI-X5: the reference's foot is `justify-content: space-between` with two
+ * children — the connection status and `<span class="mono-num">v0.4.0</span>`.
+ * `.mono-num` is `font-family: var(--mono); font-variant-numeric: tabular-nums`,
+ * and the foot rule already supplies the mono family, 10.5px size and ink-3
+ * colour, so the version chip only needs the tabular figures.
+ */
+.pc-session-rail__version {
+  font-variant-numeric: tabular-nums;
+}
+
 .pc-session-rail__foot {
   /* Pins the foot to the rail's bottom edge; see `.pc-session-rail`. */
   margin-top: auto;

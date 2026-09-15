@@ -149,6 +149,21 @@ describe("SessionRail", () => {
     );
   });
 
+  it("ends the foot with this app's own real version, not the daemon's", () => {
+    // UI-X5: the design reference's rail foot is a space-between row ending in
+    // `<span class="mono-num">v0.4.0</span>`. The value must come from this
+    // app's own package manifest via the `__APP_VERSION__` define (declared in
+    // BOTH vite.config.ts and vitest.config.ts, so the bundle and jsdom agree);
+    // the daemon's `DAEMON_APP_VERSION` is a protocol-compatibility string and
+    // would be a different fact wearing this label. Asserting against the
+    // manifest rather than a hardcoded literal keeps this true across bumps.
+    renderRail();
+    const version = screen.getByTestId("shell-session-rail-version");
+    expect(version.textContent).toBe(`v${__APP_VERSION__}`);
+    expect(__APP_VERSION__).toMatch(/^\d+\.\d+\.\d+/);
+    expect(screen.getByTestId("shell-session-rail-foot").contains(version)).toBe(true);
+  });
+
   it("states no relay fact when no connection is open", () => {
     renderRail({ connection: { status: "offline", kind: null } });
     const foot = screen.getByTestId("shell-session-rail-foot");

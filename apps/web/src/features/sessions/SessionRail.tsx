@@ -92,6 +92,17 @@ function SessionRailFoot({ connection }: { connection: SessionRailConnection }) 
         {statusWord}
         {relayWord ? <> · {relayWord}</> : null}
       </span>
+      {/*
+        UI-X5: the reference's rail foot ends with a version chip, right-aligned
+        opposite the connection status (its `.rail-foot` is a space-between row).
+        The value is this app's real version, injected from its own package
+        manifest by the `__APP_VERSION__` define — not the daemon's
+        `DAEMON_APP_VERSION`, which is a protocol-compatibility string and would
+        be a different fact wearing this label.
+      */}
+      <span className="pc-session-rail__version" data-testid="shell-session-rail-version">
+        v{__APP_VERSION__}
+      </span>
     </div>
   );
 }
