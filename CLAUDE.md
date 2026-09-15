@@ -294,6 +294,30 @@ locked, rmdir` failure mode directly (Windows holds a file handle open slightly 
   of this paragraph's own prior corrections exists because a restated count went stale the moment
   the next member landed.
 
+  **An eighth member was added on 2026-09-15, and it showed BOTH failure modes at once:**
+  `src/utils/checkout-git.commits.test.ts`. CI's `server-tests (windows-latest)` went red at
+  `51639c9` with `Error: EBUSY: resource busy or locked, rmdir
+  'C:\Users\runneradmin\AppData\Local\Temp\checkout-commits-test-Vu4CZP\repo'` AND
+  `Error: Test timed out in 30000ms`, with **zero assertion failures** — this paragraph's
+  signature. The commit under test touched only `apps/web` CSS, so it was not a regression.
+
+  Measured from the file's own source rather than assumed, it carries the shape in the
+  strongest form yet: it imports `execFileSync`, `execSync` AND `spawnSync` and drives real
+  `git` subprocesses throughout, inside a `mkdtempSync(tmpdir(), "checkout-git-test-")`
+  directory it then `rmSync`s recursively — the delete racing a still-exiting git process is
+  the `EBUSY` mode exactly as `terminal-activity-route.test.ts` and
+  `executable-resolution.test.ts` already document it.
+
+  **The decisive point is precedent, not just one red run: its own sibling
+  `src/utils/checkout-git.test.ts` was already the FIRST member of the serial lane**, isolated
+  for this identical shape, while this file — same directory, same real-git-subprocess
+  harness, same temp-directory lifecycle — was left racing in the parallel lane. Run alone on
+  this machine it takes **15.73s of test time (18.13s wall) for 12 tests**, against CI's 30s
+  budget: a ~2x margin while competing with ~250 sibling files for CPU and, on Windows, for
+  file-handle release. That is the same thin-margin measurement every prior member was
+  justified by. No timeout was raised, for the reason this paragraph already gives about the
+  other seven.
+
   **A seventh member was added on 2026-09-10, and it is the OTHER failure mode this section
   names, not the timeout one:** `src/executable-resolution/executable-resolution.test.ts`. CI's
   `server-tests (windows-latest)` went red at `2b2bfe7` with `1 failed | 3414 passed` and **zero

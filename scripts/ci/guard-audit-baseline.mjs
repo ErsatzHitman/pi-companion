@@ -366,7 +366,7 @@ export const AUDIT_BASELINE = [
   {
     package: "@react-navigation/bottom-tabs",
     severity: "moderate",
-    range: "<=7.18.18",
+    range: "<=7.19.0",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
@@ -380,21 +380,21 @@ export const AUDIT_BASELINE = [
   {
     package: "@react-navigation/elements",
     severity: "moderate",
-    range: "<=2.9.40",
+    range: "<=2.9.41",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
   {
     package: "@react-navigation/native",
     severity: "moderate",
-    range: "<=3.0.0-alpha.12 || 3.0.1 - 3.6.5 || 4.0.0-alpha.0 - 7.3.18",
+    range: "<=3.0.0-alpha.12 || 3.0.1 - 3.6.5 || 4.0.0-alpha.0 - 7.4.0",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
   {
     package: "@react-navigation/native-stack",
     severity: "moderate",
-    range: "<=7.18.10",
+    range: "<=7.19.0",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
