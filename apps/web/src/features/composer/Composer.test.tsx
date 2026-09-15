@@ -227,6 +227,40 @@ describe("Composer", () => {
     await waitFor(() => expect(client.canceledAgentIds).toEqual(["session-1"]));
   });
 
+  it("FIX-CI5: Stop is keyboard-reachable and keyboard-operable while a turn is active, not mouse-only", async () => {
+    // `apps/web/e2e/keyboard-navigation.spec.ts` used to prove this by tabbing
+    // to Stop, but it walks an IDLE session, where FIX-L2 correctly removes the
+    // control entirely. Driving a real running turn from that spec was measured
+    // and does not work: the daemon's `agent_update`/`status: "running"` push
+    // does not reliably reach the client for a turn short enough to assert
+    // against, so the browser-level assertion was moved here rather than
+    // dropped. This is the same property stated at the level that can actually
+    // hold it: Stop takes focus and responds to the keyboard, never a control
+    // reachable only by pointer.
+    const user = userEvent.setup();
+    const client = new FakeAgentTurnClient();
+    client.turnStatus = { hasActiveTurn: true };
+    render(<Composer {...baseProps()} client={client} testId="composer" />);
+
+    const stopButton = await screen.findByRole("button", { name: "Stop" });
+
+    // Reachable: a real <button> that is not removed from the tab order and not
+    // hidden from assistive technology.
+    expect(stopButton.tagName).toBe("BUTTON");
+    expect(stopButton.getAttribute("tabindex")).not.toBe("-1");
+    expect(stopButton.getAttribute("aria-hidden")).toBeNull();
+
+    // Focusable by keyboard, and focus actually lands on it.
+    stopButton.focus();
+    expect(document.activeElement).toBe(stopButton);
+
+    // Operable by keyboard alone: Enter on the focused control aborts, exactly
+    // as clicking it does.
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(client.canceledAgentIds).toEqual(["session-1"]));
+  });
+
   it("reflects an in-flight abort promptly with visible, non-colour status text, keeping Stop visible but disabled", async () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
