@@ -1,0 +1,15 @@
+# SPA fallback for static hosts (Cloudflare Pages, Netlify).
+#
+# apps/web is a client-routed SPA: TanStack Router owns paths like
+# /connect and /h/<serverId>/session/<agentId>. A static host knows
+# nothing about those routes and, without this rule, serves its own 404
+# for every one of them -- the app works only if you land on / and
+# navigate, and breaks on reload or on any shared/bookmarked deep link.
+#
+# 200 (not 301/302) is deliberate: the browser must keep the requested
+# URL so the router can read it on boot. A redirect would rewrite the
+# address bar to / and lose the route the user actually asked for.
+#
+# Harmless in the daemon-served bundle: scripts/build-daemon-web-ui.mjs
+# copies the Vite output wholesale, and Express never reads this file.
+/*    /index.html   200
