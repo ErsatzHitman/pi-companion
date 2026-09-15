@@ -295,6 +295,33 @@ export class InMemoryAgentTimelineStore {
   }
 
   /**
+   * FIX-S12: true when `mergePendingLiveUserMessage`'s fallback (see its own
+   * doc comment) would have something to merge onto even though the
+   * primary FIFO (`pendingLiveUserMessageSeqs`) is empty — i.e. the most
+   * recently claimed live row is still the newest `user_message` row in the
+   * timeline. `AgentManager.computeReplayMergeEligibleIndices` bounds a full
+   * replay's trailing merge window by `pendingLiveUserMessageCount` alone;
+   * without this, that count reaching zero the instant a *first* racing
+   * importer (e.g. the tail watcher) claims the one pending row makes the
+   * window zero-width for every *other* racing importer too, so their own
+   * independently-keyed echo of the exact same row is never even offered to
+   * `mergePendingLiveUserMessage` — it is gated out one layer above, where
+   * this fix's fallback can't help. This lets that caller widen the window
+   * by exactly one slot in that case, while `mergePendingLiveUserMessage`
+   * itself still makes the final, authoritative decision.
+   */
+  hasResolvableLiveUserMessageFallback(agentId: string): boolean {
+    const state = this.requireState(agentId);
+    const lastResolvedSeq = state.resolvedLiveUserMessageSeqs.at(-1);
+    if (lastResolvedSeq === undefined) {
+      return false;
+    }
+    return !state.rows.some(
+      (row) => row.item.type === "user_message" && row.seq > lastResolvedSeq,
+    );
+  }
+
+  /**
    * FIX-S10: claims the oldest still-unmatched live `user_message` row (see
    * `pendingLiveUserMessageSeqs`) for `dedupeKey`, merging `incoming`'s
    * `messageId` onto that existing row instead of creating a new one, and

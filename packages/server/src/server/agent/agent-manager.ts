@@ -4070,6 +4070,17 @@ export class AgentManager {
   ): ReadonlySet<number> {
     const eligible = new Set<number>();
     let remaining = this.timelineStore.pendingLiveUserMessageCount(agentId);
+    // FIX-S12: if nothing is left in the primary FIFO, a *different* racing
+    // importer (this replay) may still be looking at the very row a first
+    // racer (e.g. the tail watcher) already claimed moments ago under a
+    // different, independently-computed messageId. Widen the trailing
+    // window by exactly one slot in that case so this replay's own echo
+    // still reaches `mergePendingLiveUserMessage`, which decides — via
+    // `hasResolvableLiveUserMessageFallback`'s own "still the newest
+    // user_message row" check — whether it actually collapses.
+    if (remaining <= 0 && this.timelineStore.hasResolvableLiveUserMessageFallback(agentId)) {
+      remaining = 1;
+    }
     if (remaining <= 0) {
       return eligible;
     }
