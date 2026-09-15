@@ -284,6 +284,15 @@ const ROW_RADIUS = 12;
 const ROW_MIN_HEIGHT = 52;
 const ROW_PADDING_VERTICAL = 9;
 const ROW_PADDING_HORIZONTAL = 12;
+/**
+ * UI-X8: the artifact's `.row { gap: 10px }`. No spacing token holds
+ * 10 (the scale steps 8 -> 12), and this row was reading `spacing[2]`
+ * (8) instead — a real 2px shrink of the gap between the title/meta
+ * column and the status pill. Kept as its own literal, the same
+ * treatment `ROW_RADIUS` above already gives the artifact's 12 against
+ * the nearest token (10).
+ */
+const ROW_GAP = 10;
 
 /**
  * A1's bottom-row buttons. The artifact draws them at 44dp; 48 is
@@ -1143,7 +1152,7 @@ function createStyles(theme: NativeTheme) {
       minHeight: ROW_MIN_HEIGHT,
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing[2],
+      gap: ROW_GAP,
       paddingVertical: ROW_PADDING_VERTICAL,
       paddingHorizontal: ROW_PADDING_HORIZONTAL,
       borderRadius: ROW_RADIUS,

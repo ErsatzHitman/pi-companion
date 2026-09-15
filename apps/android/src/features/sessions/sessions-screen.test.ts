@@ -337,6 +337,11 @@ describe("SessionsScreen source: T363 A1's row", () => {
     expect(code).not.toMatch(/borderStyle: "dashed"/);
   });
 
+  it("UI-X8: uses the artifact's own `.row { gap: 10px }`, not the 8px spacing token", () => {
+    expect(code).toMatch(/const ROW_GAP = 10;/);
+    expect(code).toMatch(/gap: ROW_GAP,/);
+  });
+
   it("T385: keeps the row at the artifact's 52dp, above the platform's touch minimum", () => {
     expect(code).toMatch(/const ROW_MIN_HEIGHT = 52;/);
     expect(code).toMatch(/minHeight: ROW_MIN_HEIGHT/);

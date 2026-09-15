@@ -43,6 +43,13 @@ describe("ThinkingSection.tsx: the artifact's .thead (T357)", () => {
     expect(readCode()).toMatch(/const headTint = theme\.colors\["ink-3"\];/);
   });
 
+  it("UI-X8: uses the artifact's own `.thead { gap: 6px }`, not the 8px spacing token", () => {
+    const code = readCode();
+    expect(code).toMatch(/const THEAD_GAP = 6;/);
+    expect(code).toMatch(/gap: THEAD_GAP,/);
+    expect(code).not.toMatch(/gap: theme\.spacing\[2\],\s*minHeight: 48/);
+  });
+
   it("draws the artifact's single .think rule and inset on the wrapper, not on the body", () => {
     const code = readCode();
     expect(code).toMatch(/borderLeftWidth: THINK_RULE_WIDTH/);

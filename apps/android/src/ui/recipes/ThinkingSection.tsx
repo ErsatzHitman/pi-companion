@@ -105,6 +105,15 @@ const THINK_PADDING_LEFT = 11;
 /** `.ln { font-size: 12px; line-height: 1.62 }` — the transcript line's own mono metrics. */
 const LINE_FONT_SIZE = 12;
 const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
+/**
+ * UI-X8: `.thead { gap: 6px }`. No spacing token holds 6 (the scale
+ * steps 4 -> 8), and the trigger row was reading `spacing[2]` (8)
+ * instead — a real 2px stretch between the sparkle, the headline and
+ * the chevron. Kept as its own literal, the same treatment this file's
+ * other artifact-only figures (`THINK_RULE_WIDTH`, `THINK_PADDING_LEFT`)
+ * already get.
+ */
+const THEAD_GAP = 6;
 
 export function ThinkingSection({
   headline,
@@ -182,7 +191,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     trigger: {
       flexDirection: "row",
       alignItems: "center",
-      gap: theme.spacing[2],
+      gap: THEAD_GAP,
       minHeight: 48,
     },
     headline: {
