@@ -8914,6 +8914,156 @@ test("FIX-S11: a live send is recorded once even when a full RPC history replay 
   rmSync(workdir, { recursive: true, force: true });
 });
 
+test("FIX-S12: a live send is recorded once at scale, even when the tail watcher and a full replay each independently re-derive a *different* position-based messageId for it", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-scale-dedupe-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+
+  // The live send's own reply. This is the ONLY thing the fake provider
+  // ever streams live — everything else in this session is prior history,
+  // backfilled below exactly the way `PiLiveTailWatcher` would have
+  // already recorded it long before this send.
+  class ScaleRepliesSession extends TestAgentSession {
+    override async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
+      // A full RPC history replay (`primeTimelineFromLegacyProviderHistory` /
+      // `hydrateTimelineFromProvider`) racing this same live send. Its own
+      // `PiHistoryMapper` instance counted `role: "user"` rows from the
+      // model-facing `getMessages()` list — which, per the diagnosis this
+      // fix is for, does not necessarily see the exact same row set
+      // `PiLiveTailWatcher`'s raw-`.jsonl` `parseMessagesFromText` sees
+      // (interleaved `custom_message`/`custom`/`model_change`/
+      // `thinking_level_change` rows only one of the two producers
+      // encounters). At the scale this test seeds (300+ prior rows), that
+      // means this replay's own position-derived id for the live send
+      // (`-user-301`, one past the 300 backfilled below) genuinely differs
+      // from the tail watcher's own (`-user-300b` below) — neither producer
+      // is wrong about its own count, they just disagree, exactly the
+      // drift this fix makes harmless.
+      yield {
+        type: "timeline",
+        provider: this.provider,
+        item: {
+          type: "user_message",
+          text: "Reply with exactly: UX2077",
+          // Deliberately NOT "codex-history-user-301" (the tail watcher's own
+          // count below): this is the drift itself, standing in for the
+          // model-facing `getMessages()` list counting some interleaved
+          // injected rows as `role: "user"` that the raw-`.jsonl` tail
+          // watcher's `parseMessagesFromText` never even sees.
+          messageId: "codex-history-user-315",
+        },
+      };
+    }
+
+    override async startTurn(
+      _prompt: AgentPromptInput,
+      _options?: AgentRunOptions,
+    ): Promise<{ turnId: string }> {
+      const turnId = `turn-${++this.turnIdCounter}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: "UX2077" },
+        });
+        this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+      }, 0);
+      return { turnId };
+    }
+  }
+
+  class ScaleRepliesClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new ScaleRepliesSession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new ScaleRepliesClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000420",
+  });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  // Build a session at scale: 300 prior user/assistant turns already
+  // backfilled by an earlier tail-watcher pass, standing in for the
+  // hundreds of real rows (including interleaved `custom_message`/`custom`/
+  // `model_change`/`thinking_level_change` rows that never become timeline
+  // items on either producer, but do drive the position counters that
+  // diverge between them) a long-running real session accumulates. Every
+  // row here already carries a stable dedupeKey, so re-backfilling never
+  // creates a duplicate — only the live send below is new.
+  for (let i = 1; i <= 300; i += 1) {
+    await manager.appendHistoryBackfillTimelineItem(snapshot.id, {
+      type: "user_message",
+      text: `prior turn ${i}`,
+      messageId: `codex-history-user-${i}`,
+    });
+    await manager.appendHistoryBackfillTimelineItem(snapshot.id, {
+      type: "assistant_message",
+      text: `prior reply ${i}`,
+      messageId: `codex-history-assistant-${i}`,
+    });
+  }
+
+  const priorUserMessages = manager
+    .getTimeline(snapshot.id)
+    .filter((item) => item.type === "user_message");
+  expect(priorUserMessages).toHaveLength(300);
+
+  // Live turn path: exactly `AgentManager.recordSubmittedPrompt`'s append,
+  // driven end-to-end through a real `runAgent` turn — the same way a
+  // browser Send click does.
+  const result = await manager.runAgent(snapshot.id, "Reply with exactly: UX2077", {
+    clientMessageId: "live-send-scale-1",
+  });
+  expect(result.canceled).toBe(false);
+
+  const afterLiveSend = manager
+    .getTimeline(snapshot.id)
+    .filter((item) => item.type === "user_message");
+  expect(afterLiveSend).toHaveLength(301);
+
+  // Racer 1: the tail watcher's own from-scratch re-derivation of the raw
+  // file, computing its OWN position-based id for the live send — 300
+  // prior user rows it counted itself, so "-user-301".
+  await manager.appendHistoryBackfillTimelineItem(snapshot.id, {
+    type: "user_message",
+    text: "Reply with exactly: UX2077",
+    messageId: "codex-history-user-301",
+  });
+
+  // Racer 2: a full RPC history replay racing the same send, whose own
+  // `PiHistoryMapper` counted differently (see `ScaleRepliesSession.streamHistory`
+  // above) and so computes the SAME text under a DIFFERENT id
+  // ("codex-history-user-315" vs racer 1's "codex-history-user-301") — the
+  // fix under test must collapse this onto the same row without ever
+  // comparing the two producers' keys.
+  await manager.hydrateTimelineFromProvider(snapshot.id);
+
+  const timeline = manager.getTimeline(snapshot.id);
+  const userMessages = timeline.filter(
+    (item) => item.type === "user_message" && item.text === "Reply with exactly: UX2077",
+  );
+  expect(userMessages).toHaveLength(1);
+  const allUserMessages = timeline.filter((item) => item.type === "user_message");
+  expect(allUserMessages).toHaveLength(301);
+  const assistantReplies = timeline.filter(
+    (item) => item.type === "assistant_message" && item.text === "UX2077",
+  );
+  expect(assistantReplies).toHaveLength(1);
+
+  await manager.closeAgent(snapshot.id).catch(() => undefined);
+  await storage.flush().catch(() => undefined);
+  rmSync(workdir, { recursive: true, force: true });
+});
+
 test("hydrateTimeline preserves provider replay timestamps and marks missing ones untrusted", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-history-timestamps-"));
   const storagePath = join(workdir, "agents");
