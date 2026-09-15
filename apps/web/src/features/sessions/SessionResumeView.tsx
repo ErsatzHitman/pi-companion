@@ -25,10 +25,23 @@ export interface SessionResumeViewProps {
  * The head row (title, status pill, model/effort and mode chips) is
  * deliberately read-only and sourced only from the resumed snapshot's
  * real fields: a chip whose value the daemon does not report is omitted
- * rather than filled with a placeholder. The restored-message/queued
- * facts stay in the head as a compact sub-line, keeping the
- * `session-resume-ready` test id (and its two count test ids) several
- * Playwright specs wait on.
+ * rather than filled with a placeholder.
+ *
+ * UI-X2: the restored-message/queued facts are no longer DRAWN. The design
+ * reference's `.main-head` carries a title, a status pill and a model chip
+ * and nothing else, so a visible sub-line here put our header a line taller
+ * than the reference at every viewport. An earlier pass kept the line
+ * deliberately, because several Playwright specs wait on
+ * `session-resume-ready` and its two count ids; the owner has since required
+ * an exact match to the reference, so the line goes.
+ *
+ * The node itself stays, carrying all three test ids, marked
+ * `pc-visually-hidden` — the same treatment this wave already applied to the
+ * web assistant timestamp and the Android per-row timestamp. That utility is
+ * absolutely positioned and clipped, so it contributes no layout and the head
+ * now matches the reference's single-row geometry, while the specs keep a
+ * real signal to wait on rather than being deleted or repointed at a weaker
+ * one.
  */
 export function SessionResumeView({ controller }: SessionResumeViewProps) {
   const { state, retry } = controller;
@@ -84,7 +97,7 @@ function SessionHead({ session, timeline, queue }: SessionHeadProps) {
       <div className="pc-session-head__main">
         <h3 className="pc-session-head__title">{session.title ?? "Untitled session"}</h3>
         {timeline ? (
-          <p className="pc-session-head__facts" data-testid="session-resume-ready">
+          <p className="pc-visually-hidden" data-testid="session-resume-ready">
             <span data-testid="session-resume-message-count">{messageCount}</span> messages restored
             <span aria-hidden="true"> · </span>
             <span data-testid="session-resume-queue-count">{queue.length}</span> queued

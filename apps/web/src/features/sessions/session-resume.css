@@ -44,13 +44,14 @@
   color: var(--color-ink);
 }
 
-.pc-session-head__facts {
-  margin: 0;
-  font-family: var(--font-family-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-xs);
-  color: var(--color-ink-3);
-}
+/*
+ * UI-X2 removed `.pc-session-head__facts`. The restored-message/queued node
+ * it styled is still rendered, for the three Playwright test ids several
+ * specs wait on, but is now `pc-visually-hidden` and therefore draws
+ * nothing — the design reference's `.main-head` has no such line, and a
+ * visible one made our header a line taller than the reference at every
+ * viewport. No rule replaces it: the utility class owns the node entirely.
+ */
 
 .pc-session-head__right {
   display: flex;
