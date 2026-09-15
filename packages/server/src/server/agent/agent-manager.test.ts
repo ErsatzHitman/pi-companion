@@ -8821,6 +8821,99 @@ test("FIX-S10: two identical live sends still record two distinct user_message r
   rmSync(workdir, { recursive: true, force: true });
 });
 
+test("FIX-S11: a live send is recorded once even when a full RPC history replay races it mid-turn", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-replay-race-dedupe-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+
+  class ReplayRaceSession extends TestAgentSession {
+    override async startTurn(
+      _prompt: AgentPromptInput,
+      _options?: AgentRunOptions,
+    ): Promise<{ turnId: string }> {
+      const turnId = `turn-${++this.turnIdCounter}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: "ONE8475" },
+        });
+        this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+      }, 0);
+      return { turnId };
+    }
+
+    // Simulates `PiRpcAgentSession.streamHistory()` racing the live path
+    // mid-turn, before the assistant has replied: it independently
+    // re-derives the same user_message the live path already recorded,
+    // stamped with the stable, position-derived `messageId` a real history
+    // mapper assigns to the first user message in a session — exactly what
+    // `primeTimelineFromLegacyProviderHistory` (an ordinary page-load/
+    // reconnect hydrate, since this agent's timeline has never been primed
+    // in this process) reads back.
+    override async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
+      yield {
+        type: "timeline",
+        provider: this.provider,
+        item: {
+          type: "user_message",
+          text: "Reply with exactly: ONE8475",
+          messageId: "codex-history-user-1",
+        },
+      };
+    }
+  }
+
+  class ReplayRaceClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new ReplayRaceSession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new ReplayRaceClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000412",
+  });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  // Live turn path: exactly `AgentManager.recordSubmittedPrompt`'s append,
+  // driven end-to-end through a real `runAgent` turn — the same way a
+  // browser Send click does.
+  const result = await manager.runAgent(snapshot.id, "Reply with exactly: ONE8475", {
+    clientMessageId: "live-send-1",
+  });
+  expect(result.canceled).toBe(false);
+
+  const afterLiveSend = manager
+    .getTimeline(snapshot.id)
+    .filter((item) => item.type === "user_message");
+  expect(afterLiveSend).toHaveLength(1);
+
+  // The remaining duplication path (FIX-S11): a full RPC history replay
+  // (`primeTimelineFromLegacyProviderHistory`) races the live path, e.g. an
+  // ordinary page load/reconnect. Before FIX-S11 this appended a second,
+  // duplicate `user_message` row (observed directly: this assertion failed
+  // with `toHaveLength(2)` prior to the fix in this commit).
+  await manager.hydrateTimelineFromProvider(snapshot.id);
+
+  const timeline = manager.getTimeline(snapshot.id);
+  const userMessages = timeline.filter((item) => item.type === "user_message");
+  expect(userMessages).toHaveLength(1);
+  expect(userMessages[0]).toMatchObject({ text: "Reply with exactly: ONE8475" });
+  expect(timeline.map((item) => item.type)).toEqual(["user_message", "assistant_message"]);
+
+  await manager.closeAgent(snapshot.id).catch(() => undefined);
+  await storage.flush().catch(() => undefined);
+  rmSync(workdir, { recursive: true, force: true });
+});
+
 test("hydrateTimeline preserves provider replay timestamps and marks missing ones untrusted", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-history-timestamps-"));
   const storagePath = join(workdir, "agents");
