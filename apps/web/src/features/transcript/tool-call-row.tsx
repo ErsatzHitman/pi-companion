@@ -290,15 +290,18 @@ function ToolCallHeader({ tool, testId }: { tool: tools.ToolCallViewModel; testI
         </span>
       ) : null}
       <span className="pc-tool-call__grow" />
+      {/* Mockup order is name, arg, grow, duration, then the status pill
+          (`.tool-h .dur` before `.pill`) — matched here; both still sit
+          right of the grow spacer regardless of order. */}
+      {tool.durationMs !== undefined ? (
+        <span className="pc-tool-call__duration">{formatDuration(tool.durationMs)}</span>
+      ) : null}
       <StatusIndicator
         label="Tool call"
         tone={STATUS_TONE[tool.status]}
         statusText={STATUS_TEXT[tool.status]}
         testId={testId ? `${testId}-status` : undefined}
       />
-      {tool.durationMs !== undefined ? (
-        <span className="pc-tool-call__duration">{formatDuration(tool.durationMs)}</span>
-      ) : null}
     </div>
   );
 }

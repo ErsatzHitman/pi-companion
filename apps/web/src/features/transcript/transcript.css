@@ -126,6 +126,48 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Thinking block (T386 family fidelity, continued): the mockup draws
+ * reasoning as plain italic text beside a left rule, never a card —
+ * `.turn-think .body { border-left: 2px solid var(--line-strong); padding:
+ * 2px 0 2px 12px }`, `.turn-think .prose { color: var(--ink-3); font-style:
+ * italic; font-size: 12px }`. `ThinkingSection` (`ui/recipes`) is a
+ * bordered/shadowed disclosure card by default — shared with the dev
+ * recipe lab, so it is re-skinned here rather than edited directly. Its
+ * disclosure behaviour (trigger `<button>`, chevron, `aria-expanded`,
+ * `data-testid`) is untouched; only colour, shadow, radius and padding
+ * are overridden. 12px has no font-size token (`--font-size-sm` is 11px,
+ * `--font-size-base` is 12.5px) so it is a local custom property quoting
+ * the mockup value, the same pattern `--pc-transcript-who-size` above
+ * already uses. */
+.pc-transcript-thinking {
+  --pc-transcript-thinking-font-size: 12px;
+  --pc-transcript-thinking-pad: 2px 0 2px 12px;
+  max-width: 53.5rem;
+}
+.pc-transcript-thinking .pc-thinking {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  border-left: 2px solid var(--color-line-strong);
+}
+.pc-transcript-thinking .pc-thinking__trigger,
+.pc-transcript-thinking .pc-thinking__body {
+  padding: var(--pc-transcript-thinking-pad);
+}
+.pc-transcript-thinking .pc-thinking__body {
+  border-top: none;
+  margin-top: 0;
+}
+.pc-transcript-thinking .pc-thinking__chevron {
+  color: var(--color-ink-3);
+}
+.pc-transcript-thinking .pc-thinking__summary,
+.pc-transcript-thinking .pc-thinking__body p {
+  color: var(--color-ink-3);
+  font-style: italic;
+  font-size: var(--pc-transcript-thinking-font-size);
+}
+
 /* Work group head (T388): the disclosure row that stands in for a
  * consecutive thinking/tool-call run. Beautiful UI's signature trait is the
  * dashed hairline divider rather than a filled container, so the head is a
