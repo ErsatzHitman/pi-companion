@@ -16,12 +16,31 @@
   max-width: 53.5rem;
 }
 
+/* The mockup's `.tool` card itself: `border-radius: var(--r-card);
+ * background: var(--inset); box-shadow: var(--sh-hairline); overflow:
+ * hidden`. `Card` (`ui/primitives`) defaults to an elevated white surface
+ * (`--color-surface` + `--shadow-card`, its raised-card treatment used
+ * everywhere else in the app); this card is flatter and tinted, so it is
+ * overridden here — scoped to `.pc-tool-call.pc-card` (both classes on
+ * the same element, so this always wins over `.pc-card` alone regardless
+ * of stylesheet order) rather than changing the shared primitive. */
+.pc-tool-call.pc-card {
+  background-color: var(--color-inset);
+  box-shadow: var(--shadow-hairline);
+}
+
 .pc-tool-call__header {
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
+  /* The mockup's `.tool-out { border-top: 1px solid var(--line) }` divider
+   * between the header and the body, drawn here as the header's own
+   * bottom rule so every family's body needs no change. */
+  padding-bottom: var(--spacing-2);
+  border-bottom: 1px solid var(--color-line);
   font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
+  /* `--font-size-md` is 11.5px, the mockup's own `.tool-h` figure. */
+  font-size: var(--font-size-md);
 }
 
 .pc-tool-call__name {
@@ -51,7 +70,11 @@
    `pc-thinking__duration` uses for its elapsed-time readout. */
 .pc-tool-call__duration {
   color: var(--color-ink-3);
-  font-size: var(--font-size-xs);
+  /* The mockup's `.tool-h .dur` sets no font-size of its own — it inherits
+   * `.tool-h`'s 11.5px (`--font-size-md`), matched here explicitly since
+   * this span does not sit as a direct DOM child of the header in every
+   * case. */
+  font-size: var(--font-size-md);
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -59,7 +82,9 @@
 .pc-tool-call__meta {
   margin: 0;
   color: var(--color-ink-2);
-  font-size: var(--font-size-sm);
+  /* The mockup's `.tool-out` body text is 11.5px (`--font-size-md`), the
+   * same figure as its own header. */
+  font-size: var(--font-size-md);
   overflow-wrap: anywhere;
 }
 

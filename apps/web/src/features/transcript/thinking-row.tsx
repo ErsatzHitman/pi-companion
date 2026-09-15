@@ -129,7 +129,17 @@ function TranscriptThinkingRowImpl({ entry, live, testId }: TranscriptThinkingRo
   const durationLabel = useElapsedLabel(entry.timestamp, live);
 
   return (
-    <div data-render-count={renderCount.current}>
+    /* `.pc-transcript-thinking` re-skins the shared `ThinkingSection` recipe
+       to the mockup's plain italic, left-rule treatment (`.turn-think
+       .body`/`.turn-think .prose`) instead of its default bordered/shadowed
+       card — see `transcript.css`. Scoped here rather than edited on the
+       recipe itself, which the dev recipe lab also renders unmodified; the
+       recipe's disclosure behaviour (trigger button, chevron,
+       `aria-expanded`, `data-testid`) is unchanged. Applied to this same
+       outer element (not a new wrapper) so `ThinkingSection`'s root stays a
+       direct child, matching what `areThinkingRowPropsEqual`'s render-count
+       test observes via `.parentElement`. */
+    <div className="pc-transcript-thinking" data-render-count={renderCount.current}>
       {/* The mockup's `.meta` line carries `thinking` here, with no time:
           reasoning is process detail rather than something either party
           said, which is the T308 rule this row still honours. */}
