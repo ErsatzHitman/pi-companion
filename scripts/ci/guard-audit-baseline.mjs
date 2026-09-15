@@ -373,7 +373,7 @@ export const AUDIT_BASELINE = [
   {
     package: "@react-navigation/core",
     severity: "moderate",
-    range: "<=8.0.0-alpha.9",
+    range: "<=7.22.0 || 8.0.0-alpha.0 - 8.0.0-alpha.9",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
@@ -489,7 +489,8 @@ export const AUDIT_BASELINE = [
   {
     package: "expo-router",
     severity: "moderate",
-    range: "*",
+    range:
+      "<=0.0.33 || 1.2.2 - 3.1.2 || 4.0.13-canary-20241211-61c49bd || 4.0.18-canary-20250124-42fe332 - 4.0.18-canary-20250306-d9d3e02 || 4.0.20-canary-20250320-7a205d3 || 4.0.21 - 5.0.2-preview.6 || >=5.2.0-canary-20250611-f0afe80",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
