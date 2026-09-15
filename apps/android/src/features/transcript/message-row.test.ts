@@ -121,3 +121,20 @@ describe("message-row.tsx: T308 renders the message's local time beneath it", ()
     );
   });
 });
+
+describe("message-row.tsx: UI-P8 — the reference draws no visible time under any turn", () => {
+  it("clips the timestamp text out of sight instead of deleting it (still accessible, never painted)", () => {
+    const source = readCode();
+    expect(source).toMatch(/timestamp: \{[\s\S]*?position: "absolute"/);
+    expect(source).toMatch(/timestamp: \{[\s\S]*?width: 1,/);
+    expect(source).toMatch(/timestamp: \{[\s\S]*?height: 1,/);
+    expect(source).toMatch(/timestamp: \{[\s\S]*?overflow: "hidden"/);
+  });
+
+  it("still renders the Text (accessible name/testID unchanged) — this is a visual clip, not a removal", () => {
+    const source = readCode();
+    expect(source).toMatch(/<Text[\s\S]*?style=\{styles\.timestamp\}/);
+    expect(source).toMatch(/accessibilityLabel=\{stamp\.title\}/);
+    expect(source).toMatch(/testID=\{testId \? `\$\{testId\}-timestamp` : undefined\}/);
+  });
+});
