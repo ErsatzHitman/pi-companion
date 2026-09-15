@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { Link, useMatches, useNavigate, useParams } from "@tanstack/react-router";
 
+import { ConnectionStatus } from "../features/connection/connection-status.js";
 import { EmptyState, IconButton } from "./primitives/index.js";
 import { useRailCollapse } from "./use-rail-collapse.js";
 import "./shell.css";
@@ -233,7 +234,21 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
                 void navigate({ to: "/h/$serverId/settings", params: { serverId } });
               }}
             />
-          ) : null}
+          ) : (
+            // UI-X9. UI-X3 moved the connection badge into `HostSettingsScreen`
+            // to match the reference top bar, which holds nothing but a
+            // settings gear. That is right for a session, and wrong before
+            // there is one: the gear above renders only with a `serverId`, so
+            // without this branch the bootstrap and `/connect` routes carry no
+            // connection feedback at all, and the screen it moved to is
+            // reachable only from inside a host session.
+            //
+            // No parity is given up. The reference mockup is a single-session
+            // view and defines no connect screen, so it says nothing about
+            // this state; the badge appears exactly where the reference has no
+            // opinion, and never beside the gear it replaced.
+            <ConnectionStatus />
+          )}
         </div>
       </header>
       <div className="shell__regions" data-testid="shell-regions">

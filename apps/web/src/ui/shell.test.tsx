@@ -286,6 +286,35 @@ describe("Shell", () => {
     await screen.findByText("sessions");
     expect(await axe(populated)).toHaveNoViolations();
   });
+
+  /**
+   * UI-X9. UI-X3 reduced the top bar to a settings gear to match the
+   * reference, and the gear renders only once a `serverId` exists — so
+   * before a host is chosen the header carried no connection feedback at
+   * all, while the screen the badge had moved to (`HostSettingsScreen`)
+   * is reachable only from inside a host session. CI caught it as two
+   * failures in `app/App.test.tsx` looking for "Disconnected"; the badge
+   * had not moved, it had become unreachable on the one route that most
+   * needs it.
+   *
+   * Pinned on both sides, because either half alone would let the defect
+   * back: the badge must be present without a `serverId`, and absent
+   * beside the gear, which is where the reference top bar holds nothing
+   * else.
+   */
+  it("shows the connection badge before a host is chosen, and hands the top bar to the settings gear alone once one is", async () => {
+    renderShell({ sessionRail: null, extensionRail: null });
+    expect(await screen.findByText("Disconnected")).toBeTruthy();
+    expect(screen.queryByTestId("shell-settings-trigger")).toBeNull();
+    cleanup();
+
+    renderShell(
+      { sessionRail: null, extensionRail: null },
+      { pattern: "/h/$serverId", href: "/h/mint" },
+    );
+    expect(await screen.findByTestId("shell-settings-trigger")).toBeTruthy();
+    expect(screen.queryByText("Disconnected")).toBeNull();
+  });
 });
 
 /**
