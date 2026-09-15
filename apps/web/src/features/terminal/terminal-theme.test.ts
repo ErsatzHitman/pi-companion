@@ -46,7 +46,7 @@ describe("readTerminalTheme", () => {
 describe("readTerminalFontFamily", () => {
   it("reads the mono font stack token, not a hard-coded string", () => {
     const family = readTerminalFontFamily();
-    expect(family).toContain("Geist Mono");
+    expect(family).toContain("JetBrains Mono");
   });
 });
 

@@ -1,7 +1,10 @@
 /**
- * Self-hosted `@font-face` declarations for Inter and Geist Mono (T13C,
- * docs/issues-from-plan.md "Bundle Inter/Geist Mono and complete
- * light-theme values"; docs/beautiful-ui-reference.md "Fonts").
+ * Self-hosted `@font-face` declarations for Inter and JetBrains Mono
+ * (T13C, docs/issues-from-plan.md "Bundle Inter/Geist Mono and complete
+ * light-theme values"; docs/beautiful-ui-reference.md "Fonts"). UI-X7
+ * swapped the mono face from Geist Mono to JetBrains Mono for pixel
+ * parity with the authoritative reference (`pi-companion-web.html`); see
+ * `packages/design-tokens/src/tokens.ts`'s T345/UI-X7 comment for why.
  *
  * Both faces are vendored as woff2 assets under `../assets/fonts/` (SIL
  * Open Font License 1.1 — see `THIRD_PARTY_NOTICES.md` and the `OFL.txt`
@@ -11,11 +14,11 @@
  *
  * `font-display: swap` avoids invisible text while the (small, self-hosted)
  * files load, and each declaration's `font-weight` lets a single
- * `font-family: "Inter"`/`"Geist Mono"` (see `--font-family-sans`/`--mono`
- * in the generated theme CSS) resolve to the correct weight file — the
- * bundled files are the *primary* path; `typography.fontFamily`'s system
- * fallbacks in `@picompanion/design-tokens` remain for the (unbundled)
- * case a face fails to load.
+ * `font-family: "Inter"`/`"JetBrains Mono"` (see `--font-family-sans`/
+ * `--mono` in the generated theme CSS) resolve to the correct weight file —
+ * the bundled files are the *primary* path; `typography.fontFamily`'s
+ * system fallbacks in `@picompanion/design-tokens` remain for the
+ * (unbundled) case a face fails to load.
  */
 
 @font-face {
@@ -51,32 +54,32 @@
 }
 
 @font-face {
-  font-family: "Geist Mono";
-  src: url("../assets/fonts/geist-mono/GeistMono-400.woff2") format("woff2");
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-400.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Geist Mono";
-  src: url("../assets/fonts/geist-mono/GeistMono-500.woff2") format("woff2");
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-500.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Geist Mono";
-  src: url("../assets/fonts/geist-mono/GeistMono-600.woff2") format("woff2");
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-600.woff2") format("woff2");
   font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Geist Mono";
-  src: url("../assets/fonts/geist-mono/GeistMono-700.woff2") format("woff2");
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono/JetBrainsMono-700.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;

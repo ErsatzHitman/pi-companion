@@ -43,7 +43,7 @@ function parseFontFaces(css: string): FontFaceBlock[] {
   return blocks;
 }
 
-describe("fonts.css (T13C — self-hosted Inter and Geist Mono)", () => {
+describe("fonts.css (T13C — self-hosted Inter and JetBrains Mono, UI-X7)", () => {
   const faces = parseFontFaces(fontsCss);
 
   it("declares no CDN or remote URL — every font loads from this app's own bundle", () => {
@@ -73,8 +73,8 @@ describe("fonts.css (T13C — self-hosted Inter and Geist Mono)", () => {
     }
   });
 
-  it("declares Geist Mono at 400/500/600/700, each pointing at a real woff2 file on disk", () => {
-    const monoFaces = faces.filter((f) => f.family === "Geist Mono");
+  it("declares JetBrains Mono at 400/500/600/700, each pointing at a real woff2 file on disk", () => {
+    const monoFaces = faces.filter((f) => f.family === "JetBrains Mono");
     const weights = monoFaces.map((f) => f.weight).sort();
     expect(weights).toEqual(["400", "500", "600", "700"]);
     for (const face of monoFaces) {
@@ -90,7 +90,7 @@ describe("fonts.css (T13C — self-hosted Inter and Geist Mono)", () => {
 
   it("vendors the OFL license text alongside each family's assets", () => {
     expect(existsSync(resolve(fontsCssDir, "../assets/fonts/inter/OFL.txt"))).toBe(true);
-    expect(existsSync(resolve(fontsCssDir, "../assets/fonts/geist-mono/OFL.txt"))).toBe(true);
+    expect(existsSync(resolve(fontsCssDir, "../assets/fonts/jetbrains-mono/OFL.txt"))).toBe(true);
   });
 
   it("is imported from the app's entry point, not left dead", () => {

@@ -685,7 +685,7 @@ export interface TypographyTokens {
 export const typography: TypographyTokens = {
   fontFamily: {
     sans: '"Inter", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    mono: '"Geist Mono", "SF Mono", Menlo, Consolas, monospace',
+    mono: '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace',
   },
   fontSize: {
     xs: 10.5,
@@ -731,18 +731,24 @@ export const typography: TypographyTokens = {
  * silently on Android, falling back to a system face).
  *
  * Web does not need a per-weight map: `@font-face` declarations select the
- * right file by `font-weight` for a single family name ("Inter" / "Geist
- * Mono", the first entry in each `typography.fontFamily` stack above), the
- * way browsers have always resolved custom fonts.
+ * right file by `font-weight` for a single family name ("Inter" /
+ * "JetBrains Mono", the first entry in each `typography.fontFamily` stack
+ * above), the way browsers have always resolved custom fonts.
  *
- * T345: the two platforms' mono faces DIVERGE on purpose. Web keeps Geist
- * Mono (the `typography.fontFamily.mono` stack above); Android registers
- * JetBrains Mono, the face the S7 "Live flow" phone design
- * (plan.md §10.2) sets every transcript block, path chip, todo row and
- * pill in. The `mono` names below are therefore NOT the first entry of
- * the CSS stack the way the `sans` names are — `native.ts` resolves a
- * theme's mono `fontFamily` through this map, never through the stack, so
- * nothing on Android ever asks for a "Geist Mono" it no longer bundles.
+ * T345 originally made the two platforms' mono faces DIVERGE on purpose:
+ * web kept Geist Mono while Android registered JetBrains Mono, the face
+ * the S7 "Live flow" phone design (plan.md §10.2) sets every transcript
+ * block, path chip, todo row and pill in. UI-X7 retired that divergence:
+ * a pixel-diff comparison against the authoritative reference
+ * (`pi-companion-web.html`) measured the reference's own web mono face as
+ * JetBrains Mono too, and the owner required exact pixel parity over the
+ * previously-documented split, so `typography.fontFamily.mono` above now
+ * leads with "JetBrains Mono" on web as well. What is still true after
+ * UI-X7: the `mono` names below are NOT the first entry of the CSS stack
+ * the way the `sans` names are — `native.ts` resolves Android's mono
+ * `fontFamily` through this map, never through the CSS stack, so
+ * Android's resolution path is unchanged even though both platforms now
+ * name the same family.
  */
 export const nativeFontFamilyNames = {
   sans: {

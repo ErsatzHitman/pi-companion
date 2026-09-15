@@ -157,9 +157,9 @@ describe("Beautiful UI conformance (T13B)", () => {
     }
   });
 
-  it("uses Inter and Geist Mono on the web, JetBrains Mono on Android (T345)", () => {
+  it("uses Inter and JetBrains Mono on both web and Android (T345, UI-X7)", () => {
     expect(typography.fontFamily.sans).toContain("Inter");
-    expect(typography.fontFamily.mono).toContain("Geist Mono");
+    expect(typography.fontFamily.mono).toContain("JetBrains Mono");
     expect(nativeFontFamilyNames.sans.regular).toContain("Inter");
     expect(nativeFontFamilyNames.mono.regular).toContain("JetBrainsMono");
   });
