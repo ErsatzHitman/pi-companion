@@ -280,7 +280,11 @@ export function HostSettingsScreen() {
             <Link
               className="pc-settings-nav-link"
               to="/h/$serverId/session/$agentId/terminal/$terminalId"
-              params={{ serverId, agentId: effectiveAgentId, terminalId: NEW_TERMINAL_ROUTE_SEGMENT }}
+              params={{
+                serverId,
+                agentId: effectiveAgentId,
+                terminalId: NEW_TERMINAL_ROUTE_SEGMENT,
+              }}
               data-testid="shell-terminal-link"
             >
               <Icon name="terminal" className="pc-settings-nav-link-icon" />
@@ -288,9 +292,7 @@ export function HostSettingsScreen() {
             </Link>
           </div>
         ) : (
-          <p className="pc-agent-settings__note">
-            Open a session to reach its files and terminal.
-          </p>
+          <p className="pc-agent-settings__note">Open a session to reach its files and terminal.</p>
         )}
       </Section>
       <Section title="Agent">
