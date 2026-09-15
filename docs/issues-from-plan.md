@@ -20907,6 +20907,39 @@ re-apply it to the file.
 - [x] The real JavaScript observation is preserved in a citable location rather than in the snapshot
 - [x] No other reference-only document was modified
 
+### `FIX-CI5`: two same-push attempts to fix a stale Stop-button keyboard-navigation spec
+
+labels: ci, guard-repair
+depends-on: `FIX-L2`
+wave: P9-Y
+
+**What shipped.** Recorded here because it was found orphaned — present in the repository's commit
+history and named in passing by Wave 6's own range note, but never given an entry of its own in any
+wave section. CI's `web-tests` job went red on `keyboard-navigation.spec.ts`: the spec's idle-session
+Tab walk still expected to land on the Stop control, which `FIX-L2` (`be45254`) had correctly removed
+from an idle session's tab order — the spec was pinning the exact defect `FIX-L2` fixed, not catching
+a regression. `0b744bf` fixed the idle assertion (the walk now stops at the Queue chip and asserts
+`toHaveCount(0)` for Stop) and, to avoid losing the keyboard-reachability property entirely, added
+Stop present/keyboard-reachable/focus-visible assertions inside `session-steer-and-follow-up.spec.ts`'s
+existing mid-sleep steer window — after first trying to drive a fresh turn inside
+`keyboard-navigation.spec.ts` itself via its `/sleep/i` fixture and measuring directly that the
+daemon's `agent_update` `status: "running"` push does not reliably surface within that harness for a
+turn this short-lived. Verified locally before pushing further, that `session-steer-and-follow-up.spec.ts`
+addition itself turned red, trading one red spec for another — so `e64901b`, the very next commit,
+removed it again and relocated the same coverage to `Composer.test.tsx`, where the running state is
+deterministic under a component test rather than a real daemon race: while a turn is active, Stop is
+a real button, present in the tab order, not `aria-hidden`, takes focus, and aborts on Enter.
+
+**Evidence.** Commits `0b744bf`, `e64901b`. `keyboard-navigation.spec.ts` passes in a real browser
+(stated in `e64901b`'s own commit message); `Composer.test.tsx` 95/95.
+
+- [x] `keyboard-navigation.spec.ts` pins the real idle-session contract (Stop absent) instead of the
+      defect `FIX-L2` had already fixed
+- [x] Stop's keyboard-reachability-during-an-active-turn property is preserved, moved to the one
+      harness (a component test) that can hold it deterministically
+- [x] A locally-caught red spec from the first attempt was fixed in the very next commit, before
+      either reached CI as the reported failure
+
 ## Wave 6 — the headline duplication bug found by instrumentation, a second UI parity pass, and a CI repair (2026-09-15)
 
 Two more owner reports drove this wave: the send-duplication bug Wave 4/5's `FIX-S1`–`FIX-S6` had
@@ -21240,3 +21273,305 @@ against the underlying session data rather than assumed to be a rendering defect
 
 - [x] Both findings are recorded as host/environment conditions, separate from the product defects
       above, with the measurement that grounds each one stated plainly
+
+## Wave 7 — a pixel-diff harness replaces by-eye comparison for a third UI parity pass, plus a second same-day CI baseline resync (2026-09-15)
+
+The owner required the UI to match `C:/Users/aksha/Downloads/pi-companion-ui/` "pixel by pixel, no
+ifs and buts," so this wave's UI work is measured rather than eyeballed for the first time. Every
+commit named below is in `git log 25a99a7..c0b5d08`; `DOC-4` (`e149ae3`), the commit that recorded
+Wave 6, is the tail before this range and out of this entry's scope.
+
+### The method: a Playwright + pixelmatch harness that reads the live app and drives the mockup
+
+The harness reads the LIVE app's own rendered content — transcript rows, rail rows, the model chip
+— directly out of the running page, then drives the reference MOCKUP to render that same content
+through its page-scope `SESSIONS` array and `renderAll()` function, and diffs six clipped regions
+between the two renders with `pixelmatch`. Rendering the same data through both surfaces, rather
+than comparing two independently-seeded fixtures, is what makes a resulting diff attributable to a
+real style difference instead of a data difference. Two obstacles were real, not incidental: the
+mockup's `renderLive()` dereferences `live.agents` unconditionally, so handing it a null `live`
+threw instead of rendering an empty state; and the mockup's `activeId` is a lexical `let` binding
+closed over by its own render functions, so assigning `window.activeId` from outside created a new
+property on `window` without rebinding the variable those functions actually read, leaving the
+mockup rendering whichever session it started on regardless of what the harness assigned.
+
+### Web/Android UI reference-parity, round three
+
+#### UI-X1 — Model/mode/queue pickers moved back into the context-ring menu
+
+`labels: phase-9, area: web` · `depends-on: UI-P1 – UI-P4` · `wave: P9-AA`
+
+**What shipped.** Reverses `T388`/`UI-P4`: the reference's `#ctx-menu` keeps Mode, Model & effort,
+Queue and Context together inside the context ring's own popover, in that order, and Android's
+`PromptControlsMenu` already matched it — web's own `UI-P4` chip-row-under-the-prompt-bar design was
+the divergence. `PromptRoutingPicker` (Mode), `ModelThinkingPicker` (Model & effort) and
+`QueueModePicker` (Queue) move from `Composer`'s `metaChips` row back into the ring's `Sheet`, each
+its own labelled `.pc-composer__ring-group` ahead of the existing Context group; the chip row, its
+`Popover` wrappers, the `describe*ChipLabel` helpers and all `UI-P4` reflow CSS are removed, and
+test helpers `openModelChip`/`openRoutingChip`/`openQueueChip` now open the ring sheet instead. A
+`Composer.test.tsx` case that had asserted the sheet shows the context summary and cost readout but
+"never pickers" (titled `T388/UI-W11`) is retitled to assert the sheet now also renders the
+Mode/Model/Queue pickers, and its own `expect(screen.queryByLabelText("Model")).toBeNull()` line is
+removed.
+
+**Evidence.** Commit `25a99a7`.
+
+- [x] The context ring's sheet renders Mode, Model & effort, Queue and Context in the reference's
+      own order, matching Android's existing `PromptControlsMenu`
+- [x] The metaChips chip row, its `Popover` wrappers and all `UI-P4` reflow CSS are removed rather
+      than left dead
+- [x] The regression test that had asserted the pickers are never in the sheet is corrected, not
+      left contradicting the code it covers
+
+#### UI-X2 — The session header's "N messages restored · N queued" sub-line stops drawing
+
+`labels: phase-9, area: web` · `wave: P9-AA`
+
+**What shipped.** The reference's `.main-head` carries a title, a status pill and a model chip and
+nothing else; this app's header additionally drew a mono sub-line reading "N messages restored · N
+queued," a full line taller than the reference at every viewport. `UI-P*`'s own earlier pass had
+found this and deliberately kept the line because `approvals.spec.ts` and several other Playwright
+specs wait on `session-resume-ready` and its two count testids. With the owner now requiring an
+exact match, the line goes but the signal it fed does not: the node still renders with all three
+testids, now marked `pc-visually-hidden` (absolutely positioned, 1px, clipped) so it contributes no
+layout while the specs keep a real node to wait on — the same treatment this wave's own `UI-P5`/
+`UI-P6`/`UI-P8` (Wave 6) already applied to the web assistant timestamp and the Android per-row
+timestamp, rather than deleting testids and leaving gates broken or repointed at a weaker signal.
+`.pc-session-head__facts` is removed from the stylesheet; the visually-hidden utility class owns
+the node entirely.
+
+**Evidence.** Commit `7ceb2e4`. 343 tests pass across `features/sessions` and `routes`, `oxfmt`
+clean, per the commit's own recorded verification.
+
+- [x] No visible sub-line renders under the session header title
+- [x] `session-resume-ready` and its two count testids still exist, `pc-visually-hidden`, for every
+      Playwright spec already waiting on them
+
+#### UI-X3 — Top bar reduced to brand + settings gear; Files/Terminal and connection status move into `HostSettingsScreen`
+
+`labels: phase-9, area: web` · `wave: P9-AA`
+
+**What shipped.** Matches the reference's `.bar-tools` (`docs/ui-reference/pi-companion-web.html`),
+which holds only `#settings-btn`, pixel for pixel. The `Files`/`Terminal` session-tool links and the
+connection badge move into `HostSettingsScreen` — the same route the settings gear already opened,
+so no second settings surface was created — taking their `shell-files-link`/`shell-terminal-link`
+testids with them onto the elements now performing that role. The two manual rail-collapse toggles
+regroup together left of the spacer, keeping their direct one-click/shortcut reach, because —
+recorded directly in `shell.tsx`'s own rewritten header comment — they are "a separately-documented
+owner requirement with no reference equivalent at all," so the reference's right-of-spacer slot
+stays gear-only without losing either toggle's immediacy. This also corrects a premise from earlier
+review: no theme control was ever drawn in the header to begin with (`ThemePreferenceControl`
+already lived in `HostSettingsScreen`, untouched by this change) — there was no theme control to
+move, only Files/Terminal and the connection badge.
+
+**Evidence.** Three commits, not one: `1c34b17` (the relocation itself),
+`2699cff` (`shell.test.tsx` now asserts Shell never renders those testids or the connection badge
+on any route and that `header-tools` holds only the settings gear with both rail toggles ahead of
+it; a new `host-settings-screen.test.tsx` case proves the Connection and Navigation sections mount
+with the carried-over testids; `route-boundaries.test.tsx` gets a comment fix), and `1638f11`
+(`oxfmt` formatting only, no logic change).
+
+- [x] The header's right side renders only brand + settings gear, matching `.bar-tools` exactly
+- [x] Files/Terminal and connection status are relocated, not deleted, with their testids intact on
+      the elements now performing that role
+- [x] Both rail-collapse toggles keep direct, one-click/shortcut reach with no reference equivalent
+      required, per the owner's separately-documented requirement
+
+#### UI-X4 — The session rail's foot pinned to the rail's bottom edge
+
+`labels: phase-9, area: web` · `wave: P9-AA`
+
+**What shipped.** Measured against the reference at 1461×900: its `.rail-foot` sits at y=867, the
+rail's bottom edge, while this app's own foot sat at y=471, directly under the last session row
+with empty canvas beneath it. The reference's `.rail` is a grid
+(`grid-template-rows: auto auto minmax(0, 1fr) auto`) whose list absorbs the remaining space and
+pins the foot last; this app's rail was a flex column with no height, so it was only as tall as its
+own content. Fixed with `height: 100%` on the rail and `margin-top: auto` on the foot, reproducing
+the grid's last-row behaviour without copying its fixed four-row template — the list here renders
+conditionally (loading/error/empty states replace it), and a fixed template would mis-assign rows
+whenever the list is absent. The commit also retracts an earlier claim from this same review pass:
+an earlier measurement reported the rail's session rows at 68px against the reference's 49px; that
+was wrong — it had measured `[data-testid^=session-row]`, which matches the main-area session cards
+on the sessions route, not the rail. The rail's own `.pc-session-rail__row` already measured 48px at
+a 49px pitch with padding 7px 8px and border-radius 9px, the reference's values exactly, already
+correct before this commit.
+
+**Evidence.** Commit `ac07c2c`. 275 tests pass across `features/sessions`, `oxfmt` clean, per the
+commit's own recorded verification.
+
+- [x] The rail foot sits at the rail's bottom edge, matching the reference's y=867 at 1461×900
+- [x] The fix tolerates the list's conditional loading/error/empty states instead of assuming a
+      fixed row count
+- [x] The earlier 68px-vs-49px rail-row claim is retracted with the real cause (wrong element
+      queried) stated plainly
+
+#### UI-X5 — The rail foot renders this app's own version, with real plumbing rather than a borrowed string
+
+`labels: phase-9, area: web` · `depends-on: UI-P7 – UI-P11` · `wave: P9-AA`
+
+**What shipped.** The reference's rail foot ends in a space-between `<span class="mono-num">v0.4.0</span>`;
+this app's foot drew only connection status, leaving that slot empty. `UI-P11` (Wave 6) had reported
+this unfixable in its own scope: nothing in the client bundle knew this app's version, and wiring one
+meant editing `vite.config.ts`, outside that task's ownership; it also correctly refused
+`DAEMON_APP_VERSION`, the obvious candidate already in the bundle, as the source — that string is the
+daemon's protocol-compatibility version, a different fact wearing this label. This commit adds the
+plumbing instead of inventing the value: `vite.config.ts` reads `apps/web/package.json` and injects
+`__APP_VERSION__`; `vitest.config.ts` declares the same define so jsdom and the bundle agree (without
+it the global is undefined under test, and the assertion would be checking a value users never see);
+`src/vite-env.d.ts` declares the global. Styling follows the reference's own `.mono-num` (mono family
+
+- tabular figures); the foot rule already supplied family, 10.5px size and ink-3 colour, so the chip
+  adds only `font-variant-numeric`. The new test asserts against the `package.json` manifest rather
+  than a hardcoded literal, so it stays true across version bumps, and asserts the chip sits inside the
+  foot element so a future refactor that lifts it out fails.
+
+**Evidence.** Commit `6f64ab4`. 275 tests pass across `features/sessions` (13 in `SessionRail`), web
+typecheck 0 errors, `oxfmt` clean, per the commit's own recorded verification.
+
+- [x] The rail foot renders this app's own version, sourced from `package.json` via
+      `__APP_VERSION__`, not the daemon's protocol-compatibility string
+- [x] `vite.config.ts` and `vitest.config.ts` declare the same define, so the bundle and the test
+      environment agree
+
+#### UI-X6 — The session rail's group label gets its own chrome; row title/meta text truncates
+
+`labels: phase-9, area: web` · `wave: P9-AA`
+
+**What shipped.** Two defects. First, `SessionRail` had wrapped each group in the shared `Section`
+primitive, which rendered the group label as a dark, semibold `h2` — `Section`'s own
+`pc-section__title` styling, not the reference's own `.group-label`. The rail now renders its own
+`<h2 class="pc-session-rail__group-label">` + `<ul>` siblings via a `Fragment`, matching the
+reference's flat group-label/`.sess` sibling structure instead of `Section`'s `<section>` wrapper,
+styled by a new `.pc-session-rail__group-label` rule mirroring the reference's `.group-label`
+exactly: small grey mono text followed by a `::after` hairline that flexes to fill the remaining
+width. `Section` itself, still used by `SessionList`'s full-page rail and other screens, is
+untouched; the `<ul>` keeps its `shell-session-rail-group-<kind>` testid and gains
+`aria-labelledby` pointing at the new heading, preserving the grouping semantics `Section` used to
+supply. Second, row title/meta text could overflow: `min-width: 0` is added directly to
+`.pc-session-rail__title` and `.pc-session-rail__meta` after tracing the full shrink chain (the row
+grid's `minmax(0, 1fr)` text column and its container already carried a zero minimum; the two text
+leaves were the only nodes relying implicitly on flex cross-axis stretch instead of declaring it).
+Line-height is deliberately left at the existing token rather than the reference's literal 1.4,
+since row geometry (48px rows, `UI-X4`) was already verified correct and nudging it risked
+disturbing that match for an unrelated sub-pixel difference. The commit's own verification grepped
+for `role=heading` assertions on the group labels and found them only in the separate
+`SessionList.test.tsx`, confirming no test depends on `SessionRail` using `Section`.
+
+**Evidence.** Commit `f6d1b8f`. `npx vitest run src/features/sessions/` (apps/web): 33 files / 276
+tests pass; web typecheck exit 0; `oxfmt --check` clean after one auto-fix with no logic change;
+`oxlint` 0 warnings/errors — all per the commit's own recorded verification. The commit records
+explicitly that it did not run the pixel-diff harness itself, since that harness is the owner's own
+measurement this task responds to, not this task's own foreground gate.
+
+- [x] The rail's group label uses its own chrome matching the reference's `.group-label`, not
+      `Section`'s dark semibold heading style
+- [x] `Section` itself is untouched, since `SessionList`'s separate rail still depends on it
+- [x] Long row title/meta text truncates instead of overflowing
+
+#### UI-X7 — Web mono face swapped from Geist Mono to JetBrains Mono for reference parity
+
+`labels: phase-9, area: web, design-tokens` · `wave: P9-AA`
+
+**What shipped.** `packages/design-tokens/src/tokens.ts`'s `typography.fontFamily.mono` now leads
+with `"JetBrains Mono"` (with a `ui-monospace` fallback added to match the reference's own chain),
+and `apps/web/src/styles/fonts.css` replaces the four Geist Mono `@font-face` rules with JetBrains
+Mono at the same 400/500/600/700 weights, converted from Android's already-vendored TTFs to woff2
+(net +327 KiB of asset bytes: four JetBrains Mono woff2 files totalling 375,100 bytes added against
+four Geist Mono woff2 files totalling 40,304 bytes removed). The old `geist-mono/` asset directory is
+deleted; a grep confirmed nothing else referenced its path or filenames before removal.
+**This overturns `T345`'s documented decision that the web/Android mono divergence was
+intentional** — rather than leave that comment contradicting the code, `tokens.ts`'s `T345` comment
+is rewritten to record that the divergence was retired for owner-required pixel parity with
+`pi-companion-web.html`, while preserving the still-true fact that `native.ts` resolves Android's
+mono face through `nativeFontFamilyNames`, never through this CSS stack — `apps/android` is
+untouched by this commit. `tokens.test.ts`, `fonts.test.ts` and `terminal-theme.test.ts` are updated
+from Geist Mono to JetBrains Mono assertions. The commit also records reading and running the web
+session-route bundle guard (`scripts/ci/guard-web-session-bundle-budget.mjs`, `plan.md` §14.5's
+<500 KiB gzip JS+CSS budget) after the swap: font files are static assets loaded via `@font-face`/CSS
+`url()`, not part of the guard's gzip JS+CSS measurement, so the swap does not count against that
+budget and no ceiling was touched. This job did not independently re-run that guard to reproduce its
+exact post-swap reading; the figure is reported here as recorded, not independently re-verified.
+
+**Evidence.** Commit `440d93e`.
+
+- [x] `packages/design-tokens` and `apps/web` both resolve their mono face to JetBrains Mono; `apps/android` is untouched
+- [x] The now-unused Geist Mono assets are removed, confirmed unreferenced before deletion
+- [x] `T345`'s comment is rewritten to match what the code now does, rather than left asserting a
+      divergence that no longer exists
+
+#### UI-X8 — Android: session-row and thinking-head gap tokens corrected against the app mockup
+
+`labels: phase-9, area: android` · `wave: P9-AA`
+
+**What shipped.** Re-verified the prior pass's `.blk` claim (radius 14, padding 9×11, gap 9,
+accent-tint user bubble, tool-ok/tool-error tints, thinking rule 2px/1-11) directly against
+`docs/ui-reference/pi-companion-app.html` and found it still holds. Two real mismatches were found
+in surfaces the prior pass had not covered: `sessions-screen.tsx`'s `.row` used the spacing[2] token
+(8) where the reference's `.row` is `gap: 10px`; since no spacing token holds 10 (the scale steps
+8 → 12), a literal `ROW_GAP = 10` replaces it, matching `ROW_RADIUS`'s existing no-token-fits
+precedent in the same file. `ThinkingSection.tsx`'s `.thead` used the same spacing[2] token (8)
+where the reference's `.thead` is `gap: 6px`; since no spacing token holds 6 (the scale steps
+4 → 8), a literal `THEAD_GAP = 6` replaces it, matching `THINK_RULE_WIDTH`'s existing precedent in
+the same file. Both are pinned with source-regex tests matching each file's existing pattern, since
+these React Native files cannot render under plain `vitest`. **Explicitly not a pixel diff**: no
+device or emulator is available in this environment, so this commit compares only declared style
+VALUES against the reference markup's own declared values — it cannot prove what an actual device
+would render (RN layout rounding, DPI scaling, hairline-vs-1px border rendering, an unset sans
+family's platform-default resolution, or a box-shadow substitution on a platform without one), and
+that limit is what the source-regex-only approach is chosen to disclose rather than paper over.
+
+**Evidence.** Commit `c0f3342`.
+
+- [x] `sessions-screen.tsx`'s row gap and `ThinkingSection.tsx`'s thead gap match the reference's
+      declared values, each pinned by a source-regex test
+- [x] The gap between a declared-value match and a verified rendered-pixel match is stated plainly,
+      not implied away
+
+### CI
+
+#### FIX-CI7 — A second same-day `npm audit` baseline resync
+
+`labels: ci, guard-repair` · `depends-on: FIX-CI6` · `wave: P9-AA`
+
+**What shipped.** CI run `34973473081` went red on the same guard and the same cause as `FIX-CI6`
+(recorded in Wave 6), two packages further along: `@react-navigation/core` and `expo-router` are both
+already baselined with a named owner and reason in `scripts/ci/guard-audit-baseline.mjs`, and only
+their version RANGES had moved upstream (`core` `<=8.0.0-alpha.9` →
+`<=7.22.0 || 8.0.0-alpha.0 - 8.0.0-alpha.9`; `expo-router` `*` → the explicit canary-laden range
+`npm audit` now reports). Matching is not widened and no unreviewed advisory is hidden; the guard
+now reports every advisory `npm audit` reports (31 packages) as covered. The commit records this as
+worth flagging because it is the SECOND such resync in one day (`FIX-CI6` was the first): these
+ranges are volatile upstream and the guard compares them exactly, so a run that was green hours
+earlier can go red with no change on this repository's own side. The guard also now lists six
+baseline entries as stale (no longer reported by `npm audit` at all) — recorded as a note, not a
+failure; pruning them is deliberately left alone, since a stale entry is harmless while pruning one
+that `npm audit` resurrects tomorrow would turn the guard red again for no benefit.
+
+**Evidence.** Commit `c0b5d08`.
+
+- [x] The `@react-navigation/core` and `expo-router` baseline ranges are re-synced, with matching not
+      widened and no advisory newly hidden
+- [x] The guard reports every advisory `npm audit` reports as covered
+- [x] The volatility of these upstream ranges is recorded explicitly, not left implicit after two
+      same-day repairs
+
+### Declared divergences and refusals — not defects, recorded so a future pass does not re-litigate them
+
+**Two owner decisions are now deliberate, permanent divergences from the mockup, not open items:**
+the left rail keeps STATUS grouping ("Needs attention"/"Idle") rather than the reference's
+repo·branch grouping, and the top bar's relocated controls (`UI-X3`) live inside the settings screen
+rather than being deleted outright.
+
+**Two chrome items stay absent because building them would mean faking a value or a control with
+nothing real behind it**, per `UI-P11`'s (Wave 6) original refusal and unchanged by anything in this
+wave: the brand commit-SHA chip, since no lightweight payload this app receives carries a HEAD
+commit sha (`workspace-crumb.tsx`'s own comment already records this); and the composer mic button,
+since web has no working dictation path and — per `Composer.tsx`'s own comment, restated by
+`UI-X1`'s new comment block in the same file — a dead button is worse than a missing one. `UI-X5`
+above closes one of `UI-P11`'s original four refusals (the version chip) with real plumbing rather
+than reversing the refusal itself.
+
+- [x] Both permanent divergences are recorded as owner decisions, not left implicitly open for a
+      future pass to "fix"
+- [x] Both remaining refusals are re-confirmed against the code's own current comments, not just
+      restated from an earlier wave
