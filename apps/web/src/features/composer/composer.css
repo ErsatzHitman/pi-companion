@@ -20,6 +20,33 @@
   transition: box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
 }
 
+/* Prompt-bar single-row height (defect 2, UI-P1): `PromptBar`'s own
+ * `<textarea>` (`ui/recipes/PromptBar.tsx`) sets no `rows` attribute, so
+ * the HTML default of 2 applies, even though the reference (search it for
+ * the placeholder text `Ask, or steer the turn in flight`) ships
+ * `rows="1"` on the same element. That reserved second line, combined
+ * with `.pc-prompt-bar__row`'s `align-items: end`, was the tall,
+ * mostly-empty box: the placeholder sits on the textarea's first line
+ * while the empty second line pushes the row's cross-axis size well past
+ * the 30px attach/context controls, which then read as pinned to the
+ * bottom of a box roughly twice their own height. `height` on a textarea
+ * overrides rows-driven intrinsic sizing outright, so this pins it back
+ * to exactly one line — without editing the shared recipe (composer/**
+ * ownership) or any other `PromptBar` caller. `1.625em` is
+ * `--line-height-relaxed` (this element's own `line-height`, below)
+ * evaluated against this element's own font-size — exactly one line box;
+ * `12px` restates `--pc-prompt-textarea-padding`'s own "6px 0" (6px top +
+ * 6px bottom) because `styles/global.css`'s `* { box-sizing: border-box }`
+ * makes `height` include padding. `max-height` restates the reference's
+ * own `.prompt textarea { max-height: 140px }` verbatim — no matching
+ * token, the same treatment `--pc-composer-chip-font-size` below already
+ * gives its own off-scale mockup value. */
+.pc-composer .pc-prompt-bar__input {
+  height: calc(1.625em + 12px);
+  min-height: calc(1.625em + 12px);
+  max-height: 140px;
+}
+
 /* Drag-and-drop (T279): quiet until a file drag is actually over the
  * composer — this is the ONLY state that adds the highlight, so there is
  * never a permanently visible dashed rectangle (`use-drag-and-drop.ts`'s
@@ -85,16 +112,39 @@
 }
 .pc-composer__meta-chip {
   display: inline-flex;
-  /* Without this, the flex item's automatic min-width stays at its
-   * button's own min-content size (the flexbox spec's "automatic minimum
-   * size" rule), so it never actually shrinks — the child's own
-   * `overflow: hidden; text-overflow: ellipsis` below never gets a
-   * chance to activate, and once all three chips' combined natural
-   * width exceeds what `.pc-composer__meta` is allotted, the excess
-   * paints past this chip's box (default `overflow: visible`) directly
-   * over the keyboard-contract hint and Stop button beside it. Same fix,
-   * same reason, as `.pc-prompt-bar__foot-state` and `.pc-composer__meta`
-   * already apply one level up. */
+  /* Needed, but NOT sufficient on its own (defect 1, UI-P1) — this alone
+   * was tried before and did not stop the overlap. It lets THIS box
+   * shrink inside `.pc-composer__meta`'s row, but the box that actually
+   * refuses to shrink sits one level deeper: `Popover` (`ui/primitives/
+   * Popover.tsx`) renders its trigger inside its own wrapper,
+   * `<div class="pc-popover">` (`display: inline-block`, no `min-width`),
+   * which is THIS element's one child and therefore the real flex item
+   * `.pc-composer__meta`'s row has to size around. Because that div's
+   * `min-width` computes to `auto` and its `overflow` is the default
+   * `visible`, the flexbox "automatic minimum size" rule gives it a floor
+   * equal to its button's own min-content size (the button's text is
+   * `white-space: nowrap`, so that floor is the FULL, un-truncated label
+   * width) — it never actually shrinks. Every box in the chain up to the
+   * button already has `overflow: visible`, so once the outer chips are
+   * squeezed to slivers by `.pc-composer__meta`'s own flex-shrink, each
+   * one's un-shrunk `.pc-popover` child paints its full-width label past
+   * that sliver — several adjacent slivers' full-width labels landing in
+   * the same band is defect 1's overlapping text. See the fix on
+   * `.pc-popover` directly below, scoped to this wrapper rather than
+   * `primitives.css` because `Popover` is also used unrelated to the
+   * composer (`features/files/file-popover-button.tsx`,
+   * `features/sessions/session-row-actions-button.tsx`). */
+  min-width: 0;
+}
+.pc-composer__meta-chip .pc-popover {
+  /* The actual fix: bypasses the automatic-minimum computation above by
+   * giving this specific box an explicit `min-width`, so the flex
+   * algorithm is finally free to size it down. Once it does, the
+   * `.pc-popover__trigger` rule below — `overflow: hidden;
+   * text-overflow: ellipsis; white-space: nowrap` — is finally clipping
+   * against a real, shrunk containing width instead of the button's own
+   * unconstrained shrink-to-fit width, and the label truncates instead of
+   * overlapping its neighbours. */
   min-width: 0;
 }
 .pc-composer__meta-chip .pc-popover__trigger {
