@@ -316,9 +316,7 @@ export class InMemoryAgentTimelineStore {
     if (lastResolvedSeq === undefined) {
       return false;
     }
-    return !state.rows.some(
-      (row) => row.item.type === "user_message" && row.seq > lastResolvedSeq,
-    );
+    return !state.rows.some((row) => row.item.type === "user_message" && row.seq > lastResolvedSeq);
   }
 
   /**
