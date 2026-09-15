@@ -20870,3 +20870,39 @@ rather than quietly left for a future reader to rediscover.
 - [x] The two guards whose fixes had already reached CI were confirmed green there, not inferred
 - [x] The one failure that could not be repaired without rewriting pushed history is disclosed
       above, with the reason it cannot be
+
+### `UI-P0`: the frozen Android reference is restored to the owner's byte-exact original
+
+labels: ui-reference, frozen-snapshot
+wave: P9-Y
+
+**What shipped.** `docs/ui-reference/pi-companion-app.html` had drifted from the copy the owner
+supplied at `C:/Users/aksha/Downloads/pi-companion-ui/`. The two differed by exactly one line, in
+the mockup's own inline script:
+
+```
+-  ctxRing.className = "ctx-ring " + (p > 90 ? "er" : p > 70 ? "wa" : "");
++  ctxRing.setAttribute("class", "ctx-ring " + (p > 90 ? "er" : p > 70 ? "wa" : ""));
+```
+
+introduced by `9afc612` (T384/T385). The change is, in isolation, CORRECT as JavaScript: `ctx-ring`
+is an `<svg>` element, and `SVGElement.className` is a read-only `SVGAnimatedString`, so the
+original assignment never updates the class. It is still a defect to have made it here. This
+repository's own rule for these files is that a reference-only document is valuable precisely
+because it is an unedited snapshot, and that it must not be edited even to correct something that
+is wrong — the correction belongs in a citable home, not layered onto the snapshot, or the next
+reader can no longer tell which parts are the owner's and which are ours without reading git blame.
+
+The file is restored to the owner's byte-exact original (both copies now hash to
+`3ff70c21a0b512f169bad358608144f0`; the web reference already matched at
+`9c49b1a697dff4a6fbc547dc6c257e96`). The underlying observation is recorded HERE instead, which is
+where it is citable from:
+
+**Anyone RENDERING `pi-companion-app.html` to inspect the design should know that its context-ring
+class update is a no-op**, for the reason above. Apply the `setAttribute` form at runtime in the
+rendering harness if the ring's warning/error states matter for what is being inspected. Do not
+re-apply it to the file.
+
+- [x] Both reference documents are byte-identical to the owner's supplied copies
+- [x] The real JavaScript observation is preserved in a citable location rather than in the snapshot
+- [x] No other reference-only document was modified
