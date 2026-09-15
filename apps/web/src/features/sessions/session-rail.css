@@ -14,7 +14,8 @@
      `.newbtn` 24px / radius 7, `.search` 30px / radius 8 / 9px inline
      padding, `.sess` 7px 8px / radius 9, `.sess-gl` 14px wide at 12px
      mono, `.rail-foot` 9px block padding, `.rail-head` 12px 12px 6px,
-     `.rail-search` 4px 12px 10px, `.search kbd` radius 4. */
+     `.rail-search` 4px 12px 10px, `.search kbd` radius 4, `.group-label`
+     10px 4px 5px padding / 7px gap / 1px rule. */
   --pc-session-rail-head-pad-block-end: 6px;
   --pc-session-rail-new-height: 24px;
   --pc-session-rail-new-radius: 7px;
@@ -27,6 +28,10 @@
   --pc-session-rail-row-radius: 9px;
   --pc-session-rail-row-pad-block: 7px;
   --pc-session-rail-row-pad-inline: 8px;
+  --pc-session-rail-group-label-gap: 7px;
+  --pc-session-rail-group-label-pad-block-start: 10px;
+  --pc-session-rail-group-label-pad-block-end: 5px;
+  --pc-session-rail-group-label-rule-height: 1px;
   --pc-session-rail-glyph-width: 14px;
   --pc-session-rail-glyph-size: 12px;
   --pc-session-rail-glyph-line-height: 18px;
@@ -156,6 +161,38 @@
   padding: 0 var(--spacing-2) var(--spacing-3);
 }
 
+/*
+ * UI-X6: the reference's group heading (`.group-label`) is not the shared
+ * `Section` primitive's dark, semibold `<h2>` — `SessionRail` renders its
+ * own markup for it (see `SessionRail.tsx`) so `Section` (used elsewhere,
+ * including `SessionList`'s full-page rail) stays untouched. The reference's
+ * own rule is a small grey mono label followed by a hairline rule that
+ * fills the remaining width via `::after`. `--spacing-1` (4px) matches its
+ * horizontal padding exactly; the other three fixed values (10px/5px block
+ * padding, 7px gap, 1px rule height) have no token equivalent and are
+ * declared above alongside this file's other token-less fixed control
+ * dimensions.
+ */
+.pc-session-rail__group-label {
+  display: flex;
+  align-items: center;
+  gap: var(--pc-session-rail-group-label-gap);
+  padding: var(--pc-session-rail-group-label-pad-block-start) var(--spacing-1)
+    var(--pc-session-rail-group-label-pad-block-end);
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-ink-3);
+}
+
+.pc-session-rail__group-label::after {
+  content: "";
+  flex: 1;
+  height: var(--pc-session-rail-group-label-rule-height);
+  background-color: var(--color-line);
+}
+
 .pc-session-rail__rows {
   display: flex;
   flex-direction: column;
@@ -232,10 +269,22 @@
   min-width: 0;
 }
 
+/*
+ * UI-X6: the reference's `.sess-t` truncates a long title on one line
+ * instead of wrapping (a long model name in `.sess-m` was measured
+ * wrapping to a second line, making that row taller than its siblings).
+ * `overflow`/`text-overflow`/`white-space` were already set; `min-width: 0`
+ * is added directly on this leaf so it never depends on the flex
+ * cross-axis stretch of its ancestors alone — the chain above
+ * (`.pc-session-rail__row-item`, the `.pc-session-rail__row` grid's
+ * `minmax(0, 1fr)` track, `.pc-session-rail__row-text`) was verified to
+ * already carry `min-width: 0` at every level.
+ */
 .pc-session-rail__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-snug);
@@ -247,6 +296,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-size-xs);

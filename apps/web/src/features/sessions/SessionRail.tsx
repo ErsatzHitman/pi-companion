@@ -31,16 +31,9 @@
  *   this app's version — so, per the task's rule, the chip is omitted
  *   rather than filled with something that would mean something else.
  */
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
-import {
-  Banner,
-  EmptyState,
-  ErrorState,
-  Icon,
-  LoadingState,
-  Section,
-} from "../../ui/primitives/index.js";
+import { Banner, EmptyState, ErrorState, Icon, LoadingState } from "../../ui/primitives/index.js";
 import { groupSessions } from "./group-sessions.js";
 import { sessionGlyph, sessionMetaParts } from "./session-meta.js";
 import { statusPresentation } from "./status-presentation.js";
@@ -241,48 +234,68 @@ export function SessionRail({
                 testId="shell-session-rail-filter-empty"
               />
             ) : null}
-            {groups.map((group) => (
-              <Section key={group.kind} title={group.label}>
-                <ul
-                  className="pc-session-rail__rows"
-                  data-testid={`shell-session-rail-group-${group.kind}`}
-                >
-                  {group.sessions.map((session) => {
-                    const glyph = sessionGlyph(session);
-                    const { text } = statusPresentation(session);
-                    const selectedRow = session.id === selectedSessionId;
-                    const title = session.title ?? "Untitled session";
-                    const meta = sessionMetaParts(session, resolvedNow);
-                    return (
-                      <li key={session.id} className="pc-session-rail__row-item">
-                        <button
-                          type="button"
-                          className="pc-session-rail__row"
-                          data-selected={selectedRow}
-                          aria-current={selectedRow ? "true" : undefined}
-                          data-testid={`shell-session-rail-row-${session.id}`}
-                          onClick={() => onSelectSession?.(session.id)}
-                        >
-                          <span
-                            className={`pc-session-rail__glyph pc-session-rail__glyph--${glyph.tone}`}
-                            aria-hidden="true"
+            {groups.map((group) => {
+              const groupLabelId = `shell-session-rail-group-${group.kind}-label`;
+              return (
+                <Fragment key={group.kind}>
+                  {/*
+                  UI-X6: the reference's group heading is not the shared
+                  `Section` primitive's dark, semibold `<h2>` — it is its own
+                  small grey mono label (`.group-label`) followed by a
+                  hairline rule that fills the remaining width
+                  (`.group-label::after`). `Section` stays untouched (it is
+                  shared with `SessionList`'s full-page rail and other
+                  screens); this rail renders its own heading markup instead,
+                  styled by `.pc-session-rail__group-label` in
+                  `session-rail.css`. The heading semantics `Section` used to
+                  provide (`aria-labelledby` tying the group to its list) are
+                  kept directly on the `<ul>` rather than lost.
+                */}
+                  <h2 className="pc-session-rail__group-label" id={groupLabelId}>
+                    {group.label}
+                  </h2>
+                  <ul
+                    className="pc-session-rail__rows"
+                    data-testid={`shell-session-rail-group-${group.kind}`}
+                    aria-labelledby={groupLabelId}
+                  >
+                    {group.sessions.map((session) => {
+                      const glyph = sessionGlyph(session);
+                      const { text } = statusPresentation(session);
+                      const selectedRow = session.id === selectedSessionId;
+                      const title = session.title ?? "Untitled session";
+                      const meta = sessionMetaParts(session, resolvedNow);
+                      return (
+                        <li key={session.id} className="pc-session-rail__row-item">
+                          <button
+                            type="button"
+                            className="pc-session-rail__row"
+                            data-selected={selectedRow}
+                            aria-current={selectedRow ? "true" : undefined}
+                            data-testid={`shell-session-rail-row-${session.id}`}
+                            onClick={() => onSelectSession?.(session.id)}
                           >
-                            {glyph.glyph}
-                          </span>
-                          <span className="pc-session-rail__row-text">
-                            <span className="pc-visually-hidden">{text}. </span>
-                            <span className="pc-session-rail__title">{title}</span>
-                            {meta.length > 0 ? (
-                              <span className="pc-session-rail__meta">{meta.join(" · ")}</span>
-                            ) : null}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Section>
-            ))}
+                            <span
+                              className={`pc-session-rail__glyph pc-session-rail__glyph--${glyph.tone}`}
+                              aria-hidden="true"
+                            >
+                              {glyph.glyph}
+                            </span>
+                            <span className="pc-session-rail__row-text">
+                              <span className="pc-visually-hidden">{text}. </span>
+                              <span className="pc-session-rail__title">{title}</span>
+                              {meta.length > 0 ? (
+                                <span className="pc-session-rail__meta">{meta.join(" · ")}</span>
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Fragment>
+              );
+            })}
           </div>
         ) : null}
       </div>
