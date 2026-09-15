@@ -155,4 +155,3 @@ describe("workflow:progress's pinned element on the rail (T113)", () => {
     expect(within(card).getByText("Pending")).toBeTruthy();
   });
 });
-
