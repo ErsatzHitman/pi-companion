@@ -4556,6 +4556,43 @@ export class AgentManager {
       return;
     }
 
+    // FIX-S14: the reconcile above only fires when this echo carries a
+    // `clientMessageId` that matches an already-recorded submitted row.
+    // Pi's own live "submitted user entry" marker — the extension's
+    // `emitSubmittedUserEntries`, landing here via `agent.ts`'s
+    // `handleSubmittedUserEntryMarker` — only attaches `clientMessageId`
+    // when `activeClientMessageId` is still set at the moment it fires, and
+    // always carries the provider's own native entry id as `messageId`
+    // instead (never a value `getSubmittedUserMessage` can look up by).
+    // Measured directly on a live daemon: for a single send in a brand-new
+    // session, this event arrives with no `clientMessageId` at all, so the
+    // check above never runs, and this item — byte-for-byte the same send
+    // `AgentManager.recordSubmittedPrompt` already appended moments ago,
+    // queuing it via `registerPendingLiveUserMessage` at that method's own
+    // tail — fell through to `recordAndDispatchTimelineItem` below and was
+    // appended a second time. That queue is exactly the order-only FIFO
+    // FIX-S10 built for `appendHistoryBackfillTimelineItem`'s own re-import
+    // of the same row (see `mergePendingLiveUserMessage`'s doc comment);
+    // reuse it here instead of appending. A `user_message` with nothing
+    // pending — no local send this process is waiting to reconcile, e.g.
+    // one sent from another client, or Pi injecting a turn — finds the FIFO
+    // and its FIX-S12 fallback both empty, `mergePendingLiveUserMessage`
+    // returns null, and this falls through to the normal append below
+    // exactly as before this fix.
+    if (!options?.fromHistory && event.item.type === "user_message") {
+      const merged = this.timelineStore.mergePendingLiveUserMessage(
+        agent.id,
+        this.deriveLiveStreamUserMessageDedupeKey(event.item),
+        event.item,
+      );
+      if (merged) {
+        this.enqueueDurableTimelineUpdate(agent.id, merged);
+        flags.shouldDispatchEvent = false;
+        flags.shouldNotifyWaiters = false;
+        return;
+      }
+    }
+
     if (options?.fromHistory) {
       this.recordTimeline(
         agent.id,
@@ -4951,6 +4988,25 @@ export class AgentManager {
       return `call:${item.callId}`;
     }
     return undefined;
+  }
+
+  /**
+   * FIX-S14: dedupe-key namespace for a `mergePendingLiveUserMessage` call
+   * made directly from the live stream (`onStreamTimelineEvent`), kept
+   * distinct from `deriveHistoryTimelineDedupeKey`'s `msg:<id>` namespace so
+   * a history-derived importer's own re-import of the same underlying row
+   * still collapses through its own `wouldDedupe`/`append` dedupeKey path
+   * rather than colliding with this one. The value only has to be unique
+   * per event for `InMemoryAgentTimelineStore`'s own bookkeeping
+   * (`state.dedupeKeys`, used to make `mergePendingLiveUserMessage` itself
+   * idempotent) — nothing else ever looks this key up — so falling back to
+   * a fresh id for an item with neither a native `messageId` nor a
+   * `clientMessageId` is safe.
+   */
+  private deriveLiveStreamUserMessageDedupeKey(
+    item: Extract<AgentTimelineItem, { type: "user_message" }>,
+  ): string {
+    return `live-stream:${item.messageId ?? item.clientMessageId ?? randomUUID()}`;
   }
 
   private emitState(agent: ManagedAgent, options?: { persist?: boolean }): void {
