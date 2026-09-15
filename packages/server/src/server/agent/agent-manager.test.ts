@@ -9064,6 +9064,163 @@ test("FIX-S12: a live send is recorded once at scale, even when the tail watcher
   rmSync(workdir, { recursive: true, force: true });
 });
 
+test("FIX-S14: a live send's own stream echo merges onto the pending row instead of duplicating it (headline dup-send bug)", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stream-echo-merge-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+
+  // Reproduces exactly what was measured on a live daemon: Pi's own
+  // "submitted user entry" marker (`agent.ts`'s `handleSubmittedUserEntryMarker`)
+  // echoes the just-submitted user message back over the live stream,
+  // carrying the provider's native entry id as `messageId` and — critically —
+  // NO `clientMessageId` (observed directly: absent from the probed append),
+  // so `AgentManager`'s `reconcileSubmittedPromptEcho` (which only matches by
+  // `clientMessageId`) can never catch it. `setTimeout(0)` (not a synchronous
+  // push inside `startTurn`) matters here: it defers these events to a new
+  // macrotask, guaranteeing they arrive strictly *after* `streamForwarder`'s
+  // own synchronous `recordSubmittedPrompt` call has already run — i.e. this
+  // exercises the genuine live, non-staged `onStreamTimelineEvent` path, the
+  // same way FIX-S10's own "tail-watcher" test above does for the history
+  // path.
+  class StreamEchoSession extends TestAgentSession {
+    override async startTurn(
+      _prompt: AgentPromptInput,
+      _options?: AgentRunOptions,
+    ): Promise<{ turnId: string }> {
+      const turnId = `turn-${++this.turnIdCounter}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "user_message", text: "PROBE-DUP-XYZ", messageId: "71768a09" },
+        });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: "ack" },
+        });
+        this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+      }, 0);
+      return { turnId };
+    }
+  }
+
+  class StreamEchoClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new StreamEchoSession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new StreamEchoClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000420",
+  });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  // The live composer send: `AgentManager.recordSubmittedPrompt` appends this
+  // row synchronously (client-derived id "composer-mu2ca41j-1", matching what
+  // was measured), then queues it via `registerPendingLiveUserMessage`.
+  const result = await manager.runAgent(snapshot.id, "PROBE-DUP-XYZ", {
+    clientMessageId: "composer-mu2ca41j-1",
+  });
+  expect(result.canceled).toBe(false);
+
+  const timeline = manager.getTimeline(snapshot.id);
+  const userMessages = timeline.filter((item) => item.type === "user_message");
+
+  // Before FIX-S14 this was 2: the composer's own optimistic row, plus a
+  // second row appended from `onStreamTimelineEvent` for the un-reconciled
+  // stream echo — the headline bug this fix closes.
+  expect(userMessages).toHaveLength(1);
+  expect(userMessages[0]).toMatchObject({
+    text: "PROBE-DUP-XYZ",
+    clientMessageId: "composer-mu2ca41j-1",
+    // The surviving row ends up carrying the stream echo's native id.
+    messageId: "71768a09",
+  });
+  expect(timeline.map((item) => item.type)).toEqual(["user_message", "assistant_message"]);
+
+  await manager.closeAgent(snapshot.id).catch(() => undefined);
+  await storage.flush().catch(() => undefined);
+  rmSync(workdir, { recursive: true, force: true });
+});
+
+test("FIX-S14: a stream user_message with no pending live row still appends normally", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stream-echo-no-pending-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+
+  // No `clientMessageId` is ever supplied to `runAgent`, so
+  // `recordSubmittedPrompt` never runs and nothing is ever queued via
+  // `registerPendingLiveUserMessage` — this message is never "pending" from
+  // this process's own point of view (e.g. a message sent from another
+  // client, or Pi injecting a turn). FIX-S14's new merge attempt must find
+  // both the FIFO and its FIX-S12 fallback empty and fall through to a
+  // normal append, exactly as before this fix.
+  class UnpendingEchoSession extends TestAgentSession {
+    override async startTurn(
+      _prompt: AgentPromptInput,
+      _options?: AgentRunOptions,
+    ): Promise<{ turnId: string }> {
+      const turnId = `turn-${++this.turnIdCounter}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "user_message", text: "injected turn", messageId: "9f0e1a2b" },
+        });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: "handled" },
+        });
+        this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+      }, 0);
+      return { turnId };
+    }
+  }
+
+  class UnpendingEchoClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new UnpendingEchoSession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new UnpendingEchoClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000421",
+  });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  const result = await manager.runAgent(snapshot.id, "trigger");
+  expect(result.canceled).toBe(false);
+
+  const timeline = manager.getTimeline(snapshot.id);
+  const userMessages = timeline.filter((item) => item.type === "user_message");
+  expect(userMessages).toHaveLength(1);
+  expect(userMessages[0]).toMatchObject({ text: "injected turn", messageId: "9f0e1a2b" });
+
+  await manager.closeAgent(snapshot.id).catch(() => undefined);
+  await storage.flush().catch(() => undefined);
+  rmSync(workdir, { recursive: true, force: true });
+});
+
 test("hydrateTimeline preserves provider replay timestamps and marks missing ones untrusted", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-history-timestamps-"));
   const storagePath = join(workdir, "agents");
