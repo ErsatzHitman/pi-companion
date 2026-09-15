@@ -17,6 +17,16 @@
  * `bypassPermissions` mode so this test exercises steering, not the
  * separate approvals surface T31C owns (this fake provider never emits
  * a `permission_requested` event at all — see that file's module doc).
+ *
+ * FIX-CI5: also asserts `Composer.tsx`'s "Stop" control's active-turn
+ * contract (present, reachable by keyboard from the composer, and
+ * focus-visible) against the mid-sleep window this test already opens.
+ * `keyboard-navigation.spec.ts`'s own module doc (item 3) records
+ * measuring that driving a fresh turn just for this check could not
+ * reliably observe the daemon's `agent_update` `status: "running"` push
+ * within this same ~300ms window; this assertion inherits that same
+ * risk rather than resolving it, since this is the one spec that
+ * already needs, and already reliably gets, that window open.
  */
 import { expect, test } from "./fixtures/test.js";
 import { connectViaUi } from "./fixtures/connect-ui.js";
@@ -53,6 +63,22 @@ test.describe("send during a turn", () => {
       await expect(transcript).toContainText("Please sleep for a moment before replying.", {
         timeout: 10_000,
       });
+
+      // FIX-CI5: while this turn is genuinely active, "Stop" is present,
+      // reachable by keyboard from the composer (the same Tab-order
+      // property `keyboard-navigation.spec.ts` proves for every other
+      // composer control on an idle session, which no longer includes
+      // Stop -- see that file's module doc item 3), and focus-visible.
+      const stopButton = page.getByRole("button", { name: "Stop", exact: true });
+      await expect(stopButton).toBeVisible({ timeout: 5_000 });
+      await composerInput.focus();
+      await page.keyboard.press("Tab"); // "Send"
+      await page.keyboard.press("Tab"); // "Attach files"
+      await page.keyboard.press("Tab"); // Model chip
+      await page.keyboard.press("Tab"); // Routing chip
+      await page.keyboard.press("Tab"); // Queue chip
+      await page.keyboard.press("Tab"); // -> "Stop"
+      await expect(stopButton).toBeFocused();
 
       // A second submission, sent while that turn is still genuinely
       // running (the tool call is mid-`sleep`) -- this is the

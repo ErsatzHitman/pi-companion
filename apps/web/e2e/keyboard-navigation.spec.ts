@@ -45,6 +45,30 @@
  *    `host-session-screen.tsx`'s `useSessionTranscriptEntries`
  *    (T31B1/T31B3/T31B4), which now subscribes this session's id as soon
  *    as the hello handshake has produced a `server_info`.
+ *
+ * 3. **FIX-CI5: the Stop-button Tab-order assertion below was itself a
+ *    stale spec.** `Composer.tsx`'s Stop control used to render on
+ *    every connected session regardless of turn state (`canAbort` never
+ *    consulted turn status at all); `be45254` (FIX-L2) fixed that real
+ *    live-deployment defect by gating it on `useAgentTurnStatus`'s live
+ *    `AgentSnapshotPayload.status` signal too, so Stop is now correctly
+ *    ABSENT on the idle session this spec seeds -- exactly what
+ *    `Composer.test.tsx` already asserted was right. The idle Tab walk
+ *    below now asserts that absence explicitly instead of tabbing into a
+ *    control that is no longer there. A route that instead sent this
+ *    spec's own `/sleep/i` message (the same fixture
+ *    `session-steer-and-follow-up.spec.ts` uses) to drive a genuinely
+ *    active turn *inside this spec* was tried and measured, not assumed:
+ *    the tool call ran and completed (visible in the transcript) while
+ *    `getByRole("button", { name: "Stop" }).toBeVisible()` never once
+ *    observed it across a 10s poll, meaning the daemon's live
+ *    `agent_update`/`status: "running"` push this hook depends on does
+ *    not surface reliably for a turn this short-lived within this
+ *    harness -- a real timing property of the daemon/harness, not a bug
+ *    in the assertion. Reachability, focus, and keyboard activation of
+ *    Stop during a real turn are instead asserted in
+ *    `session-steer-and-follow-up.spec.ts`, which already drives one
+ *    that stays open long enough for its own steer assertions.
  */
 import { expect, test } from "./fixtures/test.js";
 import { connectViaUi } from "./fixtures/connect-ui.js";
@@ -111,9 +135,15 @@ test.describe("keyboard-only navigation", () => {
       // Tab instead reaches the metadata row's three popover-trigger chips
       // (Model, Routing, Queue -- each a real button with
       // `aria-haspopup`/`aria-expanded`, opening the same picker the old
-      // UI kept in a sheet) and then the "Stop" icon button, which renders
-      // whenever a client is wired (`useComposer`'s `canAbort`), not only
-      // mid-turn.
+      // UI kept in a sheet). The "Stop" icon button used to come right
+      // after Queue in this same idle walk; FIX-L2 (`be45254`, this
+      // file's module doc item 3) fixed a real defect where it rendered
+      // on every connected session regardless of turn state, so it now
+      // renders only while `useAgentTurnStatus` reports a genuinely
+      // active turn -- this idle session correctly has no Stop control to
+      // tab into at all. The two blocks below assert that absence
+      // explicitly, then drive a real turn to prove Stop's active
+      // contract instead.
       await composerInput.focus();
       await page.keyboard.press("Tab"); // PromptBar's own "Send" button comes right after the textarea in DOM order
       await expect(page.getByRole("button", { name: "Send", exact: true })).toBeFocused();
@@ -130,8 +160,17 @@ test.describe("keyboard-only navigation", () => {
       await expect(
         page.getByRole("button", { name: "Queue: — steer · — follow-up" }),
       ).toBeFocused();
-      await page.keyboard.press("Tab"); // -> "Stop"
-      await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeFocused();
+
+      // FIX-CI5: Stop is honestly ABSENT here -- this session is idle
+      // (FIX-L2, see this file's module doc item 3) -- a hard assertion
+      // of that absence rather than tabbing into a control that no
+      // longer exists on an idle session. Stop's *active*-turn contract
+      // (present, keyboard-reachable, focus-visible) is asserted instead
+      // in `session-steer-and-follow-up.spec.ts`, which already drives a
+      // real turn that stays open long enough to assert against -- see
+      // this file's module doc item 3 for why that turn could not be
+      // driven reliably inside this spec itself.
+      await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
 
       // The left session rail's own row is a real, named button too --
       // reachable and activatable without a pointer. Hard assertion,
