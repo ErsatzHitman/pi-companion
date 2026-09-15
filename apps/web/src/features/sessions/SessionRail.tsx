@@ -37,6 +37,7 @@ import {
   Banner,
   EmptyState,
   ErrorState,
+  Icon,
   LoadingState,
   Section,
 } from "../../ui/primitives/index.js";
@@ -149,6 +150,7 @@ export function SessionRail({
             onClick={onNewSession}
             data-testid="shell-session-rail-new-session"
           >
+            <Icon name="add" />
             New session
           </button>
         ) : null}

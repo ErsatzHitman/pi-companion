@@ -18,6 +18,9 @@
   --pc-session-rail-head-pad-block-end: 6px;
   --pc-session-rail-new-height: 24px;
   --pc-session-rail-new-radius: 7px;
+  --pc-session-rail-new-gap: 5px;
+  --pc-session-rail-new-pad-inline-start: 6px;
+  --pc-session-rail-new-icon-size: 13px;
   --pc-session-rail-search-pad-block-end: 10px;
   --pc-session-rail-search-height: 30px;
   --pc-session-rail-kbd-radius: 4px;
@@ -54,8 +57,9 @@
 .pc-session-rail__new {
   display: inline-flex;
   align-items: center;
+  gap: var(--pc-session-rail-new-gap);
   height: var(--pc-session-rail-new-height);
-  padding: 0 var(--spacing-2);
+  padding: 0 var(--spacing-2) 0 var(--pc-session-rail-new-pad-inline-start);
   border: none;
   border-radius: var(--pc-session-rail-new-radius);
   background-color: var(--color-surface);
@@ -66,6 +70,11 @@
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   white-space: nowrap;
+}
+
+.pc-session-rail__new svg {
+  width: var(--pc-session-rail-new-icon-size);
+  height: var(--pc-session-rail-new-icon-size);
 }
 
 .pc-session-rail__new:hover {
