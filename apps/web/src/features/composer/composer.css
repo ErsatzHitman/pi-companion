@@ -98,12 +98,16 @@
   font-size: var(--font-size-xs);
 }
 
-/* Metadata chips (T388): the mockup's `.chip` — mono, pill-radius,
- * hairline border, a hover tint, and an accent tint while its popover is
- * open. Each chip is a `Popover` trigger (unmodified primitive); these
- * rules only restyle that trigger button, scoped to this wrapper so the
- * primitive's own default (used elsewhere, e.g. `CommandSearch`) is
- * untouched. */
+/* Metadata chips (T388, values corrected UI-P1): the reference's own
+ * `.chip { height: 22px; padding: 0 8px; border-radius: 6px; background:
+ * var(--inset); box-shadow: var(--sh-hairline); font-family: var(--mono);
+ * font-size: 11px; color: var(--ink-2) }` — mono, a filled `--inset` tint,
+ * `--radius-chip` (6px), NOT the pill radius this comment previously
+ * (wrongly) claimed the mockup used; `.pill` is the mockup's pill-radius
+ * class, a different element. Each chip is a `Popover` trigger
+ * (unmodified primitive); these rules only restyle that trigger button,
+ * scoped to this wrapper so the primitive's own default (used elsewhere,
+ * e.g. `CommandSearch`) is untouched. */
 .pc-composer__meta {
   display: inline-flex;
   align-items: center;
@@ -155,9 +159,9 @@
   --pc-composer-chip-font-size: 11px;
   height: 1.375rem;
   padding: 0 var(--spacing-2);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-chip);
   box-shadow: var(--shadow-hairline);
-  background-color: transparent;
+  background-color: var(--color-inset);
   color: var(--color-ink-2);
   font-family: var(--font-family-mono);
   font-size: var(--pc-composer-chip-font-size);
