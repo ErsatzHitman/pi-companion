@@ -160,12 +160,65 @@
  * 10px/600/0.09em uppercase treatment as the session rail's `Workspace`
  * eyebrow; kept as its own class here rather than shared, because this
  * stylesheet is the only one `Shell` itself loads.
+ *
+ * UI-P9: box model matched to the design reference's own `.live-head`/
+ * `.live-scroll` pair (`docs/ui-reference/pi-companion-web.html`). The
+ * reference's `.live` itself carries no padding at all — it is `display:
+ * grid; grid-template-rows: auto minmax(0, 1fr)`, with the head (this
+ * rule, row 1) and a scrolling body (`.shell__live-scroll` below, row 2)
+ * each owning their own edge spacing instead, the same division of
+ * responsibility `.shell__rail--session` already uses for the left rail
+ * (its own comment: "The rail's own content owns its inner padding").
+ * `root-route.tsx`'s `ExtensionRailContent` renders this element plus a
+ * single `.shell__live-scroll` wrapper as the aside's only two children —
+ * always exactly two, whether or not a session is open, since
+ * `shell.tsx`'s own empty-state fallback renders a bare
+ * `.shell__live-scroll` with no head — so `grid-row` below is pinned by
+ * class rather than left to source-order auto-placement, which would
+ * place a lone `.shell__live-scroll` (the empty-state case) into row 1
+ * instead of letting it fill the whole rail.
+ *
+ * The reference's `padding: 12px 14px 8px` has two exact token matches
+ * (12px = `--spacing-3`, 8px = `--spacing-2`) and one value with none
+ * (14px side padding, between the 12px/16px steps on either side); that
+ * one is declared as a scoped custom property on this rule, the same
+ * pattern `session-status.css` uses for its own pill's untokened values,
+ * rather than rounded to a visibly different token.
  */
 .shell__live-head {
+  --shell-live-head-pad-x: 14px;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
-  margin-bottom: var(--spacing-2);
+  padding: var(--spacing-3) var(--shell-live-head-pad-x) var(--spacing-2);
+}
+
+/*
+ * The live rail's scrolling body (reference `.live-scroll`): the only
+ * element between the head above and the rail's own outer edge, so it is
+ * what actually scrolls while the head stays put — `.shell__rail--extension`
+ * below no longer scrolls itself. Holds every live-extension child
+ * (`PiNoticeBannerContainer`, `PiExtensionStatusStrip`, `PiExtensionRail`)
+ * when a session is open, or `shell.tsx`'s own `EmptyState` fallback alone
+ * when it is not; either way it is the aside's row-2 grid child (see
+ * `.shell__live-head`'s comment above for why that is pinned by class
+ * rather than source order).
+ *
+ * Reference `padding: 0 12px 16px` maps exactly (0, `--spacing-3`,
+ * `--spacing-4`); its `gap: 10px` sits between the `--spacing-2`/8px and
+ * `--spacing-3`/12px steps with no exact match, so — like the 14px above —
+ * it is a scoped custom property rather than a rounded token.
+ */
+.shell__live-scroll {
+  --shell-live-scroll-gap: 10px;
+  grid-row: 2;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 var(--spacing-3) var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--shell-live-scroll-gap);
 }
 
 .shell__live-eyebrow {
@@ -214,8 +267,26 @@
   padding: var(--spacing-4);
 }
 
+/*
+ * UI-P9: unlike `.shell__rail--session` (which zeroes the shared
+ * `.shell__rail` padding and lets `.pc-session-rail` own its own edges),
+ * the extension rail also needs to cancel the shared rule's `overflow-y:
+ * auto` — the reference's `.live` does not scroll itself; only its
+ * `.live-scroll` child (above) does, so the head can stay fixed while the
+ * body scrolls beneath it. `display: grid` plus `grid-template-rows: auto
+ * minmax(0, 1fr)` is the reference `.live`'s own layout technique,
+ * verbatim; `min-height: 0` matches its `min-height: 0` and is what lets
+ * row 2 shrink to the rail's real height instead of growing to its
+ * content's, which is what makes that row's own `overflow-y: auto` do
+ * anything.
+ */
 .shell__rail--extension {
   grid-area: extension;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding: 0;
+  overflow-y: visible;
   border-top: 1px solid var(--color-line);
 }
 
@@ -319,7 +390,7 @@
   }
 
   .shell__rail--extension {
-    display: block;
+    display: grid;
     border-inline-start: 1px solid var(--color-line);
   }
 

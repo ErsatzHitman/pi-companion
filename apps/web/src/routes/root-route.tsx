@@ -243,19 +243,29 @@ function ExtensionRailContent({ agentId, chromeClient }: ExtensionRailContentPro
         <span className="shell__live-eyebrow">Live</span>
         <SessionStatusPill session={session} testId="shell-live-status" />
       </div>
-      <PiNoticeBannerContainer agentId={agentId} client={client ?? undefined} />
-      <PiExtensionStatusStrip
-        elements={elements}
-        agentId={agentId}
-        actionController={actionController}
-        revision={revision}
-      />
-      <PiExtensionRail
-        elements={elements}
-        agentId={agentId}
-        actionController={actionController}
-        revision={revision}
-      />
+      {/*
+       * UI-P9: `.shell__live-scroll` is the reference `.live-scroll`'s
+       * padded, independently-scrolling row-2 grid cell (see `shell.css`'s
+       * own comment on `.shell__live-head` and `.shell__live-scroll`) —
+       * this wrapper, plus the head above, are the aside's only two
+       * children, which is what lets `grid-row` pin each to its own row
+       * regardless of how many elements render inside this wrapper.
+       */}
+      <div className="shell__live-scroll">
+        <PiNoticeBannerContainer agentId={agentId} client={client ?? undefined} />
+        <PiExtensionStatusStrip
+          elements={elements}
+          agentId={agentId}
+          actionController={actionController}
+          revision={revision}
+        />
+        <PiExtensionRail
+          elements={elements}
+          agentId={agentId}
+          actionController={actionController}
+          revision={revision}
+        />
+      </div>
     </>
   );
 }

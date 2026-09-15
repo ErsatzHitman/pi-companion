@@ -280,11 +280,20 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
           data-has-content={hasExtensionContent}
         >
           {extensionRail ?? (
-            <EmptyState
-              title="No live extensions"
-              description="Fleet, workflow, loop, and goal activity appear here while a session runs."
-              testId="shell-extension-rail-empty"
-            />
+            // UI-P9: `.shell__live-scroll` is the reference `.live-scroll`'s
+            // padded/scrolling row-2 grid cell (see `shell.css`'s own
+            // comment on that class) — wrapping the fallback here keeps it
+            // sitting at the reference's padding instead of flush against
+            // the rail's edges, matching the populated case below where
+            // `ExtensionRailContent` wraps its own non-head children the
+            // same way.
+            <div className="shell__live-scroll">
+              <EmptyState
+                title="No live extensions"
+                description="Fleet, workflow, loop, and goal activity appear here while a session runs."
+                testId="shell-extension-rail-empty"
+              />
+            </div>
           )}
         </aside>
       </div>
