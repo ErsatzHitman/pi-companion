@@ -34,6 +34,22 @@
   --pc-session-rail-dot-size: 6px;
   display: flex;
   flex-direction: column;
+  /*
+   * UI-X4: fill the rail region so the foot can sit at its bottom edge.
+   * The reference's `.rail` is `display: grid` with
+   * `grid-template-rows: auto auto minmax(0, 1fr) auto` — head, search,
+   * a list that absorbs the remaining space, and a foot pinned last.
+   * Measured before this change: the reference's `.rail-foot` sits at
+   * y=867 (the rail's bottom) while ours sat at y=471, directly under the
+   * last session row, because this element was only as tall as its own
+   * content. A flex column plus `margin-top: auto` on the foot reproduces
+   * the grid's last-row behaviour while staying correct when the body is
+   * absent entirely — the list is rendered conditionally (loading, error
+   * and empty states replace it), which a fixed four-row grid template
+   * would mis-assign.
+   */
+  height: 100%;
+  min-height: 0;
 }
 
 /* Head -------------------------------------------------------------------- */
@@ -246,6 +262,8 @@
 /* Foot -------------------------------------------------------------------- */
 
 .pc-session-rail__foot {
+  /* Pins the foot to the rail's bottom edge; see `.pc-session-rail`. */
+  margin-top: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
