@@ -2294,6 +2294,24 @@ export class AgentManager {
     const dedupeKey = this.deriveHistoryTimelineDedupeKey(item);
     const alreadyRecorded = dedupeKey ? this.timelineStore.wouldDedupe(agentId, dedupeKey) : false;
     this.touchUpdatedAt(agent);
+
+    // FIX-S10: before treating this as a new row, see whether it is the
+    // history-derived echo of a *live* send this same process already
+    // recorded (`AgentManager.recordSubmittedPrompt`, queued via
+    // `registerPendingLiveUserMessage` because it had no history-derived
+    // identity yet). If so, claim that row instead of appending a second
+    // one — this is the fix for the headline live-send duplication bug:
+    // `PiLiveTailWatcher.emitEvents` independently re-derives every
+    // `user_message` row from the raw `.jsonl` file, including the one the
+    // live turn path just appended optimistically.
+    if (!alreadyRecorded && dedupeKey && item.type === "user_message") {
+      const merged = this.timelineStore.mergePendingLiveUserMessage(agentId, dedupeKey, item);
+      if (merged) {
+        this.enqueueDurableTimelineUpdate(agentId, merged);
+        return;
+      }
+    }
+
     const row = this.recordTimeline(agentId, item, { dedupeKey });
     if (alreadyRecorded) {
       // Idempotent no-op: this exact source row was already recorded by the
@@ -4687,6 +4705,17 @@ export class AgentManager {
       ...(options?.messageId ? { messageId: options.messageId } : {}),
     };
     this.recordAndDispatchTimelineItem(agent.id, item, agent.provider, undefined, options);
+    // FIX-S10: this row's `messageId`, if any at this point, is at most the
+    // client's own `clientMessageId` or a captured-entry id from a staged
+    // provider echo — never the stable, position-derived identity a
+    // history-derived importer (`PiLiveTailWatcher.emitEvents`) assigns the
+    // same underlying row (`msg:<provider>-history-user-<N>`, see
+    // `deriveHistoryTimelineDedupeKey`). Queue it so that importer's first
+    // sighting of this row claims it instead of appending a duplicate.
+    const recorded = this.timelineStore.getSubmittedUserMessage(agent.id, clientMessageId);
+    if (recorded) {
+      this.timelineStore.registerPendingLiveUserMessage(agent.id, recorded.seq);
+    }
   }
 
   private reconcileSubmittedPromptEcho(

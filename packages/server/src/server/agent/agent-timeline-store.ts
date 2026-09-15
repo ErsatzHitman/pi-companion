@@ -30,6 +30,26 @@ interface AgentTimelineState {
    * carry no dedupe key, or different keys, are never merged.
    */
   dedupeKeys: Map<string, AgentTimelineRow>;
+  /**
+   * FIX-S10: FIFO of `seq`s for `user_message` rows appended by the *live*
+   * turn path (`AgentManager.recordSubmittedPrompt`) before that row has
+   * ever been matched to the stable, position-derived identity
+   * (`msg:<provider>-history-user-<N>`) a history-derived importer
+   * (`PiLiveTailWatcher.emitEvents`, today's only caller of
+   * `appendHistoryBackfillTimelineItem`) assigns to the same underlying
+   * Pi row once it reads it back off disk. The live path cannot compute
+   * that identity itself — it doesn't know its own position among the
+   * session's user rows, and `PiHistoryMapper`'s counter also advances for
+   * system-injected envelope rows the live path never sees — so instead of
+   * pre-computing a matching key, it queues its row here; the first
+   * history-derived `user_message` dedupeKey that has no existing map entry
+   * claims (`mergePendingLiveUserMessage`) the oldest queued row instead of
+   * appending a new one, which is what stops the live send from also being
+   * recorded by the tail watcher. Order-only matching (FIFO), never text:
+   * two genuinely distinct sends of identical text still enqueue two
+   * separate seqs and are claimed in the order they were queued.
+   */
+  pendingLiveUserMessageSeqs: number[];
 }
 
 const DEFAULT_TIMELINE_FETCH_LIMIT = 200;
@@ -165,6 +185,7 @@ export class InMemoryAgentTimelineStore {
       rows,
       nextSeq,
       dedupeKeys: new Map(),
+      pendingLiveUserMessageSeqs: [],
     });
   }
 
@@ -222,6 +243,52 @@ export class InMemoryAgentTimelineStore {
    */
   wouldDedupe(agentId: string, dedupeKey: string): boolean {
     return this.requireState(agentId).dedupeKeys.has(dedupeKey);
+  }
+
+  /**
+   * FIX-S10: records that `seq` (a `user_message` row just appended by the
+   * live turn path) has no history-derived identity yet, so a later
+   * `mergePendingLiveUserMessage` call for the matching underlying row
+   * claims it instead of appending a duplicate. See the doc comment on
+   * `AgentTimelineState.pendingLiveUserMessageSeqs`.
+   */
+  registerPendingLiveUserMessage(agentId: string, seq: number): void {
+    this.requireState(agentId).pendingLiveUserMessageSeqs.push(seq);
+  }
+
+  /**
+   * FIX-S10: claims the oldest still-unmatched live `user_message` row (see
+   * `pendingLiveUserMessageSeqs`) for `dedupeKey`, merging `incoming`'s
+   * `messageId` onto that existing row instead of creating a new one, and
+   * registers `dedupeKey` against the merged row so a further re-import of
+   * this same source row dedupes normally through `wouldDedupe`/`append`.
+   * Returns `null` (no merge performed) when there is no pending row to
+   * claim, or every queued seq's row is no longer present — the caller is
+   * expected to fall back to a normal `append` in that case.
+   */
+  mergePendingLiveUserMessage(
+    agentId: string,
+    dedupeKey: string,
+    incoming: Extract<AgentTimelineItem, { type: "user_message" }>,
+  ): AgentTimelineRow | null {
+    const state = this.requireState(agentId);
+    const pending = state.pendingLiveUserMessageSeqs;
+    while (pending.length > 0) {
+      const seq = pending.shift();
+      const index = state.rows.findIndex((row) => row.seq === seq);
+      if (index === -1) continue;
+      const row = state.rows[index];
+      if (row.item.type !== "user_message") continue;
+      const mergedItem: AgentTimelineItem = {
+        ...row.item,
+        ...(incoming.messageId ? { messageId: incoming.messageId } : {}),
+      };
+      const merged: AgentTimelineRow = { ...row, item: mergedItem };
+      state.rows[index] = merged;
+      state.dedupeKeys.set(dedupeKey, merged);
+      return cloneRow(merged);
+    }
+    return null;
   }
 
   fetch(agentId: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {

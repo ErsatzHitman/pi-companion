@@ -8698,6 +8698,129 @@ test("hydrateTimeline keeps provider user_message items when no canonical user h
   expect(assistantMessages).toHaveLength(2);
 });
 
+test("FIX-S10: a live send is recorded once even when a tail-watcher-shaped importer later re-observes the same underlying row", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-live-send-dedupe-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+
+  class RepliesSession extends TestAgentSession {
+    override async startTurn(
+      _prompt: AgentPromptInput,
+      _options?: AgentRunOptions,
+    ): Promise<{ turnId: string }> {
+      const turnId = `turn-${++this.turnIdCounter}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: "GM2162" },
+        });
+        this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+      }, 0);
+      return { turnId };
+    }
+  }
+
+  class RepliesClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new RepliesSession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new RepliesClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000410",
+  });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  // Live turn path: this is exactly `AgentManager.recordSubmittedPrompt`'s
+  // append, driven end-to-end through a real `runAgent` turn, the same way
+  // a browser Send click does.
+  const result = await manager.runAgent(snapshot.id, "Reply with exactly: GM2162", {
+    clientMessageId: "live-send-1",
+  });
+  expect(result.canceled).toBe(false);
+
+  const afterLiveSend = manager
+    .getTimeline(snapshot.id)
+    .filter((item) => item.type === "user_message");
+  expect(afterLiveSend).toHaveLength(1);
+
+  // Tail-watcher path: `PiLiveTailWatcher.emitEvents` independently
+  // re-derives every row from a from-scratch raw `.jsonl` read and calls
+  // this same method. It never has a `clientMessageId` (that field is not
+  // persisted to disk), only the text and the stable, position-derived
+  // `messageId` `PiHistoryMapper.mapUserMessage` assigns — position 1 in
+  // this session, since it is the only user message sent so far. Before
+  // FIX-S10 this call appended a second, duplicate `user_message` row
+  // (observed directly: this assertion failed with `toHaveLength(2)` prior
+  // to the fix in this commit).
+  await manager.appendHistoryBackfillTimelineItem(snapshot.id, {
+    type: "user_message",
+    text: "Reply with exactly: GM2162",
+    messageId: "codex-history-user-1",
+  });
+
+  const timeline = manager.getTimeline(snapshot.id);
+  const userMessages = timeline.filter((item) => item.type === "user_message");
+  expect(userMessages).toHaveLength(1);
+  expect(timeline.map((item) => item.type)).toEqual(["user_message", "assistant_message"]);
+
+  await manager.closeAgent(snapshot.id).catch(() => undefined);
+  await storage.flush().catch(() => undefined);
+  rmSync(workdir, { recursive: true, force: true });
+});
+
+test("FIX-S10: two identical live sends still record two distinct user_message rows (order-only identity, never text)", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-live-send-order-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000411",
+  });
+
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  await manager.runAgent(snapshot.id, "Hello", { clientMessageId: "dup-send-1" });
+  await manager.runAgent(snapshot.id, "Hello", { clientMessageId: "dup-send-2" });
+
+  // Each send's own tail-watcher-shaped re-observation, at its own
+  // position, must claim only its own row — never the other identical-text
+  // row — because identity here is FIFO order, not text.
+  await manager.appendHistoryBackfillTimelineItem(snapshot.id, {
+    type: "user_message",
+    text: "Hello",
+    messageId: "codex-history-user-1",
+  });
+  await manager.appendHistoryBackfillTimelineItem(snapshot.id, {
+    type: "user_message",
+    text: "Hello",
+    messageId: "codex-history-user-2",
+  });
+
+  const userMessages = manager
+    .getTimeline(snapshot.id)
+    .filter((item) => item.type === "user_message");
+  expect(userMessages).toHaveLength(2);
+
+  await manager.closeAgent(snapshot.id).catch(() => undefined);
+  await storage.flush().catch(() => undefined);
+  rmSync(workdir, { recursive: true, force: true });
+});
+
 test("hydrateTimeline preserves provider replay timestamps and marks missing ones untrusted", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-history-timestamps-"));
   const storagePath = join(workdir, "agents");
