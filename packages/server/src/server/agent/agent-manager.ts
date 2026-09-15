@@ -4034,6 +4034,89 @@ export class AgentManager {
     await this.primeTimelineFromLegacyProviderHistory(agent, broadcast);
   }
 
+  /**
+   * FIX-S11: bounds which *trailing* history-derived `user_message` events
+   * in a full RPC replay (`primeTimelineFromLegacyProviderHistory`,
+   * `forceHydrateTimelineFromLegacyProviderHistory`) may collapse onto a
+   * pending live row (`registerPendingLiveUserMessage`) instead of being
+   * appended as new rows.
+   *
+   * Unlike the tail watcher's append-only stream (already handled
+   * correctly by `appendHistoryBackfillTimelineItem`'s direct
+   * `mergePendingLiveUserMessage` call), a full replay walks the *entire*
+   * session and can present rows both BEFORE and AFTER a pending live
+   * send. Treating every not-yet-recorded `user_message` as a merge
+   * candidate would be unsafe: on a session's first-ever priming (nothing
+   * recorded yet at all), an OLDER historical message encountered early in
+   * the walk would also look "unrecorded" and could wrongly steal the
+   * pending slot meant for the live send that comes later, leaving the
+   * live send's own replayed row to append as a genuine duplicate instead.
+   *
+   * The fix walks `events` BACKWARD from the end, matching the (bounded,
+   * order-only) count of currently-pending live rows to the trailing
+   * contiguous run of not-yet-recorded `user_message` events — i.e. only
+   * rows provably at the tail of the replay, the only place a live send
+   * can ever be. The run stops the moment it meets a `user_message` whose
+   * dedupe key is already recorded (stable historical territory) or a
+   * `user_message` with no derivable identity, and never marks more
+   * indices than there are pending rows to claim. Non-`user_message`
+   * events (assistant replies, tool calls, provider_subagent updates) are
+   * skipped without breaking the run, since they may legitimately trail or
+   * separate user rows.
+   */
+  private computeReplayMergeEligibleIndices(
+    agentId: string,
+    events: readonly Extract<AgentStreamEvent, { type: "timeline" | "provider_subagent" }>[],
+  ): ReadonlySet<number> {
+    const eligible = new Set<number>();
+    let remaining = this.timelineStore.pendingLiveUserMessageCount(agentId);
+    if (remaining <= 0) {
+      return eligible;
+    }
+    for (let index = events.length - 1; index >= 0 && remaining > 0; index -= 1) {
+      const event = events[index];
+      if (event.type !== "timeline" || event.item.type !== "user_message") {
+        continue;
+      }
+      const dedupeKey = this.deriveHistoryTimelineDedupeKey(event.item);
+      if (!dedupeKey || this.timelineStore.wouldDedupe(agentId, dedupeKey)) {
+        break;
+      }
+      eligible.add(index);
+      remaining -= 1;
+    }
+    return eligible;
+  }
+
+  /**
+   * FIX-S11: records one history-replay timeline item, first trying the
+   * same `mergePendingLiveUserMessage` collapse `appendHistoryBackfillTimelineItem`
+   * uses, when `mergeEligible` (from `computeReplayMergeEligibleIndices`)
+   * says this item's position is safe to consider. Falls back to the
+   * ordinary dedupe-aware `recordTimeline` otherwise — including when this
+   * item is merge-eligible but the pending queue has already been
+   * exhausted by a concurrent claim, so nothing is ever dropped.
+   */
+  private recordReplayedTimelineItem(
+    agentId: string,
+    item: AgentTimelineItem,
+    timestamp: string | undefined,
+    mergeEligible: boolean,
+  ): AgentTimelineRow {
+    const dedupeKey = this.deriveHistoryTimelineDedupeKey(item);
+    if (mergeEligible && item.type === "user_message" && dedupeKey) {
+      const merged = this.timelineStore.mergePendingLiveUserMessage(agentId, dedupeKey, item);
+      if (merged) {
+        this.enqueueDurableTimelineUpdate(agentId, merged);
+        return merged;
+      }
+    }
+    return this.recordTimeline(agentId, item, {
+      ...(timestamp ? { timestamp } : undefined),
+      dedupeKey,
+    });
+  }
+
   private async forceHydrateTimelineFromLegacyProviderHistory(
     agent: ActiveManagedAgent,
     broadcast: boolean,
@@ -4068,11 +4151,20 @@ export class AgentManager {
         this.dispatch({ type: "provider_subagent", event: update });
       }
     }
-    for (const event of historyEvents) {
-      const row = this.recordTimeline(agent.id, event.item, {
-        ...(event.timestamp ? { timestamp: event.timestamp } : undefined),
-        dedupeKey: this.deriveHistoryTimelineDedupeKey(event.item),
-      });
+    // FIX-S11: the reset above always leaves the pending-live-message queue
+    // empty (`initialize` starts it fresh), so this is a no-op in the
+    // ordinary case — kept for consistency with `primeTimelineFromLegacyProviderHistory`
+    // and to stay correct if a live send ever lands between the reset above
+    // and this loop.
+    const eligibleIndices = this.computeReplayMergeEligibleIndices(agent.id, historyEvents);
+    for (let index = 0; index < historyEvents.length; index += 1) {
+      const event = historyEvents[index];
+      const row = this.recordReplayedTimelineItem(
+        agent.id,
+        event.item,
+        event.timestamp,
+        eligibleIndices.has(index),
+      );
       if (broadcast) {
         this.dispatchStream(agent.id, event, {
           seq: row.seq,
@@ -4090,22 +4182,19 @@ export class AgentManager {
     broadcast: boolean | (() => boolean),
   ): Promise<void> {
     const deferredBroadcast = typeof broadcast === "function";
-    const timelineEvents: Array<{
-      event: Extract<AgentStreamEvent, { type: "timeline" }>;
-      row: AgentTimelineRow;
-    }> = [];
-    const providerSubagentEvents: AgentManagerEvent[] = [];
+    // FIX-S11: buffered fully before any recording, in original stream order,
+    // so `computeReplayMergeEligibleIndices` can see the whole replay —
+    // including rows after a pending live one — before deciding which
+    // trailing `user_message` rows are safe to merge. A `streamHistory()`
+    // failure partway through still records whatever was buffered so far,
+    // matching this function's pre-existing best-effort behavior.
+    const bufferedEvents: Extract<AgentStreamEvent, { type: "timeline" | "provider_subagent" }>[] =
+      [];
     agent.historyPrimed = true;
     try {
       for await (const event of agent.session.streamHistory()) {
         if (event.type === "provider_subagent") {
-          const update = this.providerSubagents.apply(agent.id, event.provider, event.event);
-          const managerEvent: AgentManagerEvent = { type: "provider_subagent", event: update };
-          if (deferredBroadcast) {
-            providerSubagentEvents.push(managerEvent);
-          } else if (broadcast) {
-            this.dispatch(managerEvent);
-          }
+          bufferedEvents.push(event);
           continue;
         }
         if (event.type !== "timeline") {
@@ -4114,22 +4203,45 @@ export class AgentManager {
         if (event.item.type === "user_message" && isSystemInjectedEnvelope(event.item.text)) {
           continue;
         }
-        const row = this.recordTimeline(agent.id, event.item, {
-          ...(event.timestamp ? { timestamp: event.timestamp } : undefined),
-          dedupeKey: this.deriveHistoryTimelineDedupeKey(event.item),
-        });
-        if (deferredBroadcast) {
-          timelineEvents.push({ event, row });
-        } else if (broadcast) {
-          this.dispatchStream(agent.id, event, {
-            seq: row.seq,
-            epoch: this.timelineStore.getEpoch(agent.id),
-            timestamp: row.timestamp,
-          });
-        }
+        bufferedEvents.push(event);
       }
     } catch {
       // ignore history failures
+    }
+
+    const eligibleIndices = this.computeReplayMergeEligibleIndices(agent.id, bufferedEvents);
+    const timelineEvents: Array<{
+      event: Extract<AgentStreamEvent, { type: "timeline" }>;
+      row: AgentTimelineRow;
+    }> = [];
+    const providerSubagentEvents: AgentManagerEvent[] = [];
+    for (let index = 0; index < bufferedEvents.length; index += 1) {
+      const event = bufferedEvents[index];
+      if (event.type === "provider_subagent") {
+        const update = this.providerSubagents.apply(agent.id, event.provider, event.event);
+        const managerEvent: AgentManagerEvent = { type: "provider_subagent", event: update };
+        if (deferredBroadcast) {
+          providerSubagentEvents.push(managerEvent);
+        } else if (broadcast) {
+          this.dispatch(managerEvent);
+        }
+        continue;
+      }
+      const row = this.recordReplayedTimelineItem(
+        agent.id,
+        event.item,
+        event.timestamp,
+        eligibleIndices.has(index),
+      );
+      if (deferredBroadcast) {
+        timelineEvents.push({ event, row });
+      } else if (broadcast) {
+        this.dispatchStream(agent.id, event, {
+          seq: row.seq,
+          epoch: this.timelineStore.getEpoch(agent.id),
+          timestamp: row.timestamp,
+        });
+      }
     }
 
     if (typeof broadcast !== "function" || !broadcast()) {

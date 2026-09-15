@@ -257,6 +257,20 @@ export class InMemoryAgentTimelineStore {
   }
 
   /**
+   * FIX-S11: read-only count of still-unclaimed live `user_message` rows
+   * (see `pendingLiveUserMessageSeqs`), without mutating the queue. A full
+   * history-replay importer (`AgentManager.primeTimelineFromLegacyProviderHistory`,
+   * `forceHydrateTimelineFromLegacyProviderHistory`) uses this to bound how
+   * many of the *trailing* history rows it may attempt to merge — unlike
+   * the tail watcher's append-only stream, a replay walks the whole
+   * session and can present rows both before and after a pending live one,
+   * so it must not treat every unrecorded row as a merge candidate.
+   */
+  pendingLiveUserMessageCount(agentId: string): number {
+    return this.requireState(agentId).pendingLiveUserMessageSeqs.length;
+  }
+
+  /**
    * FIX-S10: claims the oldest still-unmatched live `user_message` row (see
    * `pendingLiveUserMessageSeqs`) for `dedupeKey`, merging `incoming`'s
    * `messageId` onto that existing row instead of creating a new one, and
