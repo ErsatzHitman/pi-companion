@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import type { AgentStreamEvent, AgentTimelineImageRef } from "../../agent-sdk-types.js";
 import { streamPiHistory, type PiCapturedUserMessageEntry } from "./history-mapper.js";
+import { parseMessagesFromText } from "./pi-live-tail.js";
 import type { PiAgentMessage } from "./rpc-types.js";
 
 async function collectHistory(
@@ -382,5 +383,110 @@ describe("Pi history mapper", () => {
     const withoutCapturedEntries = await collectHistory(messages);
 
     expect(withCapturedEntries).toEqual(withoutCapturedEntries);
+  });
+
+  /**
+   * FIX-S13 (minimal-reproduction regression): the owner's headline
+   * duplication bug reproduces on a session's very *first* message, with a
+   * `custom_message` row (Pi's own top-level `type`, distinct from a
+   * `message`-typed row whose `role` happens to be `"custom"`) sitting
+   * both before and after it — `workflow-delivery-probe`
+   * (`display:false`, empty content) before, `pi-time-sense` after. The
+   * prime suspect was that `PiHistoryMapper.mapUserMessage`'s positional
+   * `userIndex` counter diverges between the two production importers
+   * because one of them (the RPC path's `runtimeSession.getMessages()`)
+   * sees these rows and the other (`pi-live-tail.ts`'s
+   * `parseMessagesFromText`, which keeps only `entry.type === "message"`)
+   * never can.
+   *
+   * Measured false, not assumed: `mapUserMessage`'s `this.userIndex += 1`
+   * runs only inside the `case "user":` arm of `mapMessages`'s switch — a
+   * `role: "custom"` row is dispatched to `mapCustomMessage` instead, which
+   * touches only `this.customIndex`, never `this.userIndex`. A top-level
+   * `custom_message`/`custom` jsonl row has no `message`-typed twin at all
+   * (see the FIX-S6 cross-importer test above, which models exactly this:
+   * `type: "custom_message"` and bare `type: "custom"` rows are pure noise
+   * `parseMessagesFromText` was already proven to filter out completely).
+   * So a `custom`-role row — whether or not a given importer's feed even
+   * contains one for a `custom_message` jsonl entry — can never shift
+   * `userIndex`, and this test pins that: the RPC-shaped feed (which, per
+   * the real Pi runtime's `sendMessage()` → `session.messages` push,
+   * legitimately CAN carry a `role: "custom"` entry for each side-channel
+   * row with no jsonl `message`-typed twin) and the raw-jsonl-shaped feed
+   * (which cannot see either row at all, being a different top-level
+   * `type`) still assign the identical `pi-history-user-1` to the one real
+   * user message — confirmed to already hold on the pre-fix tree, not
+   * created as a passing tautology by this fix.
+   */
+  test("FIX-S13: a custom_message row before and after the first user message never shifts either importer's userIndex", async () => {
+    // The RPC-shaped feed (`agent.ts`'s `streamHistory()` via
+    // `runtimeSession.getMessages()`): Pi's real runtime pushes a
+    // `role: "custom"` entry to `session.messages` for every
+    // `sendMessage()`-injected row (verified against the installed Pi CLI's
+    // own `agent-session.js`/`messages.js`), so this feed legitimately CAN
+    // carry both side-channel rows the raw file records as `custom_message`.
+    const rpcMessages: PiAgentMessage[] = [
+      { role: "custom", content: "" },
+      { role: "user", content: "Reply with exactly: CLEAN1" },
+      { role: "custom", content: "time sense context" },
+      { role: "assistant", content: [{ type: "text", text: "CLEAN1" }] },
+    ];
+
+    // The raw-file-shaped feed (`pi-live-tail.ts`'s `bootstrapTail`/
+    // `incrementalTail`, via `parseMessagesFromText`): the *same* logical
+    // session's `.jsonl`, exactly as measured live — both side-channel rows
+    // persisted with a top-level `type: "custom_message"`, never
+    // `type: "message"`, so `parseMessagesFromText` (which keeps only
+    // `entry.type === "message"`) cannot see either one at all.
+    const rawJsonlLines = [
+      JSON.stringify({ type: "session" }),
+      JSON.stringify({ type: "model_change" }),
+      JSON.stringify({ type: "thinking_level_change" }),
+      JSON.stringify({
+        type: "custom_message",
+        customType: "workflow-delivery-probe",
+        content: "",
+        display: false,
+      }),
+      JSON.stringify({
+        type: "message",
+        message: { role: "user", content: "Reply with exactly: CLEAN1" },
+      }),
+      JSON.stringify({ type: "custom_message", customType: "pi-time-sense", content: "now" }),
+      JSON.stringify({
+        type: "message",
+        message: { role: "assistant", content: [{ type: "text", text: "CLEAN1" }] },
+      }),
+    ];
+    const liveTailMessages = parseMessagesFromText(rawJsonlLines.join("\n") + "\n");
+    // Sanity: both custom_message rows were genuinely filtered out, not
+    // just coincidentally absent from the assertion below.
+    expect(liveTailMessages).toEqual([
+      { role: "user", content: "Reply with exactly: CLEAN1" },
+      { role: "assistant", content: [{ type: "text", text: "CLEAN1" }] },
+    ]);
+
+    const rpcEvents = await collectHistory(rpcMessages);
+    const tailEvents = await collectHistory(liveTailMessages);
+
+    function firstUserMessageId(events: AgentStreamEvent[]): string | undefined {
+      const event = events.find(
+        (candidate) => candidate.type === "timeline" && candidate.item.type === "user_message",
+      );
+      return event && event.type === "timeline" && event.item.type === "user_message"
+        ? event.item.messageId
+        : undefined;
+    }
+
+    const rpcUserMessageId = firstUserMessageId(rpcEvents);
+    const tailUserMessageId = firstUserMessageId(tailEvents);
+
+    // The one real row this session ever contains must yield exactly one
+    // identity, agreed by both importers — the necessary condition for
+    // `AgentTimelineStore`/`AgentManager`'s dedupe-key merge machinery to
+    // ever collapse the two producers' echoes of it into a single row.
+    expect(rpcUserMessageId).toBe("pi-history-user-1");
+    expect(tailUserMessageId).toBe("pi-history-user-1");
+    expect(rpcUserMessageId).toBe(tailUserMessageId);
   });
 });

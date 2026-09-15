@@ -271,8 +271,26 @@ export class PiLiveTailWatcher {
     const knownCount = state.forceFullEmitOnBootstrap
       ? 0
       : this.getCurrentTimelineCount(state.agentId);
-    if (events.length > knownCount) {
-      await this.emitEvents(state, events.slice(knownCount));
+    // FIX-S13: `events.length` (a from-scratch replay of every raw-jsonl
+    // `message` row this bootstrap read sees) and `knownCount` (however
+    // many rows the timeline store already holds, from *any* source —
+    // including the live turn path, `AgentManager.recordSubmittedPrompt`,
+    // which records the user's row *before* this file ever contains it)
+    // are two different enumeration bases. A plain `events.slice(knownCount)`
+    // assumes they always advance in lockstep, which needs nothing more
+    // than an item this mapper can independently identify — a `user_message`
+    // or `assistant_message` with a `messageId`, or a `tool_call` — to break:
+    // `appendHistoryBackfillTimelineItem` downstream is itself dedupe/merge
+    // aware for exactly those kinds (`AgentManager.deriveHistoryTimelineDedupeKey`),
+    // so it is always safe to offer them to `emitEvents` regardless of
+    // position — it will no-op or merge instead of duplicating. Only items
+    // with no derivable identity (`reasoning`) still rely on the positional
+    // count, since that is the only signal available for them.
+    const toEmit = events.filter(
+      (event, index) => hasStableDedupeIdentity(event) || index >= knownCount,
+    );
+    if (toEmit.length > 0) {
+      await this.emitEvents(state, toEmit);
     }
 
     state.mapper = mapper;
@@ -409,6 +427,25 @@ export function parseMessagesFromText(text: string): PiAgentMessage[] {
     messages.push(msg as PiAgentMessage);
   }
   return messages;
+}
+
+/**
+ * FIX-S13: mirrors `AgentManager.deriveHistoryTimelineDedupeKey`'s notion of
+ * "has a stable, position-independent identity" — `user_message`/
+ * `assistant_message` with a `messageId`, or `tool_call` — without importing
+ * that private method. Used by `bootstrapTail` to decide which replayed
+ * events are safe to always offer to the dedupe-aware
+ * `appendHistoryBackfillTimelineItem` path regardless of this read's
+ * position versus the timeline's current row count (see that call site's
+ * own comment for why the two counts can disagree).
+ */
+function hasStableDedupeIdentity(event: AgentStreamEvent): boolean {
+  if (event.type !== "timeline") return false;
+  const item = event.item;
+  if (item.type === "user_message" || item.type === "assistant_message") {
+    return Boolean(item.messageId);
+  }
+  return item.type === "tool_call";
 }
 
 function isSystemInjected(text: string): boolean {
