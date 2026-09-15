@@ -2,23 +2,30 @@
  * Session status pill (dot + word) shared by the per-session head and the
  * live rail's own head. Every value below is the design reference
  * (`docs/ui-reference/pi-companion-web.html`'s `.pill` block) mapped onto
- * `@picompanion/design-tokens`; the reference's fixed 22px pill height and
- * 6px dot have no token, so they are declared once here as custom
- * properties rather than repeated as literals at each use site.
+ * `@picompanion/design-tokens`; the reference's fixed 22px pill height,
+ * 6px dot, 6px content gap, 9px horizontal padding and 0.01em letter
+ * spacing have no exact token (the nearest spacing steps are
+ * `--spacing-1`/4px and `--spacing-2`/8px, and the nearest tracking step
+ * is `--letter-spacing-wide`/0.02em — each off by up to 2x), so all five
+ * are declared once here as custom properties rather than repeated, or
+ * rounded to an inexact token, at each use site.
  */
 
 .pc-session-pill {
   --pc-session-pill-height: 22px;
   --pc-session-pill-dot-size: 6px;
+  --pc-session-pill-gap: 6px;
+  --pc-session-pill-pad-x: 9px;
+  --pc-session-pill-letter-spacing: 0.01em;
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-1);
+  gap: var(--pc-session-pill-gap);
   height: var(--pc-session-pill-height);
-  padding: 0 var(--spacing-2);
+  padding: 0 var(--pc-session-pill-pad-x);
   border-radius: var(--radius-full);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  letter-spacing: var(--letter-spacing-wide);
+  letter-spacing: var(--pc-session-pill-letter-spacing);
   white-space: nowrap;
 }
 

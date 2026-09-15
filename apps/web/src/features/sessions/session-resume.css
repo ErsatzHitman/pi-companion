@@ -4,9 +4,14 @@
  *
  * The head row's values are the design reference's `.main-head` block
  * (`docs/ui-reference/pi-companion-web.html`: 10px/20px padding, 1px
- * `--line` bottom border, 13.5px/600 title, 22px mono chips) mapped onto
+ * `--line` bottom border, `--page` background, 13.5px/600/-0.1px-tracked
+ * title with `text-wrap: balance`, 22px mono chips) mapped onto
  * `@picompanion/design-tokens`; the 13.5px title size and 6px chip gap
  * have no token, so they are declared once here as custom properties.
+ * The title's -0.1px tracking maps to `--letter-spacing-tight` (-0.02em),
+ * the same conversion `ui/shell.css`'s `.shell__brand-name` already uses
+ * for the reference's identical `.mark-name` literal; `text-wrap` has no
+ * token (it is a layout keyword, not a themed value) and is set directly.
  */
 
 .pc-session-head {
@@ -18,6 +23,7 @@
   gap: var(--spacing-2);
   padding: var(--pc-session-head-pad-block) var(--spacing-5);
   border-bottom: 1px solid var(--color-line);
+  background-color: var(--color-page);
 }
 
 .pc-session-head__main {
@@ -31,8 +37,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-wrap: balance;
   font-size: var(--pc-session-head-title-size);
   font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--color-ink);
 }
 
