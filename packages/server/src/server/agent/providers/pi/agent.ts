@@ -2666,6 +2666,21 @@ export class PiRpcAgentSession implements AgentSession {
         piTier2UnknownMethodWarned.add(event.method);
         console.warn(`[pi] unknown extension_ui_request method dropped: ${event.method}`);
       }
+      // FIX-S8: `extension_ui_request` is a request Pi is awaiting a reply
+      // to, correlated by `event.id`. Every event that reaches this branch
+      // — a genuinely unrecognised method (e.g. a `setStatus` call missing
+      // its required `key`, the shape observed in production hanging a
+      // turn and then killing the Pi worker) or a recognised dialog method
+      // whose payload failed to map to a permission — must still be
+      // answered, not silently ignored: an unresolved reply leaves Pi's
+      // pending promise waiting forever, which is consistent with a turn
+      // that starts, records its extension entries, and then never
+      // produces an assistant reply. `cancelExtensionUiRequest` is the same
+      // mechanism `respondToPermission` uses to resolve a denied dialog
+      // (see `buildExtensionUiResponse`'s `behavior === "deny"` case above),
+      // reused here so Pi's promise settles honestly as declined and the
+      // turn can proceed, even though the daemon cannot act on the request.
+      this.runtimeSession.cancelExtensionUiRequest(event.id);
       return;
     }
 

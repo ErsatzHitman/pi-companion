@@ -437,6 +437,73 @@ describe("PiRpcAgentSession", () => {
     ]);
   });
 
+  // FIX-S8: an `extension_ui_request` is a request Pi is awaiting a reply
+  // to. Before this fix, a method that didn't map to a known dialog (e.g. a
+  // real `setStatus` call missing its required `key`, observed in
+  // production) hit the `!request` branch and `return`ed without ever
+  // calling `respondToExtensionUiRequest`/`cancelExtensionUiRequest` —
+  // leaving Pi's pending promise unresolved forever, consistent with a
+  // turn that starts, records its extension entries, and then never
+  // produces an assistant reply while the Pi worker exits non-zero.
+  test("answers an unsupported extension_ui_request instead of leaving it pending (FIX-S8)", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      // Production shape: `setStatus` without the `key` the recognised
+      // tier-2 handler requires, so it falls through to the generic path.
+      fakeSession.emit({
+        type: "extension_ui_request",
+        id: "unsupported-setstatus-1",
+        method: "setStatus",
+      });
+
+      // The pending request must not outlive the call: it is answered
+      // immediately, using the same `cancelExtensionUiRequest` mechanism
+      // (built on `respondToExtensionUiRequest`) a denied dialog uses, and
+      // it is never tracked as a pending permission (nothing to resolve
+      // later — it was already answered).
+      expect(fakeSession.canceledExtensionUiRequests).toEqual(["unsupported-setstatus-1"]);
+      expect(fakeSession.extensionUiResponses).toEqual([
+        { id: "unsupported-setstatus-1", response: { cancelled: true } },
+      ]);
+      expect(session.getPendingPermissions()).toEqual([]);
+      // The existing once-per-method diagnostic is preserved verbatim.
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[pi] unknown extension_ui_request method dropped: setStatus",
+      );
+
+      // A handled dialog method must still behave exactly as before: it is
+      // tracked as a pending permission — not auto-declined — until the
+      // caller explicitly resolves it, and the earlier auto-decline is
+      // undisturbed.
+      fakeSession.emit({
+        type: "extension_ui_request",
+        id: "select-after-unsupported",
+        method: "select",
+        title: "Pick one",
+        options: ["A", "B"],
+      });
+      const permission = await events.nextPermissionRequest();
+      expect(permission.request.id).toBe("select-after-unsupported");
+      expect(session.getPendingPermissions()).toHaveLength(1);
+      expect(fakeSession.canceledExtensionUiRequests).toEqual(["unsupported-setstatus-1"]);
+
+      await session.respondToPermission("select-after-unsupported", {
+        behavior: "allow",
+        updatedInput: { answers: { Response: "B" } },
+      });
+      expect(fakeSession.extensionUiResponses).toEqual([
+        { id: "unsupported-setstatus-1", response: { cancelled: true } },
+        { id: "select-after-unsupported", response: { value: "B" } },
+      ]);
+      expect(session.getPendingPermissions()).toEqual([]);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   // T293: getEditorText / pasteToEditor — the composer-read half of the
   // tier-2 bridge (plan.md §4.2 "Pi editor-text read bridge").
   describe("getEditorText / pasteToEditor (T293)", () => {
