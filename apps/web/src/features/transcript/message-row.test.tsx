@@ -5,6 +5,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { generateThemeCss } from "@picompanion/design-tokens";
 import type { timeline } from "@picompanion/frontend-core";
 
 import { isCoreMessageEntry, TranscriptMessageRow } from "./message-row.js";
@@ -380,6 +381,116 @@ describe("message timestamp (T308)", () => {
     );
 
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+/**
+ * UI-P5 (plan.md §10.1/§10.4, the reference's `.turn-user .body`): a real
+ * deployed build showed `.pc-message--user` present in the DOM but its
+ * text node (`.pc-message__text, .pc-message__body` — the second class
+ * does not exist in this tree) computing a transparent background, `0`
+ * radius, and `0` padding — no visible bubble at all.
+ *
+ * **Root cause, measured rather than guessed.** `ui/recipes/recipes.css`'s
+ * `.pc-message--user` rule already declares the bubble fill
+ * (`background-color: var(--color-accent-tint)`), corner
+ * (`border-radius: var(--radius-window)`), and inset (`padding: 11px
+ * 14px`, kept as local custom properties) on the exact root node
+ * `StreamingMessage` renders for a user message — confirmed directly by
+ * rendering that real component tree with the real stylesheet text
+ * injected into this suite's jsdom document and inspecting the resulting
+ * DOM/CSSOM, not assumed from reading the source. What the earlier
+ * live-browser measurement actually caught is a verification gap, not a
+ * missing declaration: this suite's own jsdom environment does not
+ * resolve `var(...)` in `getComputedStyle` — probed directly, the very
+ * node this rule targets reports `backgroundColor: ""`, `paddingTop:
+ * ""`, and `borderRadius: "var(--radius-window)"` (the literal,
+ * unresolved token text) even though the selector matches and the
+ * declaration is present. That is the same "check that cannot fail" trap
+ * this file's own T305 suite (`recipes.test.tsx`) already documents for
+ * `white-space: pre-wrap` on this selector's sibling: any earlier claim
+ * that this bubble was "token-correct" from a `getComputedStyle` read in
+ * this environment could not have proven anything either way. The tests
+ * below therefore never read a resolved colour from jsdom; they assert
+ * the stylesheet's declared intent (against the real `recipes.css` text)
+ * and the DOM wiring (that the row's own `data-testid` node — the one a
+ * real browser paints — is the exact element carrying the class that
+ * rule targets, with the text kept a plain descendant of it), which
+ * together is what an actual regression here would break.
+ */
+describe("TranscriptMessageRow user bubble (UI-P5)", () => {
+  const recipesCss = () =>
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../ui/recipes/recipes.css"),
+      "utf8",
+    );
+
+  const ruleBodyFor = (selector: string) => {
+    const css = recipesCss().replace(/\/\*[\s\S]*?\*\//g, "");
+    const at = css.indexOf(`${selector} {`);
+    expect(at, `${selector} not found in recipes.css`).toBeGreaterThanOrEqual(0);
+    const close = css.indexOf("}", at);
+    expect(close, `${selector} has no closing brace`).toBeGreaterThan(at);
+    return css.slice(at, close);
+  };
+
+  it("declares a filled, rounded, padded bubble on .pc-message--user, sourced from tokens", () => {
+    const body = ruleBodyFor(".pc-message--user");
+    expect(body).toMatch(/background-color:\s*var\(--color-accent-tint\)\s*;/);
+    expect(body).toMatch(/border-radius:\s*var\(--radius-window\)\s*;/);
+    expect(body).toMatch(/padding:\s*[^;]+;/);
+    // Every value must come from a token or a local custom property
+    // quoting the reference (documented above it) — never a raw hex.
+    expect(body).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it("keeps the base .pc-message and the text run themselves unboxed", () => {
+    // The bubble lives ONLY on the `--user` modifier: the base rule (both
+    // speakers) and the text paragraph (inside the bubble) must not also
+    // carry a fill/radius/padding, or the reference's "assistant prose is
+    // never boxed" rule (this file's own UI-W10 correction, above) would
+    // be silently reintroduced for one speaker or blur the two apart.
+    expect(ruleBodyFor(".pc-message")).not.toMatch(/background|border-radius/);
+    expect(ruleBodyFor(".pc-message__text")).not.toMatch(/background-color|border-radius|padding/);
+  });
+
+  it("puts the class recipes.css targets on the row's own stable testid node", () => {
+    render(<TranscriptMessageRow entry={userEntry()} streaming={false} testId="row-bubble" />);
+    // `getByTestId` returns the row's `role="group"` element (see
+    // "distinguishes user and assistant messages..." above) — the same
+    // node a real browser paints the bubble on. Asserting the class HERE,
+    // not just that the class exists somewhere on the page, is what fails
+    // this test if a future change renames the class or moves
+    // `data-testid`/`role="group"` onto a different element than the one
+    // `.pc-message--user` selects.
+    const bubble = screen.getByTestId("row-bubble");
+    expect(bubble.classList.contains("pc-message--user")).toBe(true);
+  });
+
+  it("keeps the bubble class off an assistant row's own testid node", () => {
+    render(
+      <TranscriptMessageRow entry={assistantEntry()} streaming={false} testId="row-bubble-a" />,
+    );
+    expect(screen.getByTestId("row-bubble-a").classList.contains("pc-message--user")).toBe(false);
+  });
+
+  it("keeps the text a plain .pc-message__text descendant of the bubble node, not a sibling", () => {
+    render(<TranscriptMessageRow entry={userEntry()} streaming={false} testId="row-bubble-nest" />);
+    const bubble = screen.getByTestId("row-bubble-nest");
+    // A refactor that lifts the text OUT of the bubble-classed element (or
+    // renames `.pc-message__text`) must fail here rather than only look
+    // fine — the exact "targets a descendant the component doesn't
+    // render" failure mode this task named as a candidate cause.
+    const text = bubble.querySelector(".pc-message__text");
+    expect(text).not.toBeNull();
+    expect(text?.textContent).toBe("Hi Pi");
+  });
+
+  it("resolves --color-accent-tint and --radius-window in both themes", () => {
+    const themeCss = generateThemeCss();
+    expect(themeCss).toMatch(/\[data-theme="light"\][^}]*--color-accent-tint:\s*[^;]+;/);
+    expect(themeCss).toMatch(/\[data-theme="dark"\][^}]*--color-accent-tint:\s*[^;]+;/);
+    expect(themeCss).toMatch(/--radius-window:\s*[^;]+;/);
   });
 });
 
