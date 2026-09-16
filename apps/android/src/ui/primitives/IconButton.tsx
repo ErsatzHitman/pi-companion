@@ -22,9 +22,9 @@ const ICON_BUTTON_SIZE = 28;
  * IconButton primitive (plan.md §10.3). Icon-only affordance with a
  * mandatory `accessibleName` (plan.md §10.5).
  *
- * The Beautiful UI icon button is a tight 28dp square with a `control`
- * radius and no fill until hovered/pressed — well below the 48dp touch
- * minimum, so (plan.md T26C) the outer `Pressable` is the full 48dp hit
+ * The Beautiful UI icon button is a tight 28dp square, drawn as a full
+ * pill (A-SHAPE) with no fill until hovered/pressed — well below the 48dp
+ * touch minimum, so (plan.md T26C) the outer `Pressable` is the full 48dp hit
  * target while the inner `Animated.View` carries the smaller visual
  * chrome and the `active:scale-[0.96]` press feedback, centred via
  * transparent padding.
@@ -79,7 +79,14 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     button: {
       width: ICON_BUTTON_SIZE,
       height: ICON_BUTTON_SIZE,
-      borderRadius: theme.radii.control,
+      // The Android design artifact's `.ic { border-radius: var(--r-full) }`
+      // — a full pill (in practice a circle, since the box is square),
+      // not the shared `control` (8dp-corner) radius the web surface uses
+      // for its own controls (see `../theme/expressive-shape.ts`, which
+      // owns the rest of this Android-only radius scale). `--r-full`
+      // already coincides with the shared `radii.full` alias, so no
+      // Android-only token is needed for this one point.
+      borderRadius: theme.radii.full,
       alignItems: "center",
       justifyContent: "center",
     },
