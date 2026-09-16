@@ -724,6 +724,12 @@ with attribution. Authoritative plan: `plan.md` (20 sections, phases 0-9). Task 
   Two dark shadow strings in the mockups (`--sh-hairline` / `--sh-btn`) deviate from `darkShadows` and from
   `docs/beautiful-ui-reference.md`; `tokens.ts` is right and the mockup is the stale side. The mockups also
   name JetBrains Mono for web, where the app ships Geist Mono (the platform split is deliberate).
+  **CORRECTED 2026-09-15 (UI-X7, `440d93e`): the split was deliberately CLOSED three days after
+  this was written.** Web's mono face was swapped from Geist Mono to JetBrains Mono for pixel
+  parity with `docs/ui-reference/pi-companion-web.html`, and the vendored Geist Mono assets under
+  `apps/web/src/assets/fonts/geist-mono/` were removed. `plan.md` §10.2 and
+  `THIRD_PARTY_NOTICES.md` §3 were updated in the same wave (DOCS-1) to stop stating the old
+  split as current fact.
 - **The Android mockup's turn animation was dead on arrival** (T382): `paintCtx()` set `.className` on an
   `<svg>`, which is read-only, so the script threw at load and `docs/ui-reference/README.md`'s "plays one
   whole turn end to end and loops" was false in every browser. Fixed to `setAttribute("class", …)`.

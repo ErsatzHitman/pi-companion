@@ -134,11 +134,14 @@ UP to `#232427`. The original palette was too contrasty and too blue-black.
     `--shadow-raised: 0 0 0 1px var(--line), var(--shadow-md)`;
     `--shadow-overlay: 0 0 0 1px var(--line), var(--shadow-lg)`;
     `--shadow-inset-field: inset 0 1px 2px oklch(0% 0 0/.12)`.
-- **Fonts:** Inter for UI, **Geist Mono** for all numerals, paths, keys and log lines,
-  with `tabular-nums` on counters and timers. Both must be **self-hosted and bundled** —
-  naming them in the token layer is not enough, since neither ships with Windows, macOS or
-  Android, and the UI then silently falls back to a system face. Both are OFL licensed and
-  need a `THIRD_PARTY_NOTICES.md` row when vendored.
+- **Fonts:** Inter for UI, **Geist Mono** (Beautiful UI's own choice) for all numerals, paths,
+  keys and log lines, with `tabular-nums` on counters and timers. Both must be **self-hosted
+  and bundled** — naming them in the token layer is not enough, since neither ships with
+  Windows, macOS or Android, and the UI then silently falls back to a system face. Both are OFL
+  licensed and need a `THIRD_PARTY_NOTICES.md` row when vendored. This product's own mono face
+  has since diverged from Beautiful UI's: UI-X7 unified web onto JetBrains Mono (Android's face
+  since T345), for pixel parity with `docs/ui-reference/pi-companion-web.html` — see
+  `plan.md` §10.2, the authoritative record of the product's current mono face.
 - **Type scale is small:** 10.5, 11, 11.5, 12, 12.5, 13px dominate; section titles 13px/600;
   page heading 21px/600 with `tracking-[-0.02em]`. Body line-height relaxed (1.625).
 - **Motion:** signature easing `cubic-bezier(.23,1,.32,1)` (`ease-out-strong`); also
@@ -157,7 +160,8 @@ UP to `#232427`. The original palette was too contrasty and too blue-black.
    650ms cycle, with a mono elapsed-time readout beside it.
 5. **Segmented pill toggles:** `bg-field` track, `bg-surface` + `shadow-btn` thumb sliding
    with the signature easing.
-6. **Mono ordinals** — small `01`, `02` numbers in Geist Mono with tabular figures.
+6. **Mono ordinals** — small `01`, `02` numbers, in Geist Mono in Beautiful UI's own source, in
+   JetBrains Mono in this product since UI-X7 (see `plan.md` §10.2), with tabular figures.
 7. **Very tight control sizes:** 24–28px icon buttons, 13–15px icons, 6–8px padding.
 8. **Hover affordances fade in** rather than appearing instantly.
 9. **Animated underline** on links rather than a static underline.

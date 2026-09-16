@@ -673,8 +673,14 @@ Use:
 - Vite for development and static production output;
 - TanStack Router for typed routes;
 - TanStack React Query bindings for request caches;
-- Radix primitives where they reduce accessibility risk;
-- Tailwind CSS backed by generated design tokens;
+- plain CSS keyed to `@picompanion/design-tokens`' generated custom properties — no
+  utility-first CSS framework and no CSS-in-JS; `apps/web/package.json` declares no such
+  dependency, and no config for one exists anywhere under `apps/web`. A stylesheet per
+  feature/primitive imports the generated `--pc-*`/token variables directly;
+- hand-built primitives (`apps/web/src/ui/primitives`) — no third-party accessible-component
+  library is a dependency here. Each primitive's accessibility is verified directly, via
+  `packages/design-tokens/src/contrast.test.ts` (WCAG AA colour-contrast pairs) and the web
+  app's own real-browser axe checks (§14.1), rather than inherited from a library;
 - direct DOM xterm and CodeMirror integrations;
 - Playwright for end-to-end testing.
 
@@ -902,9 +908,21 @@ Before adapting external code, record its source URL, version, license, and requ
 
 `npm run build:design-tokens` produces the package exports before either application builds. Web consumes generated CSS variables. Android consumes typed theme objects. Component code must not contain product colors as raw hex values.
 
-Shadows are **1px rings, not blurs** (`0 0 0 1px var(--line)` is the workhorse). Radii are chip 6 / control 8 / card 10 / window 14. Type runs small (10.5–13px dominant) in Inter, with a monospace face and tabular figures for all numerals — Geist Mono on the web, JetBrains Mono on Android (T345: the S7 "Live flow" phone design sets every transcript block, path chip, todo row and pill in JetBrains Mono 12.5px/1.62, and Android bundles that face instead). The signature easing is `cubic-bezier(.23,1,.32,1)`.
+Shadows are **1px rings, not blurs** (`0 0 0 1px var(--line)` is the workhorse). Radii are chip 6 / control 8 / card 10 / window 14. Type runs small (10.5–13px dominant) in Inter, with a monospace face and tabular figures for all numerals — **JetBrains Mono on both web and Android.** T345 first diverged the two (the S7 "Live flow" phone design set every transcript block, path chip, todo row and pill in JetBrains Mono 12.5px/1.62, so Android bundled that face while web kept Geist Mono); UI-X7 then unified web onto JetBrains Mono too, for pixel parity with `docs/ui-reference/pi-companion-web.html`, which names JetBrains Mono for both platforms. The signature easing is `cubic-bezier(.23,1,.32,1)`.
 
 Support dark and light themes from the start. Test reduced motion and high contrast. Do not build multiple visual variants for the same component. Select one product-approved treatment.
+
+**Deferred roles: `tooltip-bg`/`tooltip-fg`/`tooltip-muted`/`tooltip-border`/`stripe`/`stripe-bg`.**
+These six colour roles were deleted from `packages/design-tokens/src/tokens.ts` (and its
+`web.ts`/`native.ts` emission) as a deliberate deferral, not a rejection of the design: both
+confirmed design specs declare each in their own `:root` block and then never reference it
+through `var()`, and no Tooltip primitive or stripe pattern is scheduled anywhere in this plan
+(§10.3 lists no Tooltip). Building either primitive to justify the tokens would be inventing
+chrome to feed a token rather than shipping something a surface actually needs — if a future
+plan revives a Tooltip primitive or the stripe pattern, restore the roles at that point rather
+than before. This does not apply to `teal`, whose colour role is live: both specs paint it (the
+Android design's path chip inside a tool block, the web design's "System + tools" context-ring
+segment), so it stayed.
 
 ### 10.3 Primitive layer
 

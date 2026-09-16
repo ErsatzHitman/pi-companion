@@ -197,27 +197,35 @@ T13C (docs/issues-from-plan.md "Bundle Inter/Geist Mono and complete
 light-theme values") self-hosts both fonts Beautiful UI's visual language
 names (`docs/beautiful-ui-reference.md` "Fonts"), closing the gap where
 neither shipped with the product and the UI silently fell back to whatever
-sans/mono face happened to be installed on the host OS. T345 added a third,
-JetBrains Mono, as Android's mono face. All three are licensed under the
-**SIL Open Font License, Version 1.1**; the license text is vendored
-verbatim alongside each family's assets, as OFL requires.
+sans/mono face happened to be installed on the host OS. T345 added a third
+vendored font, JetBrains Mono, as Android's mono face; UI-X7 (`440d93e`)
+then re-vendored it for web too and removed the Geist Mono assets web no
+longer registers, so only two font families are bundled today. All are
+licensed under the **SIL Open Font License, Version 1.1**; the license text
+is vendored verbatim alongside each family's assets, as OFL requires.
 
-| Font                     | Source used to vendor                                      | Version                    | License | Vendored at                                                                                   |
-| ------------------------ | ---------------------------------------------------------- | -------------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| Inter (web)              | `@fontsource/inter` npm package (woff2, latin subset)      | 5.3.0 (upstream Inter 4.1) | OFL-1.1 | `apps/web/src/assets/fonts/inter/` (`Inter-{400,500,600,700}.woff2`, `OFL.txt`)               |
-| Inter (Android)          | `@expo-google-fonts/inter` npm package (ttf)               | 0.4.2                      | OFL-1.1 | `apps/android/assets/fonts/` (`Inter-{400,500,600,700}.ttf`, `OFL-Inter.txt`)                 |
-| Geist Mono (web)         | `@fontsource/geist-mono` npm package (woff2, latin subset) | 5.3.0                      | OFL-1.1 | `apps/web/src/assets/fonts/geist-mono/` (`GeistMono-{400,500,600,700}.woff2`, `OFL.txt`)      |
-| JetBrains Mono (Android) | `JetBrainsMono-2.304.zip` GitHub release asset (ttf)       | 2.304                      | OFL-1.1 | `apps/android/assets/fonts/` (`JetBrainsMono-{400,500,600,700}.ttf`, `OFL-JetBrainsMono.txt`) |
+| Font                     | Source used to vendor                                       | Version                    | License | Vendored at                                                                                      |
+| ------------------------ | ----------------------------------------------------------- | -------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| Inter (web)              | `@fontsource/inter` npm package (woff2, latin subset)       | 5.3.0 (upstream Inter 4.1) | OFL-1.1 | `apps/web/src/assets/fonts/inter/` (`Inter-{400,500,600,700}.woff2`, `OFL.txt`)                  |
+| Inter (Android)          | `@expo-google-fonts/inter` npm package (ttf)                | 0.4.2                      | OFL-1.1 | `apps/android/assets/fonts/` (`Inter-{400,500,600,700}.ttf`, `OFL-Inter.txt`)                    |
+| JetBrains Mono (Android) | `JetBrainsMono-2.304.zip` GitHub release asset (ttf)        | 2.304                      | OFL-1.1 | `apps/android/assets/fonts/` (`JetBrainsMono-{400,500,600,700}.ttf`, `OFL-JetBrainsMono.txt`)    |
+| JetBrains Mono (web)     | converted (`wawoff2`) from the Android TTFs above, at UI-X7 | 2.304                      | OFL-1.1 | `apps/web/src/assets/fonts/jetbrains-mono/` (`JetBrainsMono-{400,500,600,700}.woff2`, `OFL.txt`) |
 
 - **Inter** — Copyright 2020 The Inter Project Authors
   (<https://github.com/rsms/inter>).
-- **Geist Mono** — Copyright (c) 2023 Vercel, in collaboration with
-  basement.studio (<https://github.com/vercel/geist-font>). Web only since
-  T345.
 - **JetBrains Mono** — Copyright 2020 The JetBrains Mono Project Authors
-  (<https://github.com/JetBrains/JetBrainsMono>). Android only: T345 swapped
-  the Android mono face to the one the S7 phone design (plan.md §10.2) sets,
-  and removed the vendored Geist Mono TTFs the app no longer registers.
+  (<https://github.com/JetBrains/JetBrainsMono>). Originally Android only:
+  T345 swapped the Android mono face to the one the S7 phone design
+  (plan.md §10.2) sets, and removed the vendored Geist Mono TTFs Android no
+  longer registered. UI-X7 then unified web onto the same face, for pixel
+  parity with `docs/ui-reference/pi-companion-web.html` (which names
+  JetBrains Mono for both platforms), converting the already-vendored
+  Android TTFs to woff2 rather than re-sourcing the upstream release, and
+  removed the vendored Geist Mono woff2 assets web no longer registers
+  (deleted by `440d93e`). Geist Mono (Copyright (c) 2023 Vercel, in
+  collaboration with basement.studio, <https://github.com/vercel/geist-font>)
+  is no longer bundled by either app and has no current row in the table
+  above; this paragraph is its provenance record, not a live attribution.
 - Neither font is fetched from a CDN (Google Fonts or otherwise) at runtime:
   `apps/web/src/styles/fonts.css` declares `@font-face` rules against the
   vendored woff2 files with `font-display: swap`, and
@@ -407,11 +415,11 @@ repository's AGPL-3.0-or-later licence.
   workspace — see the T43B1 task report for the transitive-audit gap this
   leaves, filed for whoever owns a future SBOM/license-scanning task).
 - The vendored font packages in §3 (`@fontsource/inter`,
-  `@expo-google-fonts/inter`, `@fontsource/geist-mono`, `geist`) are
-  intentionally absent from the table above: they are not npm dependencies
-  of any workspace here (no `package.json` declares them) — only their
-  compiled font _files_ were vendored, one time, as static assets. §3
-  already records their provenance correctly.
+  `@expo-google-fonts/inter`, `geist`) are intentionally absent from the
+  table above: they are not npm dependencies of any workspace here (no
+  `package.json` declares them) — only their compiled font _files_ were
+  vendored, one time, as static assets. §3 already records their
+  provenance correctly.
 
 ## 5. Supernova (`D:\supernova`) — MIT (T383)
 
