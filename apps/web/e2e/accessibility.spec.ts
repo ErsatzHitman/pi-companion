@@ -81,11 +81,29 @@ const SWEEPS: Record<SweptRoutePath, RouteSweep> = {
   },
 
   "/connect": async ({ page, daemonConnection }) => {
-    await connectViaUi(page, daemonConnection, "Axe Sweep Daemon");
-    // Still on /connect: `connectViaUi` never navigates away, so this
-    // checks the CONNECTED state of this route (the "Reached ..." status
-    // banner visible), distinct from the pre-connect "/" case above.
-    await expect(page.getByTestId("connect-status-banner")).toBeVisible();
+    // CORRECTED (FIX-CI9): this used to call `connectViaUi` and then assert
+    // "Still on /connect: `connectViaUi` never navigates away", sweeping the
+    // CONNECTED state of this route. A successful connect now lands on the
+    // host's session list, so `/connect` no longer HAS a connected state to
+    // sweep — that DOM is the `/h/$serverId/sessions` entry below.
+    //
+    // The state still worth sweeping here, and the one the old entry's
+    // `connect-status-banner` assertion was really covering, is a FAILED
+    // attempt: the banner renders in its danger tone and the user stays put.
+    // That is a real state, distinct from the pristine form the "/" case
+    // above checks, and it is the only remaining way this route paints a
+    // banner at all.
+    await page.goto(`${daemonConnection.webBaseUrl}/connect`);
+    await expect(page.getByRole("heading", { name: "Connect", exact: true })).toBeVisible();
+    await page.getByLabel("Host label").fill("Unreachable Daemon");
+    // Port 1 is never listening, and is not the production daemon port the
+    // harness guard forbids (`production-port-guard.spec.ts`).
+    await page.getByLabel("Host address").fill("127.0.0.1:1");
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.getByTestId("connect-status-banner")).toContainText(
+      "Could not reach Unreachable Daemon",
+      { timeout: 15_000 },
+    );
     await expectNoAxeViolations(page);
   },
 

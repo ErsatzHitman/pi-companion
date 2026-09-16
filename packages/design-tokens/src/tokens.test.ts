@@ -190,6 +190,18 @@ describe("Beautiful UI conformance (T13B)", () => {
     expect(typography.lineHeight.relaxed).toBe(1.625);
   });
 
+  // TOKENS-1: was 0.02, which is 4.5x tighter than the figure this role
+  // exists to carry. The source is Beautiful UI's own uppercase eyebrow —
+  // `D:/beautiful-ui`'s `components/site/ChatExperience.tsx` sets
+  // `tracking-[0.09em]` on it, and `app/license/page.tsx` sets 0.08em on
+  // the same shape. Pinned so the corrected value cannot drift back.
+  // Read for its published VALUE only, which is what
+  // `docs/beautiful-ui-reference.md` already records this file doing; no
+  // code is adapted, so no THIRD_PARTY_NOTICES.md row is required.
+  it("tracks wide letter-spacing at the mockup's 0.09em, not the old 0.02em", () => {
+    expect(typography.letterSpacing.wide).toBe(0.09);
+  });
+
   it("carries the signature easing family and durations", () => {
     expect(motion.easing.easeOutStrong).toEqual([0.23, 1, 0.32, 1]);
     expect(motion.easing.easeInOutStrong).toEqual([0.77, 0, 0.175, 1]);
@@ -204,9 +216,11 @@ describe("Beautiful UI conformance (T13B)", () => {
 
   // T13C (docs/beautiful-ui-reference.md "Light theme" table, now
   // publishing every role for both themes): replaces the T13B
-  // approximations for hover/hover-2/line-soft/accent-ink/every *-tint,
-  // tooltip-*, stripe, stripe-bg, and adds the `raised` shadow role that
-  // was missing entirely.
+  // approximations for hover/hover-2/line-soft/accent-ink/every *-tint, and
+  // adds the `raised` shadow role that was missing entirely. (T13C also
+  // recovered tooltip-*/stripe/stripe-bg, but TOKENS-1 subsequently deleted
+  // those roles for having no live consumer — see tokens.ts's
+  // `beautifulDark` header comment — so this test no longer pins them.)
   it("carries the exact recovered light-theme roles (T13C), not approximations", () => {
     expect(lightTheme.colors.hover).toBe("#f4f5f6");
     expect(lightTheme.colors["hover-2"]).toBe("#e7e9eb");
@@ -217,12 +231,6 @@ describe("Beautiful UI conformance (T13B)", () => {
     expect(lightTheme.colors["green-tint"]).toBe("#e8f5ed");
     expect(lightTheme.colors["orange-tint"]).toBe("#fdf1e5");
     expect(lightTheme.colors["red-tint"]).toBe("#fcecec");
-    expect(lightTheme.colors["tooltip-bg"]).toBe("#25272b");
-    expect(lightTheme.colors["tooltip-fg"]).toBe("#f6f7f8");
-    expect(lightTheme.colors["tooltip-muted"]).toBe("#a5a8ad");
-    expect(lightTheme.colors["tooltip-border"]).toBe("#3a3c40");
-    expect(lightTheme.colors["stripe-bg"]).toBe("#f5f5f5");
-    expect(lightTheme.colors.stripe).toMatch(RGBA_RE);
   });
 
   it("carries the light theme's near-white solid tints, not dark's alpha overlays", () => {
@@ -235,13 +243,6 @@ describe("Beautiful UI conformance (T13B)", () => {
       expect(lightTheme.colors[tint]).toMatch(HEX_RE);
       expect(darkTheme.colors[tint]).toMatch(RGBA_RE);
     }
-  });
-
-  it("carries the missing dark-theme tooltip/stripe-bg roles (T13C)", () => {
-    expect(darkTheme.colors["tooltip-fg"]).toBe("#f2f3f4");
-    expect(darkTheme.colors["tooltip-muted"]).toBe("#a5a8ad");
-    expect(darkTheme.colors["tooltip-border"]).toBe("#2e3033");
-    expect(darkTheme.colors["stripe-bg"]).toBe("#1b1c1e");
   });
 
   it("exposes a raised shadow role, both themes (T13C)", () => {

@@ -203,13 +203,4 @@ describe.each([
     expectAA("green on tool-success-bg", colors.green, colors["tool-success-bg"]);
     expectAA("red on tool-error-bg", colors.red, colors["tool-error-bg"]);
   });
-
-  it("tooltip foreground and muted text reach 4.5:1 on the tooltip background", () => {
-    // apps/web/src/ui/primitives/primitives.css .pc-tooltip and
-    // apps/android/src/ui/primitives/Tooltip.tsx paint these two roles on
-    // `tooltip-bg`, which is outside the surface stack and so is missed by
-    // every loop above.
-    expectAA("tooltip-fg on tooltip-bg", colors["tooltip-fg"], colors["tooltip-bg"]);
-    expectAA("tooltip-muted on tooltip-bg", colors["tooltip-muted"], colors["tooltip-bg"]);
-  });
 });

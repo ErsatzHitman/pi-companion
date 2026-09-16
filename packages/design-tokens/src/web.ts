@@ -127,6 +127,8 @@ function motionDeclarations(tokens: MotionTokens): Record<string, string> {
   for (const [key, value] of Object.entries(tokens.easing)) {
     out[cssVarName(`motion-easing-${key}`)] = `cubic-bezier(${value.join(", ")})`;
   }
+  // Beautiful UI's `active:scale-[0.96]` control press feedback.
+  out[cssVarName("motion-press-scale")] = String(tokens.pressScale);
   return out;
 }
 

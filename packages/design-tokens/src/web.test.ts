@@ -38,6 +38,7 @@ describe("generateThemeCss", () => {
     expect(css).toContain("--radius-full:");
     expect(css).toContain("--elevation-1:");
     expect(css).toContain("--breakpoint-wide:");
+    expect(css).toContain("--motion-press-scale:");
   });
 
   it("only ever emits values through custom properties, not bare selectors", () => {

@@ -49,9 +49,17 @@
  * Beautiful UI's dark theme (the library default). Values are the exact hex
  * figures published in `docs/beautiful-ui-reference.md`'s dark-theme table;
  * `*-tint` roles are the documented alpha overlays (accent/green/orange/red
- * at 16%/14%/14%/14% of their own hue), `stripe` is white at 5.5% alpha, and
- * `tooltip-fg`/`tooltip-muted`/`tooltip-border`/`stripe-bg` (T13C) are the
- * remaining published dark-theme roles that T13B had not yet carried.
+ * at 16%/14%/14%/14% of their own hue). TOKENS-1 deleted `stripe`,
+ * `stripe-bg`, `tooltip-bg`, `tooltip-fg`, `tooltip-muted` and
+ * `tooltip-border` from this palette. Neither confirmed design spec paints
+ * any of them: both declare the six roles in their own `:root` block and
+ * then never reference one through `var()`, and no Tooltip primitive is
+ * planned (plan.md §10.3 lists the primitive layer; Tooltip is not in it).
+ * `teal` was deleted in the same pass and RESTORED: it has no consumer in
+ * shipped code yet, but both specs paint it — the Android design uses it
+ * for the path chip inside a tool block, and the web design for the
+ * "System + tools" segment of the context ring — so its absence is work
+ * not yet done, not a role nothing wants.
  *
  * T54A1 nudges three roles off the published figure to clear WCAG AA (see
  * the file header and `docs/beautiful-ui-reference.md` "WCAG AA contrast
@@ -103,21 +111,17 @@ const beautifulDark = {
   "tool-error-bg": "#3b2f31",
   "extension-bg": "#373340",
   "accent-highlight": "rgba(61, 154, 255, 0.24)",
-  "tooltip-bg": "#111214",
-  "tooltip-fg": "#f2f3f4",
-  "tooltip-muted": "#a5a8ad",
-  "tooltip-border": "#2e3033",
-  stripe: "rgba(255, 255, 255, 0.055)",
-  "stripe-bg": "#1b1c1e",
 } as const;
 
 /**
  * Beautiful UI's light theme (T13C, docs/beautiful-ui-reference.md "Light
  * theme" table). Every role below is now an extracted published value: the
  * reference document previously omitted `hover`/`hover-2`/`accent-ink`/the
- * tint roles/`tooltip-*`/`stripe`/`stripe-bg` and those were approximated by
- * T13B; the table now publishes all of them and this file carries the
- * published figures exactly. Per the reference's structural note, light
+ * tint roles and those were approximated by T13B; the table now publishes
+ * all of them and this file carries the published figures exactly.
+ * (TOKENS-1 subsequently deleted the `tooltip-*`/`stripe`/`stripe-bg` roles
+ * this comment used to also cover — see `beautifulDark`'s header comment
+ * above for why.) Per the reference's structural note, light
  * tints (`accent-tint`, `*-tint`) are near-white **solid** fills, not alpha
  * overlays of the dark theme's tint hue — do not mechanically mirror
  * `beautifulDark`'s tint construction here.
@@ -177,15 +181,6 @@ const beautifulLight = {
   "tool-error-bg": "#fff1f0",
   "extension-bg": "#f4f2fc",
   "accent-highlight": "rgba(0, 109, 211, 0.18)",
-  "tooltip-bg": "#25272b",
-  "tooltip-fg": "#f6f7f8",
-  "tooltip-muted": "#a5a8ad",
-  "tooltip-border": "#3a3c40",
-  // Published as `oklch(40.5% 0 0/.075)` ("grey @7.5%", no hex column in
-  // the reference); the achromatic OKLab->sRGB conversion is rgb(73, 73,
-  // 73), i.e. #494949 at 7.5% alpha.
-  stripe: "rgba(73, 73, 73, 0.075)",
-  "stripe-bg": "#f5f5f5",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -234,17 +229,22 @@ export interface ToneColorTokens {
   "red-tint": string;
 }
 
-/** Miscellaneous Beautiful UI roles that don't belong to another group. */
 /**
  * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
  * that Beautiful UI's own palette does not name. `purple` is the extension
  * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
  * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
- * `tool-error-bg` are the finished tool-block fills (a pending block sits on
- * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
- * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
- * same construction the design uses, then nudged until
- * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
+ * `tool-error-bg` are the finished tool-block
+ * fills (a pending block sits on `inset`, a user block on `field`);
+ * `accent-highlight` is the grep-hit `mark` fill. Every value is an oklab
+ * mix of the tone over `surface`, the same construction the design uses,
+ * then nudged until `contrast.test.ts`'s AA pins hold for the text actually
+ * painted on it.
+ *
+ * FIX-CI9: this interface and its doc comment were declared FOUR times,
+ * identically. TypeScript merges same-named interface declarations, so the
+ * duplication compiled cleanly and nothing ever reported it; adding `teal`
+ * back meant editing the same member in four places. Collapsed to one.
  */
 export interface PiRoleColorTokens {
   purple: string;
@@ -253,75 +253,6 @@ export interface PiRoleColorTokens {
   "tool-error-bg": string;
   "extension-bg": string;
   "accent-highlight": string;
-}
-
-/**
- * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
- * that Beautiful UI's own palette does not name. `purple` is the extension
- * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
- * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
- * `tool-error-bg` are the finished tool-block fills (a pending block sits on
- * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
- * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
- * same construction the design uses, then nudged until
- * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
- */
-export interface PiRoleColorTokens {
-  purple: string;
-  teal: string;
-  "tool-success-bg": string;
-  "tool-error-bg": string;
-  "extension-bg": string;
-  "accent-highlight": string;
-}
-
-/**
- * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
- * that Beautiful UI's own palette does not name. `purple` is the extension
- * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
- * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
- * `tool-error-bg` are the finished tool-block fills (a pending block sits on
- * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
- * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
- * same construction the design uses, then nudged until
- * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
- */
-export interface PiRoleColorTokens {
-  purple: string;
-  teal: string;
-  "tool-success-bg": string;
-  "tool-error-bg": string;
-  "extension-bg": string;
-  "accent-highlight": string;
-}
-
-/**
- * T345: the roles the S7 "Live flow" phone design (plan.md §10.2) paints
- * that Beautiful UI's own palette does not name. `purple` is the extension
- * label (`[ask-user]`, `[advisor]`, `[peer]`) and `extension-bg` the block
- * behind it; `teal` is the path chip in a tool block; `tool-success-bg` /
- * `tool-error-bg` are the finished tool-block fills (a pending block sits on
- * `inset`, a user block on `field`); `accent-highlight` is the grep-hit
- * `mark` fill. Every value is an oklab mix of the tone over `surface`, the
- * same construction the design uses, then nudged until
- * `contrast.test.ts`'s AA pins hold for the text actually painted on it.
- */
-export interface PiRoleColorTokens {
-  purple: string;
-  teal: string;
-  "tool-success-bg": string;
-  "tool-error-bg": string;
-  "extension-bg": string;
-  "accent-highlight": string;
-}
-
-export interface MiscBeautifulColorTokens {
-  "tooltip-bg": string;
-  "tooltip-fg": string;
-  "tooltip-muted": string;
-  "tooltip-border": string;
-  stripe: string;
-  "stripe-bg": string;
 }
 
 export interface SemanticColorTokens
@@ -331,8 +262,7 @@ export interface SemanticColorTokens
     LineColorTokens,
     AccentColorTokens,
     ToneColorTokens,
-    PiRoleColorTokens,
-    MiscBeautifulColorTokens {
+    PiRoleColorTokens {
   // ---- Legacy roles (pre-T13B) -------------------------------------------
   // Kept as compatibility aliases pointing at the Beautiful UI-named fields
   // above so existing call sites keep compiling after the T13B retoken.
@@ -464,12 +394,6 @@ function buildColors(p: typeof beautifulDark | typeof beautifulLight): ColorToke
     "tool-error-bg": p["tool-error-bg"],
     "extension-bg": p["extension-bg"],
     "accent-highlight": p["accent-highlight"],
-    "tooltip-bg": p["tooltip-bg"],
-    "tooltip-fg": p["tooltip-fg"],
-    "tooltip-muted": p["tooltip-muted"],
-    "tooltip-border": p["tooltip-border"],
-    stripe: p.stripe,
-    "stripe-bg": p["stripe-bg"],
 
     // Legacy aliases, mapped onto the fields above.
     background: p.page,
@@ -715,7 +639,12 @@ export const typography: TypographyTokens = {
     // Beautiful UI: page heading tracking is `-0.02em`.
     tight: -0.02,
     normal: 0,
-    wide: 0.02,
+    // Beautiful UI: the uppercase eyebrow's tracking. Its own
+    // `components/site/ChatExperience.tsx` sets `tracking-[0.09em]` on that
+    // element. This role was 0.02 until TOKENS-1 — 4.5x tighter than the
+    // figure it exists to carry, which is why small-caps labels across both
+    // surfaces read as ordinary uppercase text rather than as eyebrows.
+    wide: 0.09,
   },
 };
 
