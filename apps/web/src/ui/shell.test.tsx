@@ -205,26 +205,30 @@ describe("Shell", () => {
     expect(document.querySelector(".connection-status")).toBeNull();
   });
 
-  it("reduces the header's right side (past the spacer) to the settings gear alone, both rail toggles sitting before it", async () => {
+  it("puts each rail toggle on the side it controls, with the settings gear last", async () => {
     const { container } = renderShell(
       {},
       { pattern: "/h/$serverId/diagnostics", href: "/h/srv-1/diagnostics" },
     );
     await screen.findByTestId("shell-settings-trigger");
 
+    // UI-X12. Each manual rail toggle (no reference equivalent — see
+    // `shell.css`'s own header comment) sits on the side it controls. UI-X3
+    // had grouped BOTH before the spacer, which left the live-pane toggle at
+    // the far left pointing away from the panel it collapses.
     const tools = container.querySelector(".shell__header-tools")!;
-    expect(tools.children).toHaveLength(1);
-    expect(tools.firstElementChild!.getAttribute("data-testid")).toBe("shell-settings-trigger");
+    const toolIds = [...tools.children].map((el) => el.getAttribute("data-testid"));
+    expect(toolIds).toEqual(["shell-toggle-extension-rail", "shell-settings-trigger"]);
 
-    // Both manual rail-collapse toggles (no reference equivalent — see
-    // `shell.css`'s own header comment) stay reachable, just regrouped left
-    // of the spacer instead of split across it.
+    // The session rail's own toggle stays on the left, before the spacer, so
+    // the two are genuinely split across the header rather than both moving.
     const header = container.querySelector(".shell__header")!;
-    const headerChildren = [...header.children].map((el) => el.getAttribute("data-testid"));
-    expect(headerChildren).toContain("shell-toggle-session-rail");
-    expect(headerChildren).toContain("shell-toggle-extension-rail");
-    expect(headerChildren.indexOf("shell-toggle-extension-rail")).toBeLessThan(
-      headerChildren.indexOf("shell-toggle-session-rail") + 2,
+    const headerChildren = [...header.children];
+    const idAt = (el: Element): string | null => el.getAttribute("data-testid");
+    expect(headerChildren.map(idAt)).toContain("shell-toggle-session-rail");
+    expect(headerChildren.map(idAt)).not.toContain("shell-toggle-extension-rail");
+    expect(headerChildren.findIndex((el) => idAt(el) === "shell-toggle-session-rail")).toBeLessThan(
+      headerChildren.findIndex((el) => el.classList.contains("shell__header-spacer")),
     );
   });
 

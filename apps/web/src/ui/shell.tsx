@@ -212,18 +212,29 @@ export function Shell({ sessionRail, extensionRail, headerWorkspace, children }:
           data-testid="shell-toggle-session-rail"
           onClick={toggleSessionRail}
         />
-        <IconButton
-          icon="panel-right"
-          accessibleName={extensionCollapsed ? "Show live pane" : "Hide live pane"}
-          aria-expanded={!extensionCollapsed}
-          aria-controls={EXTENSION_RAIL_ID}
-          title={`${extensionCollapsed ? "Show live pane" : "Hide live pane"} (Ctrl/Cmd+.)`}
-          className="shell__rail-toggle"
-          data-testid="shell-toggle-extension-rail"
-          onClick={toggleExtensionRail}
-        />
         <div className="shell__header-spacer" />
         <div className="shell__header-tools">
+          {/*
+           * UI-X12. Each rail toggle sits on the side it controls: the session
+           * rail's stays left by the brand, the live pane's moved here. UI-X3
+           * had grouped both on the left while reducing the header to a single
+           * gear, which left a control that collapses the RIGHT panel sitting
+           * at the far left, pointing away from the thing it acts on.
+           *
+           * The reference has no rail-collapse affordance at all, so nothing is
+           * being diverged from -- these are the owner's own controls and this
+           * is purely their arrangement.
+           */}
+          <IconButton
+            icon="panel-right"
+            accessibleName={extensionCollapsed ? "Show live pane" : "Hide live pane"}
+            aria-expanded={!extensionCollapsed}
+            aria-controls={EXTENSION_RAIL_ID}
+            title={`${extensionCollapsed ? "Show live pane" : "Hide live pane"} (Ctrl/Cmd+.)`}
+            className="shell__rail-toggle"
+            data-testid="shell-toggle-extension-rail"
+            onClick={toggleExtensionRail}
+          />
           {serverId ? (
             <IconButton
               icon="settings"
