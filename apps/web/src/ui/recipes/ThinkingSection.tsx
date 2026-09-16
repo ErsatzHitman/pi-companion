@@ -9,11 +9,19 @@ export interface ThinkingSectionProps {
   defaultExpanded?: boolean;
   /** `true` while this block is still receiving reasoning deltas (T28A3,
    * plan.md §11.1 "assistant text and thinking deltas"). Adds the
-   * shimmer-gradient live-state treatment to the summary text — the same
-   * approved treatment `StreamingMessage` already uses for in-flight
-   * assistant text (plan.md §10.2 "one approved treatment per
-   * component") — plus a visually-hidden "Still thinking" announcement,
-   * so the live state is never colour/animation-only. */
+   * shimmer-gradient live-state treatment to the summary text, plus a
+   * visually-hidden "Still thinking" announcement, so the live state is
+   * never colour/animation-only.
+   *
+   * CORRECTED (STREAM-1 follow-up): this used to call the gradient "the
+   * same approved treatment `StreamingMessage` already uses for in-flight
+   * assistant text". STREAM-1 removed exactly that treatment from
+   * `.pc-message__text`, because Beautiful UI reserves the gradient for
+   * short, fixed labels and gives real streamed prose a trailing blur and
+   * mask instead. The summary is a short label, which is the case the
+   * gradient was always for, so it keeps the treatment on its own terms
+   * rather than by inheriting one that no longer exists. `recipes.css`'s
+   * `.pc-thinking__summary--live` rule carries the same correction. */
   live?: boolean;
   testId?: string;
 }

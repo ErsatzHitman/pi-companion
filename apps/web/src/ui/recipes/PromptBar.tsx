@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import "../primitives/primitives.css";
@@ -78,7 +78,16 @@ export interface PromptBarProps {
  * and an `aria-live="polite"` region so screen-reader users hear it update.
  * The send control is icon-only, so its accessible name comes from
  * `aria-label="Send"` plus a native `title`.
+ *
+ * Autosize: the mockup's own `prompt autosize` script grows the textarea to
+ * fit its content, capped at 140px (`recipes.css`'s
+ * `--pc-prompt-textarea-max-height`, kept in sync with
+ * `PROMPT_TEXTAREA_MAX_HEIGHT_PX` below), beyond which the box scrolls. A
+ * `useLayoutEffect` resets `height` to `auto` before measuring `scrollHeight`
+ * so a value that shrinks (e.g. the textarea clears after send) re-measures
+ * from zero rather than being stuck at its tallest-ever height.
  */
+const PROMPT_TEXTAREA_MAX_HEIGHT_PX = 140;
 export function PromptBar({
   label,
   placeholder,
@@ -97,6 +106,14 @@ export function PromptBar({
 }: PromptBarProps) {
   const inputId = useId();
   const keysId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, PROMPT_TEXTAREA_MAX_HEIGHT_PX) + "px";
+  }, [value]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape") {
@@ -117,6 +134,7 @@ export function PromptBar({
         </label>
         {contextControl}
         <textarea
+          ref={textareaRef}
           id={inputId}
           className="pc-prompt-bar__input"
           placeholder={placeholder}

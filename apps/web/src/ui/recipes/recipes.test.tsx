@@ -26,6 +26,27 @@ import { WorkflowSteps } from "./WorkflowSteps.js";
  */
 afterEach(cleanup);
 
+/**
+ * Read `recipes.css` as text and slice out one rule's body, comments
+ * stripped first. jsdom does not load `recipes.css`, so a
+ * `getComputedStyle` assertion here would read the initial value and pass
+ * whether or not the declaration exists — a check that cannot fail. Same
+ * approach, and same reason, as the T305 block below and
+ * `features/transcript/transcript.test.tsx`'s compact-layout CSS
+ * assertions.
+ */
+const recipesCss = () =>
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "recipes.css"), "utf8");
+
+const ruleBodyFor = (selector: string) => {
+  const css = recipesCss().replace(/\/\*[\s\S]*?\*\//g, "");
+  const at = css.indexOf(`${selector} {`);
+  expect(at, `${selector} not found in recipes.css`).toBeGreaterThanOrEqual(0);
+  const close = css.indexOf("}", at);
+  expect(close, `${selector} has no closing brace`).toBeGreaterThan(at);
+  return css.slice(at, close);
+};
+
 describe("ThinkingSection", () => {
   it("is a keyboard-operable disclosure with an exposed expanded state", async () => {
     const user = userEvent.setup();
@@ -68,24 +89,6 @@ describe("ThinkingSection", () => {
  * the CSS declaration is the only thing deciding how they render.
  */
 describe("StreamingMessage newline preservation (T305)", () => {
-  const recipesCss = () =>
-    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "recipes.css"), "utf8");
-
-  // Comments are stripped BEFORE the rule is sliced out. Without that this
-  // helper truncates at the first `}` it finds, which a comment inside the
-  // rule can supply -- this rule's own decision-record comment contains the
-  // token `{text}`, and the first draft of this test failed on exactly that,
-  // reporting the declaration missing when it was present two lines below
-  // the brace the slice stopped at.
-  const ruleBodyFor = (selector: string) => {
-    const css = recipesCss().replace(/\/\*[\s\S]*?\*\//g, "");
-    const at = css.indexOf(`${selector} {`);
-    expect(at, `${selector} not found in recipes.css`).toBeGreaterThanOrEqual(0);
-    const close = css.indexOf("}", at);
-    expect(close, `${selector} has no closing brace`).toBeGreaterThan(at);
-    return css.slice(at, close);
-  };
-
   it("declares white-space: pre-wrap on .pc-message__text", () => {
     expect(ruleBodyFor(".pc-message__text")).toMatch(/white-space:\s*pre-wrap\s*;/);
   });
@@ -109,6 +112,77 @@ describe("StreamingMessage newline preservation (T305)", () => {
     );
     const paragraph = screen.getByTestId("t305-message").querySelector(".pc-message__text");
     expect(paragraph?.textContent).toBe("first line\nsecond line");
+  });
+});
+
+/**
+ * STREAM-1: the whole-paragraph shimmer is gone from streamed prose (that
+ * gradient is reserved for short fixed labels), the caret is inverted to
+ * match Beautiful UI's `.stream-caret`/`.stream-caret.is-streaming`, and a
+ * trailing blur+mask span plus a pixel-grid loader carry the live-state
+ * treatment instead.
+ */
+describe("StreamingMessage live-state treatment (STREAM-1)", () => {
+  it("no longer applies the shimmer animation to .pc-message__text", () => {
+    expect(ruleBodyFor(".pc-message__text")).not.toMatch(/animation:\s*pc-message-shimmer/);
+    expect(recipesCss()).not.toMatch(/\.pc-message__text:has\(\.pc-message__cursor\)/);
+  });
+
+  it("keeps the shimmer keyframe alive for ThinkingSection's still-thinking summary", () => {
+    expect(ruleBodyFor(".pc-thinking__summary--live")).toMatch(/animation:\s*pc-message-shimmer/);
+  });
+
+  it("holds the caret solid while streaming and blinks it at rest, inverted from before", () => {
+    expect(ruleBodyFor(".pc-message__cursor--streaming")).toMatch(/animation:\s*none\s*;/);
+  });
+
+  it("always renders the cursor, toggling the --streaming modifier rather than mounting it conditionally", () => {
+    const { rerender } = render(
+      <StreamingMessage speaker="assistant" text="hi" streaming={false} testId="cursor-msg" />,
+    );
+    let cursor = screen.getByTestId("cursor-msg").querySelector(".pc-message__cursor");
+    expect(cursor).toBeTruthy();
+    expect(cursor?.classList.contains("pc-message__cursor--streaming")).toBe(false);
+
+    rerender(<StreamingMessage speaker="assistant" text="hi" streaming testId="cursor-msg" />);
+    cursor = screen.getByTestId("cursor-msg").querySelector(".pc-message__cursor");
+    expect(cursor).toBeTruthy();
+    expect(cursor?.classList.contains("pc-message__cursor--streaming")).toBe(true);
+  });
+
+  it("wraps the trailing text in a blur+mask tail span while streaming, and renders plainly at rest", () => {
+    const { rerender } = render(
+      <StreamingMessage speaker="assistant" text="hello there world" streaming testId="tail-msg" />,
+    );
+    const tail = screen.getByTestId("tail-msg").querySelector(".pc-message__tail");
+    expect(tail).toBeTruthy();
+    expect(screen.getByTestId("tail-msg").querySelector(".pc-message__text")?.textContent).toBe(
+      "hello there world",
+    );
+
+    rerender(
+      <StreamingMessage
+        speaker="assistant"
+        text="hello there world"
+        streaming={false}
+        testId="tail-msg"
+      />,
+    );
+    expect(screen.getByTestId("tail-msg").querySelector(".pc-message__tail")).toBeFalsy();
+  });
+
+  it("shows the nine-cell pixel-grid loader only while streaming", () => {
+    const { rerender } = render(
+      <StreamingMessage speaker="assistant" text="hi" streaming testId="pixel-msg" />,
+    );
+    expect(
+      screen.getByTestId("pixel-msg").querySelectorAll(".pc-message__pixel-grid i").length,
+    ).toBe(9);
+
+    rerender(
+      <StreamingMessage speaker="assistant" text="hi" streaming={false} testId="pixel-msg" />,
+    );
+    expect(screen.getByTestId("pixel-msg").querySelector(".pc-message__pixel-grid")).toBeFalsy();
   });
 });
 
@@ -190,6 +264,47 @@ describe("PromptBar", () => {
     await user.type(input, "Hello");
     await user.keyboard("{Enter}");
     expect((input as HTMLTextAreaElement).value).toBe("");
+  });
+
+  /* STREAM-1: the textarea now autosizes in JS instead of exposing a manual
+   * resize handle, matching the mockup's own `prompt autosize` script and
+   * its 140px cap. */
+  it("no longer declares a manual resize handle in the stylesheet", () => {
+    expect(ruleBodyFor(".pc-prompt-bar__input")).toMatch(/resize:\s*none\s*;/);
+    expect(ruleBodyFor(".pc-prompt-bar__input")).not.toMatch(/resize:\s*vertical\s*;/);
+  });
+
+  it("caps the textarea's max-height at the mockup's 140px, as a scoped custom property", () => {
+    expect(ruleBodyFor(".pc-prompt-bar__input")).toMatch(
+      /--pc-prompt-textarea-max-height:\s*140px\s*;/,
+    );
+    expect(ruleBodyFor(".pc-prompt-bar__input")).toMatch(
+      /max-height:\s*var\(--pc-prompt-textarea-max-height\)\s*;/,
+    );
+  });
+
+  it("resizes the textarea's height on every value change without throwing", () => {
+    function Harness() {
+      const [value, setValue] = useState("line one");
+      return (
+        <PromptBar
+          label="Prompt"
+          placeholder="Ask Pi…"
+          value={value}
+          canSend={value.length > 0}
+          queuedCount={0}
+          onValueChange={setValue}
+          onSend={() => {}}
+          testId="autosize-bar"
+        />
+      );
+    }
+    render(<Harness />);
+    const input = screen.getByTestId("autosize-bar-input") as HTMLTextAreaElement;
+    // jsdom does not lay out text, so scrollHeight stays 0 and this cannot
+    // assert a real pixel value — it can only prove the effect runs, on
+    // mount and again after a value change, without throwing.
+    expect(input.style.height).toBe("0px");
   });
 });
 
