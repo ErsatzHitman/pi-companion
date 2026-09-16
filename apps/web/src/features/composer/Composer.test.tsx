@@ -924,19 +924,29 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     expect(steeringSelect.hasAttribute("disabled")).toBe(true);
   });
 
-  it("shows both current modes without opening either native selector", async () => {
+  it("shows both current modes as a segmented control, without opening either (SEGMENTED-1)", async () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     client.queueModes = { steeringMode: "all", followUpMode: "one-at-a-time" };
     render(<Composer {...baseProps()} client={client} testId="composer" />);
     await openQueueChip(user);
 
-    const steeringSelect = (await screen.findByLabelText(
-      "Steering queue delivery",
-    )) as HTMLSelectElement;
-    await waitFor(() => expect(steeringSelect.value).toBe("all"), MODEL_THINKING_SETTLE_WAIT);
-    const followUpSelect = screen.getByLabelText("Follow-up queue delivery") as HTMLSelectElement;
-    expect(followUpSelect.value).toBe("one-at-a-time");
+    const steeringTablist = await screen.findByRole("tablist", { name: "Steering queue delivery" });
+    await waitFor(
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .getAttribute("aria-selected"),
+        ).toBe("true"),
+      MODEL_THINKING_SETTLE_WAIT,
+    );
+    const followUpTablist = screen.getByRole("tablist", { name: "Follow-up queue delivery" });
+    expect(
+      within(followUpTablist)
+        .getByRole("tab", { name: "One at a time (default)" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
   });
 
   it("changing the steering mode round-trips through the daemon and persists the new selection", async () => {
@@ -946,24 +956,39 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     render(<Composer {...baseProps()} client={client} testId="composer" />);
     await openQueueChip(user);
 
-    const steeringSelect = (await screen.findByLabelText(
-      "Steering queue delivery",
-    )) as HTMLSelectElement;
+    const steeringTablist = await screen.findByRole("tablist", { name: "Steering queue delivery" });
     await waitFor(
-      () => expect(steeringSelect.hasAttribute("disabled")).toBe(false),
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
       MODEL_THINKING_SETTLE_WAIT,
     );
 
-    await user.selectOptions(steeringSelect, "all");
+    await user.click(within(steeringTablist).getByRole("tab", { name: "All together" }));
 
     await waitFor(
       () => expect(client.setSteeringModeCalls).toEqual([{ agentId: "session-1", mode: "all" }]),
       MODEL_THINKING_SETTLE_WAIT,
     );
-    await waitFor(() => expect(steeringSelect.value).toBe("all"), MODEL_THINKING_SETTLE_WAIT);
+    await waitFor(
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .getAttribute("aria-selected"),
+        ).toBe("true"),
+      MODEL_THINKING_SETTLE_WAIT,
+    );
     // The follow-up mode is unaffected by a steering-mode change.
-    const followUpSelect = screen.getByLabelText("Follow-up queue delivery") as HTMLSelectElement;
-    expect(followUpSelect.value).toBe("one-at-a-time");
+    const followUpTablist = screen.getByRole("tablist", { name: "Follow-up queue delivery" });
+    expect(
+      within(followUpTablist)
+        .getByRole("tab", { name: "One at a time (default)" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
   });
 
   it("reflects a mode change made by another connected client, with no manual refresh", async () => {
@@ -973,11 +998,14 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     render(<Composer {...baseProps()} client={client} testId="composer" />);
     await openQueueChip(user);
 
-    const steeringSelect = (await screen.findByLabelText(
-      "Steering queue delivery",
-    )) as HTMLSelectElement;
+    const steeringTablist = await screen.findByRole("tablist", { name: "Steering queue delivery" });
     await waitFor(
-      () => expect(steeringSelect.hasAttribute("disabled")).toBe(false),
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
       MODEL_THINKING_SETTLE_WAIT,
     );
 
@@ -985,9 +1013,21 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     // action this rendered component itself took.
     client.emitQueueModes("session-1", { steeringMode: "all", followUpMode: "all" });
 
-    await waitFor(() => expect(steeringSelect.value).toBe("all"), MODEL_THINKING_SETTLE_WAIT);
-    const followUpSelect = screen.getByLabelText("Follow-up queue delivery") as HTMLSelectElement;
-    expect(followUpSelect.value).toBe("all");
+    await waitFor(
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .getAttribute("aria-selected"),
+        ).toBe("true"),
+      MODEL_THINKING_SETTLE_WAIT,
+    );
+    const followUpTablist = screen.getByRole("tablist", { name: "Follow-up queue delivery" });
+    expect(
+      within(followUpTablist)
+        .getByRole("tab", { name: "All together" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
   });
 
   it("renders the daemon's provider notice after changing the steering mode (T127), proven in the DOM", async () => {
@@ -1001,15 +1041,18 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     render(<Composer {...baseProps()} client={client} testId="composer" />);
     await openQueueChip(user);
 
-    const steeringSelect = (await screen.findByLabelText(
-      "Steering queue delivery",
-    )) as HTMLSelectElement;
+    const steeringTablist = await screen.findByRole("tablist", { name: "Steering queue delivery" });
     await waitFor(
-      () => expect(steeringSelect.hasAttribute("disabled")).toBe(false),
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
       MODEL_THINKING_SETTLE_WAIT,
     );
 
-    await user.selectOptions(steeringSelect, "all");
+    await user.click(within(steeringTablist).getByRole("tab", { name: "All together" }));
 
     const status = await screen.findByTestId("composer-queue-modes-status");
     await waitFor(
@@ -1029,15 +1072,20 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     render(<Composer {...baseProps()} client={client} testId="composer" />);
     await openQueueChip(user);
 
-    const followUpSelect = (await screen.findByLabelText(
-      "Follow-up queue delivery",
-    )) as HTMLSelectElement;
+    const followUpTablist = await screen.findByRole("tablist", {
+      name: "Follow-up queue delivery",
+    });
     await waitFor(
-      () => expect(followUpSelect.hasAttribute("disabled")).toBe(false),
+      () =>
+        expect(
+          within(followUpTablist)
+            .getByRole("tab", { name: "All together" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
       MODEL_THINKING_SETTLE_WAIT,
     );
 
-    await user.selectOptions(followUpSelect, "all");
+    await user.click(within(followUpTablist).getByRole("tab", { name: "All together" }));
 
     const status = await screen.findByTestId("composer-queue-modes-status");
     await waitFor(
@@ -1055,16 +1103,27 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     render(<Composer {...baseProps()} client={client} testId="composer" />);
     await openQueueChip(user);
 
-    const steeringSelect = (await screen.findByLabelText(
-      "Steering queue delivery",
-    )) as HTMLSelectElement;
+    const steeringTablist = await screen.findByRole("tablist", { name: "Steering queue delivery" });
     await waitFor(
-      () => expect(steeringSelect.hasAttribute("disabled")).toBe(false),
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
       MODEL_THINKING_SETTLE_WAIT,
     );
 
-    await user.selectOptions(steeringSelect, "all");
-    await waitFor(() => expect(steeringSelect.value).toBe("all"), MODEL_THINKING_SETTLE_WAIT);
+    await user.click(within(steeringTablist).getByRole("tab", { name: "All together" }));
+    await waitFor(
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .getAttribute("aria-selected"),
+        ).toBe("true"),
+      MODEL_THINKING_SETTLE_WAIT,
+    );
 
     // Give a (wrongly) rendered empty notice a chance to appear before
     // asserting its absence.
@@ -1080,7 +1139,7 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     expect(help.textContent).toContain("do not decide whether a single message steers");
   });
 
-  it("offers no button at all — no cancel, no reorder, no per-item control over an already-queued message", async () => {
+  it("offers no cancel/remove/reorder control over an already-queued message (narrowed for SEGMENTED-1)", async () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     client.queueModes = { steeringMode: "all", followUpMode: "all" };
@@ -1088,12 +1147,29 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     await openQueueChip(user);
 
     const control = screen.getByTestId("composer-queue-modes");
-    // Deleting this assertion's guard (the query itself, not merely its
-    // expected count) would let a future "Cancel"/"Remove"/"Reorder"
-    // button ship silently — Pi exposes no such command (T38B1a's fourth
-    // acceptance criterion), so this control has nothing to spend a
-    // button on beyond the two mode selectors already asserted above.
-    expect(control.querySelectorAll("button")).toHaveLength(0);
+    // SEGMENTED-1 wired `SegmentedControl` in for the ready-with-a-known-mode
+    // case (plan.md §ATOMS-1 change 5, fix-plan.md item 5) — real `<button
+    // role="tab">` elements by design (the ARIA tablist pattern), so a
+    // literal "zero buttons anywhere in this control" assertion no longer
+    // holds and was never the actual invariant: the control's own name and
+    // this file's own comment always meant no PER-MESSAGE cancel, remove, or
+    // reorder command, because Pi exposes none (T38B1a's fourth acceptance
+    // criterion) — never "no buttons at all". A queue-MODE selector is a
+    // whole-session setting, not a per-item control, so its own two segment
+    // tabs ("One at a time (default)"/"All together") are exactly what this
+    // invariant always permitted. Narrowed, not deleted, to the invariant it
+    // actually names: every button inside this control must be one of the
+    // two known mode-segment tabs, never a cancel/remove/reorder/delete/move
+    // command — deleting this assertion's guard entirely would let a future
+    // "Cancel"/"Remove"/"Reorder" button ship silently, which is exactly
+    // what it exists to catch.
+    const buttons = Array.from(control.querySelectorAll("button"));
+    expect(buttons.length).toBeGreaterThan(0); // the two segmented-control tabs
+    const forbiddenNamePattern = /cancel|remove|reorder|delete|move/i;
+    for (const button of buttons) {
+      const accessibleName = button.getAttribute("aria-label") ?? button.textContent ?? "";
+      expect(accessibleName).not.toMatch(forbiddenNamePattern);
+    }
   });
 
   it("has no axe violations once the queue-mode control has loaded", async () => {
@@ -1103,10 +1179,16 @@ describe("Composer steer/follow-up mode control (T38B1a)", () => {
     const { container } = render(<Composer {...baseProps()} client={client} testId="composer" />);
     await openQueueChip(user);
 
-    const steeringSelect = (await screen.findByLabelText(
-      "Steering queue delivery",
-    )) as HTMLSelectElement;
-    await waitFor(() => expect(steeringSelect.value).toBe("all"), MODEL_THINKING_SETTLE_WAIT);
+    const steeringTablist = await screen.findByRole("tablist", { name: "Steering queue delivery" });
+    await waitFor(
+      () =>
+        expect(
+          within(steeringTablist)
+            .getByRole("tab", { name: "All together" })
+            .getAttribute("aria-selected"),
+        ).toBe("true"),
+      MODEL_THINKING_SETTLE_WAIT,
+    );
 
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);

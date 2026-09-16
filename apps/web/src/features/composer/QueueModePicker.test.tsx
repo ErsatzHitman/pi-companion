@@ -1,4 +1,5 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { QueueModePicker } from "./QueueModePicker.js";
@@ -34,12 +35,29 @@ function baseState(overrides: Partial<QueueModesState> = {}): QueueModesState {
 }
 
 describe("QueueModePicker", () => {
-  it("shows both modes as native selects, visible without opening either", () => {
+  it("shows both modes as a segmented control, visible without opening either (SEGMENTED-1)", () => {
     render(<QueueModePicker state={baseState()} testId="queue-modes" />);
-    const steering = screen.getByLabelText("Steering queue delivery") as HTMLSelectElement;
-    const followUp = screen.getByLabelText("Follow-up queue delivery") as HTMLSelectElement;
-    expect(steering.value).toBe("one-at-a-time");
-    expect(followUp.value).toBe("one-at-a-time");
+    const steering = screen.getByRole("tablist", { name: "Steering queue delivery" });
+    const followUp = screen.getByRole("tablist", { name: "Follow-up queue delivery" });
+    expect(
+      within(steering)
+        .getByRole("tab", { name: "One at a time (default)" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      within(followUp)
+        .getByRole("tab", { name: "One at a time (default)" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
+  it("changing the segmented control calls the state's setter with the pressed value (SEGMENTED-1)", async () => {
+    const user = userEvent.setup();
+    const state = baseState();
+    render(<QueueModePicker state={state} testId="queue-modes" />);
+    const steering = screen.getByRole("tablist", { name: "Steering queue delivery" });
+    await user.click(within(steering).getByRole("tab", { name: "All together" }));
+    expect(state.setSteeringMode).toHaveBeenCalledWith("all");
   });
 
   it("disables both selects and explains why when no client is wired", () => {

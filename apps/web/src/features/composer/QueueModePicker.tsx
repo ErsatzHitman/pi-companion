@@ -1,7 +1,11 @@
 import type { ChangeEvent } from "react";
 
-import { Select, StatusIndicator } from "../../ui/primitives/index.js";
-import type { SelectOption, StatusTone } from "../../ui/primitives/index.js";
+import { SegmentedControl, Select, StatusIndicator } from "../../ui/primitives/index.js";
+import type {
+  SegmentedControlOption,
+  SelectOption,
+  StatusTone,
+} from "../../ui/primitives/index.js";
 import type { QueueMode } from "./agent-turn-client.js";
 import type { QueueModesState } from "./use-queue-modes.js";
 
@@ -11,35 +15,53 @@ const NOT_REPORTED_OPTION_VALUE = "";
 /**
  * Steer and follow-up mode control (T38B1a, plan.md §11.1 "queues and
  * automation"). Composes the `Select` primitive (plan.md §10.3: native
- * `<select>`, so the current mode is always visible collapsed — the
- * "visible without opening a menu" acceptance criterion — and fully
- * keyboard-operable) with `StatusIndicator` for the same "explain rather
- * than silently empty" treatment `ModelThinkingPicker` uses.
+ * `<select>`) for the unavailable/loading/not-reported branches with the
+ * `SegmentedControl` primitive (`ui/primitives/SegmentedControl.tsx`, ARIA
+ * `role="tablist"`/`role="tab"`) for the simple ready-with-a-known-mode
+ * case, plus `StatusIndicator` for the same "explain rather than silently
+ * empty" treatment `ModelThinkingPicker` uses.
  *
- * **ATOMS-1 evaluated and deliberately did NOT swap either `Select` here
- * for the new `SegmentedControl` primitive** (`ui/primitives/
- * SegmentedControl.tsx`), despite plan.md §ATOMS-1 change 5 naming this
- * file as the swap site. `Composer.test.tsx` (owned by neither ATOMS-1 nor
- * any other P-wave package — it is not in any package's exclusive file
- * list) asserts against this control's ready state directly:
- * `getByLabelText("Steering/Follow-up queue delivery") as HTMLSelectElement`
- * across seven cases, and — decisively — "offers no button at all" asserts
- * `control.querySelectorAll("button")` has length 0 on this exact control.
- * `SegmentedControl` is real `<button role="tab">` elements by design (ARIA
- * tablist pattern), so wiring it in here does not merely need a label-text
- * lookup fixed, it directly contradicts that assertion's own stated intent
- * ("no cancel, no reorder, no per-item control" — a real product invariant,
- * not an implementation accident). Since `Composer.tsx`/`Composer.test.tsx`
- * are outside this package's exclusive files, they cannot be edited to
- * follow the swap. See this task's handoff report for the reproduction.
- * The `SegmentedControl` primitive itself was still built, exported, and
- * covered by its own test, per the rest of plan.md §ATOMS-1 change 5.
+ * **SEGMENTED-1 completed the swap plan.md §ATOMS-1 change 5 named this
+ * file for** (fix-plan.md's own item 5: "Swap `QueueModePicker.tsx`'s two
+ * `Select` calls for it when `state.availability === "ready"`; keep every
+ * existing unavailable/loading/not-reported branch untouched" — followed
+ * literally below). ATOMS-1 could not do this itself because
+ * `Composer.test.tsx` sits outside every P-wave package's exclusive file
+ * list; SEGMENTED-1 owns it.
+ *
+ * Two things `Composer.test.tsx` asserted against the pre-swap `<select>`
+ * needed to change, and did, in that file:
+ *
+ * 1. `getByLabelText("Steering queue delivery"|"Follow-up queue delivery")
+ *    as HTMLSelectElement` — the ready-with-a-known-mode cases now query
+ *    `getByRole("tab", { name: ... })` against the tablist instead, since a
+ *    `role="tablist"` is not an `HTMLSelectElement`.
+ * 2. "offers no button at all — no cancel, no reorder, no per-item control
+ *    over an already-queued message" asserted zero `<button>` elements
+ *    anywhere in this control, which a `SegmentedControl` (real `<button
+ *    role="tab">` elements) trips by construction. Read against what the
+ *    test's own name and comment say it protects — no per-message cancel,
+ *    remove, or reorder command, because Pi exposes none — a queue-MODE
+ *    selector is a whole-session setting, never a per-message control, so
+ *    the assertion was over-broad: it forbade every button to forbid three
+ *    specific kinds. It is narrowed in `Composer.test.tsx` to the invariant
+ *    it actually names (no button whose accessible name reads as a
+ *    cancel/remove/reorder/delete/move command), not deleted — deleting it
+ *    would let a future Cancel/Remove/Reorder button ship silently, which
+ *    is exactly what it exists to catch.
+ *
+ * The unavailable/loading/not-reported branches keep the native `<select>`
+ * unchanged: `SegmentedControl` models a fixed set of real values with a
+ * sliding highlight, not an open-ended "we don't actually know yet"
+ * placeholder, so those three branches are a worse fit for it than for a
+ * `<select>`'s native placeholder `<option>`.
  *
  * **This control is intentionally about the whole session, never a
  * single queued message**: it has no per-item list, no cancel button, no
  * reorder affordance, because Pi exposes no such command (T38B1a's
- * acceptance criteria; see `Composer.test.tsx`'s "offers no button at
- * all" assertion, which fails the moment anything like that is added).
+ * acceptance criteria; see `Composer.test.tsx`'s "offers no
+ * cancel/remove/reorder control over an already-queued message"
+ * assertion, which fails the moment anything like that is added).
  * The explanatory copy below states the mode-vs-per-message
  * distinction directly in the UI, not only in a comment, because it is
  * easy to conflate the two: this control decides how several
@@ -86,6 +108,13 @@ const MODE_OPTIONS: SelectOption[] = [
   { value: "all", label: "All together" },
 ];
 
+/** Same two values as `MODE_OPTIONS`, typed for `SegmentedControl`'s generic `Value`
+ * rather than `SelectOption`'s bare `string`, for the ready-with-a-known-mode case. */
+const MODE_SEGMENTED_OPTIONS: SegmentedControlOption<QueueMode>[] = [
+  { value: "one-at-a-time", label: "One at a time (default)" },
+  { value: "all", label: "All together" },
+];
+
 function noticeTone(type: "info" | "warning" | "error"): StatusTone {
   if (type === "error") return "danger";
   if (type === "warning") return "warning";
@@ -123,6 +152,13 @@ export function QueueModePicker({ state, testId }: QueueModePickerProps) {
     void state.setFollowUpMode(value);
   }
 
+  // Narrowed once here, rather than re-checked with a cast at each call site
+  // below: `SegmentedControl`'s `value` prop wants a real `QueueMode`, never
+  // `null`, so the ready-with-a-known-mode branch is only taken when the
+  // narrowing holds.
+  const steeringMode = state.availability === "ready" ? state.steeringMode : null;
+  const followUpMode = state.availability === "ready" ? state.followUpMode : null;
+
   return (
     <div className="pc-composer__queue-modes" data-testid={testId}>
       <p className="pc-composer__queue-modes-help">
@@ -131,26 +167,48 @@ export function QueueModePicker({ state, testId }: QueueModePickerProps) {
         the running turn or waits for it to finish; that choice is made per message, separately,
         when you send it.
       </p>
-      <Select
-        label="Steering queue delivery"
-        options={modeSelectOptions(state, state.steeringMode)}
-        value={
-          state.availability === "ready" ? (state.steeringMode ?? NOT_REPORTED_OPTION_VALUE) : ""
-        }
-        disabled={disabled}
-        onChange={handleSteeringChange}
-        testId={steeringTestId}
-      />
-      <Select
-        label="Follow-up queue delivery"
-        options={modeSelectOptions(state, state.followUpMode)}
-        value={
-          state.availability === "ready" ? (state.followUpMode ?? NOT_REPORTED_OPTION_VALUE) : ""
-        }
-        disabled={disabled}
-        onChange={handleFollowUpChange}
-        testId={followUpTestId}
-      />
+      {steeringMode !== null ? (
+        <SegmentedControl
+          ariaLabel="Steering queue delivery"
+          options={MODE_SEGMENTED_OPTIONS}
+          value={steeringMode}
+          onChange={(value) => void state.setSteeringMode(value)}
+          disabled={disabled}
+          testId={steeringTestId}
+        />
+      ) : (
+        <Select
+          label="Steering queue delivery"
+          options={modeSelectOptions(state, state.steeringMode)}
+          value={
+            state.availability === "ready" ? (state.steeringMode ?? NOT_REPORTED_OPTION_VALUE) : ""
+          }
+          disabled={disabled}
+          onChange={handleSteeringChange}
+          testId={steeringTestId}
+        />
+      )}
+      {followUpMode !== null ? (
+        <SegmentedControl
+          ariaLabel="Follow-up queue delivery"
+          options={MODE_SEGMENTED_OPTIONS}
+          value={followUpMode}
+          onChange={(value) => void state.setFollowUpMode(value)}
+          disabled={disabled}
+          testId={followUpTestId}
+        />
+      ) : (
+        <Select
+          label="Follow-up queue delivery"
+          options={modeSelectOptions(state, state.followUpMode)}
+          value={
+            state.availability === "ready" ? (state.followUpMode ?? NOT_REPORTED_OPTION_VALUE) : ""
+          }
+          disabled={disabled}
+          onChange={handleFollowUpChange}
+          testId={followUpTestId}
+        />
+      )}
       {state.availability !== "ready" && state.availability !== "loading" ? (
         <StatusIndicator
           label="Queue mode"
