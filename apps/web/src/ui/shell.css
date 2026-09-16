@@ -45,7 +45,7 @@
   --shell-rail-r: 312px;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100dvh;
   background-color: var(--color-page);
 }
 
@@ -153,8 +153,12 @@
  * (12px = `--spacing-3`, 8px = `--spacing-2`) and one value with none
  * (14px side padding, between the 12px/16px steps on either side); that
  * one is declared as a scoped custom property on this rule, the same
- * pattern `session-status.css` uses for its own pill's untokened values,
- * rather than rounded to a visibly different token.
+ * pattern `composer.css` uses for `--pc-composer-pad-bottom` (also 14px,
+ * also between the same two steps), rather than rounded to a visibly
+ * different token. CORRECTED in this wave: this said the pattern was the
+ * one `session-status.css` uses for its own pill's untokened values, which
+ * ATOMS-1 falsified in the same wave by promoting that file's only rule
+ * block to `ui/primitives/primitives.css` and leaving it empty of rules.
  */
 .shell__live-head {
   --shell-live-head-pad-x: 14px;
@@ -195,7 +199,7 @@
 .shell__live-eyebrow {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.09em;
+  letter-spacing: var(--letter-spacing-wide);
   text-transform: uppercase;
   color: var(--color-ink-3);
 }
@@ -314,6 +318,7 @@
   min-width: 0;
   min-height: 0;
   padding: 0;
+  overflow-y: auto;
   background-color: var(--color-page);
 }
 

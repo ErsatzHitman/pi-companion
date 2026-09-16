@@ -540,6 +540,18 @@ export function Transcript({
    * (see this component's doc comment) regardless of the container's
    * current — not yet meaningful — scroll geometry. */
   const hasAnchoredTailRef = useRef(false);
+  /**
+   * SHELL-1: the highest virtualized row index committed to the DOM so
+   * far. A row above this watermark is rendering for the first time and
+   * gets the mockup's `.fade` turn-entrance treatment
+   * (`data-entering="true"`, below); a row at or below it has been seen
+   * before and must not replay the animation just because the user
+   * scrolled it back into the mounted window. This is a plain `number`,
+   * not a `Set` of every index ever seen, because the transcript only
+   * ever grows: any row whose index is at or below the highest index
+   * already committed was necessarily mounted at some earlier commit.
+   */
+  const enteredRowWatermarkRef = useRef(-1);
 
   const overscan =
     items.length <= FULL_RENDER_THRESHOLD ? Math.max(items.length, 1) : BOUNDED_OVERSCAN;
@@ -586,6 +598,24 @@ export function Transcript({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastIndex, tailEntry, rowVirtualizer]);
 
+  /**
+   * Advances `enteredRowWatermarkRef` to the highest row index actually
+   * committed to the DOM this pass. Runs after every commit (no
+   * dependency array) so a newly mounted row is only ever entering on
+   * the one commit that first mounts it: the JSX below reads the
+   * watermark's value as it stood BEFORE this effect runs (i.e. as of
+   * the previous commit), and this effect only bumps the ref — it never
+   * schedules a re-render — so the already-painted DOM for this commit
+   * keeps whatever `data-entering` value it was given.
+   */
+  useLayoutEffect(() => {
+    for (const virtualRow of rowVirtualizer.getVirtualItems()) {
+      if (virtualRow.index > enteredRowWatermarkRef.current) {
+        enteredRowWatermarkRef.current = virtualRow.index;
+      }
+    }
+  });
+
   if (renderable.length === 0) {
     return (
       <EmptyState
@@ -597,6 +627,17 @@ export function Transcript({
   }
 
   const virtualItems = rowVirtualizer.getVirtualItems();
+  /**
+   * The watermark as it stands BEFORE this commit's layout effect bumps it,
+   * captured once so every row in this pass staggers against the same base.
+   * The stagger is the entering row's position within THIS batch, not its
+   * absolute transcript index: `Math.min(i * 120, 720)` in the mockup counts
+   * the elements fading in together, and keying it to the absolute index
+   * instead would give every turn past the seventh a flat 720ms delay — so a
+   * single new turn arriving in a long session would hang invisible for the
+   * better part of a second before appearing.
+   */
+  const enteringStaggerBase = enteredRowWatermarkRef.current + 1;
 
   return (
     <div
@@ -613,13 +654,28 @@ export function Transcript({
             return null;
           }
           const rendersBody = item.group === null || !item.isGroupHead || !item.groupCollapsed;
+          // Mockup's `.fade`, staggered `Math.min(i*120, 720)ms` — only for
+          // a row above the watermark (see `enteredRowWatermarkRef`'s doc
+          // comment); a row seen before never replays the entrance.
+          const isEntering = virtualRow.index > enteredRowWatermarkRef.current;
           return (
             <div
               key={virtualRow.key}
               data-index={virtualRow.index}
+              data-entering={isEntering ? "true" : undefined}
               ref={rowVirtualizer.measureElement}
               className="pc-transcript__row"
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
+              style={{
+                transform: `translateY(${virtualRow.start}px)`,
+                ...(isEntering
+                  ? {
+                      animationDelay: `${Math.min(
+                        Math.max(virtualRow.index - enteringStaggerBase, 0) * 120,
+                        720,
+                      )}ms`,
+                    }
+                  : null),
+              }}
             >
               {item.group !== null && item.isGroupHead ? (
                 <TranscriptWorkGroupHead

@@ -28,6 +28,12 @@
    * 10px block padding.
    */
   --pc-composer-pad-bottom: 14px;
+  /* SHELL-1: the fade the mockup draws over the transcript content that
+   * scrolls up under the composer, so a row does not end abruptly at the
+   * bar's top edge. 28px has no spacing token on this scale (the nearest
+   * steps are 24 and 32), so — like `--pc-composer-pad-bottom` above — it
+   * is a scoped custom property rather than a rounded step. */
+  --pc-composer-fade-height: 28px;
   max-width: calc(53.5rem + 2 * var(--spacing-5));
   padding: 0 var(--spacing-5) var(--pc-composer-pad-bottom);
   /* Reference `.composer` paints `var(--page)` explicitly. Today this is
@@ -40,6 +46,23 @@
   margin: 0 auto;
   border-radius: var(--radius-window);
   transition: box-shadow var(--motion-duration-fast) var(--motion-easing-standard);
+}
+
+/* SHELL-1: the composer's own top-edge fade, so scrolled-up transcript
+ * content dissolves into the page background instead of being cut off
+ * hard by the bar. `pointer-events: none` keeps it purely decorative —
+ * it must never intercept a click meant for the transcript beneath it.
+ * `.pc-composer` is already `position: relative`, so this pseudo-element
+ * positions against it directly. */
+.pc-composer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--pc-composer-fade-height);
+  pointer-events: none;
+  background: linear-gradient(to top, var(--color-page), transparent);
 }
 
 /* Prompt-bar single-row height (defect 2, UI-P1): `PromptBar`'s own
@@ -219,7 +242,10 @@
  * letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3)`
  * in the reference — above its control. `--font-size-xs` is the nearest
  * scale token to the reference's off-scale 9.5px, the same treatment this
- * file already gives other mockup-exact values with no matching token.
+ * file already gives other mockup-exact values with no matching token;
+ * the reference's `0.09em` tracking, unlike the font size, has an exact
+ * token match (`--letter-spacing-wide`, TOKENS-1) so the rule below reads
+ * that instead of restating the reference's literal.
  * `border-top` on every group after the first mirrors the reference's
  * `.menu-g + .menu-g` divider. */
 .pc-composer__ring-group {
@@ -235,7 +261,7 @@
 .pc-composer__ring-group-label {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.09em;
+  letter-spacing: var(--letter-spacing-wide);
   text-transform: uppercase;
   color: var(--color-ink-3);
 }

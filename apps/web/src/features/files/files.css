@@ -279,8 +279,8 @@ a.pc-file-browser__row--file:focus-visible {
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
   font-variant-numeric: tabular-nums;
-  height: 60vh;
-  max-height: 640px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .pc-file-editor__code .cm-scroller {

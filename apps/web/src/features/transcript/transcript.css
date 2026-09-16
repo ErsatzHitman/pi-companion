@@ -38,8 +38,6 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  height: 60vh;
-  max-height: 100%;
   overflow-y: auto;
   padding: var(--spacing-3) var(--spacing-2);
 }
@@ -86,6 +84,56 @@
    * each row's own measured height, since sizing here comes from the
    * virtualizer's per-row measurement rather than a flex container. */
   padding-bottom: var(--spacing-3);
+}
+
+/*
+ * Turn entrance (mockup's `.fade`: `fade-up 0.32s cubic-bezier(0.23,1,
+ * 0.32,1) both`, staggered `Math.min(i*120, 720)ms`). `transcript.tsx`
+ * sets `data-entering="true"` only on rows above a watermark of the
+ * highest row index rendered so far — never by `:nth-child`, which would
+ * re-fire on every scroll since this list is virtualized and the same
+ * DOM node is reused for many different entries as the window moves.
+ * The per-row stagger delay is set inline (`animationDelay`) by
+ * `transcript.tsx`, the same division of responsibility `connect.css`
+ * uses for its own `pc-connect-fade-up` stagger.
+ *
+ * The keyframe animates the `translate` property, not `transform` —
+ * `.pc-transcript__row` already carries an inline `transform:
+ * translateY(...)` for the virtualizer's own absolute positioning, and a
+ * CSS animation overrides an inline style for the property it animates
+ * while running; animating `transform` here would fight that positioning
+ * and make an entering row jump to the wrong offset mid-animation.
+ * `translate` is an independent CSS property precisely for this kind of
+ * composition and does not touch `transform` at all.
+ */
+@keyframes pc-transcript-row-fade-up {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.pc-transcript__row[data-entering="true"] {
+  animation: pc-transcript-row-fade-up var(--motion-duration-moderate) var(--motion-easing-standard)
+    both;
+}
+
+/*
+ * Duration alone does not need this: the token layer already collapses
+ * every `--motion-duration-*` to ~1ms under `prefers-reduced-motion:
+ * reduce` (`web.ts`'s reduced-motion block). The per-row stagger *delay*
+ * is a separate inline style the duration collapse does not touch, so it
+ * is zeroed here explicitly — the same carve-out `connect.css` documents
+ * for its own `pc-connect-fade-up` stagger.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .pc-transcript__row[data-entering="true"] {
+    animation-delay: 0ms;
+  }
 }
 
 /* The turn meta line the mockup draws above every block
