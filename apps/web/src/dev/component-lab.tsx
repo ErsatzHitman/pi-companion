@@ -19,16 +19,43 @@ import {
   Progress,
   RecordList,
   SearchField,
+  SegmentedControl,
   Section,
   Select,
   Sheet,
   StatusIndicator,
+  StatusPill,
   TextArea,
   TextField,
   Toast,
   ToastRegion,
   Toggle,
 } from "../ui/primitives/index.js";
+
+/**
+ * StatusPill/SegmentedControl lab cases (ATOMS-1). Both primitives are new
+ * in this wave, so — unlike every other case list on this page — these are
+ * declared locally rather than pulled from
+ * `@picompanion/frontend-core`'s `testing.primitiveLabManifest`: that
+ * manifest is shared with `apps/android`'s own component lab, and adding a
+ * name to it obliges an Android twin to exist (see `apps/android/src/ui/
+ * primitives/StatusPill.tsx`'s own doc comment, which states this same
+ * rule from the other side). `packages/frontend-core` is outside this
+ * package's exclusive files, so that shared registration is left for
+ * whichever future task grows the Android counterpart for
+ * `SegmentedControl` too.
+ */
+const statusPillLabCases = [
+  { id: "run", label: "Running", tone: "success" as const },
+  { id: "wait", label: "Idle", tone: "neutral" as const },
+  { id: "attention", label: "Idle · needs attention", tone: "warning" as const },
+  { id: "err", label: "Error", tone: "danger" as const },
+];
+
+const segmentedControlOptions = [
+  { value: "one-at-a-time", label: "One at a time" },
+  { value: "all", label: "All together" },
+];
 
 const {
   bannerLabCases,
@@ -58,9 +85,12 @@ const {
  * T25A dev-only component lab (plan.md §10.3): renders every primitive
  * from the shared `@picompanion/frontend-core/testing` fixtures — one
  * `<Section title="...">` per entry in `testing.primitiveLabManifest`, so
- * `apps/web` and `apps/android` (T26A) exercise identical cases. Never
- * imported outside `dev/component-lab-route.tsx`'s dev-only branch — see
- * that file for why this never reaches a production bundle.
+ * `apps/web` and `apps/android` (T26A) exercise identical cases — plus, as
+ * of ATOMS-1, `StatusPill` and `SegmentedControl`, two new primitives with
+ * their own locally-declared cases (see the doc comment above
+ * `statusPillLabCases` for why they are not yet in the shared manifest).
+ * Never imported outside `dev/component-lab-route.tsx`'s dev-only branch —
+ * see that file for why this never reaches a production bundle.
  */
 export function ComponentLab() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -68,6 +98,7 @@ export function ComponentLab() {
   const [toggles, setToggles] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(toggleLabCases.map((toggleCase) => [toggleCase.id, toggleCase.checked])),
   );
+  const [segmentedValue, setSegmentedValue] = useState(segmentedControlOptions[0].value);
 
   return (
     <div className="component-lab">
@@ -144,6 +175,16 @@ export function ComponentLab() {
         </div>
       </Section>
 
+      <Section title="SegmentedControl" id="lab-segmented-control">
+        <SegmentedControl
+          ariaLabel="Queue delivery mode"
+          options={segmentedControlOptions}
+          value={segmentedValue}
+          onChange={setSegmentedValue}
+          testId="segmented-queue-mode"
+        />
+      </Section>
+
       <Section title="Toggle" id="lab-toggle">
         <div className="component-lab__column">
           {toggleLabCases.map((toggleCase) => (
@@ -210,6 +251,19 @@ export function ComponentLab() {
               tone={statusCase.tone}
               statusText={statusCase.statusText}
               testId={`status-${statusCase.id}`}
+            />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="StatusPill" id="lab-status-pill">
+        <div className="component-lab__row">
+          {statusPillLabCases.map((pillCase) => (
+            <StatusPill
+              key={pillCase.id}
+              label={pillCase.label}
+              tone={pillCase.tone}
+              testId={`status-pill-${pillCase.id}`}
             />
           ))}
         </div>

@@ -16,6 +16,25 @@ const NOT_REPORTED_OPTION_VALUE = "";
  * keyboard-operable) with `StatusIndicator` for the same "explain rather
  * than silently empty" treatment `ModelThinkingPicker` uses.
  *
+ * **ATOMS-1 evaluated and deliberately did NOT swap either `Select` here
+ * for the new `SegmentedControl` primitive** (`ui/primitives/
+ * SegmentedControl.tsx`), despite plan.md §ATOMS-1 change 5 naming this
+ * file as the swap site. `Composer.test.tsx` (owned by neither ATOMS-1 nor
+ * any other P-wave package — it is not in any package's exclusive file
+ * list) asserts against this control's ready state directly:
+ * `getByLabelText("Steering/Follow-up queue delivery") as HTMLSelectElement`
+ * across seven cases, and — decisively — "offers no button at all" asserts
+ * `control.querySelectorAll("button")` has length 0 on this exact control.
+ * `SegmentedControl` is real `<button role="tab">` elements by design (ARIA
+ * tablist pattern), so wiring it in here does not merely need a label-text
+ * lookup fixed, it directly contradicts that assertion's own stated intent
+ * ("no cancel, no reorder, no per-item control" — a real product invariant,
+ * not an implementation accident). Since `Composer.tsx`/`Composer.test.tsx`
+ * are outside this package's exclusive files, they cannot be edited to
+ * follow the swap. See this task's handoff report for the reproduction.
+ * The `SegmentedControl` primitive itself was still built, exported, and
+ * covered by its own test, per the rest of plan.md §ATOMS-1 change 5.
+ *
  * **This control is intentionally about the whole session, never a
  * single queued message**: it has no per-item list, no cancel button, no
  * reorder affordance, because Pi exposes no such command (T38B1a's

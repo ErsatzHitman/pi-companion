@@ -1,64 +1,11 @@
 /**
- * Session status pill (dot + word) shared by the per-session head and the
- * live rail's own head. Every value below is the design reference
- * (`docs/ui-reference/pi-companion-web.html`'s `.pill` block) mapped onto
- * `@picompanion/design-tokens`; the reference's fixed 22px pill height,
- * 6px dot, 6px content gap, 9px horizontal padding and 0.01em letter
- * spacing have no exact token (the nearest spacing steps are
- * `--spacing-1`/4px and `--spacing-2`/8px, and the nearest tracking step
- * is `--letter-spacing-wide`/0.02em — each off by up to 2x), so all five
- * are declared once here as custom properties rather than repeated, or
- * rounded to an inexact token, at each use site.
+ * ATOMS-1 promoted this file's `.pc-session-pill` block — a faithful port
+ * of the design reference's `.pill` (plan.md's ATOMS-1 work package) — to
+ * the shared primitive layer as `ui/primitives/StatusPill.tsx` +
+ * `.pc-status-pill` in `ui/primitives/primitives.css`.
+ * `session-status-pill.tsx` is now a thin wrapper over that primitive and
+ * imports its CSS from there, so nothing in this feature directory needs
+ * its own stylesheet any more. This file is kept, empty of rules, rather
+ * than removed, because `plan.md`'s ATOMS-1 package lists it among the
+ * files this change touches, not deletes.
  */
-
-.pc-session-pill {
-  --pc-session-pill-height: 22px;
-  --pc-session-pill-dot-size: 6px;
-  --pc-session-pill-gap: 6px;
-  --pc-session-pill-pad-x: 9px;
-  --pc-session-pill-letter-spacing: 0.01em;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pc-session-pill-gap);
-  height: var(--pc-session-pill-height);
-  padding: 0 var(--pc-session-pill-pad-x);
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: var(--pc-session-pill-letter-spacing);
-  white-space: nowrap;
-}
-
-.pc-session-pill__dot {
-  width: var(--pc-session-pill-dot-size);
-  height: var(--pc-session-pill-dot-size);
-  flex: none;
-  border-radius: var(--radius-full);
-  background-color: currentColor;
-}
-
-.pc-session-pill--success {
-  background-color: var(--status-success-background);
-  color: var(--status-success-foreground);
-}
-
-.pc-session-pill--warning {
-  background-color: var(--status-warning-background);
-  color: var(--status-warning-foreground);
-}
-
-.pc-session-pill--danger {
-  background-color: var(--status-danger-background);
-  color: var(--status-danger-foreground);
-}
-
-.pc-session-pill--info {
-  background-color: var(--status-info-background);
-  color: var(--status-info-foreground);
-}
-
-.pc-session-pill--neutral {
-  background-color: var(--color-inset);
-  color: var(--color-ink-3);
-  box-shadow: var(--shadow-hairline);
-}

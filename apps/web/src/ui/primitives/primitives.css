@@ -16,7 +16,7 @@
  *
  * T25C (plan §10.2, docs/beautiful-ui-reference.md) restyled this file to
  * Beautiful UI's visual language: 1px ring `box-shadow`s instead of
- * borders/blurs, dashed hairline dividers, the small type scale, Geist
+ * borders/blurs, dashed hairline dividers, the small type scale, JetBrains
  * Mono tabular numerals on numeric readouts, the signature easing
  * (`--motion-easing-standard`, `cubic-bezier(.23,1,.32,1)`),
  * `active:scale-[0.96]` press feedback, and a shimmer-gradient treatment
@@ -34,7 +34,7 @@
 .pc-toggle:active:not(:disabled),
 .pc-popover__trigger:active,
 .pc-banner__action:active {
-  transform: scale(0.96);
+  transform: scale(var(--motion-press-scale));
 }
 
 /* Button ------------------------------------------------------------- */
@@ -48,7 +48,6 @@
   padding: 0 var(--spacing-3);
   border: none;
   border-radius: var(--radius-control);
-  box-shadow: var(--shadow-btn);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
@@ -71,6 +70,7 @@
 .pc-field__textarea:focus-visible,
 .pc-record-list__row-link:focus-visible,
 .pc-popover__trigger:focus-visible,
+.pc-segmented__tab:focus-visible,
 .pc-toast:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
@@ -87,6 +87,7 @@
 .pc-button--secondary {
   background-color: var(--color-surface);
   color: var(--color-ink);
+  box-shadow: var(--shadow-btn);
 }
 .pc-button--secondary:hover:not(:disabled) {
   background-color: var(--color-hover);
@@ -380,6 +381,106 @@
   font-weight: var(--font-weight-medium);
 }
 
+/* StatusPill — the mockup's `.pill` (ATOMS-1) ---------------------------- */
+
+.pc-status-pill {
+  /* The reference's fixed 22px height, 6px dot, 6px gap, 9px horizontal
+     padding and 0.01em letter spacing have no exact token match (the
+     nearest spacing steps are `--spacing-1`/4px and `--spacing-2`/8px,
+     each off by up to 2x), so all five are declared once here as custom
+     properties rather than repeated, or rounded to an inexact token, at
+     each use site — the same pattern this block was promoted from
+     (`features/sessions/session-status.css`'s former `.pc-session-pill`). */
+  --pc-status-pill-height: 22px;
+  --pc-status-pill-dot-size: 6px;
+  --pc-status-pill-gap: 6px;
+  --pc-status-pill-pad-x: 9px;
+  --pc-status-pill-letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pc-status-pill-gap);
+  height: var(--pc-status-pill-height);
+  padding: 0 var(--pc-status-pill-pad-x);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--pc-status-pill-letter-spacing);
+  white-space: nowrap;
+}
+.pc-status-pill__dot {
+  width: var(--pc-status-pill-dot-size);
+  height: var(--pc-status-pill-dot-size);
+  flex: none;
+  border-radius: var(--radius-full);
+  background-color: currentColor;
+}
+.pc-status-pill--success {
+  background-color: var(--status-success-background);
+  color: var(--status-success-foreground);
+}
+.pc-status-pill--warning {
+  background-color: var(--status-warning-background);
+  color: var(--status-warning-foreground);
+}
+.pc-status-pill--danger {
+  background-color: var(--status-danger-background);
+  color: var(--status-danger-foreground);
+}
+.pc-status-pill--info {
+  background-color: var(--status-info-background);
+  color: var(--status-info-foreground);
+}
+.pc-status-pill--neutral {
+  background-color: var(--color-inset);
+  color: var(--color-ink-3);
+  box-shadow: var(--shadow-hairline);
+}
+
+/* SegmentedControl — the mockup's `.seg` (ATOMS-1) ----------------------- */
+
+.pc-segmented {
+  position: relative;
+  display: inline-grid;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1);
+  background-color: var(--color-field);
+  border-radius: var(--radius-control);
+}
+.pc-segmented__highlight {
+  position: absolute;
+  top: var(--spacing-1);
+  bottom: var(--spacing-1);
+  left: var(--spacing-1);
+  width: calc((100% - 2 * var(--spacing-1)) / var(--pc-segmented-count, 1));
+  transform: translateX(calc(var(--pc-segmented-index, 0) * 100%));
+  border-radius: var(--radius-chip);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-btn);
+  transition: transform var(--motion-duration-fast) var(--motion-easing-standard);
+  pointer-events: none;
+}
+.pc-segmented__tab {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-chip);
+  padding: var(--spacing-1) var(--spacing-2);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink-2);
+  cursor: pointer;
+  transition: color var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.pc-segmented__tab[aria-selected="true"] {
+  color: var(--color-ink);
+}
+.pc-segmented__tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* Progress ------------------------------------------------------------ */
 
 .pc-progress {
@@ -394,9 +495,9 @@
   font-size: var(--font-size-xs);
   color: var(--color-ink-2);
 }
-/* The percentage/status readout (second span) is a numeral: Geist Mono +
-   tabular figures (docs/beautiful-ui-reference.md, "Geist Mono for all
-   numerals ... with tabular-nums on counters and timers"). */
+/* The percentage/status readout (second span) is a numeral: JetBrains Mono +
+   tabular figures (`packages/design-tokens/src/tokens.ts`'s
+   `typography.fontFamily.mono`, with tabular-nums on counters and timers). */
 .pc-progress__label-row > span:last-child {
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;

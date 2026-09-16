@@ -17,6 +17,12 @@ export interface ChipProps {
  * becomes a real `<button>` (keyboard operable) whose accessible name is
  * `"Remove <label>"`; tone is always paired with the label text, never
  * colour alone (plan.md §10.5).
+ *
+ * Reserved for the mockup's neutral mono `.chip` role (`--radius-chip`,
+ * unrounded corners relative to a pill) — permission/attachment tags, not
+ * session/turn state. `StatusPill` (ATOMS-1) is the tone-tinted, fully
+ * rounded counterpart for that (`.pill` in the design reference); do not
+ * reach for `Chip` where a status pill is what is actually wanted.
  */
 export function Chip({ label, tone = "neutral", onRemove, testId }: ChipProps) {
   if (onRemove) {
