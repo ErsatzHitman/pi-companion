@@ -1,4 +1,7 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FileCodeEditor } from "./file-code-editor.js";
@@ -213,4 +216,62 @@ describe("FileCodeEditor (T30B3)", () => {
     await waitFor(() => expect(instances).toHaveLength(2), LAZY_IMPORT_WAIT);
     expect(instances[0]?.destroyed).toBe(true);
   }, 20_000);
+});
+
+/**
+ * WEB-FILES-1: a real layout assertion (does a 5000-line file grow the
+ * page, does the editor get its own scrollbar) is not something this
+ * suite can see — jsdom never runs layout, and the `@codemirror/*`
+ * modules are faked above (see the module docstring) precisely because
+ * real CodeMirror needs measurement APIs jsdom does not provide. What
+ * CAN be pinned honestly is the CSS rule itself: that `.pc-file-editor__code`
+ * (the element `FileCodeEditor` renders below, and the `.cm-editor` child's
+ * `.cm-*` classes are applied to a descendant CodeMirror mounts inside it)
+ * is a genuine flex container with a real height bound, so its CodeMirror
+ * child's `flex: 1 1 auto; min-height: 0` rule (`files.css`) has something
+ * to resolve against instead of being inert.
+ *
+ * This fails against the pre-fix CSS: SHELL-1 left `.pc-file-editor__code`
+ * a plain block box (`border-radius`/`box-shadow`/`overflow` only, no
+ * `display` and no height bound at all), which is exactly the regression
+ * this task fixes — see `files.css`'s own comment on this rule for the
+ * full account.
+ */
+describe("FileCodeEditor's box has a real bound (WEB-FILES-1)", () => {
+  function readFilesCssRule(selector: string): string {
+    const cssPath = join(dirname(fileURLToPath(import.meta.url)), "files.css");
+    const css = readFileSync(cssPath, "utf8");
+    // Matches only the block whose selector is exactly `selector` (nothing
+    // but whitespace before the `{`), not a longer descendant selector like
+    // `.pc-file-editor__code .cm-editor { ... }` that happens to start with
+    // the same text.
+    const escaped = selector.replace(/[.#]/g, "\\$&");
+    const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css);
+    expect(match, `expected a \`${selector} { ... }\` rule in files.css`).toBeTruthy();
+    return match![1]!;
+  }
+
+  it("makes .pc-file-editor__code a flex container with a real max-height, not an inert flex-child rule on a plain block box", () => {
+    const codeBox = readFilesCssRule(".pc-file-editor__code");
+
+    expect(codeBox).toMatch(/display:\s*flex/);
+    // Bounded in `dvh` (the dynamic-viewport unit `.shell` itself caps
+    // against, `ui/shell.css`'s `height: 100dvh`) rather than the plain
+    // `vh` SHELL-1 removed, or no bound at all (today's regression).
+    expect(codeBox).toMatch(/max-height:.*dvh/);
+
+    // The `.cm-editor` child rule this box's flex container-ness makes
+    // meaningful again: still present, still expecting a flex parent.
+    const cmEditor = readFilesCssRule(".pc-file-editor__code .cm-editor");
+    expect(cmEditor).toMatch(/flex:\s*1\s+1\s+auto/);
+    expect(cmEditor).toMatch(/min-height:\s*0/);
+  });
+
+  it("still frames the box with the code-block chrome (radius/shadow/overflow) SHELL-1 didn't touch", () => {
+    const codeBox = readFilesCssRule(".pc-file-editor__code");
+
+    expect(codeBox).toMatch(/border-radius:\s*var\(--radius-control\)/);
+    expect(codeBox).toMatch(/box-shadow:\s*var\(--shadow-hairline\)/);
+    expect(codeBox).toMatch(/overflow:\s*hidden/);
+  });
 });

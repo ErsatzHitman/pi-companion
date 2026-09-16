@@ -266,10 +266,43 @@ a.pc-file-browser__row--file:focus-visible {
   gap: var(--spacing-2);
 }
 
+/**
+ * WEB-FILES-1 (regression disclosed by SHELL-1): SHELL-1 replaced this
+ * box's old `height: 60vh; max-height: 640px` cap (then on `.cm-editor`
+ * below) with `flex: 1 1 auto; min-height: 0` on that same child rule,
+ * expecting a flex ancestor chain to hand this box a bounded height to
+ * fill, the way `.shell__center`'s direct children do against `.shell`'s
+ * own `height: 100dvh` cap (`ui/shell.css`). That chain never reached
+ * here: `FileEditorPanel` renders inside `Section`'s `.pc-section`
+ * (`ui/primitives/primitives.css`) inside `.shell__center` (which scrolls
+ * the whole column itself via `overflow-y: auto` rather than handing a
+ * bounded height down), and neither `.pc-section` nor `.pc-file-browser`
+ * marks itself `flex: 1; min-height: 0` to pass one along — both outside
+ * this package's file list. So this box was never `display: flex` at
+ * all, the `.cm-editor` flex-child rule resolved against a plain block
+ * container and did nothing, and a long file grew to full content height
+ * inside `.shell__center`'s scroller instead of scrolling itself
+ * (confirmed against the real tree, not assumed: this rule block carried
+ * no `display` and no height bound of its own).
+ *
+ * Fixed here without that ancestor chain: this box becomes the flex
+ * parent itself, which is what makes the `.cm-editor` flex-child rule
+ * below meaningful again, and gets a genuine bound of its own so it has
+ * something to hand that child. The bound is sized in `dvh` — the same
+ * dynamic-viewport unit `.shell` caps itself with, not the plain `vh` the
+ * old band-aid used — so it tracks the same viewport-chrome-aware cap the
+ * shell does (mobile browser chrome collapsing/expanding) rather than a
+ * unit that can disagree with it. `640px` keeps the same ceiling the old
+ * rule had on a tall desktop viewport, where `60dvh` alone would let the
+ * editor grow past a useful reading height.
+ */
 .pc-file-editor__code {
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-hairline);
   overflow: hidden;
+  max-height: min(60dvh, 640px);
 }
 
 .pc-file-editor__code .cm-editor {
