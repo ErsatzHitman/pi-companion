@@ -59,8 +59,14 @@ export type {
   EditFromHereOutcome,
   UseEditFromHereOptions,
 } from "./use-edit-from-here.js";
+export { adaptEditFromHereForkClient } from "./edit-from-here-fork-client.js";
 export { EditFromHereSurface } from "./EditFromHereSurface.js";
 export type { EditFromHereSurfaceProps } from "./EditFromHereSurface.js";
+export { useSessionTranscriptEntries } from "./use-session-transcript-entries.js";
+export type {
+  SessionTranscriptOptions,
+  SessionTranscriptResult,
+} from "./use-session-transcript-entries.js";
 export {
   addUndoneTurn,
   buildUndoneTurn,

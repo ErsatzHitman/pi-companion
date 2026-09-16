@@ -12,9 +12,12 @@
  * `DaemonClient` directly) so it is directly testable with fakes, the
  * same way `features/sessions/SessionsScreen.tsx` stays "directly
  * testable without going through the router" per its own doc comment.
- * `routes/screens/host-session-screen.tsx` is the one place that adapts
- * the real `DaemonClient` and calls the real `navigate()` on
- * `onOpenSession` — see that file's own doc comment.
+ * `routes/screens/host-session-screen.tsx` is the one place that calls
+ * the real `navigate()` on `onOpenSession` — see that file's own doc
+ * comment. The real-`DaemonClient` adapter itself is
+ * `edit-from-here-fork-client.ts`'s `adaptEditFromHereForkClient`, in
+ * this same directory (WEB-ARCH-1: moved out of
+ * `host-session-screen.tsx`, which now only imports and calls it).
  *
  * ## Gating decision (T114, still in force)
  *
@@ -23,9 +26,9 @@
  * real `DaemonClient` implemented `forkAgent` on no production path, so the
  * gate was the only thing standing between every production render and a
  * guaranteed-failure banner. The fork half has since landed: whenever
- * `host-session-screen.tsx`'s `adaptEditFromHereForkClient` hands this surface
- * a defined `client` (every connected render), the button is enabled and a
- * click forks for real through `useEditFromHere`.
+ * `edit-from-here-fork-client.ts`'s `adaptEditFromHereForkClient` hands this
+ * surface a defined `client` (every connected render), the button is enabled
+ * and a click forks for real through `useEditFromHere`.
  *
  * The gate itself is unchanged: `editFromHereTargets` is handed to `Transcript`
  * only when `client` is present, so `canEditFromHere` (`edit-from-here-

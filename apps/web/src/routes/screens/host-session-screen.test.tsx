@@ -3,14 +3,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanup, render, screen } from "@testing-library/react";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { DaemonClient } from "@picompanion/client";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 afterEach(cleanup);
 
 import { CoreProvider } from "../../app/core-context.js";
 import { routeTree } from "../route-tree.js";
-import { adaptEditFromHereForkClient } from "./host-session-screen.js";
 
 /**
  * Warm the lazy route chunk BEFORE any assertion is timed. See
@@ -90,83 +88,15 @@ describe("HostSessionScreen route wiring (T28B3)", () => {
 });
 
 /**
- * T105: `adaptEditFromHereForkClient` is the one place this route adapts
- * a real `DaemonClient` to `features/transcript`'s narrow
- * `EditFromHereForkClient` — see this file's own module doc for why it
- * is a duck-typed structural check rather than an import from
- * `features/sessions/`. `client: null` (the disconnected case) must resolve
- * to `undefined`, not throw; a client that *does* implement it must be
- * unwrapped correctly. A mutation that skips the `agent.id` unwrap (e.g.
- * returns `agent` itself as `agentId`) fails the second assertion below —
- * see this file's own mutation proof in the task report.
- *
- * CORRECTED (fork-agent-ui): this previously said no real `DaemonClient`
- * implemented `forkAgent` yet, so `null` was "every existing production
- * case". The fork wire has since landed — a real `DaemonClient` now
- * implements `forkAgent`, so the live path below (real class yields a defined
- * fork client) is the production case and `null` is only the disconnected one.
- */
-describe("adaptEditFromHereForkClient (T105)", () => {
-  it("returns undefined for a client without forkAgent (null / fork-less fake)", () => {
-    expect(adaptEditFromHereForkClient(null)).toBeUndefined();
-    expect(adaptEditFromHereForkClient({} as unknown as DaemonClient)).toBeUndefined();
-  });
-
-  it("adapts a client that does implement forkAgent, unwrapping agent.id to agentId", async () => {
-    const forkAgent = vi.fn(async (_agentId: string, _options: unknown) => ({
-      agent: { id: "forked-agent-7" },
-    }));
-    const fakeClient = { forkAgent } as unknown as DaemonClient;
-
-    const adapted = adaptEditFromHereForkClient(fakeClient);
-    expect(adapted).toBeDefined();
-
-    const result = await adapted!.forkAgent("source-session", { entryId: "m1", entryIndex: 0 });
-
-    expect(forkAgent).toHaveBeenCalledTimes(1);
-    expect(forkAgent).toHaveBeenCalledWith("source-session", { entryId: "m1", entryIndex: 0 });
-    expect(result).toEqual({ agentId: "forked-agent-7" });
-  });
-
-  it("returns a defined fork client for a real DaemonClient (live path — the fork wire has landed)", async () => {
-    const realClient = new DaemonClient({
-      url: "ws://127.0.0.1:1/ws",
-      clientId: "clid_host_screen_fork_live_0001",
-      clientType: "browser",
-      reconnect: { enabled: false },
-    });
-    try {
-      expect(typeof realClient.forkAgent).toBe("function");
-      const adapted = adaptEditFromHereForkClient(realClient);
-      expect(adapted).toBeDefined();
-      expect(typeof adapted?.forkAgent).toBe("function");
-    } finally {
-      await realClient.close().catch(() => {});
-    }
-  });
-
-  it("rejects rather than mapping a null-agent resolution (mirrors the wire's failure shape)", async () => {
-    const forkAgent = vi.fn(async (_agentId: string, _options: unknown) => ({
-      agent: null,
-    }));
-    const fakeClient = { forkAgent } as unknown as DaemonClient;
-
-    const adapted = adaptEditFromHereForkClient(fakeClient);
-    expect(adapted).toBeDefined();
-    await expect(
-      adapted!.forkAgent("source-session", { entryId: "m1", entryIndex: 0 }),
-    ).rejects.toThrow("did not return a new session");
-  });
-});
-
-/**
- * fork-agent-ui: the live path above yields a defined client on every connected
- * render, so this route must actually hand that value to `EditFromHereSurface`
- * — otherwise the adapter's defined return would never enable the button.
- * A full render cannot observe this (this route's `client` comes from a real
- * `HostController` nothing here can inject — see the T284 block below for the
- * same instrument), so this pins the wiring line at the source level: deleting
- * `client={editFromHereClient}` from the mount fails this assertion.
+ * fork-agent-ui: `edit-from-here-fork-client.ts`'s `adaptEditFromHereForkClient`
+ * (own tests: `edit-from-here-fork-client.test.ts`) yields a defined client on
+ * every connected render, so this route must actually hand that value to
+ * `EditFromHereSurface` — otherwise the adapter's defined return would never
+ * enable the button. A full render cannot observe this (this route's `client`
+ * comes from a real `HostController` nothing here can inject — see the T284
+ * block below for the same instrument), so this pins the wiring line at the
+ * source level: deleting `client={editFromHereClient}` from the mount fails
+ * this assertion.
  */
 describe("HostSessionScreen edit-from-here live wiring (fork-agent-ui)", () => {
   it("derives editFromHereClient from the live client via adaptEditFromHereForkClient", () => {
@@ -235,8 +165,9 @@ describe("HostSessionScreen session-cost wiring (UI-W11)", () => {
  * that file is outside this task's owned files. The
  * "mounts the edit-from-here transcript surface" test above already
  * proves `EditFromHereSurface` itself renders with no live connection;
- * this only proves the wiring line, the same way `adaptEditFromHereForkClient`
- * above is proven as a pure function rather than through the DOM.
+ * this only proves the wiring line, the same way
+ * `edit-from-here-fork-client.test.ts` proves `adaptEditFromHereForkClient`
+ * as a pure function rather than through the DOM.
  */
 function readHostSessionScreenSource(): string {
   // `import.meta.url` is already a real `file:` URL string here; under
