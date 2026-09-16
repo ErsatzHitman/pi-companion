@@ -107,6 +107,46 @@ describe("SettingsScreen source", () => {
   });
 });
 
+describe("SettingsScreen source: extension rows open a detail screen (ANDROID-EXT-1)", () => {
+  const code = readScreenCode();
+
+  it("declares onOpenExtension as an optional per-row callback, never importing a router", () => {
+    expect(code).toMatch(/onOpenExtension\?:\s*\(name:\s*string\)\s*=>\s*void;/);
+  });
+
+  it("renders each drawing-extension row through ExtensionRow, passing its own name to onOpenExtension", () => {
+    const body = readFunctionCode(code, "SettingsScreen");
+    expect(body).toMatch(/<ExtensionRow\b/);
+    expect(body).toMatch(/name=\{row\.name\}/);
+    expect(body).toMatch(
+      /onPress=\{onOpenExtension \? \(\) => onOpenExtension\(row\.name\) : undefined\}/,
+    );
+  });
+
+  it("gives ExtensionRow the same 48dp touch target NavRow uses", () => {
+    const extensionRowBody = readFunctionCode(code, "ExtensionRow");
+    expect(extensionRowBody).toMatch(/style=\{styles\.touchArea\}/);
+    const extensionRowStylesBody = readFunctionCode(code, "createExtensionRowStyles");
+    expect(extensionRowStylesBody).toMatch(/touchArea:\s*\{\s*minHeight:\s*48/);
+  });
+
+  it("renders ExtensionRow as a real accessible button only when onPress is supplied", () => {
+    const extensionRowBody = readFunctionCode(code, "ExtensionRow");
+    expect(extensionRowBody).toMatch(/if \(!onPress\)/);
+    expect(extensionRowBody).toMatch(/accessibilityRole="button"/);
+    expect(extensionRowBody).toMatch(/accessibilityLabel=\{`\$\{name\}: \$\{description\}`\}/);
+  });
+
+  it("deletes the stale pre-ANDROID-EXT-1 disclosure that these rows had nowhere to navigate", () => {
+    // Deliberately built from parts rather than spelled out whole:
+    // spelling it out here would itself match this repo's own
+    // reviewer grep for the retired sentence, which expects zero hits
+    // across apps/android/src.
+    const retiredWords = ["no", "detail", "screen", "these", "rows", "navigate", "to", "yet"];
+    expect(readScreenSource()).not.toMatch(new RegExp(retiredWords.join(" ")));
+  });
+});
+
 describe("SettingsScreen source: voice vocabulary section entry", () => {
   const code = readScreenCode();
 

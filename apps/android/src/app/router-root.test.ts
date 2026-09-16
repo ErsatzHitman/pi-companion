@@ -123,6 +123,10 @@ describe("Expo Router root contains only real routes (or a named exception)", ()
     // the same "plain path route, not under `(tabs)/`" shape as
     // diagnostics.tsx above (devices is not a tab either).
     "./h/[serverId]/devices.tsx",
+    // ANDROID-EXT-1: the per-extension detail screen the settings
+    // extension rows now navigate to. A plain path route, not under
+    // `(tabs)/`, for the same reason diagnostics and devices are not.
+    "./h/[serverId]/extensions/[name].tsx",
     "./h/[serverId]/session/[agentId]/index.tsx",
     // T350: the Live (A2) screen, at the path frontend-core's own
     // `sessionLive` intent renders. A plain sibling of `index.tsx`, not

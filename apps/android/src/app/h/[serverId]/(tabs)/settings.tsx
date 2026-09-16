@@ -7,6 +7,7 @@ import {
   SettingsScreen,
   pressOpenDevices,
   pressOpenDiagnostics,
+  pressOpenExtension,
   type SettingsHostProfileView,
 } from "../../../../features/settings";
 import { useAppCore } from "../../../core-context";
@@ -41,6 +42,12 @@ import { useAppCore } from "../../../core-context";
  * function ever sees — `SettingsScreen` itself never imports `expo-
  * router` (T301, closing the gap `../../../../features/devices/
  * DevicesScreen.tsx`'s own doc comment named).
+ *
+ * `onOpenExtension` follows the identical shape (ANDROID-EXT-1): each
+ * row press in "Extensions that draw" hands its own extension `name`
+ * here, which goes straight through `pressOpenExtension` to
+ * `/h/:serverId/extensions/:name` — `app/h/[serverId]/extensions/
+ * [name].tsx`.
  *
  * **T366**: this route also feeds A3's host row. It reads the saved
  * profile matching `serverId` from the credential store and passes on
@@ -104,6 +111,7 @@ export default function SettingsRoute() {
       storage={core.keyValueStorage}
       onOpenDevices={() => pressOpenDevices(router, serverId)}
       onOpenDiagnostics={() => pressOpenDiagnostics(router, serverId)}
+      onOpenExtension={(name) => pressOpenExtension(router, serverId, name)}
       hostProfile={hostProfile}
       connectionPhase={phase}
       onClose={canClose ? handleClose : undefined}

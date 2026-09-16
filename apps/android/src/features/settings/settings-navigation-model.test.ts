@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildDevicesHref,
   buildDiagnosticsHref,
+  buildExtensionHref,
   pressOpenDevices,
   pressOpenDiagnostics,
+  pressOpenExtension,
   type SettingsNavRouter,
 } from "./settings-navigation-model.js";
 
@@ -47,8 +49,28 @@ describe("pressOpenDiagnostics", () => {
   });
 });
 
-describe("buildDevicesHref / buildDiagnosticsHref", () => {
+describe("pressOpenExtension", () => {
+  it("navigates the router to this host's extension detail route", () => {
+    const router: SettingsNavRouter = { push: vi.fn() };
+    pressOpenExtension(router, "srv_1", "todo");
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith(buildExtensionHref("srv_1", "todo"));
+    expect(router.push).toHaveBeenCalledWith("/h/srv_1/extensions/todo");
+  });
+
+  it("percent-encodes both serverId and name the same way frontend-core's own path builder does", () => {
+    const router: SettingsNavRouter = { push: vi.fn() };
+    pressOpenExtension(router, "srv one/two", "pi-herdr-delegate");
+    expect(router.push).toHaveBeenCalledWith(
+      `/h/${encodeURIComponent("srv one/two")}/extensions/pi-herdr-delegate`,
+    );
+  });
+});
+
+describe("buildDevicesHref / buildDiagnosticsHref / buildExtensionHref", () => {
   it("never produce the same path for the same serverId", () => {
     expect(buildDevicesHref("srv_1")).not.toBe(buildDiagnosticsHref("srv_1"));
+    expect(buildDevicesHref("srv_1")).not.toBe(buildExtensionHref("srv_1", "todo"));
+    expect(buildDiagnosticsHref("srv_1")).not.toBe(buildExtensionHref("srv_1", "todo"));
   });
 });

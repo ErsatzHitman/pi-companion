@@ -58,6 +58,13 @@ describe("SettingsRoute source", () => {
     );
   });
 
+  it("wires onOpenExtension through the real router and the shared navigation model (ANDROID-EXT-1)", () => {
+    expect(readCode()).toMatch(/pressOpenExtension,?/);
+    expect(readCode()).toMatch(
+      /onOpenExtension=\{\(name\)\s*=>\s*pressOpenExtension\(router,\s*serverId,\s*name\)\}/,
+    );
+  });
+
   it("never builds a devices/diagnostics href by hand — both go through the shared model", () => {
     // Guards against a regression that inlines a template-string href
     // (e.g. `/h/${serverId}/devices`) directly in this route file

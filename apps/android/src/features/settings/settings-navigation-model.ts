@@ -44,6 +44,18 @@ export function buildDiagnosticsHref(serverId: string): string {
   return `/h/${encodeSegment(serverId)}/diagnostics`;
 }
 
+/**
+ * The path `app/h/[serverId]/extensions/[name].tsx` is mounted at
+ * (ANDROID-EXT-1). Like `serverId`, `name` is percent-encoded before it
+ * reaches the URL — an extension namespace such as `pi-herdr-delegate`
+ * is already URL-safe, but nothing here should depend on that staying
+ * true of every future entry in `settings-extension-coverage.ts`'s
+ * `DRAWING_EXTENSIONS`.
+ */
+export function buildExtensionHref(serverId: string, name: string): string {
+  return `/h/${encodeSegment(serverId)}/extensions/${encodeSegment(name)}`;
+}
+
 /** Navigates to this host's trusted-devices screen. */
 export function pressOpenDevices(router: SettingsNavRouter, serverId: string): void {
   router.push(buildDevicesHref(serverId));
@@ -52,4 +64,13 @@ export function pressOpenDevices(router: SettingsNavRouter, serverId: string): v
 /** Navigates to this host's diagnostics screen. */
 export function pressOpenDiagnostics(router: SettingsNavRouter, serverId: string): void {
   router.push(buildDiagnosticsHref(serverId));
+}
+
+/** Navigates to one extension's static detail screen (ANDROID-EXT-1). */
+export function pressOpenExtension(
+  router: SettingsNavRouter,
+  serverId: string,
+  name: string,
+): void {
+  router.push(buildExtensionHref(serverId, name));
 }

@@ -45,6 +45,17 @@ export interface SettingsScreenProps {
   /** Same convention as `onOpenDevices`, for `/h/:serverId/diagnostics` (T301), wired from `settings-navigation-model.ts`'s `pressOpenDiagnostics`. */
   onOpenDiagnostics?: () => void;
   /**
+   * Opens one extension's static detail screen (ANDROID-EXT-1), given
+   * its `name`. Same omit-when-absent convention as `onOpenDevices`/
+   * `onOpenDiagnostics` above, wired from `(tabs)/settings.tsx` through
+   * `settings-navigation-model.ts`'s `pressOpenExtension`. Unlike those
+   * two this is per-row rather than per-section: each row in "Extensions
+   * that draw" below calls it with its own `row.name`, so a caller
+   * without a router still gets a rendered (if unpressable-looking) list
+   * rather than losing the whole section.
+   */
+  onOpenExtension?: (name: string) => void;
+  /**
    * The saved profile this screen's host row describes (T366), or
    * `null` while none is loaded. The caller reads it — this component
    * touches no credential store, and takes the four non-secret fields
@@ -126,6 +137,7 @@ export function SettingsScreen({
   storage,
   onOpenDevices,
   onOpenDiagnostics,
+  onOpenExtension,
   hostProfile = null,
   connectionPhase = "idle",
   onClose,
@@ -211,8 +223,11 @@ export function SettingsScreen({
       {/*
         UI-A5: the two informational A3 regions the module doc's
         "other two ... are informational" paragraph describes — static,
-        honest copy from `./settings-extension-coverage.ts`, never a
-        Pressable (there is no detail screen these rows navigate to yet).
+        honest copy from `./settings-extension-coverage.ts`. Each row in
+        "Extensions that draw" is a Pressable (ANDROID-EXT-1) opening
+        that extension's own static detail screen via onOpenExtension;
+        "Loaded but silent" stays a plain card, since none of its
+        namespaces has a detail screen to open.
       */}
       <Section
         title="Extensions that draw"
@@ -222,13 +237,12 @@ export function SettingsScreen({
         <Card style={styles.navCard}>
           {DRAWING_EXTENSIONS.map((row, index) => (
             <View key={row.name}>
-              <View
-                style={styles.extensionRow}
-                testID={testId ? `${testId}-extension-${row.name}` : undefined}
-              >
-                <Text style={styles.extensionName}>{row.name}</Text>
-                <Text style={styles.extensionDescription}>{row.description}</Text>
-              </View>
+              <ExtensionRow
+                name={row.name}
+                description={row.description}
+                onPress={onOpenExtension ? () => onOpenExtension(row.name) : undefined}
+                testId={testId ? `${testId}-extension-${row.name}` : undefined}
+              />
               {index < DRAWING_EXTENSIONS.length - 1 ? <Divider /> : null}
             </View>
           ))}
@@ -321,6 +335,71 @@ function NavRow({
   );
 }
 
+/**
+ * One row of "Extensions that draw" (ANDROID-EXT-1): the same 48dp
+ * `Pressable`/`usePressScale` shape `NavRow` above uses, applied to a
+ * name-then-description stack instead of a single label. Opens
+ * `ExtensionDetailScreen.tsx` for `name` via `onPress` when the caller
+ * supplies `onOpenExtension`; when it does not (the same
+ * omit-affordance-when-absent convention `onOpenDevices`/
+ * `onOpenDiagnostics` use), the row still renders its copy but carries
+ * no `Pressable`, no chevron, and no button role — never an unpressable
+ * button pretending it works.
+ */
+function ExtensionRow({
+  name,
+  description,
+  onPress,
+  testId,
+}: {
+  name: string;
+  description: string;
+  onPress?: () => void;
+  testId?: string;
+}) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createExtensionRowStyles(theme), [theme]);
+  const { style: pressStyle, onPressIn, onPressOut } = usePressScale();
+
+  const content = (
+    <View style={styles.textGroup}>
+      <Text style={styles.name}>{name}</Text>
+      <Text style={styles.description}>{description}</Text>
+    </View>
+  );
+
+  if (!onPress) {
+    return (
+      <View style={styles.touchArea} testID={testId}>
+        <View style={styles.row}>{content}</View>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${name}: ${description}`}
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      testID={testId}
+      style={styles.touchArea}
+    >
+      <Animated.View style={[styles.row, pressStyle]}>
+        {content}
+        <Text
+          style={styles.chevron}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          {"›"}
+        </Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: theme.colors.canvas },
@@ -339,22 +418,6 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontSize: theme.typography.variant.caption.fontSize,
     },
     navCard: { padding: 0, overflow: "hidden" },
-    // UI-A5: the extensions-that-draw row, mirroring the mockup's
-    // `.row .n`/`.s` name-then-description stack via theme tokens.
-    extensionRow: {
-      paddingHorizontal: theme.spacing[4],
-      paddingVertical: theme.spacing[3],
-      gap: 2,
-    },
-    extensionName: {
-      color: theme.colors.ink,
-      fontSize: theme.typography.variant.body.fontSize,
-      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
-    },
-    extensionDescription: {
-      color: theme.colors["ink-3"],
-      fontSize: theme.typography.variant.caption.fontSize,
-    },
     // UI-A5: the "Loaded but silent" card's paragraph, mirroring the
     // mockup's `.card p`.
     silentSummary: {
@@ -384,6 +447,36 @@ function createNavRowStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       color: theme.colors.ink,
       fontSize: theme.typography.variant.body.fontSize,
       fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
+    },
+    chevron: {
+      color: theme.colors["ink-3"],
+      fontSize: theme.typography.variant.heading.fontSize,
+    },
+  });
+}
+
+function createExtensionRowStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+  return StyleSheet.create({
+    touchArea: { minHeight: 48, justifyContent: "center" },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: theme.spacing[4],
+      paddingVertical: theme.spacing[3],
+    },
+    // UI-A5: the extensions-that-draw row's name-then-description
+    // stack, mirroring the mockup's `.row .n`/`.s` shape via theme
+    // tokens.
+    textGroup: { flex: 1, gap: 2 },
+    name: {
+      color: theme.colors.ink,
+      fontSize: theme.typography.variant.body.fontSize,
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+    },
+    description: {
+      color: theme.colors["ink-3"],
+      fontSize: theme.typography.variant.caption.fontSize,
     },
     chevron: {
       color: theme.colors["ink-3"],
