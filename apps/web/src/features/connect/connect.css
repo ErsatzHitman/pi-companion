@@ -61,3 +61,117 @@
 .connect-form > .pc-button {
   align-self: flex-start;
 }
+
+/* Beautiful UI motion (UI-X13) ------------------------------------------
+ *
+ * Beautiful UI's own connect-shaped screens open with `fade-up`
+ * (`opacity 0 -> 1`, `translateY(8px) -> 0`) on the section and `pop-in`
+ * on anything that appears afterwards. Both curves are already this
+ * repository's tokens -- `packages/design-tokens/src/tokens.ts` names
+ * `cubic-bezier(.23,1,.32,1)` "Beautiful UI's signature easing" and
+ * publishes the 100/150/200/300/400/600ms duration ladder -- so this ports
+ * the treatment, not a stylesheet.
+ *
+ * Note for anyone porting more of that library: its `package.json` lists
+ * `motion` (Framer Motion) but NOTHING imports it. Every animation there
+ * is plain CSS, which is why this needs no new dependency and costs the
+ * web bundle nothing.
+ *
+ * Press feedback is deliberately NOT redefined here: `primitives.css`
+ * already applies Beautiful UI's `active:scale-[0.96]` to `.pc-button`,
+ * `.pc-toggle` and friends globally, matching `motion.pressScale`.
+ *
+ * Reduced motion needs no media query of its own: the token layer already
+ * collapses every `--motion-duration-*` to ~1ms under
+ * `prefers-reduced-motion: reduce` (see `web.ts`'s reduced-motion block),
+ * so these animations become instant rather than being special-cased.
+ */
+
+.connect-card {
+  animation: pc-connect-fade-up var(--motion-duration-slower) var(--motion-easing-standard) both;
+}
+
+@keyframes pc-connect-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Beautiful UI staggers a form's rows in rather than flashing the whole
+ * card at once. The delays are small multiples of the token ladder's
+ * `fast` step; they are delays, not durations, so reduced motion (which
+ * collapses durations) is handled by suppressing them here.
+ */
+.connect-form > *,
+.connect-offer > * {
+  animation: pc-connect-fade-up var(--motion-duration-slow) var(--motion-easing-standard) both;
+}
+
+.connect-form > *:nth-child(1) {
+  animation-delay: 40ms;
+}
+.connect-form > *:nth-child(2) {
+  animation-delay: 80ms;
+}
+.connect-form > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+.connect-form > *:nth-child(4) {
+  animation-delay: 160ms;
+}
+.connect-form > *:nth-child(5) {
+  animation-delay: 200ms;
+}
+
+/*
+ * `:nth-child(n)` matches every child, and exists here only to raise this
+ * rule's specificity to (0,2,0) so it can actually beat the staggered
+ * `:nth-child(1..5)` rules above. A media query adds no specificity of its
+ * own, so the obvious `.connect-form > *` form silently lost to them and
+ * left the delays in place under reduced motion -- measured, not assumed:
+ * `getAnimations()` still reported `delay=40..200` with the plain selector.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .connect-form > *:nth-child(n),
+  .connect-offer > *:nth-child(n) {
+    animation-delay: 0ms;
+  }
+}
+
+/*
+ * The status banner appears after a submit, so it gets `pop-in` -- the
+ * same treatment `composer.css` already uses for content that arrives
+ * mid-interaction, at the same 200ms/signature-easing pairing.
+ */
+.connect-form .pc-banner,
+.connect-offer .pc-banner {
+  animation: pc-connect-pop-in var(--motion-duration-moderate) var(--motion-easing-standard) both;
+}
+
+@keyframes pc-connect-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/*
+ * Beautiful UI's `Switch` runs its knob at 200ms; `.pc-toggle`'s shared
+ * default is the 100ms `fast` step. Nudged to the library's timing on this
+ * screen only, per the owner's "for now just transform connect page" --
+ * the primitive's own default is untouched for every other caller.
+ */
+.connect-form .pc-toggle,
+.connect-form .pc-toggle__knob {
+  transition-duration: var(--motion-duration-moderate);
+}
