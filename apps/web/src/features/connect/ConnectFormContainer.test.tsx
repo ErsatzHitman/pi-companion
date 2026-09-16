@@ -1,5 +1,12 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ConnectionState } from "@picompanion/client";
@@ -10,7 +17,10 @@ import { ConnectFormContainer } from "./ConnectFormContainer.js";
 import { createApplyConnectionOfferAttempt } from "./apply-connection-offer.js";
 import type { CreateApplyConnectionOfferOptions } from "./apply-connection-offer.js";
 import { createConnectAndAuthenticateAttempt } from "./authenticate-host.js";
-import type { CreateConnectAndAuthenticateOptions } from "./authenticate-host.js";
+import type {
+  ConnectAndAuthenticateAttempt,
+  CreateConnectAndAuthenticateOptions,
+} from "./authenticate-host.js";
 
 afterEach(cleanup);
 
@@ -224,6 +234,64 @@ describe("ConnectFormContainer daemon-injected bootstrap (T27A5)", () => {
     expect(addressField.value).toBe("");
     await user.type(addressField, "user-typed-host:1234");
     expect(addressField.value).toBe("user-typed-host:1234");
+  });
+
+  it("navigates to the bootstrapped host's session list once the bootstrap attempt succeeds (CONNECT-1)", async () => {
+    // Before this, `runBootstrapAttempt` set `bootstrapPhase = "success"`
+    // and never read `outcome.savedProfileId`, so a bootstrapped connection
+    // stopped at "Connected to <host>." with no way onward except the
+    // unrelated "Connect to a different daemon" escape hatch. Wired the
+    // same way the manual path already was (UI-X14).
+    //
+    // `createAttempt` is overridden with a canned success outcome rather
+    // than the real `createConnectAndAuthenticateAttempt` wiring, because a
+    // real `ok: true` outcome reaches `hosts.HostProfileStore.save()`,
+    // which needs real IndexedDB (unavailable under jsdom) — the same
+    // reason `FakeRejectingDaemonClient`'s doc comment above gives for
+    // never exercising a real success outcome through this container.
+    const createAttempt =
+      (_options: CreateConnectAndAuthenticateOptions): ConnectAndAuthenticateAttempt =>
+      async () => ({
+        ok: true,
+        reachable: true,
+        authenticated: true,
+        savedProfileId: "bootstrap-profile-1",
+        error: null,
+      });
+    const readBootstrap = () => ({
+      label: "my-mac",
+      direct: { endpoint: "daemon.example.test:6767", useTls: false },
+      preferDirect: true as const,
+    });
+
+    const rootRoute = createRootRoute();
+    const connectRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/connect",
+      component: () => (
+        <CoreProvider>
+          <ConnectFormContainer createAttempt={createAttempt} readBootstrap={readBootstrap} />
+        </CoreProvider>
+      ),
+    });
+    const sessionsRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/h/$serverId/sessions",
+      component: () => {
+        const { serverId } = sessionsRoute.useParams();
+        return <div data-testid="landed-sessions-list">{serverId}</div>;
+      },
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([connectRoute, sessionsRoute]),
+      history: createMemoryHistory({ initialEntries: ["/connect"] }),
+    });
+
+    render(<RouterProvider router={router} />);
+
+    const landed = await screen.findByTestId("landed-sessions-list");
+    expect(landed.textContent).toBe("bootstrap-profile-1");
+    expect(router.state.location.pathname).toBe("/h/bootstrap-profile-1/sessions");
   });
 });
 

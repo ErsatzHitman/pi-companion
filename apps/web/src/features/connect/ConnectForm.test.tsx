@@ -365,6 +365,25 @@ describe("ConnectForm pairing-link offers (T27A3)", () => {
     expect((screen.getByLabelText("Host label") as HTMLInputElement).value).toBe("relay.paseo.sh");
   });
 
+  it("hands the saved profile id up on a successful pair, same as the direct-connect path (CONNECT-1)", async () => {
+    // Before this, `handleSubmit`'s success branch called `onConnected` but
+    // `applyOfferValue`'s did not, so pairing via a link left the user
+    // stranded on this screen even though `ConnectFormContainer` was ready
+    // to navigate them on.
+    const user = userEvent.setup();
+    const onApplyOffer = vi.fn().mockResolvedValue(offerSuccess);
+    const onConnected = vi.fn();
+    render(
+      <ConnectForm onAttempt={vi.fn()} onApplyOffer={onApplyOffer} onConnected={onConnected} />,
+    );
+
+    await user.type(screen.getByLabelText("Pairing link"), "https://app.paseo.sh/#offer=abc");
+    await user.click(screen.getByRole("button", { name: "Pair" }));
+
+    await screen.findByRole("status");
+    expect(onConnected).toHaveBeenCalledWith("offer-profile-1");
+  });
+
   it("rejects a malformed offer with a distinct, visible error and no host-label change", async () => {
     const user = userEvent.setup();
     const onApplyOffer = vi.fn().mockResolvedValue(offerMalformed);

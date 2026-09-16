@@ -129,6 +129,22 @@ export function ConnectFormContainer({
         if (outcome.ok) {
           setBootstrapPhase("success");
           setBootstrapMessage(`Connected to ${bootstrapDraft.label}.`);
+          /*
+           * CONNECT-1: the manual path (`ConnectForm`'s `onConnected`,
+           * wired below) already lands the user on the host's session
+           * list; a bootstrapped connection reached the identical
+           * post-connect state (`hosts.HostProfileStore`-persisted
+           * profile, `savedProfileId` set) but never read it, so it stayed
+           * on this screen's "Connected to <host>." banner with no next
+           * step. `outcome.savedProfileId` is `string | null` even on the
+           * `ok` branch, so the guard is real, not defensive.
+           */
+          if (outcome.savedProfileId !== null) {
+            void navigate({
+              to: "/h/$serverId/sessions",
+              params: { serverId: outcome.savedProfileId },
+            });
+          }
         } else {
           setBootstrapPhase("error");
           setBootstrapMessage(outcome.error ?? `Could not connect to ${bootstrapDraft.label}.`);
@@ -142,7 +158,7 @@ export function ConnectFormContainer({
         );
       },
     );
-  }, [attempt, bootstrapDraft]);
+  }, [attempt, bootstrapDraft, navigate]);
 
   const bootstrapStarted = useRef(false);
   useEffect(() => {

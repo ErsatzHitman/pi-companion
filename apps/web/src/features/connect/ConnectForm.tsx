@@ -181,6 +181,18 @@ export function ConnectForm({ onAttempt, onApplyOffer, onForget, onConnected }: 
         setOfferMessage(outcome.label ? `Paired with ${outcome.label}.` : "Paired successfully.");
         setOfferProfileId(outcome.savedProfileId);
         if (outcome.label) setLabel(outcome.label);
+        /*
+         * Mirrors `handleSubmit`'s identical guard (UI-X14/CONNECT-1): this
+         * path is reached both by "Pair" and by `QrCaptureSheet`'s
+         * `onScanned` -> `handleScannedOffer`, so routing the user on to the
+         * paired host has to live here, not in either caller.
+         * `outcome.savedProfileId` is `string | null` even on the `ok`
+         * branch (see `ApplyConnectionOfferOutcome`'s own doc comment), so
+         * the guard is real rather than defensive.
+         */
+        if (outcome.savedProfileId !== null) {
+          onConnected?.(outcome.savedProfileId);
+        }
       } else if (outcome.kind === "malformed") {
         setOfferPhase("malformed");
         setOfferMessage(outcome.error ?? "This pairing link isn't valid.");

@@ -88,7 +88,7 @@
  */
 
 .connect-card {
-  animation: pc-connect-fade-up var(--motion-duration-slower) var(--motion-easing-standard) both;
+  animation: pc-connect-fade-up var(--motion-duration-entrance) var(--motion-easing-standard) both;
 }
 
 @keyframes pc-connect-fade-up {
