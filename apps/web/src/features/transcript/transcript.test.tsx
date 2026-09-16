@@ -810,6 +810,149 @@ describe("Transcript virtualization (T28A6)", () => {
   });
 });
 
+/**
+ * WEB-TRANSCRIPT-TEST-1: the turn-entrance stagger (`transcript.tsx`'s
+ * `enteredRowWatermarkRef` and `enteringStaggerBase`, `transcript.css`'s
+ * `pc-transcript-row-fade-up` keyframe / `[data-entering="true"]` rule).
+ * Nothing in this file exercised this before — a real defect sat here
+ * invisible to every other test: keying the stagger delay to a row's
+ * *absolute* transcript index (rather than its position within the batch
+ * that is entering right now) left every turn past the seventh sitting at
+ * `opacity: 0` for a flat 720ms, held there by `animation-fill-mode: both`,
+ * any time a single new turn arrived into an already-long transcript.
+ *
+ * Each row wrapper carries `data-index` always, `data-entering="true"` only
+ * while entering (omitted entirely otherwise — never `"false"`), and an
+ * inline `animationDelay` style only while entering. `enteringInfo` reads
+ * all three off the live DOM rather than re-deriving them, so these tests
+ * assert what actually rendered, not what the component intended to render.
+ */
+describe("Transcript turn-entrance stagger watermark (SHELL-1)", () => {
+  function enteringInfo(
+    container: HTMLElement,
+  ): Array<{ index: number; entering: string | null; delay: string }> {
+    return Array.from(container.querySelectorAll<HTMLElement>("[data-index]")).map((el) => ({
+      index: Number(el.getAttribute("data-index")),
+      entering: el.getAttribute("data-entering"),
+      delay: el.style.animationDelay,
+    }));
+  }
+
+  it("staggers a first-load batch 0/120/240ms per row position, clamped at the 720ms ceiling", () => {
+    // 8 rows: enough to reach the `Math.min(..., 720)` clamp (720ms is hit
+    // at row 6, so row 7 proves the clamp holds rather than continuing to
+    // 840ms). Breaks if the 120ms step, the 720ms ceiling, or the initial
+    // watermark (`enteredRowWatermarkRef`'s `-1` seed, which is what makes
+    // every row in a fresh mount count as "entering") changes.
+    const entries = manyMessageEntries(8);
+    const { container } = render(<Transcript entries={entries} testId="transcript" />);
+    const rows = enteringInfo(container);
+    expect(rows).toHaveLength(8);
+    expect(rows.every((r) => r.entering === "true")).toBe(true);
+    expect(rows.map((r) => r.delay)).toEqual([
+      "0ms",
+      "120ms",
+      "240ms",
+      "360ms",
+      "480ms",
+      "600ms",
+      "720ms",
+      "720ms",
+    ]);
+  });
+
+  it("enters a single new turn arriving into an already-populated transcript at 0ms — not at its absolute index times 120ms (the flat-720ms-past-the-seventh-row regression)", () => {
+    // This is the important test. 20 rows already committed puts the new
+    // row's absolute index at 20, well past the point (index 6) where an
+    // absolute-index stagger would already be clamped to the 720ms
+    // ceiling: `Math.min(20 * 120, 720)` is 720ms, so a version that keys
+    // the delay to `virtualRow.index` instead of
+    // `virtualRow.index - enteringStaggerBase` fails this assertion
+    // concretely (expects "0ms", gets "720ms") rather than merely
+    // differing in degree.
+    const initial = manyMessageEntries(20);
+    const { container, rerender } = render(<Transcript entries={initial} testId="transcript" />);
+    expect(enteringInfo(container).every((r) => r.entering === "true")).toBe(true);
+
+    const newTurn = row({
+      kind: "assistant-message",
+      id: "new-turn",
+      seqStart: 21,
+      seqEnd: 21,
+      text: "the 21st turn",
+      corrected: false,
+    });
+    rerender(<Transcript entries={[...initial, newTurn]} testId="transcript" />);
+
+    const rows = enteringInfo(container);
+    expect(rows).toHaveLength(21);
+    const previouslySeenRows = rows.slice(0, 20);
+    // Test 3 (already-seen rows carry no data-entering attribute) is
+    // exercised here as part of the same scenario: the 20 rows committed
+    // on the prior render must not replay the entrance just because a
+    // sibling row was added.
+    expect(previouslySeenRows.every((r) => r.entering === null)).toBe(true);
+    expect(previouslySeenRows.every((r) => r.delay === "")).toBe(true);
+
+    const newRow = rows[20];
+    expect(newRow?.entering).toBe("true");
+    expect(newRow?.delay).toBe("0ms");
+  });
+
+  it("does not resurrect the entrance on a later re-render that adds no rows", () => {
+    // Breaks if a row's entering state is recomputed from anything that
+    // changes on an ordinary re-render — every row would replay
+    // `data-entering="true"` forever, which is the failure this case
+    // exists to catch.
+    //
+    // WHY THIS IS NOT "rerender with the identical entries, expect the
+    // attribute to clear". That was this test's first form, and it is not
+    // satisfiable at the same time as the batch-stagger case above.
+    // Mounting the transcript produces SEVERAL commits, not one: the
+    // tail-anchor layout effect calls `scrollToIndex` and
+    // `measureElement` reports each row's real height, and each schedules
+    // another render. React exposes no signal telling those internal
+    // re-renders apart from a caller's own, so a mechanism that clears
+    // the attribute on a no-change re-render necessarily also clears it
+    // during the mount, before any frame is painted — which is exactly
+    // the defect that left this feature inert on `main` while every grep
+    // for it still passed. `transcript.tsx`'s `enteringFromRowRef` doc
+    // comment records the measurement in full.
+    //
+    // The invariant that actually matters survives intact, and is what
+    // this case now asserts: once a batch boundary has passed, the rows
+    // below it stay done, and no amount of further rendering brings
+    // their entrance back.
+    const entries = manyMessageEntries(5);
+    const { container, rerender } = render(<Transcript entries={entries} testId="transcript" />);
+    expect(enteringInfo(container).every((r) => r.entering === "true")).toBe(true);
+
+    const sixth = row({
+      kind: "assistant-message",
+      id: "sixth",
+      seqStart: 6,
+      seqEnd: 6,
+      text: "the sixth turn",
+      corrected: false,
+    });
+    rerender(<Transcript entries={[...entries, sixth]} testId="transcript" />);
+    expect(
+      enteringInfo(container)
+        .slice(0, 5)
+        .every((r) => r.entering === null),
+    ).toBe(true);
+
+    // Two further renders that add nothing must leave those five alone.
+    rerender(<Transcript entries={[...entries, sixth]} testId="transcript" />);
+    rerender(<Transcript entries={[...entries, sixth]} testId="transcript" />);
+    const rows = enteringInfo(container);
+    expect(rows).toHaveLength(6);
+    const previouslySeen = rows.slice(0, 5);
+    expect(previouslySeen.every((r) => r.entering === null)).toBe(true);
+    expect(previouslySeen.every((r) => r.delay === "")).toBe(true);
+  });
+});
+
 describe("Transcript edit-from-here wiring (T105)", () => {
   const entries: timeline.TranscriptEntry[] = [
     row({ kind: "user-message", id: "u1", seqStart: 1, seqEnd: 1, text: "please add a test" }),

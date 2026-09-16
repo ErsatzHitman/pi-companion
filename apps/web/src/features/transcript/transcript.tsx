@@ -541,17 +541,40 @@ export function Transcript({
    * current — not yet meaningful — scroll geometry. */
   const hasAnchoredTailRef = useRef(false);
   /**
-   * SHELL-1: the highest virtualized row index committed to the DOM so
-   * far. A row above this watermark is rendering for the first time and
-   * gets the mockup's `.fade` turn-entrance treatment
-   * (`data-entering="true"`, below); a row at or below it has been seen
-   * before and must not replay the animation just because the user
-   * scrolled it back into the mounted window. This is a plain `number`,
-   * not a `Set` of every index ever seen, because the transcript only
-   * ever grows: any row whose index is at or below the highest index
-   * already committed was necessarily mounted at some earlier commit.
+   * SHELL-1: the boundary between rows the reader has already seen and
+   * rows arriving now. A row at or above it is rendering for the first
+   * time and gets the mockup's `.fade` turn-entrance treatment
+   * (`data-entering="true"`, below); a row below it has been seen before
+   * and must not replay the animation just because the user scrolled it
+   * back into the mounted window, or because the virtualizer re-rendered.
+   *
+   * These are plain counts rather than a `Set` of every index ever seen,
+   * because the transcript only ever grows: any index below the count as
+   * it stood before this batch was necessarily rendered earlier.
+   *
+   * WHY A COUNT AND NOT A COMMITTED-ROW WATERMARK. This was a watermark
+   * of the highest index committed to the DOM, advanced from an effect
+   * over `rowVirtualizer.getVirtualItems()`, and the feature was inert
+   * on `main` for it: mounting the transcript never produces one commit.
+   * The tail-anchor layout effect below calls `scrollToIndex`, and
+   * `measureElement` reports every row's real height, and each schedules
+   * another render. React flushes effects between those commits — for
+   * layout and passive effects alike — so the watermark had already
+   * reached the last row before the final render ran. That render
+   * recomputed `isEntering` as `false` for every row, React erased the
+   * `data-entering` attribute and the `animationDelay` an earlier commit
+   * had written, and none of it ever survived to a painted frame. No
+   * effect schedule fixes that, because React exposes no signal
+   * separating the virtualizer's own re-renders from a real one.
+   *
+   * The row COUNT does separate them: it is identical across every
+   * commit belonging to one arrival, and changes exactly when there is
+   * something new to animate. So every commit of one arrival agrees on
+   * which rows are entering, and the next arrival measures its stagger
+   * from where this one ended.
    */
-  const enteredRowWatermarkRef = useRef(-1);
+  const enteringFromRowRef = useRef(0);
+  const enteredRowCountRef = useRef(-1);
 
   const overscan =
     items.length <= FULL_RENDER_THRESHOLD ? Math.max(items.length, 1) : BOUNDED_OVERSCAN;
@@ -599,22 +622,20 @@ export function Transcript({
   }, [lastIndex, tailEntry, rowVirtualizer]);
 
   /**
-   * Advances `enteredRowWatermarkRef` to the highest row index actually
-   * committed to the DOM this pass. Runs after every commit (no
-   * dependency array) so a newly mounted row is only ever entering on
-   * the one commit that first mounts it: the JSX below reads the
-   * watermark's value as it stood BEFORE this effect runs (i.e. as of
-   * the previous commit), and this effect only bumps the ref — it never
-   * schedules a re-render — so the already-painted DOM for this commit
-   * keeps whatever `data-entering` value it was given.
+   * Opens a new entrance batch the moment the row count changes, and
+   * never otherwise. `enteringFromRowRef` becomes the count as it stood
+   * for the PREVIOUS batch, so every row at or above it is new and every
+   * row below it has been seen. Assigning during render rather than from
+   * an effect is deliberate and is the whole fix described on
+   * `enteringFromRowRef` above: an effect cannot run late enough to
+   * survive the virtualizer's own re-renders, and this assignment is
+   * idempotent — running it twice for the same count changes nothing,
+   * so a StrictMode double-render produces the same answer.
    */
-  useLayoutEffect(() => {
-    for (const virtualRow of rowVirtualizer.getVirtualItems()) {
-      if (virtualRow.index > enteredRowWatermarkRef.current) {
-        enteredRowWatermarkRef.current = virtualRow.index;
-      }
-    }
-  });
+  if (items.length !== enteredRowCountRef.current) {
+    enteringFromRowRef.current = enteredRowCountRef.current < 0 ? 0 : enteredRowCountRef.current;
+    enteredRowCountRef.current = items.length;
+  }
 
   if (renderable.length === 0) {
     return (
@@ -628,8 +649,8 @@ export function Transcript({
 
   const virtualItems = rowVirtualizer.getVirtualItems();
   /**
-   * The watermark as it stands BEFORE this commit's layout effect bumps it,
-   * captured once so every row in this pass staggers against the same base.
+   * The first row index of the batch entering right now, so every row in
+   * this pass staggers against the same base.
    * The stagger is the entering row's position within THIS batch, not its
    * absolute transcript index: `Math.min(i * 120, 720)` in the mockup counts
    * the elements fading in together, and keying it to the absolute index
@@ -637,7 +658,7 @@ export function Transcript({
    * single new turn arriving in a long session would hang invisible for the
    * better part of a second before appearing.
    */
-  const enteringStaggerBase = enteredRowWatermarkRef.current + 1;
+  const enteringStaggerBase = enteringFromRowRef.current;
 
   return (
     <div
@@ -655,9 +676,9 @@ export function Transcript({
           }
           const rendersBody = item.group === null || !item.isGroupHead || !item.groupCollapsed;
           // Mockup's `.fade`, staggered `Math.min(i*120, 720)ms` — only for
-          // a row above the watermark (see `enteredRowWatermarkRef`'s doc
+          // a row in the batch entering now (see `enteringFromRowRef`'s doc
           // comment); a row seen before never replays the entrance.
-          const isEntering = virtualRow.index > enteredRowWatermarkRef.current;
+          const isEntering = virtualRow.index >= enteringFromRowRef.current;
           return (
             <div
               key={virtualRow.key}
