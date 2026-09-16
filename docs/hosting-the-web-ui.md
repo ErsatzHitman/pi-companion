@@ -17,12 +17,12 @@ hostname from ngrok.
 
 ## The pieces
 
-| Piece | Where | Notes |
-| --- | --- | --- |
+| Piece  | Where                                                    | Notes                                          |
+| ------ | -------------------------------------------------------- | ---------------------------------------------- |
 | Web UI | GitHub Pages, repo `ErsatzHitman/ErsatzHitman.github.io` | Free, always up, root path so no `base` change |
-| Daemon | Mint box, `127.0.0.1:6767` | Never listens publicly |
-| Tunnel | ngrok → `likewise-swore-crabgrass.ngrok-free.dev` | `ngrok-paseo` user service, restarts on boot |
-| Auth | bcrypt password at `daemon.auth.password` | Enforced on REST *and* WebSocket |
+| Daemon | Mint box, `127.0.0.1:6767`                               | Never listens publicly                         |
+| Tunnel | ngrok → `likewise-swore-crabgrass.ngrok-free.dev`        | `ngrok-paseo` user service, restarts on boot   |
+| Auth   | bcrypt password at `daemon.auth.password`                | Enforced on REST _and_ WebSocket               |
 
 ## Connecting
 
