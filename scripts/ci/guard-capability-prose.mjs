@@ -2839,6 +2839,48 @@ export const CAPABILITIES = [
       /(?:the )?session rail and (?:the )?(?:live|extension) (?:pane|rail) (?:have|has) no (?:manual )?(?:collapse|hide) (?:toggle|control)/i,
     ],
   },
+  {
+    // ANDROID-EXT-1: the per-extension detail screen the Android settings
+    // extension rows navigate to, mounted at
+    // `apps/android/src/app/h/[serverId]/extensions/[name].tsx` and
+    // registered in `router-root.test.ts`'s `REAL_ROUTES`. Before it, an
+    // extension row in Settings was terminal — it named a capability and
+    // offered nowhere to go. `ExtensionDetailScreen` is declared in exactly
+    // one shipped file (measured, not assumed), so a plain bare-string
+    // `methodNames` entry is sufficient; no T168 AND-group is needed.
+    name: "per-extension detail screen on Android (ExtensionDetailScreen)",
+    methodNames: ["ExtensionDetailScreen"],
+    denyingPhrases: [
+      /(?:there is |we have )?no (?:per-)?extension detail screen/i,
+      /extension rows? (?:are|is) terminal/i,
+      /nothing to navigate to for an individual extension/i,
+    ],
+  },
+  {
+    // WEB-ARCH-1: the session transcript's data layer, lifted out of
+    // `host-session-screen.tsx` into its own hook so the screen file no
+    // longer owns subscription, catch-up and entry assembly.
+    // `useSessionTranscriptEntries` is declared in exactly one shipped file.
+    name: "transcript data layer as its own hook (useSessionTranscriptEntries)",
+    methodNames: ["useSessionTranscriptEntries"],
+    denyingPhrases: [
+      /transcript'?s? data layer lives (?:inside|in) the screen (?:file|component)/i,
+      /no (?:dedicated )?hook owns the transcript(?:'s)? entries/i,
+      /the screen file still assembles (?:the )?transcript entries itself/i,
+    ],
+  },
+  {
+    // WEB-SETTINGS-1: one agent-fetch hook for the host settings screen,
+    // replacing the redundant pair that fetched the same list twice.
+    // `useAgentPicker` is declared in exactly one shipped file.
+    name: "single agent-fetch hook for host settings (useAgentPicker)",
+    methodNames: ["useAgentPicker"],
+    denyingPhrases: [
+      /two (?:separate )?hooks fetch the (?:same )?agent list/i,
+      /the agent list is fetched twice/i,
+      /no single hook owns (?:the )?agent (?:fetching|selection)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
