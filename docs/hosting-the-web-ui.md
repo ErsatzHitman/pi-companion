@@ -1,126 +1,88 @@
-# Hosting the web UI on Cloudflare (free)
+# Hosting the web UI (live setup)
 
-Goal: the web UI is always up and off your PC, on a permanent public URL,
-reachable only by you.
+**Live URL: https://ersatzhitman.github.io/**
 
-The shape this takes, and **why it is two pieces rather than one**: the web UI
-is a thin client. It is a static bundle with no server of its own, and it is
-useless until a browser can open a WebSocket to your daemon. Hosting only the
-bundle gives you a page that loads and can never connect — a browser on an
-HTTPS page is not allowed to open a `ws://` connection to a private home IP,
-and your daemon has no public address. So the UI goes on Cloudflare Pages, and
-the daemon gets its own public HTTPS hostname through a Cloudflare Tunnel.
+The UI is served by GitHub Pages and talks to the daemon on the Mint box through
+an ngrok tunnel. Verified end to end: loading that URL, signing in, and reading
+the real session list off the daemon.
 
-## What is already done
+## Why it is two pieces
 
-- **Daemon password set and verified.** Stored bcrypt-hashed at
-  `daemon.auth.password` in `~/.paseo/config.json`. Proven enforced on both
-  channels, not assumed: the REST API answers `401` with no token and `401`
-  with a wrong one, and the WebSocket closes with code `4401`
-  (`"Password required"` / `"Incorrect password"`) while the correct token
-  stays open.
-- **`cloudflared` installed** on the Mint box (version 2026.9.1, amd64).
-- **SPA fallback committed** (`apps/web/public/_redirects`), without which
-  every deep link 404s on a static host.
+The web UI is a thin client — a static bundle with no server of its own, useless
+until a browser can open a WebSocket to the daemon. Hosting only the bundle
+gives a page that loads and can never connect: a browser on an HTTPS page may
+not open `ws://` to a private home IP, and the daemon has no public address of
+its own. So the bundle goes on Pages, and the daemon gets a public HTTPS
+hostname from ngrok.
 
-## Step 1 — add your domain to Cloudflare
+## The pieces
 
-Cloudflare's free plan is enough. You need a domain you control, pointed at
-Cloudflare's nameservers. A tunnel hostname must live on a zone in your own
-account; this is the one part that cannot be free-tier-substituted, because
-Quick Tunnels (the no-domain option) hand out a random URL that changes on
-every restart and are documented by Cloudflare as testing-and-development only.
-
-## Step 2 — create the tunnel (on the Mint box)
-
-```bash
-ssh akshat@192.168.0.158
-
-# Opens a browser link; authorise the zone you added in step 1.
-cloudflared tunnel login
-
-cloudflared tunnel create pi-companion
-cloudflared tunnel route dns pi-companion daemon.YOURDOMAIN.com
-```
-
-Then write `~/.cloudflared/config.yml`:
-
-```yaml
-tunnel: pi-companion
-credentials-file: /home/akshat/.cloudflared/<TUNNEL-ID>.json
-
-ingress:
-  - hostname: daemon.YOURDOMAIN.com
-    service: http://127.0.0.1:6767
-    originRequest:
-      noTLSVerify: true
-  - service: http_status:404
-```
-
-Install it as a service so it survives reboots:
-
-```bash
-sudo cloudflared service install
-sudo systemctl enable --now cloudflared
-```
-
-**Why the daemon's own `listen` stays `127.0.0.1:6767`:** the tunnel connects
-outbound from the machine, so the daemon never needs to listen on a public
-interface and no router port-forwarding is involved. Leave it bound to
-loopback. That is a security property worth keeping, not an oversight.
-
-## Step 3 — deploy the UI to Cloudflare Pages
-
-The build must happen in the monorepo (the app depends on workspace packages),
-so build locally and upload the result rather than pointing Pages at the repo:
-
-```bash
-cd /d/pi-companion/apps/web
-npx vite build
-
-npx wrangler pages project create pi-companion --production-branch main
-npx wrangler pages deploy dist --project-name pi-companion
-```
-
-That prints your permanent URL, `https://pi-companion.pages.dev`.
-
-## Step 4 — allow the new origin (required, or the browser blocks everything)
-
-`~/.paseo/config.json` currently allows exactly one origin,
-`https://app.paseo.sh`, which is Paseo's hosted app and not yours. Until your
-Pages URL is added, every request from it fails CORS:
-
-```json
-"cors": { "allowedOrigins": ["https://app.paseo.sh", "https://pi-companion.pages.dev"] }
-```
-
-Then `systemctl --user restart paseo-daemon`.
-
-## Step 5 — lock it to you alone
-
-The password is the only thing standing between the public internet and a
-daemon that runs shell commands on your PC. Put identity in front of it:
-
-Cloudflare Zero Trust → Access → Applications → Add a self-hosted app for
-`daemon.YOURDOMAIN.com`, with a policy allowing only your own email. Free for
-up to 50 users. A browser session then carries the `CF_Authorization` cookie
-through the WebSocket upgrade, so the app keeps working while anonymous
-traffic never reaches the daemon at all.
-
-Do the same for the Pages URL if you do not want the UI itself public.
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Web UI | GitHub Pages, repo `ErsatzHitman/ErsatzHitman.github.io` | Free, always up, root path so no `base` change |
+| Daemon | Mint box, `127.0.0.1:6767` | Never listens publicly |
+| Tunnel | ngrok → `likewise-swore-crabgrass.ngrok-free.dev` | `ngrok-paseo` user service, restarts on boot |
+| Auth | bcrypt password at `daemon.auth.password` | Enforced on REST *and* WebSocket |
 
 ## Connecting
 
-Open the Pages URL → **Host address** `daemon.YOURDOMAIN.com:443`, tick **Use
-TLS**, and paste the password into **Access token**.
+Host address `likewise-swore-crabgrass.ngrok-free.dev:443`, tick **Use TLS**,
+paste the password into **Access token**, press **Connect**.
+
+**"Signed in to …" is success, and the app does not navigate on its own.** This
+reads like a failure and is not one: `ConnectForm`'s `handleSubmit` saves a host
+profile and reports the outcome; it never routes anywhere. The header badge
+still says "Disconnected" at that point because the app only opens a connection
+once you are on a host route. Pick the host from the session rail, or go to
+`/h/<profileId>/sessions`.
+
+## Things that were fixed to make this work, and will bite again if changed
+
+- **Host allowlist.** The daemon has vite-style DNS-rebinding protection and
+  answered `403 {"error":"Invalid Host header"}` to every tunnelled request
+  until the ngrok hostname was added to `daemon.hostnames`. Defaults
+  (localhost, private IPs) are always allowed, so adding an entry is additive
+  and does not break LAN access — confirmed after the change.
+- **CORS.** `daemon.cors.allowedOrigins` shipped containing only
+  `https://app.paseo.sh`, which is Paseo's app, not this one. The Pages origin
+  had to be added or the browser blocks everything.
+- **SPA deep links.** GitHub Pages has no rewrite rules, so `404.html` is a copy
+  of `index.html`. Without it, `/h/<id>/sessions` returns Pages' own 404 on a
+  reload or a shared link. `.nojekyll` stops Jekyll dropping underscore files.
+  `apps/web/public/_redirects` does the same job on Cloudflare Pages/Netlify.
+
+## ngrok free limits, measured rather than assumed
+
+- **1 GB/month transfer** — the real ceiling. Streaming terminal output is what
+  would consume it.
+- **20k HTTP requests/month** — barely relevant here: the app is WebSocket
+  based, so it costs one upgrade request per connection and everything after
+  flows inside that socket.
+- **Interstitial warning page.** ngrok injects it on browser HTML navigation —
+  confirmed by request against this very tunnel. It does **not** affect the
+  WebSocket upgrade or `fetch`, which is exactly why the UI is on Pages and only
+  the daemon is behind ngrok. Serving the UI through the tunnel would put that
+  click-through in front of every page load.
 
 ## Honest limitations
 
-- **Your PC still has to be on.** Pages keeps the *interface* up; the daemon is
-  the product, and it runs on your machine. If the Mint box sleeps, the UI
-  loads and cannot connect. This setup removes the PC as the thing serving the
-  page, not as the thing doing the work.
-- **A Pages deploy is a manual step** after any UI change, unless you later add
-  a GitHub Action with a Cloudflare API token.
-- **Access protects the browser path.** If you ever use a non-browser client
-  against the tunnel hostname, it needs a service token, not the cookie.
+- **The PC still has to be awake.** Pages keeps the interface up; the daemon is
+  the product and it runs on your machine. This removes the PC as the thing
+  serving the page, not as the thing doing the work.
+- **A UI change needs a redeploy** — rebuild `apps/web` and push the output to
+  the Pages repo.
+- **The password is the only gate.** Anyone with the URL and the password
+  reaches a daemon that runs shell commands. Cloudflare Access (free, needs a
+  domain) would add an identity layer in front; ngrok's equivalent is a paid
+  feature.
+- **Rotate the credentials if this conversation is shared** — both the daemon
+  password and the ngrok authtoken were typed in plain text during setup.
+
+## Redeploying the UI
+
+```bash
+cd /d/pi-companion/apps/web && npx vite build
+cd <pages-clone> && cp -r /d/pi-companion/apps/web/dist/. . \
+  && cp index.html 404.html && touch .nojekyll \
+  && git add -A && git commit -m "rebuild" && git push
+```
