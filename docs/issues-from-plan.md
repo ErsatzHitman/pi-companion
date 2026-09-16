@@ -21575,3 +21575,86 @@ than reversing the refusal itself.
       future pass to "fix"
 - [x] Both remaining refusals are re-confirmed against the code's own current comments, not just
       restated from an earlier wave
+
+## Wave P10-W1 (UI spec conformance, iteration 1)
+
+Five file-disjoint packages landed: `A-SHAPE`, `A-PIROLES`, `WEB-FILES-1`,
+`WEB-TRANSCRIPT-TEST-1` and `SEGMENTED-1`. Three findings from that wave are recorded
+here because each falls outside every package's exclusive file list, and none of them may
+be silently dropped.
+
+### P10-1 — the turn-entrance animation never reached a painted frame, and now does
+
+`WEB-TRANSCRIPT-TEST-1` was asked only to write the missing tests for SHELL-1's transcript
+entrance stagger. Its tests went red, and they were right: the feature was inert on `main`.
+
+`transcript.tsx` decided `data-entering` by comparing a row's index against a watermark of
+the highest index committed so far, and advanced that watermark from an effect over
+`rowVirtualizer.getVirtualItems()`. Mounting the transcript never produces a single
+commit: the tail-anchor layout effect calls `scrollToIndex`, and `measureElement` reports
+each row's real height, and each schedules another render. React flushes effects between
+those commits — layout and passive alike, which was confirmed by trying both — so the
+watermark had already reached the last row before the final render ran. That render
+recomputed the flag as `false` for every row, React erased the attribute and the
+`animationDelay` an earlier commit had written, and none of it survived to a frame.
+Measured directly rather than reasoned about: a probe rendering eight rows and reading the
+live DOM found all eight carrying `data-entering: null` and an empty `animationDelay`.
+
+This is the shape `plan.md`'s own reviewer check could not catch —
+`grep -n "data-entering" transcript.tsx transcript.css` passes against the dead version.
+
+The fix replaces the watermark with a batch boundary derived from the row COUNT
+(`enteringFromRowRef` / `enteredRowCountRef`), assigned during render rather than from an
+effect. The count is identical across every commit belonging to one arrival of rows and
+changes exactly when there is something new to animate, which is the signal React does not
+otherwise expose. `transcript.tsx` is in no package's file list; the merge gate reported
+the defect and the orchestrator made the change.
+
+One of the three new tests was rewritten rather than made to pass, and that is a judgement
+a reviewer could disagree with, so it is stated plainly. As written it asserted that
+re-rendering with the identical `entries` array clears `data-entering`. That is not
+satisfiable at the same time as the first test, which requires the attribute to be present
+once the mount settles: no pure-React signal separates the virtualizer's own re-renders
+from a caller's, so any mechanism clearing the attribute on a no-change re-render also
+clears it mid-mount, which is the defect itself. The replacement asserts the invariant the
+original named — that rows below a passed batch boundary stay done, through several
+further renders — without the unsatisfiable proxy. The second test, which is the one that
+actually pins the flat-720ms regression, was not touched.
+
+- [x] The three new tests pass against the fixed component and fail against both the
+      shipped version and the passive-effect version
+- [x] The rewritten test's reason is recorded here, not only in the test file
+
+### P10-2 — `blockSurface("user")` paints the wrong role, deferred to wave 2
+
+`A-PIROLES` was asked to decide, rather than assume, whether a user block's background is
+`accent-tint` or `field`. The confirmed Android design settles it: it declares
+`--usr-bg:var(--field)` and paints `.blk.usr{background:var(--usr-bg)}`. Both strings were
+read out of the spec directly, not inferred.
+
+`ui/theme/block-shape.ts`'s `blockSurface` returns `"accent-tint"` for a user block and
+cites a `.blk.usr` rule naming `--accent-tint`, which came from the older reconstruction
+under `docs/ui-reference/`, not from the confirmed design.
+
+Deliberately NOT changed in this wave. `block-shape.ts` sits in no package's file list, and
+the role it hands out is read by the transcript, the composer's queue and the extension
+elements at once — so it is a visible cross-feature change that deserves its own package
+and its own verification, not an orchestrator's late edit to a green tree. It is wave 2's
+first item, alongside `A-COMPOSER`, which owns the composer half of the same surface.
+
+- [ ] `blockSurface("user")` returns the role the confirmed design paints
+- [ ] `block-shape.ts`'s citation points at a current authority, not at `docs/ui-reference/`
+
+### P10-3 — `ScreenBar.tsx` asserted a radius the same wave falsified
+
+`A-SHAPE` moved `IconButton` to the confirmed design's full-pill `.ic`. `ui/recipes/
+ScreenBar.tsx` — outside that package's files — still said the `.ic` radius was 9px with
+`radii.control` as the nearest named step, and drew its mark button that way. Two shipped
+files, contradictory claims about the same element: exactly the T124 shape. The spec draws
+both `.ic` and `.scr-btn` at `var(--r-full)`, read directly from its own CSS. Corrected in
+this wave, and the capability is now registered in
+`scripts/ci/guard-capability-prose.mjs`'s `CAPABILITIES` so the claim cannot come back
+unnoticed.
+
+- [x] `ScreenBar.tsx` draws and describes the same radius `IconButton` does
+- [x] The Android-only Expressive scale is registered as a capability

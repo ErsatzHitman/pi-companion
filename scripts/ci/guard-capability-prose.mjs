@@ -341,6 +341,31 @@ const DECLARED_WORKSPACE_DEPS_OWN_SOURCE_FILES =
 /** @type {Capability[]} */
 export const CAPABILITIES = [
   {
+    // A-SHAPE (apps/android/src/ui/theme/expressive-shape.ts). The
+    // confirmed Android design draws its chrome on an MD3 Expressive
+    // radius scale of its own — 10/16/22/28/9999, plus a 14 block
+    // step — with icon buttons, chips, pills and switches all at the
+    // full-pill step. The shared `radii` scale in
+    // `@picompanion/design-tokens` deliberately does NOT move with it,
+    // because the confirmed web design measures 8px controls: the two
+    // surfaces genuinely diverge, and the Android-only module is what
+    // lets them. Registered because this wave found the opposite claim
+    // already live in a shipped file: `ui/recipes/ScreenBar.tsx` was
+    // still asserting a 9px `.ic` with `radii.control` as the nearest
+    // step, read off the older reconstruction under `docs/ui-reference/`,
+    // while `IconButton` had already moved to the full pill. Two files,
+    // contradictory claims about the same element, and nothing to catch
+    // it.
+    name: "Android-only Expressive radius scale (expressive-shape.ts)",
+    methodNames: ["EXPRESSIVE_RADII", "EXPRESSIVE_RADIUS_FULL"],
+    denyingPhrases: [
+      /Android (?:has |carries )?no (?:shape|radius|radii) scale of its own/i,
+      /(?:shares|share) (?:the|one) (?:single )?`?radii`? scale with the web/i,
+      /nearest named step(?:,| ) so the box stays on the token scale/i,
+      /no Android-only (?:shape|radius) tokens? exists?/i,
+    ],
+  },
+  {
     // T110 (packages/client/src/daemon-client.ts) / T38B1a
     // (apps/web/src/features/composer). Seeded per T124's acceptance
     // criteria — the exact trio ten P6-W6 sites got wrong.

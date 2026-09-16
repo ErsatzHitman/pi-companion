@@ -73,7 +73,7 @@ export interface ScreenBarProps {
   testId?: string;
 }
 
-/** The artifact's `.ic` rounded square. The touch target around it is 48dp; see this file's doc comment. */
+/** The confirmed Android design's `.ic`, a full pill. The touch target around it is 48dp; see this file's doc comment. */
 const MARK_BUTTON_SIZE = 34;
 /** The artifact's `.ic` font size. */
 const MARK_FONT_SIZE = 15;
@@ -168,9 +168,17 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     markButton: {
       width: MARK_BUTTON_SIZE,
       height: MARK_BUTTON_SIZE,
-      // The artifact's `.ic` radius is 9px; `radii.control` (8) is the
-      // nearest named step, so the box stays on the token scale.
-      borderRadius: theme.radii.control,
+      // A-SHAPE: the confirmed Android design draws `.ic` at
+      // `border-radius: var(--r-full)`, a full pill, and `.scr-btn` the
+      // same way — so does `IconButton`, the primitive this recipe's
+      // mark button mirrors. This said "the artifact's `.ic` radius is
+      // 9px; `radii.control` (8) is the nearest named step", which was
+      // read off the older reconstruction under `docs/ui-reference/` and
+      // is no longer what the design specifies. See
+      // `ui/theme/expressive-shape.ts` and its `EXPRESSIVE_RADIUS_FULL`
+      // for the Android-only scale and why the shared `radii` keeps its
+      // own 8px control step for the web.
+      borderRadius: theme.radii.full,
       alignItems: "center",
       justifyContent: "center",
     },
