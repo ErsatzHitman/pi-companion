@@ -39,6 +39,18 @@ export interface ConnectFormProps {
    * "Forget saved credentials" action.
    */
   onForget?: (profileId: string) => Promise<void>;
+  /**
+   * Called with the saved profile id once an attempt succeeds, so the caller
+   * can move the user on to that host (UI-X14). Before this existed the form
+   * announced "Signed in to <host>." and then simply stopped, leaving the
+   * user on the connect screen with no indication that the next step was to
+   * navigate themselves — the success state looked like a dead end.
+   *
+   * Kept as a callback rather than a `useNavigate` call inside this file so
+   * the form stays presentational and router-free, the way its own container
+   * doc comment already promises ("`ConnectForm` itself stays presentational").
+   */
+  onConnected?: (profileId: string) => void;
 }
 
 type AttemptPhase = "idle" | "connecting" | "success" | "unreachable" | "auth-failed";
@@ -74,7 +86,7 @@ type OfferPhase = "idle" | "applying" | "success" | "malformed" | "wrong-daemon-
  * a denied or missing camera with its own status banner and always
  * offers a way back to this manual-entry field.
  */
-export function ConnectForm({ onAttempt, onApplyOffer, onForget }: ConnectFormProps) {
+export function ConnectForm({ onAttempt, onApplyOffer, onForget, onConnected }: ConnectFormProps) {
   const [label, setLabel] = useState("");
   const [address, setAddress] = useState("");
   const [useTls, setUseTls] = useState(false);
@@ -120,6 +132,16 @@ export function ConnectForm({ onAttempt, onApplyOffer, onForget }: ConnectFormPr
             : `Reached ${result.draft.label}.`,
         );
         setSavedProfileId(outcome.savedProfileId);
+        /*
+         * `savedProfileId` is `string | null` even on the `ok` branch, so the
+         * guard is real rather than defensive: without an id there is no
+         * `$serverId` to route to, and the caller would be asked to navigate
+         * to a host that was never saved. In that case the success banner
+         * stays put, which is the old behaviour and the right fallback.
+         */
+        if (outcome.savedProfileId !== null) {
+          onConnected?.(outcome.savedProfileId);
+        }
       } else if (!outcome.reachable) {
         setPhase("unreachable");
         setStatusMessage(`Could not reach ${result.draft.label}. Check the address and try again.`);

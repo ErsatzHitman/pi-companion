@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { useCore } from "../../app/core-context.js";
 import { BootstrapConnectStatus } from "./BootstrapConnectStatus.js";
@@ -85,6 +86,7 @@ export function ConnectFormContainer({
   readBootstrap = readBootstrapConnectDraft,
 }: ConnectFormContainerProps = {}) {
   const { platform } = useCore();
+  const navigate = useNavigate();
   const attempt = useMemo(
     () =>
       createAttempt({
@@ -165,6 +167,15 @@ export function ConnectFormContainer({
     <ConnectForm
       onAttempt={attempt}
       onApplyOffer={applyOffer}
+      /*
+       * UI-X14. A successful connect now lands the user on that host's
+       * session list instead of stopping at a "Signed in to <host>." banner
+       * on the connect screen. `savedProfileId` is the same id the route's
+       * `$serverId` segment takes, so no lookup is needed.
+       */
+      onConnected={(profileId) => {
+        void navigate({ to: "/h/$serverId/sessions", params: { serverId: profileId } });
+      }}
       onForget={(profileId) =>
         forgetHostCredentials(
           {

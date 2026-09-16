@@ -129,6 +129,35 @@ describe("ConnectForm (T27A1)", () => {
     expect(status.textContent).toContain("Reached");
   });
 
+  it("hands the saved profile id up on success so the caller can leave the connect screen", async () => {
+    // UI-X14. A successful connect used to announce "Signed in to <host>."
+    // and stop, stranding the user on this screen; `ConnectFormContainer`
+    // turns this callback into a route change to that host's sessions.
+    const user = userEvent.setup();
+    const onAttempt = vi.fn().mockResolvedValue(reachable);
+    const onConnected = vi.fn();
+    render(<ConnectForm onAttempt={onAttempt} onConnected={onConnected} />);
+
+    await user.type(screen.getByLabelText(/^Host address/), "localhost:6767");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    await screen.findByRole("status");
+    expect(onConnected).toHaveBeenCalledWith("profile-1");
+  });
+
+  it("does not report a connection when the host is unreachable", async () => {
+    const user = userEvent.setup();
+    const onAttempt = vi.fn().mockResolvedValue(unreachable);
+    const onConnected = vi.fn();
+    render(<ConnectForm onAttempt={onAttempt} onConnected={onConnected} />);
+
+    await user.type(screen.getByLabelText(/^Host address/), "localhost:6767");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    await screen.findByRole("status");
+    expect(onConnected).not.toHaveBeenCalled();
+  });
+
   it("reports an unreachable attempt through a visible, non-colour status banner", async () => {
     const user = userEvent.setup();
     const onAttempt = vi.fn().mockResolvedValue(unreachable);
