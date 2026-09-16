@@ -82,7 +82,7 @@
 }
 
 .pc-session-row__button:active {
-  transform: scale(0.96);
+  transform: scale(var(--motion-press-scale));
 }
 
 .pc-session-row__button:focus-visible {

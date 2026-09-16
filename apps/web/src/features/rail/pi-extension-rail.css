@@ -200,7 +200,8 @@
   height: var(--spacing-4);
   border-radius: var(--radius-control);
   background: var(--color-field);
-  animation: pi-extension-rail-shimmer 1.2s var(--motion-easing-standard) infinite;
+  animation: pi-extension-rail-shimmer calc(var(--motion-duration-slower) * 3)
+    var(--motion-easing-standard) infinite;
 }
 .pi-extension-rail__shimmer-row + .pi-extension-rail__shimmer-row {
   margin-top: var(--spacing-2);
