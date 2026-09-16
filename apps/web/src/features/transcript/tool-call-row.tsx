@@ -206,7 +206,7 @@ function syntheticDiffText(edits: ReadonlyArray<{ oldString: string; newString: 
  * primitive's `children` override (its own doc comment: "lets richer
  * renderers … compose this primitive instead of duplicating its
  * `<pre><code>` shell"). Sits alongside the `DiffSummary` recipe's
- * at-a-glance +/- counts (already tabular Geist Mono — T28A5 acceptance:
+ * at-a-glance +/- counts (already tabular JetBrains Mono — T28A5 acceptance:
  * "diffs render with add/remove counts in tabular mono figures") rather
  * than replacing it: the summary is the one-line badge, this is the
  * expanded content.

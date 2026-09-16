@@ -30,9 +30,9 @@
   color: var(--color-ink-2);
 }
 
-/* Numerals: Geist Mono + tabular figures, matching the Progress
-   primitive's own percentage readout (docs/beautiful-ui-reference.md,
-   "Geist Mono for all numerals ... with tabular-nums on counters"). */
+/* Numerals: JetBrains Mono + tabular figures, matching the Progress
+   primitive's own percentage readout (`packages/design-tokens/src/tokens.ts`'s
+   `typography.fontFamily.mono`). */
 .context-meter__value {
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;

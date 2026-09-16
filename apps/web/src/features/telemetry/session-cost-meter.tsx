@@ -21,7 +21,7 @@
  * screen-reader user is never told an incomplete number without also
  * being told it is incomplete.
  *
- * Every numeral is Geist Mono with tabular figures
+ * Every numeral is JetBrains Mono with tabular figures
  * (`.session-cost-meter__value`, matching `ContextMeter`'s own
  * `.context-meter__value` and the `Progress` primitive's percentage
  * readout) and sits in a `role="status"` `aria-live="polite"` region, so

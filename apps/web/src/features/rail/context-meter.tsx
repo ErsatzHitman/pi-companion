@@ -23,7 +23,7 @@
  * branch below renders a `StatusIndicator` instead of a zero- or
  * indeterminate-`Progress`.
  *
- * Every numeral is Geist Mono with tabular figures (`.context-meter__value`,
+ * Every numeral is JetBrains Mono with tabular figures (`.context-meter__value`,
  * matching the `Progress` primitive's own percentage readout and the
  * `pc-pi-progress__fraction-value` precedent in `features/extensions/
  * renderers/`) and sits in a `role="status"` `aria-live="polite"` region,

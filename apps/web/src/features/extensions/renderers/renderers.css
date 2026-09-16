@@ -113,8 +113,9 @@
   color: var(--color-ink-2);
   font-size: var(--font-size-xs);
 }
-/* A numeral: Geist Mono + tabular figures, matching the Progress primitive's
-   own percentage readout (docs/beautiful-ui-reference.md). */
+/* A numeral: JetBrains Mono + tabular figures, matching the Progress
+   primitive's own percentage readout (`packages/design-tokens/src/tokens.ts`'s
+   `typography.fontFamily.mono`). */
 .pc-pi-progress__fraction-value {
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
