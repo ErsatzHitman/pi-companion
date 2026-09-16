@@ -14,3 +14,5 @@ export { useAutoCompaction } from "./use-auto-compaction.js";
 export type { UseAutoCompactionOptions } from "./use-auto-compaction.js";
 export { useAutoRetry } from "./use-auto-retry.js";
 export type { UseAutoRetryOptions } from "./use-auto-retry.js";
+export { useAgentPicker } from "./use-agent-picker.js";
+export type { AgentPickerState, AvailableAgentOption } from "./use-agent-picker.js";

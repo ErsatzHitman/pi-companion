@@ -1,11 +1,9 @@
-import { cleanup, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { CoreProvider } from "../../app/core-context.js";
 import { routeTree } from "../route-tree.js";
-import { useAgentPicker, useCurrentAgentId } from "./host-settings-screen.js";
-import type { DaemonClient } from "@picompanion/client";
 
 afterEach(() => {
   cleanup();
@@ -119,135 +117,4 @@ describe("HostSettingsScreen route wiring (T131)", () => {
     expect(screen.queryByTestId("shell-terminal-link")).toBeNull();
     expect(screen.getByText("Open a session to reach its files and terminal.")).toBeTruthy();
   }, 20_000);
-});
-
-/**
- * `useCurrentAgentId` is this file's own closing of the "which agent do
- * these per-agent settings target on a per-server route" seam (see the
- * hook's module doc). Proven here in isolation, against a counting fake
- * `fetchAgents`, independent of any route or `DaemonClient` wiring.
- */
-describe("useCurrentAgentId (T131)", () => {
-  it("stays idle with a null client", () => {
-    const { result } = renderHook(() => useCurrentAgentId(null));
-    expect(result.current).toEqual({ status: "idle", agentId: null, reason: null });
-  });
-
-  it("resolves to the most recently updated agent when one exists", async () => {
-    let calls = 0;
-    const fakeClient = {
-      fetchAgents: async (query: unknown) => {
-        calls += 1;
-        expect(query).toEqual({
-          sort: [{ key: "updated_at", direction: "desc" }],
-          page: { limit: 1 },
-        });
-        return { entries: [{ agent: { id: "agent-42" } }] };
-      },
-    } as unknown as DaemonClient;
-
-    const { result } = renderHook(() => useCurrentAgentId(fakeClient));
-
-    await waitFor(() => {
-      expect(result.current).toEqual({ status: "ready", agentId: "agent-42", reason: null });
-    });
-    expect(calls).toBe(1);
-  });
-
-  it("reports 'empty' truthfully when the host has no agents yet", async () => {
-    const fakeClient = {
-      fetchAgents: async () => ({ entries: [] }),
-    } as unknown as DaemonClient;
-
-    const { result } = renderHook(() => useCurrentAgentId(fakeClient));
-
-    await waitFor(() => {
-      expect(result.current.status).toBe("empty");
-    });
-    expect(result.current.agentId).toBeNull();
-    expect(result.current.reason).toMatch(/no agents/i);
-  });
-
-  it("reports 'error' truthfully when fetchAgents rejects, without throwing", async () => {
-    const fakeClient = {
-      fetchAgents: async () => {
-        throw new Error("host unreachable");
-      },
-    } as unknown as DaemonClient;
-
-    const { result } = renderHook(() => useCurrentAgentId(fakeClient));
-
-    await waitFor(() => {
-      expect(result.current.status).toBe("error");
-    });
-    expect(result.current.agentId).toBeNull();
-    expect(result.current.reason).toBe("host unreachable");
-  });
-});
-
-describe("useAgentPicker (per-agent settings picker)", () => {
-  it("stays idle with a null client", () => {
-    const { result } = renderHook(() => useAgentPicker(null));
-    expect(result.current.status).toBe("idle");
-    expect(result.current.selectedAgentId).toBeNull();
-  });
-
-  it("lists agents most-recent-first and defaults the selection to the first", async () => {
-    const fakeClient = {
-      fetchAgents: async (query: unknown) => {
-        expect(query).toEqual({
-          sort: [{ key: "updated_at", direction: "desc" }],
-          page: { limit: 50 },
-        });
-        return {
-          entries: [
-            { agent: { id: "agent-2", title: "Second" } },
-            { agent: { id: "agent-1", title: null } },
-          ],
-        };
-      },
-    } as unknown as DaemonClient;
-
-    const { result } = renderHook(() => useAgentPicker(fakeClient));
-
-    await waitFor(() => {
-      expect(result.current.status).toBe("ready");
-    });
-    expect(result.current.agents.map((agent) => agent.id)).toEqual(["agent-2", "agent-1"]);
-    expect(result.current.selectedAgentId).toBe("agent-2");
-  });
-
-  it("follows the user's explicit choice instead of resetting to most-recent", async () => {
-    const fakeClient = {
-      fetchAgents: async () => ({
-        entries: [{ agent: { id: "agent-1" } }, { agent: { id: "agent-2" } }],
-      }),
-    } as unknown as DaemonClient;
-
-    const { result } = renderHook(() => useAgentPicker(fakeClient));
-
-    await waitFor(() => {
-      expect(result.current.status).toBe("ready");
-    });
-    expect(result.current.selectedAgentId).toBe("agent-1");
-
-    const { act } = await import("@testing-library/react");
-    act(() => {
-      result.current.selectAgent("agent-2");
-    });
-    expect(result.current.selectedAgentId).toBe("agent-2");
-  });
-
-  it("reports empty truthfully when the host has no agents yet", async () => {
-    const fakeClient = {
-      fetchAgents: async () => ({ entries: [] }),
-    } as unknown as DaemonClient;
-
-    const { result } = renderHook(() => useAgentPicker(fakeClient));
-
-    await waitFor(() => {
-      expect(result.current.status).toBe("empty");
-    });
-    expect(result.current.selectedAgentId).toBeNull();
-  });
 });
