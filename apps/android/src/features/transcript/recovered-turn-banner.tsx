@@ -52,6 +52,7 @@ import { Fragment } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { Banner, Button } from "../../ui/primitives";
+import { useTheme } from "../../ui/theme/theme-context";
 import {
   confirmRecoveredTurn,
   describeRecoveredTurn,
@@ -72,6 +73,8 @@ export interface RecoveredTurnBannerProps {
 }
 
 export function RecoveredTurnBanner({ turns, outbox }: RecoveredTurnBannerProps) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   if (turns.length === 0) {
     return null;
   }
@@ -106,6 +109,8 @@ export function RecoveredTurnBanner({ turns, outbox }: RecoveredTurnBannerProps)
   );
 }
 
-const styles = StyleSheet.create({
-  actions: { flexDirection: "row", gap: 8, marginBottom: 8 },
-});
+function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
+  return StyleSheet.create({
+    actions: { flexDirection: "row", gap: theme.spacing[2], marginBottom: theme.spacing[2] },
+  });
+}
