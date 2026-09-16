@@ -288,6 +288,25 @@
  * this column was the last delta, at `padding: 16px` and a transparent
  * background.
  */
+/*
+ * UI-X11. The rule above is written for the SESSION route, whose children
+ * (`.main-head`, `.pc-transcript`, `.pc-composer`) each carry their own
+ * padding so the header's bottom border can span the column edge to edge.
+ * Every OTHER route renders a single `<Section>` here and owns no padding
+ * of its own, so `padding: 0` left those screens flush against both rails
+ * and the viewport edge -- on `/connect` the card ran off the right side of
+ * the screen entirely.
+ *
+ * Scoped to a direct-child `.pc-section` rather than added to `.pc-section`
+ * itself, which is a shared primitive used inside rails and sheets that must
+ * not inherit page-level insets. The session route renders no `<Section>` at
+ * all (checked, not assumed), so this cannot reach it and the edge-to-edge
+ * border above is unaffected.
+ */
+.shell__center > .pc-section {
+  padding: var(--spacing-5);
+}
+
 .shell__center {
   grid-area: center;
   display: flex;

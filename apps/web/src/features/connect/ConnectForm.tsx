@@ -13,6 +13,7 @@ import type { ConnectAndAuthenticateOutcome } from "./authenticate-host.js";
 import { QrCaptureSheet } from "./QrCaptureSheet.js";
 import { validateConnectForm } from "./validate-connect-form.js";
 import type { ConnectDraft, ConnectFormFieldErrors } from "./validate-connect-form.js";
+import "./connect.css";
 
 export interface ConnectFormProps {
   /**
@@ -230,8 +231,8 @@ export function ConnectForm({ onAttempt, onApplyOffer, onForget }: ConnectFormPr
 
   return (
     <Section title="Connect">
-      <Card>
-        <form onSubmit={(event) => void handleSubmit(event)} noValidate>
+      <Card className="connect-card">
+        <form className="connect-form" onSubmit={(event) => void handleSubmit(event)} noValidate>
           <TextField
             label="Host label"
             value={label}
@@ -284,7 +285,7 @@ export function ConnectForm({ onAttempt, onApplyOffer, onForget }: ConnectFormPr
           </Button>
         </form>
         {onApplyOffer ? (
-          <div data-testid="connect-offer-section">
+          <div className="connect-offer" data-testid="connect-offer-section">
             <Divider />
             <TextField
               label="Pairing link"
@@ -308,23 +309,25 @@ export function ConnectForm({ onAttempt, onApplyOffer, onForget }: ConnectFormPr
                   : {})}
               />
             ) : null}
-            <Button
-              type="button"
-              kind="secondary"
-              disabled={applyingOffer || !offerInput.trim()}
-              onClick={() => void handleApplyOffer()}
-            >
-              {applyingOffer ? "Pairing…" : "Pair"}
-            </Button>
-            <Button
-              type="button"
-              kind="secondary"
-              disabled={applyingOffer}
-              onClick={() => setQrOpen(true)}
-              data-testid="connect-qr-trigger-button"
-            >
-              Scan QR code
-            </Button>
+            <div className="connect-offer__actions">
+              <Button
+                type="button"
+                kind="secondary"
+                disabled={applyingOffer || !offerInput.trim()}
+                onClick={() => void handleApplyOffer()}
+              >
+                {applyingOffer ? "Pairing…" : "Pair"}
+              </Button>
+              <Button
+                type="button"
+                kind="secondary"
+                disabled={applyingOffer}
+                onClick={() => setQrOpen(true)}
+                data-testid="connect-qr-trigger-button"
+              >
+                Scan QR code
+              </Button>
+            </div>
             <QrCaptureSheet
               open={qrOpen}
               onClose={() => setQrOpen(false)}

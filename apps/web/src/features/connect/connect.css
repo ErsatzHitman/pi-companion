@@ -1,0 +1,63 @@
+/*
+ * Connect screen layout (UI-X11).
+ *
+ * The form's fields, toggle and buttons were stacking with a measured gap of
+ * exactly 0 between every pair: `<form>` is a block box, and none of the
+ * primitives inside it carry an outer margin (each owns only its internal
+ * label/control spacing). The result read as one cramped block -- the "Use
+ * TLS" toggle sat flush against the "Access token" label above the field it
+ * belongs to, which is what made the control look mis-associated rather than
+ * merely tight.
+ *
+ * Fixed here, in the feature's own stylesheet, rather than by giving
+ * `.pc-card form` a gap in `primitives.css`: this is the only `<form>` in the
+ * app (verified across `src/features` and `src/routes`), so a primitive-level
+ * rule would be a global change made for a single caller.
+ */
+
+.connect-form,
+.connect-offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+/*
+ * `Pair` and `Scan QR code` are siblings with no wrapper, so they sat as bare
+ * inline-flex boxes with only the whitespace between two JSX elements holding
+ * them apart. A row with a real gap keeps them apart, and wraps instead of
+ * overflowing the card on a narrow viewport.
+ */
+.connect-offer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+
+/*
+ * `.pc-field`'s own `max-width: 28rem` is right for a field sitting in a wide
+ * screen, but inside this card it left every input ending well short of the
+ * card's right edge while the card itself stretched the full column -- the
+ * lopsided look in the report. Capping the CARD and letting the fields fill it
+ * keeps one consistent edge down the whole form. Scoped to this screen; the
+ * primitive's own default is untouched everywhere else.
+ */
+.connect-card {
+  max-width: 32rem;
+}
+
+.connect-form .pc-field,
+.connect-offer .pc-field {
+  max-width: none;
+}
+
+/*
+ * A flex column stretches its items, which silently widened the submit button
+ * to the full card -- a restyle nobody asked for, and one that left it
+ * inconsistent with the natural-width `Pair` / `Scan QR code` buttons below.
+ * Keep its intrinsic width; the column still owns the vertical rhythm.
+ */
+.connect-form > .pc-button {
+  align-self: flex-start;
+}
