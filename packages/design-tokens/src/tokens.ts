@@ -107,8 +107,18 @@ const beautifulDark = {
   "red-tint": "rgba(238, 92, 97, 0.14)",
   purple: "#b88fe6",
   teal: "#8dc8c0",
+  // A-PIROLES: verified by an independent oklab implementation (sRGB ->
+  // linear -> LMS -> OKLab, per Björn Ottosson's published matrices), not
+  // eyeballed. `color-mix(in oklab, green 10%, surface)` on this palette's
+  // own `green` (#3cbb72) and `surface` (#232427) computes to exactly
+  // #28312e — this value already IS the raw mix, no AA nudge needed.
   "tool-success-bg": "#28312e",
+  // A-PIROLES: `color-mix(in oklab, red 13%, surface)` on `red` (#f17579)
+  // and `surface` computes to exactly #3b2f31 — already the raw mix.
   "tool-error-bg": "#3b2f31",
+  // A-PIROLES: `color-mix(in oklab, purple 15%, surface)` on `purple`
+  // (#b88fe6) and `surface` computes to exactly #373340 — already the raw
+  // mix.
   "extension-bg": "#373340",
   "accent-highlight": "rgba(61, 154, 255, 0.24)",
 } as const;
@@ -177,8 +187,30 @@ const beautifulLight = {
   "red-tint": "#fcecec",
   purple: "#6d3fbf",
   teal: "#0f766e",
+  // A-PIROLES: verified with the same independent oklab implementation used
+  // for the dark palette above. Unlike dark, the raw
+  // `color-mix(in oklab, green 10%, surface)` on this palette's own `green`
+  // (#157f40) and `surface` (#ffffff) computes to #e9f2eb, NOT this value —
+  // but the raw mix fails `contrast.test.ts`'s "what a tool/extension block
+  // paints on its own fill reaches 4.5:1": green-on-itself lands at
+  // 4.434:1 and accent-on-it at 4.449:1, both under the 4.5:1 floor. This
+  // value is the same mix lightened further (same hue, higher lightness),
+  // the T54A1 "keep the hue, nudge for AA" policy already documented on the
+  // base palette above, applied to a mixed role instead of a raw one; every
+  // fg/bg pair `contrast.test.ts` pins against it clears 4.5:1 with this
+  // value (green 4.626:1, accent 4.591:1, teal 4.993:1, ink/ink-2 far
+  // above).
   "tool-success-bg": "#f0f6f1",
+  // A-PIROLES: the raw `color-mix(in oklab, red 13%, surface)` on `red`
+  // (#d52026) computes to #fee6e2, which fails the same AA check (red text
+  // on it: 4.339:1; accent: 4.271:1). This value is that mix nudged
+  // lighter for AA, verified: red 4.698:1, accent 4.625:1, teal 4.976:1.
   "tool-error-bg": "#fff1f0",
+  // A-PIROLES: the raw `color-mix(in oklab, purple 15%, surface)` on
+  // `purple` (#6d3fbf) computes to #e7e3f7, which fails the same AA check
+  // (accent text on it: 4.052:1; teal: 4.360:1). This value is that mix
+  // nudged lighter for AA, verified: purple 6.087:1, accent 4.591:1, teal
+  // 4.940:1.
   "extension-bg": "#f4f2fc",
   "accent-highlight": "rgba(0, 109, 211, 0.18)",
 } as const;
