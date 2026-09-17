@@ -21848,3 +21848,139 @@ declare 24, and always did - but `Chip` now declares 30, so the two no longer co
 sentence pointed a reader at a file that would contradict it. Prose only: nothing read Chip's
 value, and no test or behaviour broke. Corrected at the gate with the old sentence quoted,
 since the file sits outside every partition.
+
+## Wave P10-W4 (UI spec conformance, iteration 4)
+
+The first wave scoped from a fresh audit rather than from the brief's list, because every item
+that list named had closed in waves 1-3. The method, so a later wave can repeat or fault it:
+every class selector declared in the confirmed Android design's CSS was extracted and
+cross-checked against the whole of `apps/android/src`. 37 of 152 were cited nowhere.
+
+**Most of those 37 are not gaps, and the count is the least useful part of the result.** Some
+ship under a different name - `.fp-drag`/`.fp-ready` as `FooterPills.tsx`'s `fpReadyRing` and
+its drag `armed` flag, `.snack` as `ui/primitives/Toast.tsx`, `.listening` as
+`features/voice/voice-capture-indicator.tsx`, `.strike` as
+`features/transcript/todo-row-model.ts`. Others are the design page's OWN showcase chrome and
+must never be ported: `.rail` (a 250px `position:sticky` desktop sidebar with an `h1`, painted
+from `--pg-*` tokens that exist nowhere else), `.stage`, and `.navpill` - which is the phone
+mock's Android gesture bar, wired in the design's own script to `back`, not a product control.
+A future wave that treats the uncited list as a backlog will "fix" these; it should not.
+
+Two survived as real, verified-absent features, and became the wave's two packages.
+
+### P10-12 - a hand-rolled syntax highlighter was written beside the one already shipped
+
+`W4-TOOLBLOCK` ported the design's `.hl-*` palette by writing a small tokenizer
+(`syntax-highlight-model.ts`) and five hardcoded hex colours converted from the design's
+`oklch()` declarations. Both were deleted at the merge gate. Two independent reasons, each
+sufficient on its own:
+
+**The colours failed WCAG AA, and worst where it matters most.** The design declares `.hl-*`
+exactly once, in `oklch`, and its device mock is dark-only - it never says what light mode
+should do. Painting the converted hexes in both themes put every one of the five below AA on
+the light code surface:
+
+| role     | spec-derived hex | on light `#f7f8f9` | on dark `#1f2022` |
+| -------- | ---------------- | ------------------ | ----------------- |
+| keyword  | `#6da9e7`        | **2.33:1**         | 6.58              |
+| string   | `#df9d6f`        | **2.15:1**         | 7.14              |
+| comment  | `#679f69`        | **2.93:1**         | 5.23              |
+| function | `#ded078`        | **1.47:1**         | 10.40             |
+| number   | `#aed59a`        | **1.54:1**         | 9.93              |
+
+Light high-contrast is identical, so a reader who turned high contrast ON for accessibility
+got the worst result in the table. `plan.md` §10.5 governs contrast; the design does not, and
+on this point it says nothing at all.
+
+**The repository already ships a real highlighter, and Android already used it.**
+`packages/highlight` is a Lezer-based tokenizer, the read path's highlighter on web, and
+`apps/android/src/features/files/file-syntax-highlight.ts` was already its Android adapter -
+exporting `tokenizeFileContent` and `syntaxColorKey`, mapping onto
+`design-tokens`' `SyntaxColors`, which carries the same five role names resolved per theme and
+clears AA in both. The tool block now uses that. A second, deliberately-partial tokenizer would
+have had to be kept in agreement with the real one forever, and nothing would have noticed when
+it drifted.
+
+**What is lost, stated rather than glossed:** the design's five exact dark hexes are not what
+the app paints. `theme.colors.code.syntax` resolves keyword to `accent-ink`, string to `green`,
+comment to `ink-3`, function to `accent`, number to `orange`. A reviewer could reasonably
+prefer the design's own dark values and derive light ones separately. That is a defensible
+second answer; it costs a per-theme fork of a palette that already exists, to match a mock that
+only ever showed one theme.
+
+The 10-line cap the design's own frame label states ("expanded - syntax-highlighted, capped at
+10 lines") survived the deletion: `HIGHLIGHT_LINE_CAP` and `capHighlightedLines` moved into
+`tool-call-row-model.ts`, which has a test file, and are pinned there.
+
+### P10-13 - a body hidden behind a button that is not drawn
+
+The same package gated body visibility on `expanded || status === "failed"`, while the expand
+button is drawn only for `completed` and `failed`. For `running`, `blocked` and `canceled` that
+is a body with no control able to reveal it. A running shell command's streaming output became
+invisible at the moment it matters most. Each half was tested; the combination was not, which
+is the same shape as this project's other recurring defect - an acceptance criterion that
+passes against the thing it was supposed to catch.
+
+`toolBodyIsVisible` gained a third clause: a status that draws no expand button always shows
+its body. The design agrees by construction rather than in prose - its eight `.blk.pend` frames
+without `data-r` and its eleven `.blk.ext` frames all print their lines, and none carries an
+`.xbtn`. `data-r` marks a block that HAS a collapsible result; every block carrying it carries
+a button, and a block with neither is not collapsed, it simply has nothing to fold.
+
+**A test was rewritten rather than made to pass, and a reviewer could disagree.** The old test
+read `expect(toolBodyIsVisible("running", false)).toBe(false)` - it pinned the defect. It is
+replaced by two tests: one naming the three statuses directly, and one stating the invariant
+over every status, so a sixth status added later cannot reintroduce this silently. Both were
+proven to fire before being trusted: restoring the old two-clause return produced
+`2 failed | 63 passed`, and restoring the file from a scratchpad copy returned it to 65 passed
+with an empty `git diff`.
+
+**One frame is deliberately not ported, and naming it is the point.** The design has exactly
+one `<div class="blk pend" data-r>` - a still-running `write` whose result IS expandable. So
+"running is never expandable" is not what the design says, only what this wave built. Making
+`running` expandable is a behaviour change rather than a fold, and it stays out until a wave
+owns it.
+
+### P10-14 - `RunHeader` ships wired to nothing, and that is the SegmentedControl shape again
+
+`W4-RUNFOLD`'s model work is correct and was verified against the design's own bytes: the
+`.runhead` box metrics, the `U+00B7` middle-dot separator read at the byte level rather than
+assumed to be a hyphen, the `runheadTap` script quoted verbatim including both announcement
+strings, and the 12x12 chevron path matching `ui/primitives/vector-icons.tsx`'s own. Its four
+box literals were unpinned on arrival and are now pinned by tests proven to fire.
+
+It is mounted by nothing. That is the defect the brief names by its canonical example -
+`SegmentedControl` shipping with zero call sites - and it is being disclosed rather than
+dressed up: **this wave shipped no user-visible run header.**
+
+**The merge gate's stated reason for not wiring it is wrong, and correcting it matters more
+than the verdict.** The gate reported that `TranscriptWindowList` depends on a 1:1
+entry-to-list-index correspondence that injecting headers would break. Checked against the
+source: `TranscriptWindowEntry` requires exactly `{ readonly id: string }`, and
+`transcript-window-model.ts`'s own doc comment says it is "deliberately generic rather than
+importing `CoreMessageEntry`/`SessionTranscriptEntry`: this window has no opinion on _which_
+`TranscriptEntry` kinds a caller renders, only on how many of them it keeps mounted." A run
+header carrying its own `id` is an entry like any other; the window slices the caller's array
+and the correspondence is preserved by construction. Left uncorrected, that reason would have
+sent the next wave designing around a constraint that does not exist.
+
+**The real blocker is upstream, and it is narrower.** The entries array is built by the route,
+outside this package's file list, and `TranscriptWindowEntry` carries no turn identity. The
+wire does have one - `packages/protocol`'s `agent-types.ts` declares `turn_started` /
+`turn_completed` / `turn_canceled` each with `turnId?: string` - but it is OPTIONAL, and
+nothing carries it down into the Android transcript entry model. So the wiring package is:
+thread `turnId` from the agent events through `frontend-core`'s transcript entry shape into
+`TranscriptWindowEntry`, decide what a run boundary is when `turnId` is absent (it is optional,
+so that case is real and needs an answer, not an assumption), and inject `RunHeader` rows in
+the route. That is a cross-package task, not a gate fix, and inventing the boundary at a gate -
+unreviewed, and unverifiable without a device - would have been worse than reporting it.
+
+### P10-15 - the wave shipped no new `CAPABILITIES` entry, on purpose
+
+Every other wave in this phase registered what it shipped, per `CLAUDE.md`'s T124 rule. This
+one registers nothing, and the reason is that the rule is about capabilities that SHIP.
+`RunHeader` reaches no user (P10-14), so an entry for it would assert a capability the product
+does not have. The tool block's expand affordance does ship - but its colour source changed at
+the gate (P10-12) and the `running`/`blocked`/`canceled` behaviour is explicitly unfinished
+(P10-13), so an entry pinned to a symbol either could still move would be registering a
+moving target. Both are registered by the wave that finishes them, not by this one.
