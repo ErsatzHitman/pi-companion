@@ -22260,3 +22260,136 @@ not be smuggled in as one.
 manufacturing a package out of the three candidates above is the finding, not a failure to find
 one: each of the three has a written reason a reviewer can attack, and the two that are real
 work are named precisely enough for whoever picks them up.
+
+## Wave P10-W7 (UI spec conformance, iteration 7)
+
+One Android package, `W7-COUNTDOWN`: the provider-retry countdown the design draws, built on the
+live `pi_retry` data Android was already receiving. Files were
+`apps/android/src/features/composer/turn-status-model.ts`, `TurnStatusBanner.tsx` and the two
+matching test files, plus `scripts/ci/guard-capability-prose.mjs` in the SAME commit rather than a
+follow-up - see P10-24 for why that changed this wave.
+
+### P10-22 - P10-21's third finding was wrong: the retry countdown was never blocked
+
+P10-21 sorted the behaviour-first audit's candidates into three classes and put the provider-retry
+countdown in the third: "real, wire-backed, and blocked on a domain that deliberately does not
+exist yet". It specified the work as "build the turn-state domain in `frontend-core`, subscribe the
+stream events, and render the row on both platforms", and ruled it out of an Android UI wave on the
+grounds that it "changes `apps/web` identically".
+
+**That conclusion is false, and this entry supersedes it.** Android already subscribes the live
+retry event, already stores every field the countdown needs, and renders a banner from it today.
+Measured, not assumed:
+
+- `apps/android/src/features/composer/turn-status-model.ts`'s `createTurnStatusController`
+  subscribes `DaemonClient.on("agent_stream")` directly and feeds `applyTurnStreamEvent`, which
+  handles the `pi_retry` variant. Its own header comment states why it bypasses the timeline
+  reducer: that reducer drops `pi_retry` silently, so this module "reads BOTH signals directly off
+  the same raw `agent_stream` push ... independent of `frontend-core`'s timeline reducer entirely,
+  so it is not blocked by the gap above and does not need it closed to be real."
+- `apps/android/src/app-shell/session-route-daemon-clients.ts`'s `resolveTurnStatusClient` wires the
+  live client; `Composer.tsx` renders `TurnStatusBanner` from the resulting state.
+- `TurnRetryStatus` already carries `delayMs`, straight off the wire - and `describeRetryStatus`
+  never read it. That, and only that, was the actual gap.
+
+**Two supporting claims in P10-21 were also wrong, and both are the same conflation.**
+
+| P10-21 said                                                                                                       | Measured                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| "`auto_retry_start` and `auto_retry_end` are genuine Pi RPC events" backing the countdown                         | True that they exist, false that they are the daemon's stream shape. `git grep -c auto_retry packages/protocol/src/agent-types.ts` returns zero. They are Pi's own upstream RPC events, translated by the Pi provider; the `AgentStreamEvent` variant the apps actually see is `pi_retry`. |
+| "`apps/web` already has `use-auto-retry.ts` while `apps/android` has no equivalent at all - a genuine parity gap" | Half right, and the wrong half was load-bearing. The auto-retry SETTING (`setAutoRetry`/`getAutoRetry`, settings RPCs) genuinely has no Android call site. The live retry EVENT does, and has since T39C. The sentence read as though Android saw no retry data at all.                    |
+
+**The reusable lesson, which is the point of recording this.** P10-14 retired the class-name audit
+lens after five false positives. P10-21 replaced it with a behaviour-first lens - `aria-label`,
+`data-act`, `say()` - and that lens was genuinely better: it resolved six of its nine candidates
+correctly. It still produced this miss, because of what it asked next. Having found real wire data,
+it asked "which `TranscriptEntry` kind would host this row?", got the correct answer "none, and
+inventing one contradicts a written decision", and stopped there. The question that closes it is
+different: **"does any live data path already carry this event, anywhere, under any name?"** The
+command is one line and it answers in one line:
+
+```
+git grep -ln "pi_retry" -- apps packages
+```
+
+Run against the tree P10-21 was written on, it returns `turn-status-model.ts` and `Composer.tsx`
+among others. So this is the same failure mode as P10-14 one level up: not "the source names it
+differently" but "the source hosts it somewhere else". A lens that enumerates the design's
+controls still only tells you what to look for, never where the app might already have put it.
+The grep for the DATA is what closes the question; the grep for the CONTROL never can.
+
+**What is still genuinely open, stated so it is not lost in this correction.** Two things P10-21
+named are real and remain undone, and neither is what it thought was blocking:
+
+1. The `frontend-core` timeline reducer still drops `pi_retry`, so neither platform can render a
+   retry as a transcript ROW in stream order. `apps/web`'s `retry-row.tsx` is a finished renderer
+   with no production caller waiting on exactly that projection - `retryEntryFromPiRetryEvent` has
+   test callers only. That is still cross-package work and still not an Android UI package.
+2. Android still has no equivalent of `apps/web/src/features/settings/use-auto-retry.ts` - the
+   toggle that turns auto-retry on or off. `DaemonClient.setAutoRetry`/`getAutoRetry` are shipped
+   and unused by Android. That is a settings-surface package, not a transcript one.
+
+The spec's `data-act="retry"` ("tap to retry now") is closed unbuilt for the `WEB-TEAL` reason
+(P10-8): no request in `packages/protocol/src` or `packages/client/src` forces an immediate retry,
+so the chip would fire an action that does not exist. A reviewer could disagree by arguing the
+daemon should grow that RPC - true, and a backend feature with its own protocol change.
+
+### P10-23 - the countdown shipped with a stale clock, and the test method could not see it
+
+The implementer's `useRetryCountdownSeconds` seeded its clock once, at mount:
+
+```
+const [nowMs, setNowMs] = useState(() => Date.now());
+const remaining = retryCountdownSecondsRemaining(retry, nowMs);
+const counting = remaining !== null && remaining > 0;
+useEffect(() => { if (!counting) return undefined; ... }, [counting]);
+```
+
+`nowMs` advances only from inside the interval, and the interval only runs while something is
+already counting down. So a banner mounted before the first `pi_retry` measured that retry against
+a clock frozen at mount time: idle for ten minutes, then a `delayMs: 8000` retry arrives and the
+line reads `Retrying (2/5) in 608s…`. The fix is a second effect keyed on `receivedAtMs` that
+re-seeds the clock once per retry, before any tick.
+
+**The part worth recording is why neither agent caught it.** The verify agent read the effect and
+checked exactly what it was asked to check - does the interval start only while counting, does it
+clear on unmount and at zero, does a second retry mid-countdown behave - and every one of those
+answers was correct. It never asked whether the value being counted against was fresh. The gate
+found it by reading the hook with a different question: not "does this timer stop correctly" but
+"where does each input to the displayed number come from, and when was it last true".
+
+**And no test in that file could have caught it, which is a standing limit, not this wave's
+oversight.** `TurnStatusBanner.test.ts` asserts against the component's own SOURCE TEXT, because
+this workspace's plain vitest cannot mount `react-native` - a constraint that file's own header
+has documented for many waves. Every assertion it can make is a shape assertion. A stale seed is a
+runtime fact about when a value was captured; no regex over source can see it. The two tests added
+at the gate pin the re-seed's shape and were proven to fire (removing the effect turns the file
+red, restoring it green, the file restored from a scratchpad copy rather than `git checkout --`),
+but they prove the code has the right STRUCTURE, not that the countdown reads correctly on a
+device. That gap closes only when this workspace grows a React Native render harness. Until then,
+this file's tests should be read as a guard against regression, never as proof of behaviour.
+
+This is the fourth wave in a row where the finding is the same shape: **an acceptance criterion
+that is a grep, and a defect that lives exactly where the grep cannot look.** P10-17 found three
+design numbers pinned by a regex over a `.tsx` file while the token underneath them could move
+freely; this is the same failure one layer up.
+
+### P10-24 - the capability entry landed in the package's own commit, for the first time this phase
+
+P10-15 recorded that `W4-TOOLBLOCK` shipped a capability with no `CAPABILITIES` entry, and the
+three waves since each closed that with a separate `GATE-N` commit afterwards. That works, but it
+is not what the rule says: `CLAUDE.md`'s T124 section, and the brief, both require the entry in the
+SAME commit that ships the capability, because the window between the two commits is exactly when
+a false sentence can land and pass CI.
+
+`W7-COUNTDOWN` therefore includes `scripts/ci/guard-capability-prose.mjs` in its own commit. The
+entry is a single bare member (`retryCountdownSecondsRemaining`, measured as declared in exactly
+one shipped file before the shape was chosen, not assumed), and it was proven able to FIRE before
+being trusted: a denying sentence in this entry's own wording, appended to a real tracked in-scope
+file, made `run-guard-capability-prose.mjs` exit 1 naming this capability; restoring that file from
+a scratchpad copy returned it to exit 0 with `git status --porcelain` empty for it.
+
+The T124 grep was also run and came back clean: no shipped source anywhere in scope asserts the
+Android retry countdown is absent. The only prose that this wave falsifies is P10-21's own, which
+sits in `DOCS_LEDGER_DENIAL_EXCLUSIONS` where the guard cannot reach it - corrected by hand in
+P10-22 above, the same way P10-14 was.
