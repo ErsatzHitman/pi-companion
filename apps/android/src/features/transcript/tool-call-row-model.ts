@@ -486,6 +486,188 @@ export function unrecognizedToolMeta(tool: tools.GenericToolCallViewModel): stri
   return `Unrecognized tool${tool.source ? ` from ${tool.source}` : ""}: ${tool.toolName}`;
 }
 
+// --- The `.xbtn` expand affordance (W4-TOOLBLOCK) ---
+//
+// android-spec.html: `.xbtn{position:absolute;right:8px;top:7px;width:26px;
+// height:26px;border-radius:var(--r-full);...background:color-mix(in
+// oklab,var(--ink) 9%,transparent);color:var(--ink-2);transition:transform
+// .28s cubic-bezier(.34,1.56,.64,1),background .15s}` plus
+// `.blk:hover .xbtn{background:color-mix(in oklab,var(--ink) 15%,
+// transparent)}` and `.blk.hasx.open .xbtn,.blk[data-r]:not(.fold)
+// .xbtn{transform:rotate(180deg)}`. There is no `:hover` on Android, so the
+// hover step is ported as the PRESSED state instead (`tool-call-row.tsx`'s
+// own doc comment says so again at the call site, where the theme is).
+//
+// The geometry constants (26px size, 8px/7px offset, the 11px icon, the
+// hitSlop that clears the 48dp touch floor) are NOT here: they are RN
+// layout literals with no meaning outside a `StyleSheet`, and
+// `ui/primitives/touch-targets.test.ts` (T376) can only resolve a
+// dimension it finds as a literal or a same-file `const NAME = <int>;` in
+// `tool-call-row.tsx` itself — an imported identifier resolves to nothing
+// there. They are pinned directly in that file instead, the same split
+// `TOOL_CHIP_RADIUS`/`TOOL_CHIP_PADDING_HORIZONTAL` already use for the
+// `.tchip` box below.
+
+/**
+ * `color-mix(in oklab, var(--ink) 9%, transparent)` / `... 15% ...`.
+ *
+ * Mixing ANY opaque colour with the `transparent` keyword in CSS Color 4
+ * does not blend toward black the way naively premultiplying two RGBA
+ * values would: a colour with 0% alpha is defined to carry forward the
+ * OTHER colour's hue/lightness/chroma for interpolation purposes (the
+ * "powerless component" rule CSS Color 4 added specifically to fix the old
+ * `rgba(0,0,0,0)`-gradient grey-halo bug). The result of mixing `ink` with
+ * `transparent` at a given percentage is therefore just `ink` at that
+ * percentage as its ALPHA — not a flat pre-composited hex the way
+ * `packages/design-tokens/src/tokens.ts`'s A-PIROLES roles are (those mix
+ * two OPAQUE colours, which really does need the oklab math that file's
+ * comments show). No oklab conversion is needed here; only alpha changes.
+ */
+export const TOOL_XBTN_BACKGROUND_ALPHA_REST = 0.09;
+export const TOOL_XBTN_BACKGROUND_ALPHA_PRESSED = 0.15;
+
+/** Parses a `#rrggbb` hex colour and returns it as an `rgba(...)` string at
+ * `alpha` — the mechanism `TOOL_XBTN_BACKGROUND_ALPHA_REST`/`_PRESSED`'s
+ * own doc comment describes, applied to whichever hex `theme.colors.ink`
+ * resolves to for the active theme (this module never imports
+ * `@picompanion/design-tokens` itself — the caller, which already has the
+ * theme, supplies the hex). Never throws on a malformed input; returns the
+ * input unchanged so a caller sees the mistake rather than a crash. */
+export function inkOverlayColor(inkHex: string, alpha: number): string {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec(inkHex);
+  if (match === null) {
+    return inkHex;
+  }
+  const value = match[1];
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** `transition:transform .28s cubic-bezier(.34,1.56,.64,1)` — the artifact's
+ * own spring for this one control. Not `EXPRESSIVE_PRESS_SPRING_EASING`
+ * (`../../ui/theme/expressive-motion.ts`'s `cubic-bezier(.34,1.7,.5,1)`,
+ * checked directly and confirmed distinct — different duration, different
+ * curve): that file has no matching entry today, and it is outside this
+ * package's exclusive file list, so this is recorded here rather than
+ * there. See this task's report for the exact addition a future task could
+ * migrate into that file instead. */
+export const TOOL_XBTN_ROTATION_DURATION_MS = 280;
+
+/** `cubic-bezier(.34,1.56,.64,1)` as a plain 4-tuple, the same shape
+ * `../../ui/theme/expressive-motion.ts`'s own `CubicBezier` type uses (not
+ * imported — this module stays RN- and theme-free — but named the same way
+ * on purpose). */
+export type ToolXbtnRotationEasing = readonly [number, number, number, number];
+export const TOOL_XBTN_ROTATION_EASING: ToolXbtnRotationEasing = [0.34, 1.56, 0.64, 1];
+
+/** `.blk.hasx.open .xbtn,.blk[data-r]:not(.fold) .xbtn{transform:rotate(
+ * 180deg)}` — the open/expanded rotation target; `0` is the resting,
+ * collapsed angle. */
+export const TOOL_XBTN_ROTATION_OPEN_DEG = 180;
+export const TOOL_XBTN_ROTATION_CLOSED_DEG = 0;
+
+/**
+ * Whether a tool call's header draws the `.xbtn` affordance at all.
+ *
+ * android-spec.html shows the button on every FINISHED call this app's own
+ * families can produce — `completed` or `failed` — and never on a call
+ * that is still `running`/`blocked` (every `.blk.pend` frame in the spec
+ * omits it; there is nothing resolved yet for it to reveal) nor on
+ * `canceled` (the spec's own "ctrl+c aborted" error frame — the one
+ * finished-but-produced-nothing case — also omits it). This keys off
+ * outcome, not merely "not running".
+ */
+export function toolCardHasExpandButton(status: tools.ToolCallViewStatus): boolean {
+  return status === "completed" || status === "failed";
+}
+
+/**
+ * Whether a tool call's collapsible body renders, given the caller's own
+ * local `expanded` toggle state.
+ *
+ * android-spec.html's own words for this rule, quoted directly from its
+ * "collapsed" frame label: "renderResult returns "" unless expanded or
+ * errored". `failed` is therefore a standing OVERRIDE, independent of
+ * `expanded` — an error result is never hidden behind the fold, even
+ * while the block's own toggle is still in its collapsed default — which
+ * is also why `../../ui/recipes` never re-derives this decision: the two
+ * conditions are genuinely independent (a caller could press the button
+ * on an already-visible error body and nothing would change), not one
+ * flag standing in for the other.
+ *
+ * The third clause is the one that keeps this honest, and it was added at
+ * the P10-W4 merge gate after the first version shipped without it: a
+ * status that draws NO expand button always shows its body. Without that
+ * clause `running`, `blocked` and `canceled` rendered no body and offered
+ * no control to reveal one, so a running shell command's streaming output
+ * became unreachable at the moment it matters most. The design agrees, and
+ * says so by construction rather than in prose — its eight `.blk.pend`
+ * frames without `data-r` and its eleven `.blk.ext` frames all print their
+ * lines with no `.xbtn` anywhere near them. `data-r` marks a block that
+ * HAS a collapsible result, and every block carrying it carries a button;
+ * a block with neither is not collapsed, it simply has nothing to fold.
+ *
+ * One frame is deliberately not ported, and naming it is the point: the
+ * design has exactly one `<div class="blk pend" data-r>` — a still-running
+ * `write` whose result IS expandable. Making `running` expandable is a
+ * behaviour change, not a fold; it stays out until a wave owns it. See
+ * `docs/issues-from-plan.md` P10-13.
+ */
+export function toolBodyIsVisible(status: tools.ToolCallViewStatus, expanded: boolean): boolean {
+  return expanded || status === "failed" || !toolCardHasExpandButton(status);
+}
+
+/**
+ * The design's own frame label for an expanded read reads "expanded —
+ * syntax-highlighted, capped at 10 lines". This is that cap.
+ */
+export const HIGHLIGHT_LINE_CAP = 10;
+
+export interface CappedHighlightLines {
+  /** Already bounded to at most `cap` entries. */
+  readonly visible: readonly string[];
+  readonly totalLines: number;
+  /** How many trailing lines were dropped by the cap; `0` when none were. */
+  readonly hiddenLines: number;
+  /** Same phrasing as `diffLinesFor`'s truncation notice — one wording for
+   * "there is more, and here is exactly how much" across this feature,
+   * rather than a second string shape for the identical idea. `undefined`
+   * when nothing was hidden. */
+  readonly truncatedNotice: string | undefined;
+}
+
+/** Bounds `lines` to `cap` (default `HIGHLIGHT_LINE_CAP`) entries, with a
+ * visible, named truncation notice rather than a silent cut — the same
+ * shape `diffLinesFor` already uses for the diff line cap, applied here to
+ * the highlighted-body cap. */
+export function capHighlightedLines(
+  lines: readonly string[],
+  cap: number = HIGHLIGHT_LINE_CAP,
+): CappedHighlightLines {
+  const visible = lines.length > cap ? lines.slice(0, cap) : lines.slice();
+  const hiddenLines = lines.length - visible.length;
+  return {
+    visible,
+    totalLines: lines.length,
+    hiddenLines,
+    truncatedNotice:
+      hiddenLines > 0
+        ? `Showing first ${visible.length} of ${lines.length} lines (${hiddenLines} more ${
+            hiddenLines === 1 ? "line" : "lines"
+          } hidden).`
+        : undefined,
+  };
+}
+
+/** The `.xbtn`'s `aria-label`, which the design flips between the two
+ * states it announces — `accessibilityLabel` on Android plays the
+ * identical role. */
+export function toolExpandButtonAccessibilityLabel(expanded: boolean): "Expand" | "Collapse" {
+  return expanded ? "Collapse" : "Expand";
+}
+
 export interface TranscriptToolCallRowProps {
   entry: ToolCallTranscriptEntry;
   testId?: string;

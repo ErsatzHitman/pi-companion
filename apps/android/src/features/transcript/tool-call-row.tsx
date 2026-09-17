@@ -75,8 +75,14 @@
  * `genericResultSummary`) and never the raw `collapsibleInput`/`result`/
  * `rawError` value.
  */
-import { memo, useCallback } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useEffect, useState } from "react";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import type { tools } from "@picompanion/frontend-core";
 
 // The one label that names how a reader actually stops a running
@@ -85,7 +91,7 @@ import type { tools } from "@picompanion/frontend-core";
 // reader to press a button the composer no longer draws.
 import { ABORT_ACTION_LABEL } from "../composer/composer-model";
 
-import { CodeBlock, Link, RecordList, StatusIndicator } from "../../ui/primitives";
+import { CodeBlock, Link, RecordList, StatusIndicator, VectorIcon } from "../../ui/primitives";
 import {
   BLOCK_PADDING_HORIZONTAL,
   BLOCK_PADDING_VERTICAL,
@@ -97,7 +103,6 @@ import {
 } from "../../ui/theme/block-shape";
 import {
   BashBlock,
-  CodeListing,
   DiffLines,
   DiffSummary,
   MatchedLine,
@@ -109,6 +114,12 @@ import { useTheme } from "../../ui/theme/theme-context";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import {
   STATUS_TONE,
+  TOOL_XBTN_BACKGROUND_ALPHA_PRESSED,
+  TOOL_XBTN_BACKGROUND_ALPHA_REST,
+  TOOL_XBTN_ROTATION_CLOSED_DEG,
+  TOOL_XBTN_ROTATION_DURATION_MS,
+  TOOL_XBTN_ROTATION_EASING,
+  TOOL_XBTN_ROTATION_OPEN_DEG,
   areToolCallRowPropsEqual,
   diffCounts,
   diffLineInputsFor,
@@ -116,11 +127,16 @@ import {
   formatToolDuration,
   genericInputSummary,
   genericResultSummary,
+  inkOverlayColor,
   isKnownToolCall,
   searchCountsLine,
   searchMatchLines,
   shellBlockIsDimmed,
   statusTextFor,
+  capHighlightedLines,
+  toolBodyIsVisible,
+  toolCardHasExpandButton,
+  toolExpandButtonAccessibilityLabel,
   toolHeaderChipLabel,
   truncateBody,
   unrecognizedToolMeta,
@@ -128,6 +144,7 @@ import {
   type KnownToolCallViewModel,
   type TranscriptToolCallRowProps,
 } from "./tool-call-row-model";
+import { syntaxColorKey, tokenizeFileContent } from "../files/file-syntax-highlight";
 
 export type { ToolCallTranscriptEntry, TranscriptToolCallRowProps } from "./tool-call-row-model";
 export { isToolCallEntry } from "./tool-call-row-model";
@@ -140,6 +157,33 @@ const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
 /** `.tchip { border-radius: 5px; padding: 0 4px }` — no token at 5 or 4, so both are stated with the reference. */
 const TOOL_CHIP_RADIUS = 5;
 const TOOL_CHIP_PADDING_HORIZONTAL = 4;
+
+/**
+ * `.xbtn { position: absolute; right: 8px; top: 7px; width: 26px; height:
+ * 26px }` (W4-TOOLBLOCK). RN literals, not imported from `tool-call-row-
+ * model.ts`: `../../ui/primitives/touch-targets.test.ts` (T376) can only
+ * resolve a style dimension it finds as a numeric literal, or as a
+ * same-file `const NAME = <int>;`, so these have to live here — see
+ * `tool-call-row-model.ts`'s own `.xbtn` section header comment for why
+ * the geometry split lands this way (same reasoning `TOOL_CHIP_RADIUS`
+ * above already follows).
+ */
+const TOOL_XBTN_SIZE_DP = 26;
+const TOOL_XBTN_OFFSET_TOP_DP = 7;
+const TOOL_XBTN_OFFSET_RIGHT_DP = 8;
+/** `<svg width="11" height="11" ...>` — the artifact's own chevron size. */
+const TOOL_XBTN_ICON_SIZE_DP = 11;
+// The 26dp `.xbtn` sits below the 48dp touch floor: `26 + 2 * hitSlop >=
+// 48` needs `hitSlop >= 11`; `11` reaches exactly 48dp. That number is
+// written as a literal directly on the `Pressable` below, not as a named
+// constant here: `touch-targets.test.ts` reads `hitSlop={(\d+)}` and never
+// resolves an identifier for this one prop (see that file's own
+// `elementMeetsTouchTarget`) — the one geometry number in this section
+// that cannot be given a name at all.
+/** `.blk.hasx>.ln:first-child,.blk[data-r]>.ln:first-child{padding-right:
+ * 34px}` — room reserved on the header row so its text never runs under
+ * the button. */
+const TOOL_XBTN_HEADER_RESERVE_DP = 34;
 
 /**
  * Which `.blk` a tool call is. `running`, `blocked` and `canceled` are
@@ -174,7 +218,13 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     // `.blk { border-radius: 14px; padding: 9px 11px }` — the same block
     // every other transcript element is drawn in. The fill, ring and
     // outline come from `useToolBlockStyle` above.
+    // `.blk.hasx,.blk[data-r]{position:relative}` — always applied here
+    // rather than conditionally, since an absolutely positioned `.xbtn`
+    // only ever renders as a sibling when `toolCardHasExpandButton` is
+    // true, so a resting (no-button) card gains a `position:relative` with
+    // nothing positioned against it, changing nothing about its layout.
     block: {
+      position: "relative",
       gap: theme.spacing[1],
       borderRadius: BLOCK_RADIUS,
       paddingVertical: BLOCK_PADDING_VERTICAL,
@@ -186,6 +236,45 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       flexWrap: "wrap",
       gap: theme.spacing[1],
       marginBottom: theme.spacing[1],
+    },
+    headerReserveExpandButton: {
+      paddingRight: TOOL_XBTN_HEADER_RESERVE_DP,
+    },
+    xbtnTouch: {
+      position: "absolute",
+      top: TOOL_XBTN_OFFSET_TOP_DP,
+      right: TOOL_XBTN_OFFSET_RIGHT_DP,
+      width: TOOL_XBTN_SIZE_DP,
+      height: TOOL_XBTN_SIZE_DP,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    xbtn: {
+      width: TOOL_XBTN_SIZE_DP,
+      height: TOOL_XBTN_SIZE_DP,
+      borderRadius: theme.radii.full,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    highlight: {
+      backgroundColor: theme.colors.code.codeBackground,
+      borderWidth: 1,
+      borderColor: theme.colors.code.codeBorder,
+      borderRadius: theme.radii.control,
+      padding: theme.spacing[3],
+      gap: 1,
+    },
+    highlightPath: {
+      color: theme.colors["ink-3"],
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: theme.typography.variant.caption.fontSize,
+      marginBottom: theme.spacing[1],
+    },
+    highlightLine: {
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: LINE_FONT_SIZE,
+      lineHeight: LINE_HEIGHT,
+      color: theme.colors.code.codeForeground,
     },
     // `.tt { color: var(--ink); font-weight: 700 }` on a `.ln`.
     name: {
@@ -234,12 +323,23 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
 
 type Styles = ReturnType<typeof createStyles>;
 
-function ToolCallHeader({ tool, testId }: { tool: tools.ToolCallViewModel; testId?: string }) {
+function ToolCallHeader({
+  tool,
+  reserveExpandButton,
+  testId,
+}: {
+  tool: tools.ToolCallViewModel;
+  /** `.blk.hasx>.ln:first-child{padding-right:34px}` — true whenever
+   * `toolCardHasExpandButton(tool.status)` is, so the header's own text
+   * never sits under the absolutely positioned `.xbtn`. */
+  reserveExpandButton: boolean;
+  testId?: string;
+}) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const chipLabel = toolHeaderChipLabel(tool);
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, reserveExpandButton ? styles.headerReserveExpandButton : null]}>
       <Text style={styles.name}>{tool.displayName}</Text>
       {chipLabel !== undefined && chipLabel.length > 0 ? (
         <View style={styles.chip} testID={testId ? `${testId}-arg-chip` : undefined}>
@@ -257,6 +357,170 @@ function ToolCallHeader({ tool, testId }: { tool: tools.ToolCallViewModel; testI
         statusText={statusTextFor(tool.status)}
         testId={testId ? `${testId}-status` : undefined}
       />
+    </View>
+  );
+}
+
+/**
+ * W4-TOOLBLOCK: the design's `.xbtn` — a round chevron button pinned to
+ * the block's own top-right corner (`styles.xbtnTouch`, positioned against
+ * the `position:"relative"` block View), which flips between "Expand" and
+ * "Collapse" as `expanded` changes (plan.md §10.5: the announced meaning,
+ * not colour or rotation alone, carries the state).
+ *
+ * **Hover ported as pressed.** There is no `:hover` on Android; the
+ * design's `.blk:hover .xbtn{background:...15%...}` step is drawn here on
+ * `pressed` instead (`inkOverlayColor`, whose own doc comment on
+ * `tool-call-row-model.ts` explains why no oklab math is needed for a
+ * mix-with-`transparent`).
+ *
+ * **Rotation is a real animation**, not an instant flip: 280ms on the
+ * artifact's own overshoot spring (`TOOL_XBTN_ROTATION_EASING`), collapsed
+ * to an instant jump under `reduceMotion` the same way every other themed
+ * animation in this tree already is (e.g. `../../ui/theme/use-press-
+ * scale.ts`'s `onPressIn`/`onPressOut`).
+ *
+ * The 26dp visual circle sits below the 48dp touch floor
+ * (`../../ui/primitives/touch-targets.test.ts`), so — the same treatment
+ * `Chip`'s removable button and `work-group-row.tsx`'s disclosure trigger
+ * already get — the visual size is left exactly as the design draws it
+ * and a `hitSlop` (below) pads the touch area outward instead.
+ */
+function ExpandButton({
+  expanded,
+  onPress,
+  styles,
+  testId,
+}: {
+  expanded: boolean;
+  onPress: () => void;
+  styles: Styles;
+  testId?: string;
+}) {
+  const { theme, reduceMotion } = useTheme();
+  const rotation = useSharedValue(
+    expanded ? TOOL_XBTN_ROTATION_OPEN_DEG : TOOL_XBTN_ROTATION_CLOSED_DEG,
+  );
+
+  useEffect(() => {
+    const target = expanded ? TOOL_XBTN_ROTATION_OPEN_DEG : TOOL_XBTN_ROTATION_CLOSED_DEG;
+    rotation.value = reduceMotion
+      ? target
+      : withTiming(target, {
+          duration: TOOL_XBTN_ROTATION_DURATION_MS,
+          easing: Easing.bezier(...TOOL_XBTN_ROTATION_EASING),
+        });
+  }, [expanded, reduceMotion, rotation]);
+
+  const rotationStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={toolExpandButtonAccessibilityLabel(expanded)}
+      accessibilityState={{ expanded }}
+      onPress={onPress}
+      // Literal, not `TOOL_XBTN_HIT_SLOP`: `touch-targets.test.ts`'s
+      // `elementMeetsTouchTarget` reads `hitSlop={(\d+)}` and never
+      // resolves an identifier for this one prop (see that constant's own
+      // doc comment above).
+      hitSlop={11}
+      style={styles.xbtnTouch}
+      testID={testId ? `${testId}-xbtn` : undefined}
+    >
+      {({ pressed }) => (
+        <Animated.View
+          style={[
+            styles.xbtn,
+            {
+              backgroundColor: inkOverlayColor(
+                theme.colors.ink,
+                pressed ? TOOL_XBTN_BACKGROUND_ALPHA_PRESSED : TOOL_XBTN_BACKGROUND_ALPHA_REST,
+              ),
+            },
+            rotationStyle,
+          ]}
+        >
+          <VectorIcon
+            name="chevron-down"
+            size={TOOL_XBTN_ICON_SIZE_DP}
+            color={theme.colors["ink-2"]}
+          />
+        </Animated.View>
+      )}
+    </Pressable>
+  );
+}
+
+/**
+ * W4-TOOLBLOCK: the design's `.hl-*` syntax-highlighted body
+ * (the confirmed Android design's own "expanded — syntax-highlighted,
+ * capped at 10 lines" frame). Rendered as its own minimal mono block
+ * rather than by adding a "highlight" prop to `../../ui/primitives`'
+ * `CodeBlock` or `../../ui/recipes`' `CodeListing` — neither accepts
+ * styled spans today — in the same visual language those two already use
+ * (`theme.colors.code.*`, `theme.radii.control`).
+ *
+ * Each line becomes one outer `Text` (so it wraps as one unit) holding one
+ * nested `Text` per token, because React Native colours text by nesting
+ * `Text` and has no inline `<span>`.
+ *
+ * **The tokenizer is `../files/file-syntax-highlight`'s
+ * `tokenizeFileContent`, and the colours are `theme.colors.code.syntax`.**
+ * Decided at the P10-W4 merge gate, replacing a hand-rolled tokenizer and
+ * five hardcoded hexes this wave first shipped. Two reasons, both
+ * measured rather than argued:
+ *
+ * 1. The repository already ships a real highlighter. `@picompanion/
+ *    highlight`'s Lezer build is the read path's tokenizer on web and was
+ *    already this app's tokenizer for the file view, via the adapter this
+ *    module now imports. A second, deliberately-partial tokenizer beside
+ *    it would have had to be kept in agreement with it forever.
+ * 2. The design declares `.hl-*` exactly once, in oklch, and its device
+ *    mock is dark-only — it never says what light mode should do.
+ *    Converting those five to hex and painting them in both themes put
+ *    every one of them below AA on the light code surface, worst case
+ *    1.47:1 for `.hl-f`, and identical under high contrast, where a
+ *    reader has explicitly asked for MORE contrast. `theme.colors.code
+ *    .syntax` carries the same five roles resolved per theme and clears
+ *    AA in both. plan.md §10.5 governs; the design does not.
+ */
+function HighlightedFileBody({
+  path,
+  code,
+  styles,
+}: {
+  path: string;
+  code: string;
+  styles: Styles;
+}) {
+  const { theme } = useTheme();
+  const capped = capHighlightedLines(code.split("\n"));
+  // Tokenize only what is drawn: the cap is applied first, so a 4000-line
+  // read parses ten lines, not four thousand.
+  const tokenLines = tokenizeFileContent(capped.visible.join("\n"), path);
+  return (
+    <View style={styles.highlight}>
+      <Text style={styles.highlightPath} numberOfLines={1}>
+        {path}
+      </Text>
+      {capped.visible.map((line, index) => (
+        <Text key={index} style={styles.highlightLine}>
+          {(tokenLines[index] ?? [{ text: line, style: null }]).map((token, tokenIndex) => {
+            const key = syntaxColorKey(token.style);
+            return key === null ? (
+              token.text
+            ) : (
+              <Text key={tokenIndex} style={{ color: theme.colors.code.syntax[key] }}>
+                {token.text}
+              </Text>
+            );
+          })}
+        </Text>
+      ))}
+      {capped.truncatedNotice ? <Text style={styles.meta}>{capped.truncatedNotice}</Text> : null}
     </View>
   );
 }
@@ -309,7 +573,11 @@ function ReadBody({ tool, styles }: { tool: tools.ReadToolCallViewModel; styles:
   return (
     <View style={styles.body}>
       {tool.content ? (
-        <CodeListing path={tool.filePath} language="text" code={truncateBody(tool.content)} />
+        <HighlightedFileBody
+          path={tool.filePath}
+          code={truncateBody(tool.content)}
+          styles={styles}
+        />
       ) : (
         <Text style={styles.meta}>{tool.filePath}</Text>
       )}
@@ -507,21 +775,42 @@ function UnknownToolCard({
   const resultLabel = tool.status === "failed" ? "Error" : "Result";
   const showResultPanel =
     tool.status === "failed" ? tool.rawError !== undefined : tool.result !== undefined;
+  // W4-TOOLBLOCK: the `.xbtn` affordance and the collapsed-by-default
+  // body it reveals — `collapsibleInput` is this generic card's OWN field
+  // name for exactly this behaviour (see `tool-call-row-model.ts`'s
+  // `genericInputSummary`), so both panels below (Input and, when shown,
+  // Result/Error) are gated the same way a known card's family body is.
+  const hasExpandButton = toolCardHasExpandButton(tool.status);
+  const [expanded, setExpanded] = useState(false);
+  const bodyVisible = toolBodyIsVisible(tool.status, expanded);
+  const onToggleExpand = useCallback(() => setExpanded((value) => !value), []);
   return (
     <View style={[styles.block, blockStyle]} testID={testId}>
-      <ToolCallHeader tool={tool} testId={testId} />
+      <ToolCallHeader tool={tool} reserveExpandButton={hasExpandButton} testId={testId} />
+      {hasExpandButton ? (
+        <ExpandButton
+          expanded={expanded}
+          onPress={onToggleExpand}
+          styles={styles}
+          testId={testId}
+        />
+      ) : null}
       <View style={styles.body}>
         <Text style={[styles.meta, tool.status === "failed" ? styles.metaError : null]}>
           {unrecognizedToolMeta(tool)}
         </Text>
-        {showResultPanel ? (
+        {bodyVisible ? (
           <>
-            <Text style={styles.panelLabel}>{resultLabel}</Text>
-            <CodeBlock code={genericResultSummary(tool)} language="json" />
+            {showResultPanel ? (
+              <>
+                <Text style={styles.panelLabel}>{resultLabel}</Text>
+                <CodeBlock code={genericResultSummary(tool)} language="json" />
+              </>
+            ) : null}
+            <Text style={styles.panelLabel}>Input</Text>
+            <CodeBlock code={genericInputSummary(tool)} language="json" />
           </>
         ) : null}
-        <Text style={styles.panelLabel}>Input</Text>
-        <CodeBlock code={genericInputSummary(tool)} language="json" />
       </View>
     </View>
   );
@@ -537,34 +826,55 @@ function KnownToolCard({
   testId?: string;
 }) {
   const blockStyle = useToolBlockStyle(tool.status);
+  // W4-TOOLBLOCK: `hasExpandButton`/`bodyVisible` are `tool-call-row-
+  // model.ts`'s `toolCardHasExpandButton`/`toolBodyIsVisible` — see those
+  // functions' own doc comments for android-spec.html's exact rule
+  // ("renderResult returns "" unless expanded or errored"). `tool.summary`
+  // and a failed call's `errorText` stay OUTSIDE the gate: they are the
+  // always-visible one-line facts the header itself sits beside, not the
+  // "rest" the button reveals — the per-family `Body` below is.
+  const hasExpandButton = toolCardHasExpandButton(tool.status);
+  const [expanded, setExpanded] = useState(false);
+  const bodyVisible = toolBodyIsVisible(tool.status, expanded);
+  const onToggleExpand = useCallback(() => setExpanded((value) => !value), []);
   return (
     <View style={[styles.block, blockStyle]} testID={testId}>
-      <ToolCallHeader tool={tool} testId={testId} />
+      <ToolCallHeader tool={tool} reserveExpandButton={hasExpandButton} testId={testId} />
+      {hasExpandButton ? (
+        <ExpandButton
+          expanded={expanded}
+          onPress={onToggleExpand}
+          styles={styles}
+          testId={testId}
+        />
+      ) : null}
       {tool.summary ? <Text style={styles.meta}>{tool.summary}</Text> : null}
       {tool.status === "failed" && tool.errorText ? (
         <Text style={[styles.meta, styles.metaError]}>{tool.errorText}</Text>
       ) : null}
-      {tool.family === "shell" ? (
-        <ShellBody tool={tool} styles={styles} testId={testId} />
-      ) : tool.family === "read" ? (
-        <ReadBody tool={tool} styles={styles} />
-      ) : tool.family === "write" ? (
-        <WriteBody tool={tool} styles={styles} />
-      ) : tool.family === "edit" ? (
-        <EditBody tool={tool} styles={styles} testId={testId} />
-      ) : tool.family === "search" ? (
-        <SearchBody tool={tool} styles={styles} />
-      ) : tool.family === "fetch" ? (
-        <FetchBody tool={tool} styles={styles} />
-      ) : tool.family === "worktree_setup" ? (
-        <WorktreeSetupBody tool={tool} styles={styles} />
-      ) : tool.family === "sub_agent" ? (
-        <SubAgentBody tool={tool} styles={styles} />
-      ) : tool.family === "plan" ? (
-        <PlanBody tool={tool} styles={styles} />
-      ) : (
-        <PlainTextBody tool={tool} styles={styles} />
-      )}
+      {bodyVisible ? (
+        tool.family === "shell" ? (
+          <ShellBody tool={tool} styles={styles} testId={testId} />
+        ) : tool.family === "read" ? (
+          <ReadBody tool={tool} styles={styles} />
+        ) : tool.family === "write" ? (
+          <WriteBody tool={tool} styles={styles} />
+        ) : tool.family === "edit" ? (
+          <EditBody tool={tool} styles={styles} testId={testId} />
+        ) : tool.family === "search" ? (
+          <SearchBody tool={tool} styles={styles} />
+        ) : tool.family === "fetch" ? (
+          <FetchBody tool={tool} styles={styles} />
+        ) : tool.family === "worktree_setup" ? (
+          <WorktreeSetupBody tool={tool} styles={styles} />
+        ) : tool.family === "sub_agent" ? (
+          <SubAgentBody tool={tool} styles={styles} />
+        ) : tool.family === "plan" ? (
+          <PlanBody tool={tool} styles={styles} />
+        ) : (
+          <PlainTextBody tool={tool} styles={styles} />
+        )
+      ) : null}
     </View>
   );
 }

@@ -195,3 +195,131 @@ describe("tool-call-row.tsx: the shell call is the artifact's .bash (T359)", () 
     expect(code).toMatch(/`Exit code: \$\{tool\.exitCode \?\? "—"\}`/);
   });
 });
+
+describe("tool-call-row.tsx: the `.xbtn` expand affordance (W4-TOOLBLOCK)", () => {
+  it("pins android-spec.html's exact `.xbtn` geometry as literal RN constants", () => {
+    // `.xbtn{right:8px;top:7px;width:26px;height:26px}`, and the
+    // artifact's own `<svg width="11" height="11">` chevron. A test that
+    // only matched the identifier, not its value, would pass against a
+    // drifted number — see this file's own header comment on why every
+    // assertion here is positive AND value-bearing.
+    const code = readCode();
+    expect(code).toMatch(/^const TOOL_XBTN_SIZE_DP = 26;$/m);
+    expect(code).toMatch(/^const TOOL_XBTN_OFFSET_TOP_DP = 7;$/m);
+    expect(code).toMatch(/^const TOOL_XBTN_OFFSET_RIGHT_DP = 8;$/m);
+    expect(code).toMatch(/^const TOOL_XBTN_ICON_SIZE_DP = 11;$/m);
+  });
+
+  it("pads the 26dp button out to the 48dp touch floor with a literal hitSlop of 11", () => {
+    // 26 + 2*11 = 48 — `ui/primitives/touch-targets.test.ts` only resolves
+    // this prop as a bare digit literal, never an identifier (see the
+    // constant this pattern replaces, named in this file's own comment
+    // just above the prop).
+    expect(readCode()).toMatch(/hitSlop=\{11\}/);
+  });
+
+  it("reserves `.blk.hasx>.ln:first-child{padding-right:34px}` on the header when the button is shown", () => {
+    const code = readCode();
+    expect(code).toMatch(/^const TOOL_XBTN_HEADER_RESERVE_DP = 34;$/m);
+    expect(code).toMatch(/reserveExpandButton \? styles\.headerReserveExpandButton : null/);
+  });
+
+  it("shows the button on both cards, gated by toolCardHasExpandButton, never unconditionally", () => {
+    const code = readCode();
+    const matches = code.match(/hasExpandButton \? \(\s*<ExpandButton/g) ?? [];
+    expect(matches).toHaveLength(2);
+    expect(code).toMatch(/const hasExpandButton = toolCardHasExpandButton\(tool\.status\);/g);
+  });
+
+  it("drives the rotation with the artifact's own 280ms overshoot spring, not the shared press spring", () => {
+    const code = readCode();
+    expect(code).toMatch(/duration: TOOL_XBTN_ROTATION_DURATION_MS,/);
+    expect(code).toMatch(/easing: Easing\.bezier\(\.\.\.TOOL_XBTN_ROTATION_EASING\),/);
+  });
+
+  it("collapses the rotation to an instant jump under reduced motion, like every other themed animation here", () => {
+    expect(readCode()).toMatch(
+      /rotation\.value = reduceMotion\s*\? target\s*: withTiming\(target, \{/,
+    );
+  });
+
+  it("announces Expand/Collapse and the expanded accessibility state, never colour or rotation alone", () => {
+    const code = readCode();
+    expect(code).toMatch(/accessibilityLabel=\{toolExpandButtonAccessibilityLabel\(expanded\)\}/);
+    expect(code).toMatch(/accessibilityState=\{\{ expanded \}\}/);
+    expect(code).toMatch(/accessibilityRole="button"/);
+  });
+
+  it("ports the hover step (9%\u219215% ink overlay) as the pressed state, since there is no :hover on Android", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /pressed \? TOOL_XBTN_BACKGROUND_ALPHA_PRESSED : TOOL_XBTN_BACKGROUND_ALPHA_REST/,
+    );
+    expect(code).toMatch(/inkOverlayColor\(\s*theme\.colors\.ink,/);
+  });
+});
+
+describe('tool-call-row.tsx: "renderResult returns \\"\\" unless expanded or errored" (W4-TOOLBLOCK)', () => {
+  it("gates each family's Body, and the generic card's panels, behind bodyVisible — never unconditionally", () => {
+    const code = readCode();
+    const matches = code.match(/\{bodyVisible \? \(/g) ?? [];
+    expect(matches).toHaveLength(2);
+    expect(code).toMatch(/const bodyVisible = toolBodyIsVisible\(tool\.status, expanded\);/g);
+  });
+
+  it("keeps the header-level one-liners (summary, failed errorText) OUTSIDE the gate", () => {
+    // These sit beside the header as always-visible facts, not inside
+    // "the rest" the button reveals.
+    const code = readCode();
+    expect(code).toMatch(
+      /\{tool\.summary \? <Text style=\{styles\.meta\}>\{tool\.summary\}<\/Text> : null\}\s*\n\s*\{tool\.status === "failed" && tool\.errorText \?/,
+    );
+  });
+});
+
+describe("tool-call-row.tsx: the highlighted body (W4-TOOLBLOCK)", () => {
+  it("renders a read call's content through the highlighter, not the plain CodeListing recipe", () => {
+    const code = readCode();
+    expect(code).toMatch(/<HighlightedFileBody\s+path=\{tool\.filePath\}/);
+    expect(code).not.toMatch(/<CodeListing/);
+  });
+
+  it("bounds the body with capHighlightedLines before anything is tokenized", () => {
+    const code = readCode();
+    expect(code).toMatch(/const capped = capHighlightedLines\(code\.split\("\\n"\)\);/);
+    // The cap is applied to the STRING handed to the tokenizer, not after
+    // it — a 4000-line read must parse ten lines, not four thousand.
+    expect(code).toMatch(/tokenizeFileContent\(capped\.visible\.join\("\\n"\), path\)/);
+  });
+
+  it("uses the highlighter this repository already ships, not a second one", () => {
+    const code = readCode();
+    // REWRITTEN at the P10-W4 merge gate. This said the body tokenizes
+    // with `tokenizeHighlightLine` and colours from `HIGHLIGHT_ROLE_COLOR`
+    // — a hand-rolled tokenizer and five hardcoded hexes this wave first
+    // shipped, both since deleted. `@picompanion/highlight`'s Lezer build
+    // was already this app's tokenizer for the file view, and the five
+    // hexes failed AA on the light code surface (worst 1.47:1). See
+    // `docs/issues-from-plan.md` P10-12.
+    expect(code).toMatch(
+      /import \{ syntaxColorKey, tokenizeFileContent \} from "\.\.\/files\/file-syntax-highlight";/,
+    );
+    expect(code).not.toMatch(/syntax-highlight-model/);
+  });
+
+  it("colours a token from the themed syntax palette only when it has a role", () => {
+    const code = readCode();
+    expect(code).toMatch(/const key = syntaxColorKey\(token\.style\);/);
+    expect(code).toMatch(/color: theme\.colors\.code\.syntax\[key\]/);
+    // The whole file, not just this one component: every colour in this
+    // file is a theme or model token, never a raw hex product colour
+    // (plan.md §10.2) — this test's own file-wide sibling above already
+    // pins that for the block frame; this line pins it again for the
+    // reader looking specifically at the new highlighted-body code.
+    expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it("shows a visible, named truncation notice when the 10-line cap hides lines, never a silent cut", () => {
+    expect(readCode()).toMatch(/\{capped\.truncatedNotice \? <Text/);
+  });
+});

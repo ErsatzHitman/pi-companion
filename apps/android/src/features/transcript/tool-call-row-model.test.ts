@@ -20,6 +20,7 @@ import {
   formatToolDuration,
   genericInputSummary,
   genericResultSummary,
+  inkOverlayColor,
   isKnownToolCall,
   isToolCallEntry,
   redactValue,
@@ -28,10 +29,21 @@ import {
   searchMatchLines,
   shellBlockIsDimmed,
   statusTextFor,
+  HIGHLIGHT_LINE_CAP,
+  capHighlightedLines,
+  toolBodyIsVisible,
+  toolCardHasExpandButton,
+  toolExpandButtonAccessibilityLabel,
   toolHeaderChipLabel,
   truncateBody,
   unrecognizedToolMeta,
   worktreeCommandStepStatus,
+  TOOL_XBTN_BACKGROUND_ALPHA_PRESSED,
+  TOOL_XBTN_BACKGROUND_ALPHA_REST,
+  TOOL_XBTN_ROTATION_CLOSED_DEG,
+  TOOL_XBTN_ROTATION_DURATION_MS,
+  TOOL_XBTN_ROTATION_EASING,
+  TOOL_XBTN_ROTATION_OPEN_DEG,
   type ToolCallTranscriptEntry,
 } from "./tool-call-row-model";
 
@@ -575,5 +587,160 @@ describe("shellBlockIsDimmed: which shell blocks lose their green (T359)", () =>
   it("keeps a running and a finished command green", () => {
     expect(shellBlockIsDimmed("running")).toBe(false);
     expect(shellBlockIsDimmed("completed")).toBe(false);
+  });
+});
+
+describe("toolCardHasExpandButton: android-spec.html's `.xbtn`, ported (W4-TOOLBLOCK)", () => {
+  it("shows the button once a call has finished, one way or the other", () => {
+    expect(toolCardHasExpandButton("completed")).toBe(true);
+    expect(toolCardHasExpandButton("failed")).toBe(true);
+  });
+
+  it("hides the button while nothing has resolved yet", () => {
+    // Every `.blk.pend` frame in android-spec.html omits `.xbtn` — there
+    // is nothing yet for it to reveal.
+    expect(toolCardHasExpandButton("running")).toBe(false);
+    expect(toolCardHasExpandButton("blocked")).toBe(false);
+  });
+
+  it("hides the button on a canceled call, the one finished status that produced nothing", () => {
+    // android-spec.html's own "ctrl+c aborted" error frame — a call that
+    // never got its result — also carries no `.xbtn`.
+    expect(toolCardHasExpandButton("canceled")).toBe(false);
+  });
+});
+
+describe('toolBodyIsVisible: "renderResult returns \\"\\" unless expanded or errored"', () => {
+  it("is hidden by default (collapsed) for a successful call", () => {
+    expect(toolBodyIsVisible("completed", false)).toBe(false);
+  });
+
+  it("shows once the caller's own toggle is expanded", () => {
+    expect(toolBodyIsVisible("completed", true)).toBe(true);
+  });
+
+  it("shows a failed call's body even while the toggle is still collapsed", () => {
+    expect(toolBodyIsVisible("failed", false)).toBe(true);
+  });
+
+  it("a failed call's body stays visible when the toggle is also expanded", () => {
+    expect(toolBodyIsVisible("failed", true)).toBe(true);
+  });
+
+  // REWRITTEN at the P10-W4 merge gate, and a reviewer could disagree, so
+  // here is exactly what changed and why. This said:
+  //
+  //   it("is hidden by default for every other status too", () => {
+  //     expect(toolBodyIsVisible("running", false)).toBe(false);
+  //     ...
+  //
+  // which pinned a real defect rather than a rule. `running`, `blocked`
+  // and `canceled` draw NO expand button, so "hidden by default" left
+  // their bodies with no control that could ever reveal them — a running
+  // shell command's streaming output was unreachable while it streamed.
+  // The design never says this: its eight `.blk.pend` frames without
+  // `data-r` all print their lines, and none carries an `.xbtn`.
+  it("always shows the body of a status that draws no expand button", () => {
+    for (const status of ["running", "blocked", "canceled"] as const) {
+      expect(toolCardHasExpandButton(status)).toBe(false);
+      // Both toggle positions: there is no button, so the toggle is not
+      // reachable and must not decide anything.
+      expect(toolBodyIsVisible(status, false)).toBe(true);
+      expect(toolBodyIsVisible(status, true)).toBe(true);
+    }
+  });
+
+  it("never leaves a body hidden with no control able to reveal it", () => {
+    // The invariant the rewritten test above is an instance of, stated
+    // once over every status rather than over a hand-picked three.
+    const statuses = ["completed", "failed", "running", "blocked", "canceled"] as const;
+    for (const status of statuses) {
+      if (!toolBodyIsVisible(status, false)) {
+        expect(toolCardHasExpandButton(status)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("capHighlightedLines: the design's own 10-line cap", () => {
+  it("declares HIGHLIGHT_LINE_CAP as 10", () => {
+    expect(HIGHLIGHT_LINE_CAP).toBe(10);
+  });
+
+  it("passes a short body through untouched, with no notice", () => {
+    const capped = capHighlightedLines(["a", "b", "c"]);
+    expect(capped.visible).toEqual(["a", "b", "c"]);
+    expect(capped.hiddenLines).toBe(0);
+    expect(capped.truncatedNotice).toBeUndefined();
+  });
+
+  it("bounds a long body to the cap and names exactly how much is hidden", () => {
+    const lines = Array.from({ length: 14 }, (_, index) => `line ${index}`);
+    const capped = capHighlightedLines(lines);
+    expect(capped.visible).toHaveLength(HIGHLIGHT_LINE_CAP);
+    expect(capped.totalLines).toBe(14);
+    expect(capped.hiddenLines).toBe(4);
+    expect(capped.truncatedNotice).toBe("Showing first 10 of 14 lines (4 more lines hidden).");
+  });
+
+  it("says 'line', singular, when exactly one is hidden", () => {
+    const capped = capHighlightedLines(Array.from({ length: 11 }, (_, i) => `l${i}`));
+    expect(capped.truncatedNotice).toBe("Showing first 10 of 11 lines (1 more line hidden).");
+  });
+});
+
+describe("toolExpandButtonAccessibilityLabel", () => {
+  it("reads Expand when collapsed and Collapse when open", () => {
+    expect(toolExpandButtonAccessibilityLabel(false)).toBe("Expand");
+    expect(toolExpandButtonAccessibilityLabel(true)).toBe("Collapse");
+  });
+});
+
+describe("the .xbtn rotation spring — android-spec.html: `transition:transform .28s cubic-bezier(.34,1.56,.64,1)`", () => {
+  it("is 280ms", () => {
+    expect(TOOL_XBTN_ROTATION_DURATION_MS).toBe(280);
+  });
+
+  it("is the exact cubic-bezier control points, not `../../ui/theme/expressive-motion.ts`'s unrelated overshoot spring", () => {
+    expect(TOOL_XBTN_ROTATION_EASING).toEqual([0.34, 1.56, 0.64, 1]);
+  });
+
+  it("rotates from 0deg (collapsed) to 180deg (open)", () => {
+    expect(TOOL_XBTN_ROTATION_CLOSED_DEG).toBe(0);
+    expect(TOOL_XBTN_ROTATION_OPEN_DEG).toBe(180);
+  });
+});
+
+describe("the .xbtn background overlay — android-spec.html: `color-mix(in oklab, var(--ink) 9%|15%, transparent)`", () => {
+  it("is 9% at rest and 15% pressed (the ported hover step)", () => {
+    expect(TOOL_XBTN_BACKGROUND_ALPHA_REST).toBe(0.09);
+    expect(TOOL_XBTN_BACKGROUND_ALPHA_PRESSED).toBe(0.15);
+  });
+});
+
+describe("inkOverlayColor: color-mix(in oklab, ink N%, transparent) === ink at N% alpha", () => {
+  it("resolves the dark theme's own ink (#f2f3f4) at the rest and pressed alphas", () => {
+    // packages/design-tokens/src/tokens.ts's dark palette: ink: "#f2f3f4".
+    expect(inkOverlayColor("#f2f3f4", TOOL_XBTN_BACKGROUND_ALPHA_REST)).toBe(
+      "rgba(242, 243, 244, 0.09)",
+    );
+    expect(inkOverlayColor("#f2f3f4", TOOL_XBTN_BACKGROUND_ALPHA_PRESSED)).toBe(
+      "rgba(242, 243, 244, 0.15)",
+    );
+  });
+
+  it("resolves the light theme's own ink (#1f2124) the same way", () => {
+    // packages/design-tokens/src/tokens.ts's light palette: ink: "#1f2124".
+    expect(inkOverlayColor("#1f2124", TOOL_XBTN_BACKGROUND_ALPHA_REST)).toBe(
+      "rgba(31, 33, 36, 0.09)",
+    );
+  });
+
+  it("accepts a hex string with or without its leading #", () => {
+    expect(inkOverlayColor("f2f3f4", 0.5)).toBe(inkOverlayColor("#f2f3f4", 0.5));
+  });
+
+  it("never throws on a malformed hex, and returns it unchanged", () => {
+    expect(inkOverlayColor("not-a-color", 0.09)).toBe("not-a-color");
   });
 });
