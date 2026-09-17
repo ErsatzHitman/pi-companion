@@ -22199,3 +22199,64 @@ register loosely: `CLAUDE.md`'s T124 section already gives the real constraint, 
 entry the runner cannot see is a check that cannot fail, and that a bare `methodNames` token
 must disappear when its capability does (the T172 trap). Those are correctness rules, unchanged
 by this being 53 times faster.
+
+### P10-21 - a behaviour-first audit of the Android surface, and why it produced no package
+
+P10-14 established that the class-name audit lens is unreliable: it finds a feature only when
+the source happens to name it the way the design does, and it produced five false positives in
+one wave, one of which cost a whole package. This is the replacement lens and its full result,
+recorded because "we looked and found nothing" is a finding that must be checkable rather than
+asserted.
+
+**The method.** Instead of the design's CSS class names, extract its _interaction contract_ -
+every `aria-label`, every `data-act` action value, and every sentence its own script passes to
+`say()` - and check each against what the app actually does. That is the lens that would have
+caught the P10-14 miss in one command, because it asks what a control IS rather than what it is
+called. The design declares 7 `aria-label`s, 9 `data-act` values and 33 `say()` announcements.
+
+**Result: every candidate resolved, and none became work.** The three classes, with the evidence
+for each:
+
+**1. Already shipped, better than the design (3 of 3 "absent" aria-labels).** `Choose model`,
+`Choose thinking effort` and `Toggle build or plan mode` appear nowhere in `apps/android/src`.
+They sit on `.fp.f-model`, `.fp.f-eff` and `.fp.f-mode` - the footer pills `A-COMPOSER` built in
+P10-W2 as `FooterPills.tsx`. The controls exist; only the exact label strings differ, and the
+app's are a superset: it announces `Model: ${modelLabel}` with the hint "Opens the model and
+thinking effort menu", where the design announces only `Choose model`. A screen-reader user gets
+the action AND the current value instead of the action alone. **Deliberately not changed** -
+conforming to the design here would remove information.
+
+**2. No data behind it (the delegate and peer-message action chips).** The design draws
+`data-act` chips for `resume` (`delegate_resume`), `peer` / `reply` (`peer_message`), `wait` and
+`ignore` inside `.blk.ext` blocks. `git grep -n "peer_message|delegate_resume" -- packages/
+protocol/src` returns NOTHING: there is no wire message, no event and no timeline item for any
+of them. This is the `WEB-TEAL` shape (P10-8) - building the chips means inventing the actions
+they fire. **Closed unbuilt.** A reviewer could disagree by arguing the daemon should grow those
+RPCs, which is true and is a backend feature with its own protocol change, not a UI conformance
+task.
+
+**3. Real, wire-backed, and blocked on a domain that deliberately does not exist yet (the
+provider-retry countdown).** The design draws `<div class="blk pend cd" data-n="8"
+data-act="retry">` reading `Retrying (2/5) in 8s... (ctrl+c to cancel)`, with the frame label
+"provider retry - the countdown ticks in place; tap to retry now". Unlike the chips above, the
+data is real: `auto_retry_start` and `auto_retry_end` are genuine Pi RPC events, handled in
+`packages/server`'s Pi provider agent, with a committed protocol fixture scenario
+(`compaction-and-retries.json`). `packages/client`'s `DaemonClient` already has
+`setAutoRetry`/`getAutoRetry`, and `apps/web` already has `use-auto-retry.ts` while
+`apps/android` has no equivalent at all - a genuine parity gap.
+
+It still is not a package, and the reason is written into the code it would have to change.
+`packages/frontend-core/src/timeline/transcript-view.ts` states in its own header that
+auto-retry, summarization retry, extension errors and turn lifecycle "are `AgentStreamEvent`
+variants outside `type: \"timeline\"`", belong "to other, not-yet-built frontend-core domains
+(sessions/turn state, extensions)", and that this file "does not invent rows for state that has
+no data behind it yet". There is no `TranscriptEntry` kind for a retry and adding one
+contradicts that decision rather than extending it. The work is: build the turn-state domain in
+`frontend-core`, subscribe the stream events, and render the row on both platforms. That is
+cross-package and changes `apps/web` identically, so it is not an Android UI package and must
+not be smuggled in as one.
+
+**What this iteration therefore delivered** is `PERF-GUARD-1` (P10-20) and this record. Not
+manufacturing a package out of the three candidates above is the finding, not a failure to find
+one: each of the three has a written reason a reviewer can attack, and the two that are real
+work are named precisely enough for whoever picks them up.
