@@ -227,10 +227,20 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     },
     strong: { fontWeight: asFontWeight(theme.typography.fontWeight.bold) },
     em: { fontStyle: "italic" },
+    // A-TEAL: android-spec.html's `.md code{font-family:'JetBrains
+    // Mono',monospace;font-size:11.8px;color:var(--teal)}` — inline
+    // markdown code is teal text (confirmed by grepping the spec), not
+    // `code.codeForeground`. The spec rule carries no `background`
+    // property at all; `codeBackground` (= `inset`) is kept here rather
+    // than dropped, since removing the pill fill is a separate, more
+    // invasive layout question this task did not ask and `teal` already
+    // clears WCAG AA 4.5:1 on `inset` in both themes (verified against
+    // `contrast.test.ts`'s own "purple and teal roles reach 4.5:1 as text
+    // on every backdrop" pin, which already includes `inset`).
     inlineCode: {
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.code.fontSize,
-      color: theme.colors.code.codeForeground,
+      color: theme.colors.teal,
       backgroundColor: theme.colors.code.codeBackground,
     },
     list: { gap: theme.spacing[1] },

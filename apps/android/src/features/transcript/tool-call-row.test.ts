@@ -142,11 +142,13 @@ describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
     expect(code).not.toMatch(/<Card\b/);
   });
 
-  it("renders the header's `.tchip` from toolHeaderChipLabel, in `accent-ink` on `surface`", () => {
+  it("renders the header's `.tchip` from toolHeaderChipLabel, in `teal` on `surface` (A-TEAL)", () => {
+    // android-spec.html: `.pa{color:var(--teal)}` — the chip text, not the
+    // `.tchip` box (background/border stay as they were before A-TEAL).
     const code = readCode();
     expect(code).toMatch(/const chipLabel = toolHeaderChipLabel\(tool\);/);
     expect(code).toMatch(/\{chipLabel\}/);
-    expect(code).toMatch(/color: theme\.colors\["accent-ink"\]/);
+    expect(code).toMatch(/color: theme\.colors\.teal/);
     expect(code).toMatch(/borderRadius: TOOL_CHIP_RADIUS/);
   });
 

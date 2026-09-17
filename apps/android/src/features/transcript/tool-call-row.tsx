@@ -28,9 +28,25 @@
  *
  * **The header is the artifact's own line.** `.tt` names the tool in
  * bold `ink`, `.tchip` carries the one path or argument this call
- * touched in `accent-ink` (see `toolHeaderChipLabel`), and the mono
+ * touched in `teal` (see `toolHeaderChipLabel`), and the mono
  * duration sits at the right edge beside the status. A tool family with
  * no single such fact simply draws no chip.
+ *
+ * **A-TEAL:** android-spec.html's `.pa{color:var(--teal)}` is this exact
+ * chip text — confirmed by grepping the spec, not assumed. Its sibling
+ * `.tchip{...background:var(--field);box-shadow:0 0 0 1px var(--line)}`
+ * rule is the chip BOX and stays unrecoloured; only `chipText` below
+ * moved off `accent-ink` onto `theme.colors.teal`. `plan.md` §10.2 records
+ * `teal` as a live, deliberately-kept role — "the Android design's path
+ * chip inside a tool block" is this exact chip, and this file is its
+ * first real consumer. The three other `styles.meta` sites that also print a
+ * `tool.filePath`/worktree fact (`ReadBody`'s no-content fallback,
+ * `WriteBody`, `WorktreeSetupBody`'s `branchName at worktreePath`
+ * sentence) are deliberately left on `ink-2`: the spec's own tool-call
+ * markup (`s3`/`s5`/`s7` frames) draws exactly one `.pa.tchip` per call,
+ * in the header, and never repeats the path as a second teal line in the
+ * body — a collapsed read with no content prints no body line at all,
+ * and a worktree sentence is prose, not a path chip.
  *
  * **T358: the edit and search cards draw the redesign's own bands.** An
  * edit's diff was a `CodeBlock` of plain mono text with a `diff`
@@ -180,7 +196,8 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontWeight: asFontWeight(theme.typography.fontWeight.bold),
     },
     // `.tchip { background: var(--surface); border-radius: 5px; padding:
-    // 0 4px; box-shadow: var(--sh-hairline) }`, text `accent-ink`.
+    // 0 4px; box-shadow: var(--sh-hairline) }` (box, unchanged by A-TEAL);
+    // text is android-spec.html's `.pa{color:var(--teal)}`.
     chip: {
       backgroundColor: theme.colors.surface,
       borderRadius: TOOL_CHIP_RADIUS,
@@ -189,7 +206,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       borderColor: theme.colors.line,
     },
     chipText: {
-      color: theme.colors["accent-ink"],
+      color: theme.colors.teal,
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: LINE_FONT_SIZE,
       lineHeight: LINE_HEIGHT,
