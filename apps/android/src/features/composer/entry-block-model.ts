@@ -16,7 +16,7 @@ import type { ComposerEntryStatus } from "./composer-model";
  *
  * The artifact draws everything the session screen stacks as one block
  * shape: radius 14, padding 9×11, 9 between blocks, and a background
- * that says what KIND of thing it is — `.usr` on `accent-tint` for a
+ * that says what KIND of thing it is — `.usr` on `field` for a
  * prompt the user sent, `.pend` on `inset` for one still queued, `.err`
  * on `tool-error-bg` for one that failed. The composer's own entry list
  * used to be a flat row per entry with a chip on the right; this module
@@ -61,7 +61,7 @@ export const ENTRY_BLOCK_GAP = BLOCK_GAP;
  * than a colour, so this module stays RN-free and theme-free and no
  * product colour is ever written down outside `@picompanion/design-tokens`.
  */
-export type EntryBlockSurface = "accent-tint" | "inset" | "tool-error-bg";
+export type EntryBlockSurface = "field" | "inset" | "tool-error-bg";
 
 /** Which kind of block one entry status is. The composer's own decision, hence its home here. */
 export function entryBlockKind(status: ComposerEntryStatus): BlockKind {

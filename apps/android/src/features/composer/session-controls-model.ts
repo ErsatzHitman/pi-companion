@@ -2,9 +2,9 @@
  * Build/Plan mode and auto-compaction for one session (T354).
  *
  * Two per-agent daemon settings, one controller, because they load
- * together and are drawn together: the context-ring menu's top row is
- * the mode toggle and its bottom row is the compaction switch next to
- * the context readout, and giving each its own controller would mean
+ * together and are drawn together: the prompt controls menu's top row
+ * is the mode toggle and its bottom row is the compaction switch next
+ * to the context readout, and giving each its own controller would mean
  * two `fetchAgent` round trips and two independent availability states
  * for one panel that is either usable or not.
  *

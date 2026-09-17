@@ -30,11 +30,15 @@
  *  - `QueueModePicker` renders its "no-client" unavailable state
  *    (`describeQueueModesUnavailable("no-client")`'s own text) — a
  *    truthful unavailable render, never an enabled control that
- *    silently does nothing. **Since T353 it renders inside the
- *    context-ring menu rather than in the composer's own scroll area**,
- *    so the flow taps `contextRing` first; the picker's own testId is
+ *    silently does nothing. **Since T353 it renders inside the prompt
+ *    controls menu rather than in the composer's own scroll area**, so
+ *    the flow opens that menu first; the picker's own testId is
  *    unchanged, which is the point of this redesign's
- *    testID-continuity rule.
+ *    testID-continuity rule. P10-GATE: what OPENS the menu changed with
+ *    it. The context ring is gone — the design artifact draws a row of
+ *    footer pills instead, and the context one is a readout, not a
+ *    button — so the flow now taps the `model` pill, which is one of the
+ *    two pills wired to `onOpenControlsMenu`.
  *  - `TurnStatusBanner` renders nothing at all (its default
  *    `alwaysShowUnavailable={false}`, and `Composer.tsx` passes no such
  *    prop) — there is no banner text, no testId, nothing this flow can
@@ -51,11 +55,15 @@ export const QUEUE_RETRY_COMPACTION_FLOW = {
   composerRoot: "composer",
 
   /**
-   * T353: the prompt bar's context ring, which is what now opens the
-   * menu holding the queue-mode picker. `Composer.tsx` mounts it as
-   * `${composerTestId}-context-ring`.
+   * The footer pill that opens the menu holding the queue-mode picker.
+   * `Composer.tsx` mounts `FooterPills` as `${composerTestId}-footer`,
+   * and the model pill is `${testId}-model` within it — so
+   * `composer-footer-model`. Chosen over the effort pill (which opens the
+   * same menu) because it is the one whose label is always populated, and
+   * over the mode pill, which deliberately toggles in place and opens
+   * nothing.
    */
-  contextRing: "composer-context-ring",
+  controlsMenuPill: "composer-footer-model",
 
   /**
    * T353: the menu the ring opens (`PromptControlsMenu`'s default

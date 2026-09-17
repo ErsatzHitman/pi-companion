@@ -1,0 +1,111 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+/**
+ * A-COMPOSER source-level contract for `FooterPills.tsx`, replacing
+ * `context-ring.test.ts`'s "ContextRing source" describe block (deleted
+ * along with `ContextRing.tsx`). `FooterPills.tsx` imports
+ * `react-native`/`react-native-reanimated`, so it can't render under
+ * this workspace's plain `vitest` setup — same limitation, same
+ * source-contract style as that old file and as
+ * `../../ui/primitives/touch-targets.test.ts`.
+ *
+ * Of the old "ContextRing source" describe block's six cases:
+ *
+ * REMOVED, genuinely gone (3 cases — the ring itself is gone):
+ *  - "takes every number from the model, computing no geometry of its
+ *    own" (`buildContextRingViewModel`/`circumference`/`dashOffset`) —
+ *    no arc, no `circumference`, nothing to pin.
+ *  - "delegates the drawing rather than keeping a second copy of the
+ *    arc" (`<ProgressRing`/no `<Circle`) — no ring primitive is drawn
+ *    here at all.
+ *  - "keeps a full 48dp touch target around an 18dp ring" — replaced by
+ *    THIS file's own `hitSlop={12}` case below, which pins the pill's
+ *    own 24dp box plus slop rather than the ring's 18dp one.
+ *
+ * INVERTED, not moved (1 case): "names and hints itself as a button,
+ * and hides its own graphics from assistive tech" pinned that the RING
+ * was a button. The context pill is the one footer pill that is NOT
+ * one — see this file's own "the context pill is a readout, not a
+ * button" case below, which pins the opposite fact on purpose.
+ *
+ * MOVED here, adapted to the pill's own shape (2 cases): "puts the
+ * percentage in visible text" (now `contextPill.percentLabel`, not
+ * `model.shortLabel`) and "reads every colour from the theme and
+ * hardcodes no product colour" (generically applicable to any themed
+ * component, re-pinned against this file).
+ */
+function readCode(name: string): string {
+  return readFileSync(fileURLToPath(new URL(`./${name}.tsx`, import.meta.url)), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+describe("FooterPills source", () => {
+  const code = readCode("FooterPills");
+
+  it("draws the mode/model/effort pills and the context readout, in the artifact's own order", () => {
+    expect(code).toMatch(/variant="mode"[\s\S]*?variant="model"[\s\S]*?variant="eff"/);
+    expect(code.indexOf('variant="eff"')).toBeLessThan(code.indexOf("ctxPill"));
+  });
+
+  it("puts the context percentage in visible text, so fill level is never the only signal", () => {
+    expect(code).toMatch(/\{contextPill\.percentLabel\}/);
+  });
+
+  it("the context pill is a readout, not a button — no accessibilityRole, no onPress, no responder handlers on it", () => {
+    const anchor = code.indexOf("testID={`${testId}-ctx`}");
+    expect(anchor).toBeGreaterThan(-1);
+    // The readout's own View opens a few lines above its testID and
+    // closes a few lines below the bar fill — a window comfortably
+    // inside those bounds without reaching into `MetadataPill` (whose
+    // OWN accessibilityRole/responder props this file's other cases
+    // pin as present).
+    const ctxSection = code.slice(code.indexOf("styles.ctxPill"), anchor + 600);
+    expect(ctxSection).toMatch(/styles\.ctxBarFill/);
+    expect(ctxSection).not.toMatch(/accessibilityRole="button"/);
+    expect(ctxSection).not.toMatch(/onStartShouldSetResponder/);
+    expect(ctxSection).not.toMatch(/onPress=/);
+  });
+
+  it("the three interactive pills are real buttons for assistive tech, with an accessibility-tap fallback for a gesture that never becomes a real touch", () => {
+    expect(code).toMatch(/accessibilityRole="button"/);
+    expect(code).toMatch(/onAccessibilityTap=\{disabled \? undefined : onPress\}/);
+  });
+
+  it("keeps a full touch target around the pill's own 24dp box (hitSlop, not an inflated pill)", () => {
+    expect(code).toMatch(/hitSlop=\{12\}/);
+    expect(code).toMatch(/const PILL_HEIGHT = 24;/);
+  });
+
+  it("draws the pills as full pills, reading the shared radii.full token rather than a literal", () => {
+    expect(code).toMatch(/borderRadius: theme\.radii\.full/);
+  });
+
+  it("only plays the bubble/halo/swap pop from a resolved drag, never from a plain tap", () => {
+    // stepPill is the artifact's only caller of bubble(); toggleMode/
+    // openMenu (this file's onPress path) never call it.
+    const tapBranch = code.slice(
+      code.indexOf("if (!armed) {"),
+      code.indexOf("const step = resolveSwipeStep"),
+    );
+    expect(tapBranch).toMatch(/onPress\(\);/);
+    expect(tapBranch).not.toMatch(/playPop/);
+  });
+
+  it("reads every colour from the theme and hardcodes no product colour", () => {
+    expect(code).toMatch(/useTheme\(\)/);
+    expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(code).not.toMatch(/rgba?\(/);
+  });
+
+  it("takes its drag physics from footer-pill-drag-model.ts rather than re-deriving them", () => {
+    expect(code).toMatch(/from "\.\/footer-pill-drag-model"/);
+    expect(code).not.toMatch(/Math\.tanh/);
+  });
+
+  it("takes the context pill's numbers from context-pill-model.ts rather than computing them inline", () => {
+    expect(code).toMatch(/buildContextPillViewModel\(usage\)/);
+  });
+});

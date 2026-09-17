@@ -6,9 +6,18 @@ import { VectorIcon, type VectorIconName } from "../../ui/primitives/vector-icon
 import { useTheme } from "../../ui/theme/theme-context";
 import { usePressScale } from "../../ui/theme/use-press-scale";
 
-/** The artifact's `.ic { width: 34px; height: 34px; border-radius: 9px }` box. */
+/**
+ * The confirmed spec's `.cmp-box .ic { width: 34px; height: 34px;
+ * border-radius: var(--r-full) }` box — a full pill on a square, not a
+ * fixed corner. (CORRECTED for A-COMPOSER: this constant read `9`, the
+ * confirmed spec's OWN `border-radius:9px` shows up nowhere for `.ic` —
+ * every declaration of that selector in `C:/Users/aksha/Downloads/
+ * pi-ui-goal/android-spec.html` draws it at `--r-full`. `theme.radii.full`
+ * already equals that token's own value — see
+ * `../../ui/theme/expressive-shape.ts`'s doc comment for why the FULL
+ * point on the Expressive scale needs no Android-only entry of its own.)
+ */
 const ICON_BOX_SIZE = 34;
-const ICON_BOX_RADIUS = 9;
 /** `.ic svg { width: 17px; height: 17px }`. */
 const ICON_SIZE = 17;
 
@@ -111,7 +120,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     glyphWrap: {
       width: ICON_BOX_SIZE,
       height: ICON_BOX_SIZE,
-      borderRadius: ICON_BOX_RADIUS,
+      borderRadius: theme.radii.full,
       alignItems: "center",
       justifyContent: "center",
     },

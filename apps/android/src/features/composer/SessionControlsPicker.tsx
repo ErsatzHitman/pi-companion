@@ -11,7 +11,7 @@ import {
 } from "./session-controls-model";
 
 /**
- * The context-ring menu's Build/Plan mode row and auto-compaction
+ * The prompt controls menu's Build/Plan mode row and auto-compaction
  * switch (T354) — the artifact's `.f-mode` segment pair, plus the
  * compaction switch that sits beside the context readout.
  *

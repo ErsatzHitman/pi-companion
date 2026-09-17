@@ -20,7 +20,11 @@ const EVERY_STATUS: readonly ComposerEntryStatus[] = ["pending", "sent", "failed
 
 describe("entryBlockSurface", () => {
   it("gives a sent prompt the artifact's own `.usr` surface", () => {
-    expect(entryBlockSurface("sent")).toBe("accent-tint");
+    // P10-GATE: was `accent-tint`, which came from the stale
+    // reconstruction. The design artifact declares `--usr-bg:var(--field)`
+    // and `.blk.usr{background:var(--usr-bg)}`, so the user block paints
+    // on `field`; `accent-tint` appears nowhere in it.
+    expect(entryBlockSurface("sent")).toBe("field");
   });
 
   it("gives a still-queued prompt `.pend`, so waiting reads differently from delivered", () => {

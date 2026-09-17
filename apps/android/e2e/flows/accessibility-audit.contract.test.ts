@@ -348,7 +348,25 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
       );
       // Both arrive through the bar's own slots, which is what puts them
       // INSIDE `.cmp-box` rather than in the controls row above it.
-      expect(code).toMatch(/<PromptBar\b[\s\S]{0,2000}?leading=\{\s*<>[\s\S]{0,2000}?trailing=\{/);
+      //
+      // P10-GATE: this read `leading=\{\s*<>` — it required `leading` to open
+      // with a JSX Fragment, which was only ever true incidentally, because
+      // `leading` used to hold the attach mark AND the context ring. The
+      // ring is gone (the artifact draws nothing between `+` and the input),
+      // so `leading` is now a single element and the Fragment with it. The
+      // assertion is narrowed to what it says it protects — each control
+      // arriving through the bar's own named slot — and in doing so gets
+      // STRICTER, not looser: it previously proved only that `leading` held
+      // two-or-more children, never which control was in which slot, so it
+      // would have passed with mic and attach swapped. It now pins attach to
+      // `leading` and mic to `trailing`, which is the artifact's own order
+      // (`.cmp-box` runs `.ic.plus`, `.inp`, `.ic.voice`, `.ic.send`).
+      expect(code).toMatch(
+        /<PromptBar\b[\s\S]{0,2000}?leading=\{\s*<ComposerIconAction\s+icon="plus"/,
+      );
+      expect(code).toMatch(
+        /<PromptBar\b[\s\S]{0,2000}?trailing=\{\s*<ComposerIconAction\s+icon="mic"/,
+      );
     });
 
     it("composer-icon-action.tsx wires accessibleName to the Pressable's own accessibilityLabel and hides the glyph from the accessibility tree — the mechanism ACCESSIBILITY_AUDIT_FLOW's mic/attach labels depend on", () => {
@@ -735,18 +753,26 @@ describe("accessibility-audit.yaml anchors exist in source", () => {
       }
     });
 
-    it("still covers the context ring, which nothing mechanical reaches", () => {
+    it("still covers the context readout, which nothing mechanical reaches", () => {
       // The one intentional asymmetry, pinned so it cannot be quietly
-      // dropped: `ContextRing.tsx` hides both the arc and the `34%`
-      // numeral from the accessibility tree, so its accessible name is
-      // the entire affordance, and this flow never opens the ring.
-      const ring = documented.get("composer-context-ring");
+      // dropped. P10-GATE: this named `composer-context-ring`, a control
+      // this wave deleted — the design artifact draws no ring, it draws a
+      // `.fp.f-ctx` readout at the end of the footer pill row. The
+      // asymmetry itself is unchanged and is if anything sharper: the
+      // readout is one `accessible` View whose children (the percent, the
+      // token count, the bar) are merged into a single announcement, so
+      // its `accessibilityLabel` is the entire affordance, and this flow
+      // still never reaches it.
+      const contextReadout = documented.get("composer-footer-ctx");
       expect(
-        ring,
-        "the procedure must keep a row for composer-context-ring: it is the only coverage that control has",
+        contextReadout,
+        "the procedure must keep a row for composer-footer-ctx: it is the only coverage that control has",
       ).toBeDefined();
-      expect(ring?.line).toMatch(/Not sampled mechanically/);
-      expect(flowIds).not.toContain("composer-context-ring");
+      expect(contextReadout?.line).toMatch(/Not sampled mechanically/);
+      expect(flowIds).not.toContain("composer-footer-ctx");
+      // And the retired id must not linger in the table, or the procedure
+      // sends a human looking for a control that is not on the screen.
+      expect(documented.has("composer-context-ring")).toBe(false);
     });
   });
 });

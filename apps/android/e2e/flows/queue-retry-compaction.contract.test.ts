@@ -54,6 +54,7 @@ function readComponentCode(relativePath: string, name: string): string {
 
 const COMPOSER_TSX = "../../src/features/composer/Composer.tsx";
 const SESSION_ROUTE_TSX = "../../src/app/h/[serverId]/session/[agentId]/index.tsx";
+const FOOTER_PILLS_TSX = "../../src/features/composer/FooterPills.tsx";
 
 describe("queue-retry-compaction.yaml anchors exist in source", () => {
   // T132 (P6-W10) wired `queueModeClient`/`turnStatusClient` into this
@@ -161,19 +162,19 @@ describe("queue-retry-compaction.yaml anchors exist in source", () => {
       expect(ids).toContain(QUEUE_RETRY_COMPACTION_FLOW.queueModePickerUnavailable);
     });
 
-    // T353 moved the queue-mode picker into the context-ring menu. A
+    // T353 moved the queue-mode picker into the prompt controls menu. A
     // node inside a closed `Sheet` is not rendered at all, so a flow
     // that still asserted it straight after `openLink` would fail on a
     // real device with a "not visible" that looks like a regression in
     // the picker rather than a stale flow. These two cases pin the tap
     // and its ordering so that cannot happen silently.
-    it("T353: taps the context ring before asserting anything inside the menu it opens", () => {
+    it("taps the pill that opens the menu before asserting anything inside it", () => {
       const ringIndex = steps.findIndex(
-        (step) => step.kind === "tapOn" && step.id === QUEUE_RETRY_COMPACTION_FLOW.contextRing,
+        (step) => step.kind === "tapOn" && step.id === QUEUE_RETRY_COMPACTION_FLOW.controlsMenuPill,
       );
       expect(
         ringIndex,
-        `queue-retry-compaction.yaml should tapOn id="${QUEUE_RETRY_COMPACTION_FLOW.contextRing}"`,
+        `queue-retry-compaction.yaml should tapOn id="${QUEUE_RETRY_COMPACTION_FLOW.controlsMenuPill}"`,
       ).toBeGreaterThanOrEqual(0);
       const pickerIndex = steps.findIndex(
         (step) => step.id === QUEUE_RETRY_COMPACTION_FLOW.queueModePickerRoot,
@@ -186,11 +187,22 @@ describe("queue-retry-compaction.yaml anchors exist in source", () => {
       expect(ids).toContain(QUEUE_RETRY_COMPACTION_FLOW.controlsMenu);
     });
 
-    it("T353: the ring and the menu it opens carry the ids this flow names, at their real Composer.tsx mounts", () => {
+    // P10-GATE: this case used to pin `${composerTestId}-context-ring`.
+    // That control was deleted this wave (the design artifact draws no
+    // ring), so the id it asserted could never match again. It is
+    // repointed at the control that actually opens the menu now rather
+    // than dropped — this is the case that stops the flow's id and the
+    // real mount drifting apart, which is exactly how the ring's removal
+    // would otherwise have reached a device before it reached CI.
+    it("the pill and the menu it opens carry the ids this flow names, at their real Composer.tsx mounts", () => {
       const composer = readComponentCode(COMPOSER_TSX, "Composer");
-      expect(composer).toMatch(/testId=\{`\$\{composerTestId\}-context-ring`\}/);
+      // `FooterPills` is mounted under `${composerTestId}-footer`, and
+      // suffixes each pill itself — so the flow's `composer-footer-model`
+      // is that prefix plus `FooterPills.tsx`'s own `${testId}-model`.
+      expect(composer).toMatch(/testId=\{`\$\{composerTestId\}-footer`\}/);
+      expect(readCode(FOOTER_PILLS_TSX)).toMatch(/testId=\{`\$\{testId\}-model`\}/);
       expect(composer).toMatch(/testId=\{`\$\{composerTestId\}-controls-menu`\}/);
-      expect(QUEUE_RETRY_COMPACTION_FLOW.contextRing).toBe("composer-context-ring");
+      expect(QUEUE_RETRY_COMPACTION_FLOW.controlsMenuPill).toBe("composer-footer-model");
       expect(QUEUE_RETRY_COMPACTION_FLOW.controlsMenu).toBe("composer-controls-menu");
     });
 
@@ -199,9 +211,9 @@ describe("queue-retry-compaction.yaml anchors exist in source", () => {
     // wired at this route" shape every other control in this flow is
     // in, so these three cases pin the same three things: the tap
     // ordering, the exact sentence, and the real mount's testId.
-    it("T354: asserts the session-controls picker only after the ring has opened the menu", () => {
+    it("T354: asserts the session-controls picker only after the pill has opened the menu", () => {
       const ringIndex = steps.findIndex(
-        (step) => step.kind === "tapOn" && step.id === QUEUE_RETRY_COMPACTION_FLOW.contextRing,
+        (step) => step.kind === "tapOn" && step.id === QUEUE_RETRY_COMPACTION_FLOW.controlsMenuPill,
       );
       const pickerIndex = steps.findIndex(
         (step) => step.id === QUEUE_RETRY_COMPACTION_FLOW.sessionControlsRoot,

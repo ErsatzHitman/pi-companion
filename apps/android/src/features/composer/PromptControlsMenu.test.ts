@@ -3,14 +3,21 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * T353 source-level contract for `ContextRing.tsx` and
- * `PromptControlsMenu.tsx`. Both import `react-native`, so neither can
- * render under this workspace's plain `vitest` setup (see
+ * T353 source-level contract for `PromptControlsMenu.tsx`, split out of
+ * `context-ring.test.ts` (deleted by A-COMPOSER along with
+ * `ContextRing.tsx`) into its own file. Every case below is UNCHANGED
+ * from that file — per this task's brief, "the controls menu SURVIVES
+ * unchanged in content... only its TRIGGER moves, from the ring to the
+ * [footer] pills", and none of these cases pin the trigger. What moved
+ * is `FooterPills.test.ts`'s own new cases for the trigger side of that
+ * change.
+ *
+ * `PromptControlsMenu.tsx` imports `react-native`, so it can't render
+ * under this workspace's plain `vitest` setup (see
  * `../extensions/renderers/log-model.ts`'s doc comment). Every number
- * and every string they draw is decided by
- * `./context-ring-model.ts` and `../telemetry`'s
- * `buildContextCardViewModel`, both of which are proven by execution in
- * their own test files; what these cases pin is the drawing itself.
+ * and every string it draws is decided by `../telemetry`'s
+ * `buildContextCardViewModel`, proven by execution in its own test
+ * file; what these cases pin is the drawing itself.
  *
  * `readCode()` strips comments first, so a claim made only in a doc
  * comment can never satisfy an assertion.
@@ -20,59 +27,6 @@ function readCode(name: string): string {
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/.*$/gm, "");
 }
-
-describe("ContextRing source", () => {
-  // T360 moved the DRAWING to `../../ui/recipes/ProgressRing.tsx`, when
-  // the todo widget became this app's second ring. The three cases that
-  // pinned the two `<Circle>`s and the twelve-o'clock rotation moved
-  // with it, to `ProgressRing.test.ts` — same assertions, new address,
-  // not widened to whatever this file still happens to say and not
-  // deleted, which would have dropped the only proof the arc does not
-  // start at three o'clock.
-  //
-  // What stays here is what is still THIS control's decision: that
-  // every number it hands the ring comes from its own model, and that
-  // it computes no geometry itself.
-  it("takes every number from the model, computing no geometry of its own", () => {
-    const code = readCode("ContextRing");
-    expect(code).toMatch(/buildContextRingViewModel\(usage\)/);
-    expect(code).toMatch(/circumference=\{model\.circumference\}/);
-    expect(code).toMatch(/dashOffset=\{model\.dashOffset\}/);
-    expect(code).not.toMatch(/Math\.PI/);
-  });
-
-  it("delegates the drawing rather than keeping a second copy of the arc", () => {
-    const code = readCode("ContextRing");
-    expect(code).toMatch(/<ProgressRing\b/);
-    expect(code).not.toMatch(/<Circle\b/);
-    expect(code).not.toMatch(/from "react-native-svg"/);
-  });
-
-  it("puts the percentage in visible text, so fill level is never the only signal", () => {
-    const code = readCode("ContextRing");
-    expect(code).toMatch(/\{model\.shortLabel\}/);
-  });
-
-  it("names and hints itself as a button, and hides its own graphics from assistive tech", () => {
-    const code = readCode("ContextRing");
-    expect(code).toMatch(/accessibilityRole="button"/);
-    expect(code).toMatch(/accessibilityLabel=\{model\.accessibilityLabel\}/);
-    expect(code).toMatch(/accessibilityHint=\{model\.accessibilityHint\}/);
-    expect(code).toMatch(/accessibilityElementsHidden/);
-  });
-
-  it("keeps a full 48dp touch target around an 18dp ring", () => {
-    const code = readCode("ContextRing");
-    expect(code).toMatch(/minHeight: 48/);
-  });
-
-  it("reads every colour from the theme and hardcodes no product colour", () => {
-    const code = readCode("ContextRing");
-    expect(code).toMatch(/useTheme\(\)/);
-    expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(code).not.toMatch(/rgba?\(/);
-  });
-});
 
 describe("PromptControlsMenu source", () => {
   it("hosts itself in the shared Sheet rather than a hand-built scrim and overlay", () => {
@@ -140,5 +94,16 @@ describe("PromptControlsMenu source", () => {
     expect(code).toMatch(/testID=\{`\$\{testId\}-context-compact`\}/);
     expect(code).toMatch(/disabled=\{!onCompactNow\}/);
     expect(code).toMatch(/no wire path — \/compact is a slash command, not a menu action/);
+  });
+
+  // A-COMPOSER: the panel this trigger opens is unchanged, but the
+  // ANCHOR it clears is — the pill row now sits above `.cmp`, not a ring
+  // inside it, so the sheet must still clear both.
+  it("still anchors above the composer, per its own doc comment, rather than assuming Sheet already handles that", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("./PromptControlsMenu.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(source).toMatch(/panel is bottom-anchored/);
   });
 });

@@ -71,7 +71,7 @@ import {
   createModelThinkingController,
   type DaemonModelThinkingSource,
 } from "./model-thinking-model";
-import { ContextRing } from "./ContextRing";
+import { FooterPills } from "./FooterPills";
 import {
   ENTRY_BLOCK_GAP,
   ENTRY_BLOCK_PADDING_HORIZONTAL,
@@ -654,7 +654,7 @@ function voiceOutcomeDisplay(
  * it is deliberately still here.** `HANDOFF.md` §5.2 offered two ways
  * to stop the composer starving the pinned live-extension area: Option
  * A, which drops this scroll container once the pickers move into the
- * context-ring menu, and Option B, a measured cap on the composer
+ * prompt controls menu, and Option B, a measured cap on the composer
  * slot. T346 took Option B — `app-shell/composer-slot-cap-model.ts`'s
  * `resolveComposerSlotMaxHeightDp` returns `min(320, 0.32 × window)`
  * whenever the pinned area is occupied, and `app-shell/
@@ -686,6 +686,16 @@ function voiceOutcomeDisplay(
  * session-screen flow.) Real focus retention through a live
  * `Modal`/`Portal` sheet remains for T59 (real device) to prove; this
  * component does not claim it.
+ *
+ * **A-COMPOSER reverses T353's context-ring amendment.** The confirmed
+ * Android spec (`plan.md`'s Android composer section; `spec-delta.md`
+ * §2 A-COMPOSER) draws the four metadata pills ABOVE this prompt bar —
+ * `<FooterPills>`, mounted as the first child of the same
+ * `onLayout={handlePromptBarLayout}` wrapper `PromptBar` sits in below
+ * — and there is no ring: `leading` now carries only the attach mark,
+ * matching the artifact's own `<div class="cmp"><div class="cmp-box">`
+ * (nothing sits between `+` and the input). See `FooterPills.tsx`'s own
+ * module doc for the full reasoning and the pill animations it owns.
  */
 export function Composer({
   onSubmit,
@@ -1519,9 +1529,11 @@ export function Composer({
     },
     [remeasureMinHeight],
   );
-  // T353: the context ring's menu. Local state, not lifted: nothing
-  // outside this component opens or closes it, and a route that owned
-  // the flag would have to be told about a control it does not draw.
+  // T353 named this the context ring's menu; A-COMPOSER reverses the
+  // ring back to the footer pills, three of which open it. Local state,
+  // not lifted: nothing outside this component opens or closes it, and
+  // a route that owned the flag would have to be told about a control
+  // it does not draw.
   const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
   const handleOpenControlsMenu = useCallback(() => setControlsMenuOpen(true), []);
   const handleCloseControlsMenu = useCallback(() => setControlsMenuOpen(false), []);
@@ -1620,7 +1632,7 @@ export function Composer({
             </Text>
           </View>
           {/* T353: the model/effort and queue controls moved into the
-              context-ring menu below, keeping their own testIDs. */}
+              prompt controls menu below, keeping their own testIDs. */}
           <TurnStatusBanner state={turnStatusState} testId={`${composerTestId}-turn-status`} />
           {attachmentPermissionState !== null ? (
             <PermissionRecoveryNotice
@@ -1736,8 +1748,27 @@ export function Composer({
             testId={`${composerTestId}-commands-picker`}
           />
         </ScrollView>
-        {/* T344: measured for the root's minHeight; never shrinks itself. */}
+        {/* T344/A-COMPOSER: measured for the root's minHeight; never
+            shrinks itself. The artifact's own reason for drawing the
+            pills ABOVE the bar rather than a ring beside `+`: the thing
+            you type into stays the LAST element before the screen edge,
+            closest to the thumb — so `FooterPills` is the first child
+            here, `PromptBar` the second, and `handlePromptBarLayout`
+            measures this wrapper's whole height (both never-shrinking
+            rows), not the bar alone — a ring beside `+` needed no
+            separate row to account for; a pill row above the bar does. */}
         <View onLayout={handlePromptBarLayout}>
+          <FooterPills
+            sessionControlsState={sessionControlsState}
+            onSelectMode={handleSelectMode}
+            modelThinkingState={modelThinkingState}
+            onSelectModel={handleSelectModel}
+            onSelectThinking={handleSelectThinking}
+            usage={usage}
+            onOpenControlsMenu={handleOpenControlsMenu}
+            controlsMenuOpen={controlsMenuOpen}
+            testId={`${composerTestId}-footer`}
+          />
           <PromptBar
             label={COMPOSER_INPUT_LABEL}
             placeholder={placeholder ?? "Type a prompt…"}
@@ -1751,19 +1782,12 @@ export function Composer({
             onValueChange={handleValueChange}
             onSend={handleSend}
             leading={
-              <>
-                <ComposerIconAction
-                  icon="plus"
-                  accessibleName={ATTACH_ACTION_LABEL}
-                  onPress={handleAttachPress}
-                  testId={`${composerTestId}-attach`}
-                />
-                <ContextRing
-                  usage={usage}
-                  onPress={handleOpenControlsMenu}
-                  testId={`${composerTestId}-context-ring`}
-                />
-              </>
+              <ComposerIconAction
+                icon="plus"
+                accessibleName={ATTACH_ACTION_LABEL}
+                onPress={handleAttachPress}
+                testId={`${composerTestId}-attach`}
+              />
             }
             trailing={
               <ComposerIconAction

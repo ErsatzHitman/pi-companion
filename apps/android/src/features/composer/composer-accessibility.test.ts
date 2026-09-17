@@ -175,11 +175,13 @@ describe("Composer.tsx", () => {
     expect(scrollBody).toMatch(/keyboardShouldPersistTaps="handled"/);
     // The controls that outgrow the keyboard-shrunk shell are still
     // never beside the prompt bar. T353 moved the model/effort and
-    // queue pickers OUT of this ScrollView and into the context-ring
+    // queue pickers OUT of this ScrollView and into the prompt controls
     // menu, which is a `Sheet` -- a bottom-anchored panel that is not
     // in this flex column at all, so it cannot squeeze the prompt bar
     // either. What this case guards is unchanged: neither control may
-    // sit between the ScrollView and the PromptBar.
+    // sit between the ScrollView and the PromptBar — `<FooterPills>`
+    // (A-COMPOSER) now sits there too, but it renders none of the two
+    // pickers this case forbids, so the assertions below still hold.
     expect(scrollBody).toMatch(/<SlashCommandPicker/);
     expect(scrollBody).not.toMatch(/<QueueModePicker/);
     expect(scrollBody).not.toMatch(/<ModelThinkingPicker/);
@@ -188,7 +190,7 @@ describe("Composer.tsx", () => {
     expect(afterScroll).not.toMatch(/<ModelThinkingPicker/);
   });
 
-  it("T353: the model/effort and queue controls live in the context-ring menu, keeping their own testIDs", () => {
+  it("T353: the model/effort and queue controls live in the prompt controls menu, keeping their own testIDs", () => {
     // The menu is mounted AFTER the prompt bar so a Sheet with no
     // PortalHost falls back to rendering inline below it, rather than
     // above the bar where it would push the input off-screen.
@@ -201,15 +203,37 @@ describe("Composer.tsx", () => {
     expect(menuBody).toMatch(/testId=\{`\$\{composerTestId\}-model-thinking`\}/);
   });
 
-  it("T353: the context ring is inside the prompt bar and is what opens that menu", () => {
-    expect(code).toMatch(/<PromptBar[\s\S]*?leading=\{[\s\S]*?<ContextRing/);
-    expect(code).toMatch(/onPress=\{handleOpenControlsMenu\}/);
+  // A-COMPOSER: replaces the old "T353: the context ring is inside the
+  // prompt bar and is what opens that menu" case. The ring is gone —
+  // `FooterPills` is mounted above `PromptBar`, inside the same
+  // never-shrinking wrapper, and `leading` now carries only the attach
+  // mark (see `Composer.tsx`'s own A-COMPOSER paragraph for why nothing
+  // else may sit there).
+  it("A-COMPOSER: the footer pills sit above the prompt bar, inside the same measured wrapper, and open the controls menu", () => {
+    const wrapper = code.indexOf("onLayout={handlePromptBarLayout}");
+    const footerPills = code.indexOf("<FooterPills");
+    const promptBarTag = code.indexOf("<PromptBar");
+    expect(wrapper).toBeGreaterThan(-1);
+    expect(footerPills).toBeGreaterThan(wrapper);
+    expect(promptBarTag).toBeGreaterThan(footerPills);
+    expect(code).toMatch(/onOpenControlsMenu=\{handleOpenControlsMenu\}/);
+    expect(code).toMatch(/controlsMenuOpen=\{controlsMenuOpen\}/);
     expect(code).toMatch(/open=\{controlsMenuOpen\}/);
     expect(code).toMatch(/onClose=\{handleCloseControlsMenu\}/);
   });
 
-  it("T353: the ring's reading is the daemon's, never a literal", () => {
-    expect(code).toMatch(/<ContextRing\s+usage=\{usage\}/);
+  it("A-COMPOSER: nothing but the attach mark sits in the prompt bar's leading slot — no ring, no ContextRing import", () => {
+    const promptBarBlock = code.slice(
+      code.indexOf("<PromptBar"),
+      code.indexOf("</View>", code.indexOf("<PromptBar")),
+    );
+    expect(promptBarBlock).toMatch(/leading=\{[\s\S]*?<ComposerIconAction/);
+    expect(promptBarBlock).not.toMatch(/ContextRing/);
+    expect(source).not.toMatch(/from "\.\/ContextRing"/);
+  });
+
+  it("A-COMPOSER: the footer pills' reading is the daemon's, never a literal", () => {
+    expect(code).toMatch(/<FooterPills[\s\S]*?usage=\{usage\}/);
     expect(code).not.toMatch(/usage=\{\{/);
   });
 
@@ -227,7 +251,17 @@ describe("Composer.tsx", () => {
     );
     expect(code).toMatch(/const sectionGap = theme\.spacing\[3\];/);
     expect(code).toMatch(/accessibilityRole="header"[\s\S]*?onLayout=\{handleTitleLayout\}/);
-    expect(code).toMatch(/<View onLayout=\{handlePromptBarLayout\}>\s*<PromptBar/);
+    // A-COMPOSER: this wrapper now measures TWO never-shrinking rows
+    // (`FooterPills` above `PromptBar`, see `Composer.tsx`'s own
+    // A-COMPOSER paragraph), not `PromptBar` alone — the SUM the test
+    // title already describes stays a sum of views that never shrink
+    // either way.
+    expect(code).toMatch(/<View onLayout=\{handlePromptBarLayout\}>\s*<FooterPills/);
+    const wrapperOpen = code.indexOf("<View onLayout={handlePromptBarLayout}>");
+    const footerPillsClose = code.indexOf("/>", code.indexOf("<FooterPills", wrapperOpen));
+    const promptBarOpen = code.indexOf("<PromptBar", wrapperOpen);
+    expect(promptBarOpen).toBeGreaterThan(footerPillsClose);
+    expect(code.slice(footerPillsClose, promptBarOpen)).not.toMatch(/</);
     expect(code).not.toMatch(/sectionHeightRef|controlsHeightRef/);
     const scrollOpen = code.indexOf("<ScrollView");
     const scrollTagEnd = code.indexOf(">", scrollOpen);

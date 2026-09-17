@@ -4,21 +4,30 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Sheet } from "../../ui/primitives";
 import { useTheme } from "../../ui/theme/theme-context";
 import { asFontWeight } from "../../ui/theme/native-style-helpers";
+import { EXPRESSIVE_RADIUS_XS } from "../../ui/theme/expressive-shape";
 import { buildContextCardViewModel, type ContextUsageBand } from "../telemetry";
 import type { AgentUsage } from "@picompanion/protocol/agent-types";
 
 /**
- * The context-ring menu (T353) — the artifact's `.pmenu`.
+ * The prompt controls menu — the artifact's `.pmenu`.
  *
- * The redesign's amendment removed the four control pills that used to
- * sit above the prompt bar and put their contents behind the context
- * ring instead. This is what the ring opens: one panel holding the
- * session's per-turn controls, in the artifact's own order, with the
- * context readout at the bottom where the ring itself lives.
+ * T353 amended the redesign to remove the four metadata pills that used
+ * to sit above the prompt bar and put their contents behind a context
+ * ring instead; A-COMPOSER reverses that amendment (`plan.md`'s Android
+ * composer section, `spec-delta.md` §2 A-COMPOSER) back to the
+ * confirmed spec's own markup — the four pills are back above the
+ * prompt bar (`FooterPills.tsx`), and there is no ring. This is what
+ * THREE of those pills now open (`f-mode`/`f-model`/`f-eff` — see that
+ * file's own module doc for why `f-mode` also toggles directly on a
+ * plain tap): one panel holding the session's per-turn controls, in the
+ * artifact's own order, with the context readout at the bottom, exactly
+ * as it already was — this file's own content is UNCHANGED by that
+ * reversal (this task's brief: "the menu's content does not change").
  *
  * **Why `Sheet` and not a bespoke absolute overlay.** The artifact
- * positions `.pmenu` absolutely above the prompt bar over a scrim, and
- * building that here would mean re-deriving a scrim, a back-gesture
+ * positions `.pmenu` absolutely above the prompt bar over a scrim
+ * (`bottom:98px` — clearing both the pill row and the bar beneath it),
+ * and building that here would mean re-deriving a scrim, a back-gesture
  * handler and a TalkBack focus move that `ui/primitives/Sheet.tsx`
  * already owns — and, crucially, getting the IME right. A menu opened
  * from the composer competes with a focused `TextInput`; `Sheet`
@@ -327,7 +336,10 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       alignItems: "center",
       gap: theme.spacing[2],
       paddingHorizontal: theme.spacing[2],
-      borderRadius: theme.radii.md,
+      // `.pmenu .pm-row{border-radius:var(--r-xs)}` — A-SHAPE's Android
+      // Expressive scale, not the shared `radii.md` this used to read
+      // (8, one point off the artifact's own 10).
+      borderRadius: EXPRESSIVE_RADIUS_XS,
     },
     pmRowLabel: {
       flex: 1,

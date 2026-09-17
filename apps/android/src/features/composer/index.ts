@@ -173,24 +173,29 @@ export type {
 export { ModelThinkingPicker } from "./ModelThinkingPicker";
 export type { ModelThinkingPickerProps } from "./ModelThinkingPicker";
 
-// T353: the context ring and the menu it opens — the redesign's
-// replacement for the four control pills that used to sit above the
-// prompt bar. See `context-ring-model.ts`'s module doc.
+// A-COMPOSER: the four metadata pills above the prompt bar and the menu
+// three of them open — reverses T353's ring amendment back to the
+// confirmed spec's own markup. See `FooterPills.tsx`'s module doc.
+export { buildContextPillViewModel } from "./context-pill-model";
+export type { ContextPillViewModel } from "./context-pill-model";
 export {
-  CONTEXT_RING_CIRCUMFERENCE,
-  CONTEXT_RING_RADIUS,
-  CONTEXT_RING_SIZE,
-  CONTEXT_RING_STROKE,
-  buildContextRingViewModel,
-} from "./context-ring-model";
-export type { ContextRingViewModel } from "./context-ring-model";
-export { ContextRing } from "./ContextRing";
-export type { ContextRingProps } from "./ContextRing";
+  SWIPE_ARM_PX,
+  SWIPE_COMMIT_PX,
+  SWIPE_MAX_PX,
+  cycleOptionId,
+  cyclePillIndex,
+  isSwipeReady,
+  resolveSwipeStep,
+  rubberBandOffsetPx,
+} from "./footer-pill-drag-model";
+export type { SwipeStep } from "./footer-pill-drag-model";
+export { FooterPills } from "./FooterPills";
+export type { FooterPillsProps } from "./FooterPills";
 export { PromptControlsMenu } from "./PromptControlsMenu";
 export type { PromptControlsMenuProps } from "./PromptControlsMenu";
 
 // T354: the Build/Plan mode control and the auto-compaction switch the
-// context-ring menu's MODE and CONTEXT groups mount. See
+// prompt controls menu's MODE and CONTEXT groups mount. See
 // `session-controls-model.ts`'s module doc for why one controller owns
 // both settings.
 export {

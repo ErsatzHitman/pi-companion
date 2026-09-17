@@ -105,14 +105,16 @@ tags:
 - assertVisible:
     id: "composer"
 
-# --- T353 moved the queue-mode picker into the context-ring menu, so
-# --- it has to be opened before it can be asserted on. The ring is the
-# --- small circle in the prompt bar that fills with context usage; the
-# --- menu is a `Sheet`, which renders in the same window (never a
-# --- second native Window), so Maestro sees its contents as ordinary
-# --- nodes once it is open.
+# --- T353 moved the queue-mode picker into the prompt controls menu, so
+# --- it has to be opened before it can be asserted on. P10-GATE: the tap
+# --- target moved with it. The context ring this step used to tap is
+# --- gone; the row above the prompt bar now holds four footer pills, and
+# --- the model one opens this menu (the context pill at the end of the
+# --- row is a readout and opens nothing). The menu is a `Sheet`, which
+# --- renders in the same window (never a second native Window), so
+# --- Maestro sees its contents as ordinary nodes once it is open.
 - tapOn:
-    id: "composer-context-ring"
+    id: "composer-footer-model"
 - assertVisible:
     id: "composer-controls-menu"
 
