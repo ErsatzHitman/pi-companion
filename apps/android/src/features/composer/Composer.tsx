@@ -826,6 +826,21 @@ export function Composer({
     },
     [sessionControlsController],
   );
+  // W8-AUTORETRY. Identical shape to `handleSetAutoCompaction` above, and
+  // it exists for the reason that one does: the picker draws a real
+  // switch, so the switch must move real state. `SessionControlsPicker`
+  // types this callback as optional only so its own file could land
+  // without editing this one; an unpassed handler would leave a visible
+  // toggle that silently does nothing, which is the failure this repo
+  // has already paid for twice (see `docs/issues-from-plan.md`'s P10-14).
+  const handleSetAutoRetry = useCallback(
+    (enabled: boolean) => {
+      void sessionControlsController
+        .setAutoRetry(enabled)
+        .then(() => setSessionControlsState(sessionControlsController.getState()));
+    },
+    [sessionControlsController],
+  );
 
   // --- T39C: session-wide steer/follow-up queue mode ----------------------
   // Same one-controller-per-(client, agentId)-identity shape as
@@ -1810,6 +1825,7 @@ export function Composer({
               state={sessionControlsState}
               onSelectMode={handleSelectMode}
               onSetAutoCompaction={handleSetAutoCompaction}
+              onSetAutoRetry={handleSetAutoRetry}
               testId={`${composerTestId}-session-controls`}
             />
           }

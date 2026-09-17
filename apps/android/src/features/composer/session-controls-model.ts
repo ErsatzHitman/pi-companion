@@ -46,6 +46,30 @@
  * a switch must never be. Every consumer renders `null` as "unknown",
  * and `../telemetry`'s `buildContextCardViewModel` already omits its
  * auto-compaction clause entirely when handed `undefined`.
+ *
+ * ## Auto-retry (W8-AUTORETRY): an exact sibling, deliberately NOT in `REQUIRED_METHODS`
+ *
+ * `getAutoRetry`/`setAutoRetry` close the same parity gap
+ * `apps/web/src/features/settings/use-auto-retry.ts` already closes for
+ * web, with the identical shape auto-compaction already has here:
+ * `autoRetry: boolean | null`, an `isChangingAutoRetry` in-flight guard,
+ * and a read-back after every write.
+ *
+ * They are NOT added to `REQUIRED_METHODS`. `supportsSessionControls`
+ * requires every listed method, so a client missing auto-retry would flip
+ * the WHOLE picker — mode segments and auto-compaction included — to
+ * `"unsupported"`, a regression on two already-shipped controls to add a
+ * third. Auto-retry's support is instead expressed the same way its own
+ * *value* already is: `autoRetry` stays `null` for a client that omits
+ * `getAutoRetry` (see `loadAutoRetry` below) exactly as it would for a
+ * load still in flight or a daemon that refused the read, and
+ * `describeAutoRetry(null)` reads "unknown" for all three. No separate
+ * `"unsupported"` enum member was introduced for this one optional pair,
+ * because `REQUIRED_METHODS` already governs whether the *panel* is
+ * usable at all, and collapsing "never wired" into the same `null` this
+ * module already uses for "no truthful answer yet" is the smaller,
+ * already-proven shape rather than a new one invented just for this
+ * field.
  */
 
 /** A single selectable mode — matches `AgentMode` (`packages/protocol/src/agent-types.ts`) field-for-field. */
@@ -82,6 +106,14 @@ export interface DaemonSessionControlsSource {
   getAutoCompaction?(agentId: string): Promise<boolean>;
   /** Matches `DaemonClient.setAutoCompaction(agentId, enabled)`. */
   setAutoCompaction?(agentId: string, enabled: boolean): Promise<SessionControlsNotice | null>;
+  /**
+   * Matches `DaemonClient.getAutoRetry(agentId)`. Independently optional —
+   * deliberately absent from `REQUIRED_METHODS`, see this module's doc
+   * comment for why.
+   */
+  getAutoRetry?(agentId: string): Promise<boolean>;
+  /** Matches `DaemonClient.setAutoRetry(agentId, enabled)`. Same envelope shape as `setAutoCompaction`. */
+  setAutoRetry?(agentId: string, enabled: boolean): Promise<SessionControlsNotice | null>;
 }
 
 const REQUIRED_METHODS = [
@@ -142,6 +174,15 @@ export interface SessionControlsState {
   readonly autoCompaction: boolean | null;
   /** `true` while a `setAutoCompaction` call is in flight. */
   readonly isChangingAutoCompaction: boolean;
+  /**
+   * `true`/`false` once known; `null` covers both "no truthful answer
+   * yet" AND "this client never implements auto-retry" — see this
+   * module's doc comment on why auto-retry has no separate `"unsupported"`
+   * state of its own.
+   */
+  readonly autoRetry: boolean | null;
+  /** `true` while a `setAutoRetry` call is in flight. */
+  readonly isChangingAutoRetry: boolean;
   /** The most recent change failure, or `null`. Cleared at the start of the next call. */
   readonly changeError: string | null;
   /** A provider notice attached to the most recent successful change, or `null`. */
@@ -158,6 +199,8 @@ export const INITIAL_SESSION_CONTROLS_STATE: SessionControlsState = {
   isChangingMode: false,
   autoCompaction: null,
   isChangingAutoCompaction: false,
+  autoRetry: null,
+  isChangingAutoRetry: false,
   changeError: null,
   notice: null,
 };
@@ -176,6 +219,18 @@ export function currentModeLabel(state: SessionControlsState): string {
 export function describeAutoCompaction(autoCompaction: boolean | null): string {
   if (autoCompaction === null) return "Auto-compaction: unknown";
   return autoCompaction ? "Auto-compaction on" : "Auto-compaction off";
+}
+
+/**
+ * The auto-retry switch's own visible words — exact sibling of
+ * `describeAutoCompaction`. `null` covers both "no truthful answer yet"
+ * and "this client doesn't implement auto-retry"; see this module's doc
+ * comment for why those two share one state rather than each getting
+ * their own.
+ */
+export function describeAutoRetry(autoRetry: boolean | null): string {
+  if (autoRetry === null) return "Auto-retry: unknown";
+  return autoRetry ? "Auto-retry on" : "Auto-retry off";
 }
 
 export interface SessionControlsControllerDeps {
@@ -197,6 +252,13 @@ export interface SessionControlsController {
   setMode(modeId: string): Promise<void>;
   /** Turns auto-compaction on or off. No-op while not ready or another compaction change is in flight. */
   setAutoCompaction(enabled: boolean): Promise<void>;
+  /**
+   * Turns auto-retry on or off. No-op while not ready, another
+   * auto-retry change is in flight, or the client omits `setAutoRetry`
+   * (see this module's doc comment — auto-retry support is expressed by
+   * value, not by a `REQUIRED_METHODS` gate).
+   */
+  setAutoRetry(enabled: boolean): Promise<void>;
 }
 
 function toMessage(error: unknown): string {
@@ -244,6 +306,17 @@ export function createSessionControlsController(
     }
   }
 
+  async function loadAutoRetry(): Promise<boolean | null> {
+    if (!client?.getAutoRetry) return null;
+    try {
+      return await client.getAutoRetry(agentId);
+    } catch {
+      // Same treatment as `loadAutoCompaction`: a refused read leaves the
+      // switch at "unknown", never at a guessed "off".
+      return null;
+    }
+  }
+
   async function load(): Promise<void> {
     if (!client) {
       state = { ...INITIAL_SESSION_CONTROLS_STATE };
@@ -285,6 +358,7 @@ export function createSessionControlsController(
 
     const { modes, modesError } = await resolveModes(snapshot.provider, snapshot.availableModes);
     const autoCompaction = await loadAutoCompaction();
+    const autoRetry = await loadAutoRetry();
 
     state = {
       ...state,
@@ -295,6 +369,7 @@ export function createSessionControlsController(
       currentModeId: snapshot.currentModeId ?? null,
       modesError,
       autoCompaction,
+      autoRetry,
     };
   }
 
@@ -338,10 +413,32 @@ export function createSessionControlsController(
     }
   }
 
+  async function setAutoRetry(enabled: boolean): Promise<void> {
+    if (state.availability !== "ready" || state.isChangingAutoRetry) return;
+    if (!client?.setAutoRetry) return;
+
+    state = { ...state, isChangingAutoRetry: true, changeError: null, notice: null };
+    try {
+      const notice = await client.setAutoRetry(agentId, enabled);
+      const confirmed = await loadAutoRetry();
+      state = {
+        ...state,
+        isChangingAutoRetry: false,
+        notice: notice ?? null,
+        // Read back rather than assume — same discipline as
+        // `setAutoCompaction` above.
+        autoRetry: confirmed,
+      };
+    } catch (error) {
+      state = { ...state, isChangingAutoRetry: false, changeError: toMessage(error) };
+    }
+  }
+
   return {
     getState: () => state,
     load,
     setMode,
     setAutoCompaction,
+    setAutoRetry,
   };
 }

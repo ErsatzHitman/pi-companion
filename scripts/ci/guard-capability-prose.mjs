@@ -3154,6 +3154,27 @@ export const CAPABILITIES = [
       /nothing (?:counts|ticks) (?:the |a )?retry (?:delay|countdown) down/i,
     ],
   },
+  {
+    // P10-W8 (W8-AUTORETRY): Android can turn the daemon's auto-retry on
+    // and off, closing the parity gap against web's own
+    // `use-auto-retry.ts`. `DaemonClient.getAutoRetry`/`setAutoRetry` have
+    // shipped for waves; nothing on Android called either, so the daemon's
+    // retry behaviour was readable only by watching it happen.
+    //
+    // A single bare member. `setAutoRetry` itself would be the wrong token
+    // - it is declared in `packages/client`'s own client and in web's
+    // settings client, both of which predate this capability, so the entry
+    // would have reported "shipped" long before Android had anything. This
+    // name is declared only where the Android control actually lives, and
+    // disappears with it, which is what T172 asks of a bare token.
+    name: "Android can turn the daemon's auto-retry on and off (describeAutoRetry)",
+    methodNames: ["describeAutoRetry"],
+    denyingPhrases: [
+      /(?:apps\/)?android (?:still )?has no (?:equivalent|auto-?retry)(?: of| for)?[^.]{0,40}auto-?retry/i,
+      /no (?:way|control|toggle|switch) (?:on android )?to turn auto-?retry (?:on or off|off|on)/i,
+      /auto-?retry (?:is )?(?:only|exclusively) (?:settable|changeable|toggleable) (?:from|on) (?:the )?web/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

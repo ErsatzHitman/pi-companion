@@ -7,6 +7,7 @@ import { useTheme } from "../../ui/theme/theme-context";
 import {
   currentModeLabel,
   describeAutoCompaction,
+  describeAutoRetry,
   type SessionControlsState,
 } from "./session-controls-model";
 
@@ -62,6 +63,17 @@ import {
  * have to pick a position, and both positions are a claim. The sentence
  * `describeAutoCompaction(null)` is rendered instead, which says
  * "unknown" and nothing else.
+ *
+ * A second `Toggle`, for auto-retry (W8-AUTORETRY), sits right below the
+ * auto-compaction one and follows the identical rule:
+ * `state.autoRetry === null` — which the model's doc comment says covers
+ * both "still loading" and "this client doesn't implement auto-retry" —
+ * renders `describeAutoRetry(null)` instead of a switch, for the same
+ * reason. `onSetAutoRetry` is an optional prop, unlike its mode/compaction
+ * siblings: this task's file list excludes `Composer.tsx`, the sole
+ * mounting site, whose own call is out of scope here and does not pass
+ * it yet. Optional keeps that call type-correct as-is; a future task can
+ * wire it there without touching this file.
  */
 export interface SessionControlsPickerProps {
   state: SessionControlsState;
@@ -69,17 +81,24 @@ export interface SessionControlsPickerProps {
   onSelectMode: (modeId: string) => void;
   /** Fires with the requested auto-compaction position. */
   onSetAutoCompaction: (enabled: boolean) => void;
+  /**
+   * Fires with the requested auto-retry position. Optional — see this
+   * file's doc comment on why, unlike its mode/compaction siblings.
+   */
+  onSetAutoRetry?: (enabled: boolean) => void;
   testId?: string;
 }
 
 /** The artifact's `.f-mode`: a 9.5px uppercase label inside a tight pill. */
 const MODE_LABEL_SIZE = 9.5;
 const AUTO_COMPACTION_LABEL = "Auto-compact this session";
+const AUTO_RETRY_LABEL = "Auto-retry this session";
 
 export function SessionControlsPicker({
   state,
   onSelectMode,
   onSetAutoCompaction,
+  onSetAutoRetry,
   testId = "session-controls-picker",
 }: SessionControlsPickerProps) {
   const { theme } = useTheme();
@@ -148,6 +167,19 @@ export function SessionControlsPicker({
           onCheckedChange={onSetAutoCompaction}
           disabled={state.isChangingAutoCompaction}
           testId={`${testId}-auto-compaction`}
+        />
+      )}
+      {state.autoRetry === null ? (
+        <Text style={styles.muted} testID={`${testId}-auto-retry-unknown`}>
+          {describeAutoRetry(null)}
+        </Text>
+      ) : (
+        <Toggle
+          label={AUTO_RETRY_LABEL}
+          checked={state.autoRetry}
+          onCheckedChange={(enabled) => onSetAutoRetry?.(enabled)}
+          disabled={state.isChangingAutoRetry}
+          testId={`${testId}-auto-retry`}
         />
       )}
       {state.changeError ? (

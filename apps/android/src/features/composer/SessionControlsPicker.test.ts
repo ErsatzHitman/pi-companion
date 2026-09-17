@@ -80,6 +80,19 @@ describe("SessionControlsPicker source", () => {
     expect(code).toMatch(/disabled=\{state\.isChangingAutoCompaction\}/);
   });
 
+  it("draws a second, independent switch for auto-retry (W8-AUTORETRY), unknown-gated the same way as auto-compaction", () => {
+    const code = readCode();
+    expect(code).toMatch(/state\.autoRetry === null \?/);
+    expect(code).toMatch(/testID=\{`\$\{testId\}-auto-retry-unknown`\}/);
+  });
+
+  it("wires the auto-retry switch to the controller and locks it mid-write", () => {
+    const code = readCode();
+    expect(code).toMatch(/checked=\{state\.autoRetry\}/);
+    expect(code).toMatch(/onCheckedChange=\{\(enabled\) => onSetAutoRetry\?\.\(enabled\)\}/);
+    expect(code).toMatch(/disabled=\{state\.isChangingAutoRetry\}/);
+  });
+
   it("surfaces a failed change and a provider notice rather than swallowing either", () => {
     const code = readCode();
     expect(code).toMatch(/\{state\.changeError\}/);

@@ -107,3 +107,40 @@ describe("Composer.tsx: no live client wired at the real production mount today"
     expect(code).not.toMatch(/turnStatusClient\s*\?\?/);
   });
 });
+
+/**
+ * W8-AUTORETRY (added at the merge gate). `SessionControlsPicker` types
+ * `onSetAutoRetry` as OPTIONAL, so its own file could land without
+ * editing `Composer.tsx` — which means nothing in the type system
+ * notices if the picker ships mounted without a handler, drawing a
+ * switch that silently does nothing. That is the exact shape this
+ * repository has already paid for twice (`docs/issues-from-plan.md`'s
+ * P10-14). These assertions are what makes the wiring a fact rather
+ * than a convention.
+ *
+ * `onSetAutoCompaction`'s own mount was unpinned in the same way before
+ * this wave, so it is pinned here too — the gap predates
+ * `W8-AUTORETRY`, and closing only half of it would leave the next
+ * reader assuming the other half was checked.
+ */
+describe("Composer.tsx: the session-controls switches are wired to the real controller", () => {
+  it("builds an auto-retry handler that calls the controller's setAutoRetry", () => {
+    expect(readCode()).toMatch(
+      /const handleSetAutoRetry = useCallback\([\s\S]*?sessionControlsController[\s\S]*?\.setAutoRetry\(enabled\)/,
+    );
+  });
+
+  it("passes that handler to SessionControlsPicker, not nothing", () => {
+    expect(readCode()).toMatch(/onSetAutoRetry=\{handleSetAutoRetry\}/);
+  });
+
+  it("re-reads controller state after an auto-retry write, so the switch shows the confirmed value", () => {
+    expect(readCode()).toMatch(
+      /\.setAutoRetry\(enabled\)\s*\.then\(\(\) => setSessionControlsState\(sessionControlsController\.getState\(\)\)\)/,
+    );
+  });
+
+  it("passes the auto-compaction handler too (unpinned before this wave)", () => {
+    expect(readCode()).toMatch(/onSetAutoCompaction=\{handleSetAutoCompaction\}/);
+  });
+});

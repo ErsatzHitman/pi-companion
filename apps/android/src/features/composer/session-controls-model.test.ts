@@ -5,6 +5,7 @@ import {
   createSessionControlsController,
   currentModeLabel,
   describeAutoCompaction,
+  describeAutoRetry,
   describeSessionControlsUnavailable,
   supportsSessionControls,
   type DaemonSessionControlsSource,
@@ -33,6 +34,8 @@ interface FullFake {
   setAgentModeCalls: Array<{ agentId: string; modeId: string }>;
   setAutoCompactionCalls: Array<{ agentId: string; enabled: boolean }>;
   getAutoCompactionCalls: string[];
+  setAutoRetryCalls: Array<{ agentId: string; enabled: boolean }>;
+  getAutoRetryCalls: string[];
 }
 
 /** A fully capable fake whose snapshot really moves when a setter is called. */
@@ -42,9 +45,12 @@ function createFullFake(overrides: Partial<DaemonSessionControlsSource> = {}): F
   const setAgentModeCalls: Array<{ agentId: string; modeId: string }> = [];
   const setAutoCompactionCalls: Array<{ agentId: string; enabled: boolean }> = [];
   const getAutoCompactionCalls: string[] = [];
+  const setAutoRetryCalls: Array<{ agentId: string; enabled: boolean }> = [];
+  const getAutoRetryCalls: string[] = [];
 
   let currentModeId: string | null = "build";
   let autoCompaction = false;
+  let autoRetry = false;
 
   const fake: Required<DaemonSessionControlsSource> = {
     fetchAgent: vi.fn(async (agentId: string) => {
@@ -69,6 +75,15 @@ function createFullFake(overrides: Partial<DaemonSessionControlsSource> = {}): F
       autoCompaction = enabled;
       return null;
     }),
+    getAutoRetry: vi.fn(async (agentId: string) => {
+      getAutoRetryCalls.push(agentId);
+      return autoRetry;
+    }),
+    setAutoRetry: vi.fn(async (agentId: string, enabled: boolean) => {
+      setAutoRetryCalls.push({ agentId, enabled });
+      autoRetry = enabled;
+      return null;
+    }),
     ...overrides,
   } as Required<DaemonSessionControlsSource>;
 
@@ -79,6 +94,8 @@ function createFullFake(overrides: Partial<DaemonSessionControlsSource> = {}): F
     setAgentModeCalls,
     setAutoCompactionCalls,
     getAutoCompactionCalls,
+    setAutoRetryCalls,
+    getAutoRetryCalls,
   };
 }
 
@@ -96,6 +113,14 @@ describe("supportsSessionControls", () => {
 
   it("is true only for a client carrying every one of the five", () => {
     expect(supportsSessionControls(createFullFake().fake)).toBe(true);
+  });
+
+  it("stays true when a client has no auto-retry methods at all — W8-AUTORETRY: getAutoRetry/setAutoRetry are deliberately not in REQUIRED_METHODS, and this must fail if they are ever added", () => {
+    const { fake } = createFullFake();
+    const partial: DaemonSessionControlsSource = { ...fake };
+    delete partial.getAutoRetry;
+    delete partial.setAutoRetry;
+    expect(supportsSessionControls(partial)).toBe(true);
   });
 });
 
@@ -150,6 +175,14 @@ describe("describeAutoCompaction", () => {
   });
 });
 
+describe("describeAutoRetry", () => {
+  it("has the same three-state shape as describeAutoCompaction", () => {
+    expect(describeAutoRetry(null)).toBe("Auto-retry: unknown");
+    expect(describeAutoRetry(false)).toBe("Auto-retry off");
+    expect(describeAutoRetry(true)).toBe("Auto-retry on");
+  });
+});
+
 describe("createSessionControlsController", () => {
   it("starts in the no-client state, with a sentence that says so", () => {
     const controller = createSessionControlsController({ agentId: "a1" });
@@ -170,9 +203,14 @@ describe("createSessionControlsController", () => {
     expect(fake.fetchAgent).not.toHaveBeenCalled();
   });
 
-  it("loads provider, modes, current mode and auto-compaction from one snapshot", async () => {
-    const { fake, fetchAgentCalls, listProviderModesCalls, getAutoCompactionCalls } =
-      createFullFake();
+  it("loads provider, modes, current mode, auto-compaction and auto-retry from one snapshot", async () => {
+    const {
+      fake,
+      fetchAgentCalls,
+      listProviderModesCalls,
+      getAutoCompactionCalls,
+      getAutoRetryCalls,
+    } = createFullFake();
     const controller = createSessionControlsController({ agentId: "a1", client: fake });
 
     await controller.load();
@@ -184,8 +222,10 @@ describe("createSessionControlsController", () => {
     expect(state.modes).toEqual([BUILD, PLAN]);
     expect(state.currentModeId).toBe("build");
     expect(state.autoCompaction).toBe(false);
+    expect(state.autoRetry).toBe(false);
     expect(fetchAgentCalls).toEqual(["a1"]);
     expect(getAutoCompactionCalls).toEqual(["a1"]);
+    expect(getAutoRetryCalls).toEqual(["a1"]);
     // The snapshot already carried the modes, so the provider-level
     // lookup is not paid for.
     expect(listProviderModesCalls).toEqual([]);
@@ -427,6 +467,98 @@ describe("createSessionControlsController", () => {
     release?.();
     await first;
     expect(controller.getState().isChangingAutoCompaction).toBe(false);
+  });
+
+  it("leaves autoRetry null when the client omits getAutoRetry, while mode and auto-compaction stay usable — W8-AUTORETRY regression guard: this must fail if getAutoRetry/setAutoRetry are ever added to REQUIRED_METHODS", async () => {
+    const { fake, setAgentModeCalls, setAutoCompactionCalls } = createFullFake();
+    const partial: DaemonSessionControlsSource = { ...fake };
+    delete partial.getAutoRetry;
+    delete partial.setAutoRetry;
+
+    const controller = createSessionControlsController({ agentId: "a1", client: partial });
+    await controller.load();
+
+    expect(controller.getState().availability).toBe("ready");
+    expect(controller.getState().autoRetry).toBeNull();
+
+    await controller.setMode("plan");
+    expect(setAgentModeCalls).toEqual([{ agentId: "a1", modeId: "plan" }]);
+
+    await controller.setAutoCompaction(true);
+    expect(setAutoCompactionCalls).toEqual([{ agentId: "a1", enabled: true }]);
+  });
+
+  it("reads auto-retry back after writing it, and shows the confirmed value even when it differs from what was requested", async () => {
+    let reads = 0;
+    const { fake, setAutoRetryCalls } = createFullFake({
+      // Always reports `false`, regardless of what was written — if the
+      // controller optimistically kept the written `true` instead of
+      // this confirmed read, the final assertion below would fail.
+      getAutoRetry: async () => {
+        reads += 1;
+        return false;
+      },
+    });
+    const controller = createSessionControlsController({ agentId: "a1", client: fake });
+    await controller.load();
+    expect(reads).toBe(1);
+
+    await controller.setAutoRetry(true);
+
+    expect(setAutoRetryCalls).toEqual([{ agentId: "a1", enabled: true }]);
+    expect(reads).toBe(2);
+    expect(controller.getState().autoRetry).toBe(false);
+  });
+
+  it("shows a failed auto-retry change and leaves the previous reading alone", async () => {
+    const { fake } = createFullFake({
+      setAutoRetry: async () => {
+        throw new Error("provider refused");
+      },
+    });
+    const controller = createSessionControlsController({ agentId: "a1", client: fake });
+    await controller.load();
+
+    await controller.setAutoRetry(true);
+
+    expect(controller.getState().changeError).toBe("provider refused");
+    expect(controller.getState().isChangingAutoRetry).toBe(false);
+    expect(controller.getState().autoRetry).toBe(false);
+  });
+
+  it("refuses an auto-retry change before the panel is ready", async () => {
+    const { fake, setAutoRetryCalls } = createFullFake();
+    const controller = createSessionControlsController({ agentId: "a1", client: fake });
+
+    await controller.setAutoRetry(true);
+
+    expect(setAutoRetryCalls).toEqual([]);
+  });
+
+  it("does not send a second auto-retry change while the first is still in flight", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const enabledSeen: boolean[] = [];
+    const { fake } = createFullFake({
+      setAutoRetry: async (_agentId: string, enabled: boolean) => {
+        enabledSeen.push(enabled);
+        await gate;
+        return null;
+      },
+    });
+    const controller = createSessionControlsController({ agentId: "a1", client: fake });
+    await controller.load();
+
+    const first = controller.setAutoRetry(true);
+    expect(controller.getState().isChangingAutoRetry).toBe(true);
+    await controller.setAutoRetry(false);
+    expect(enabledSeen).toEqual([true]);
+
+    release?.();
+    await first;
+    expect(controller.getState().isChangingAutoRetry).toBe(false);
   });
 
   it("clears a previous error and notice when a new change starts", async () => {
