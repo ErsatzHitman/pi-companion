@@ -22561,3 +22561,87 @@ BEHAVIOUR or the DATA, never the name the document uses.** The four commands tha
 saved a wave were `git grep -l "accessibilityState={{ expanded"`, `git grep -ln "pi_retry"`,
 re-running the mix against the shipped palette, and `git grep -n "SegmentedControl"`. None takes
 longer than reading the paragraph that motivated the work.
+
+## Wave P10-W10 (UI spec conformance, iteration 10)
+
+One Android package, `W10-ELAPSED`, found by a lens no previous wave had run.
+
+### P10-30 - the data lens, and the defect it found on its first pass
+
+P10-14 retired the class-name lens. P10-21 replaced it with an interaction-contract lens
+(`aria-label`, `data-act`, `say()`), which was better and is now spent. This wave ran a third:
+walk the design's **live-updating VALUES** - every `data-*` it authors, filtered to the ones its
+own script actually reads - and check each against what the app binds.
+
+The filter matters and is the cheap part. The Android design authors 25 distinct `data-*`
+attributes; its own JS reads 25 `dataset.*` names, and the two sets are not the same. `data-stats`
+(`↑12.4k ↓3.1k R84k W12k CH92.4% $0.312`) appears twelve times and is read by nothing - there is
+no `dataset.stats` anywhere in the file. It is authored metadata, not a requirement, and building
+a cost-and-cache-hit readout from it would have been inventing a feature the design never draws.
+`data-total` and `data-pct` ARE read, by `paintFoot`.
+
+Two results, one closed and one real:
+
+- **The context pill already conforms.** `paintFoot` derives four things from one number - a
+  rounded percent, a bracketed absolute token count (`total x pct/100`), a bar width clamped at
+  100, and an `er`/`wa` severity class above 90/70. `context-pill-model.ts`'s
+  `buildContextPillViewModel` implements all four and cites the artifact's own expressions in its
+  field comments. Nothing to do.
+- **A running tool call's elapsed time never advanced.** This became `W10-ELAPSED`.
+
+### P10-31 - elapsed time was a stored duration pretending to be a live one
+
+`tool-call-row.tsx` rendered `formatToolDuration(tool.durationMs)`. `durationMs` comes from
+`packages/frontend-core/src/tools/util.ts`'s `timingFields`, where it is `updatedAt - startedAt`,
+and `types.ts`'s own field comment says `updatedAt` is the "Most recent time this callId was
+**observed** by the view-model layer". So it is a snapshot taken when a view model is BUILT, and
+view models are built when stream events arrive. A tool running thirty seconds while producing no
+intermediate output displayed the same stale number for the whole thirty seconds - or `0s`, if it
+was observed exactly once.
+
+This is the P10-23 shape again, one wave later and in a different file: **a value that must
+advance with the wall clock, derived instead from a stored timestamp.** The countdown had it
+because its hook seeded a clock at mount; this had it because the value was never live to begin
+with. Both render a number that looks authoritative and is wrong, and neither had a test that
+could notice, because the stored value is perfectly correct at the instant it is computed.
+
+The fix follows the design's own script, which solves it the same way:
+`fmt(parseFloat(e.dataset.base) + (Date.now()-t0)/1000)` - a base plus a live delta.
+`toolElapsedMs(tool, nowMs)` returns `nowMs - tool.startedAt` while running and the stored
+`durationMs` once settled, because a finished call's duration IS a fact rather than a running
+total. `startedAt` was already on the view model and read by nothing under
+`apps/android/src/features/transcript`, so this consumes an existing field and changes no package.
+
+The format is a second, separable gap: the design's `fmt` carries one decimal below 60s (`4.2s`,
+`1m 5.0s`) and Android rounded to whole seconds. `formatToolElapsedWithTenths` was added as a
+SIBLING of `formatToolDuration` rather than replacing it, because the design shows tenths only on
+the live ticking readout of a still-running block, never on a settled summary - and
+`formatToolDuration` also renders every finished call's duration. Replacing it in place would have
+restyled all of those into a format the design never asked for there.
+
+The `CAPABILITIES` entry is a T168 AND-group of both names for a reason worth stating: a live
+value in the old whole-second format still contradicts the design, and the design's format applied
+to a frozen value is a prettier stale number. Either half alone is a half-port that an OR list
+would have called shipped.
+
+### P10-32 - fixing the body made the header wrong, and the gate caught it
+
+Once the body's readout ticked live, `ToolCallHeader`'s own duration - rendered whenever
+`tool.durationMs !== undefined`, running or not - became the stale half of a contradiction: one
+row showing two different numbers for the same elapsed time, a frozen header beside a live body.
+Before the fix they were at least consistently wrong together.
+
+The design settles it without a judgement call. Every running frame it draws is a `.tt` tool name
+plus a `.pa.tchip` arg chip and nothing else - re-read directly off the four `blk pend` headers in
+the artifact, not recalled - and all three `.elapsed` sites sit in a body `.ln.load` row beside
+`<span class="shim">Running...</span>`. So the header reports a duration once the call has
+SETTLED, which is exactly when `durationMs` stops being a snapshot and becomes a fact. Both new
+assertions were mutation-proven at the gate (revert the status gate, confirm the named `it` fails,
+restore from a scratchpad copy - never `git checkout --`).
+
+**The general shape, since this is the second gate in three waves to catch one:** making a value
+live does not finish at the site that renders it. Every OTHER site rendering the same underlying
+quantity has just become inconsistent with it, and nothing in the type system relates them - they
+are two calls to two formatters on one field. The check is to grep for the field, not the
+component: `formatToolDuration` had two call sites in this one file, and only one of them was in
+the package's brief.
