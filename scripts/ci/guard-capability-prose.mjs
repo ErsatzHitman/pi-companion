@@ -3077,6 +3077,60 @@ export const CAPABILITIES = [
       /no single hook owns (?:the )?agent (?:fetching|selection)/i,
     ],
   },
+  {
+    // P10-W5 (W5-PEND): a tool block earns the confirmed design's `.xbtn`
+    // once it HAS a collapsible result, not once its status word reads
+    // "finished". The wave before this one shipped the status-only proxy
+    // and said so in `tool-call-row-model.ts`'s own doc comment - "making
+    // `running` expandable is a behaviour change, not a fold, and it stays
+    // out until a wave owns it". This wave owns it, and removed that
+    // sentence in the same commit; this entry is what stops an equivalent
+    // one being written again.
+    //
+    // A bare member name, and T172's trap was checked before choosing one:
+    // `foldableFamilyAlreadyHasResult` exists ONLY because this capability
+    // does - it is the per-family "is a result already there?" test the
+    // `running`/`blocked` branch asks - and it is declared in exactly one
+    // shipped file. Delete the capability and the name goes with it, which
+    // is precisely what a bare member has to guarantee. `toolCardHas
+    // ExpandButton` would NOT have worked: it predates this capability by a
+    // wave and would keep the entry "shipped" forever.
+    name: "a still-running tool call with a result already gets the expand button (foldableFamilyAlreadyHasResult)",
+    methodNames: ["foldableFamilyAlreadyHasResult"],
+    denyingPhrases: [
+      /(?:a |any )?(?:still-)?running (?:tool )?(?:call|block)s? (?:can |could )?never (?:be )?expand(?:ed|able)/i,
+      /no `?\.?xbtn`? (?:is )?(?:drawn|shown|offered) (?:on|for) (?:a |any )?(?:still-)?running/i,
+      /(?:the )?expand button keys off (?:the )?status(?: word)? alone/i,
+    ],
+  },
+  {
+    // P10-W5 (W5-RUNHEAD): a collapsed run header says so on its own face
+    // and announces the fold, per the confirmed design's own `runheadTap`
+    // script - it appends a middle-dot "hidden" suffix to the header's
+    // summary and calls `say()` with one of two sentences. Before this wave
+    // the Android row toggled silently and its collapsed state was legible
+    // only from the chevron.
+    //
+    // A T168 AND-group, not three OR members, and that is the point: all
+    // three constants are declared in ONE shipped file (the row itself), and
+    // the capability is only real when the suffix AND both announced
+    // sentences are present. Any one of them alone is a half-port - a row
+    // that marks itself hidden but never announces, or announces without
+    // marking - which an OR list would happily call shipped.
+    name: "a collapsed run header marks itself hidden and announces the fold (RUNHEAD_COLLAPSED_SUFFIX/RUNHEAD_COLLAPSED_ANNOUNCEMENT/RUNHEAD_EXPANDED_ANNOUNCEMENT)",
+    methodNames: [
+      [
+        "RUNHEAD_COLLAPSED_SUFFIX",
+        "RUNHEAD_COLLAPSED_ANNOUNCEMENT",
+        "RUNHEAD_EXPANDED_ANNOUNCEMENT",
+      ],
+    ],
+    denyingPhrases: [
+      /(?:a |the )?collapsed run header (?:does not|never) (?:say|mark|show)s? (?:that )?(?:it|its content) (?:is )?hidden/i,
+      /(?:folding|collapsing) a run (?:is silent|announces nothing|says nothing)/i,
+      /no (?:live region|announcement|spoken feedback) (?:when|as) a run (?:is )?(?:folded|collapsed)/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

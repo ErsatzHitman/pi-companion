@@ -22059,3 +22059,97 @@ does not have. The tool block's expand affordance does ship - but its colour sou
 the gate (P10-12) and the `running`/`blocked`/`canceled` behaviour is explicitly unfinished
 (P10-13), so an entry pinned to a symbol either could still move would be registering a
 moving target. Both are registered by the wave that finishes them, not by this one.
+
+## Wave P10-W5 (UI spec conformance, iteration 5)
+
+Two file-disjoint Android packages, both SAFE TO COMMIT: `W5-RUNHEAD` (conform the shipped run
+head's presentation to `.runhead`) and `W5-PEND` (the expand button follows the result, not the
+status word). `packages/frontend-core` and `packages/design-tokens` were both off limits and
+both are untouched. No new component was built by either package, which is the direct
+consequence of P10-14.
+
+### P10-16 - P10-13's "stays out until a wave owns it" is now false, and this is the record
+
+P10-13 closed the previous wave by saying that making a `running` tool block expandable "is a
+behaviour change rather than a fold, and it stays out until a wave owns it". `W5-PEND` owns it,
+so that sentence is superseded.
+
+It is being recorded here rather than edited in place, which is what `CLAUDE.md`'s T124 rule
+asks for a dated ledger entry: `docs/issues-from-plan.md` sits in
+`DOCS_LEDGER_DENIAL_EXCLUSIONS`, so the guard cannot see it either way, and rewriting a closed
+entry's history would make the ledger stop being a record of what was true when each wave ran.
+The shipped source comment that carried the same claim was NOT exempt and was deleted by
+`W5-PEND` in the same change that falsified it, which is the half the rule actually binds.
+
+### P10-17 - a token-delegated design number is pinned by nothing, and four of them were
+
+`W5-RUNHEAD` did the right thing with the design's box metrics: where a theme token already
+held the value, it spent the token instead of re-typing the number. The test then pinned the
+TOKEN NAME by matching the component's source text - and a regex over a `.tsx` file cannot fail
+when the token's own value moves underneath it.
+
+Measured at the merge gate rather than assumed, across the four values the component delegates:
+
+| value | token                      | pinned by a test that could fail?                                                        |
+| ----- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| 8     | `radii.control`            | yes, in `packages/design-tokens`' own `tokens.test.ts`                                   |
+| 12.5  | `typography.fontSize.base` | no - asserted only `toBeGreaterThan(0)`                                                  |
+| 4     | `spacing[1]`               | no - not asserted at all                                                                 |
+| 200   | `motion.duration.moderate` | no - `tokens.test.ts` pins `fast`/`base`/`slow`/`slower`/`entrance` and skips `moderate` |
+
+So three of four design numbers were unpinned while looking pinned, which is a worse state than
+a bare literal: a bare literal at least fails a grep-shaped test. The fix belongs to the
+consumer, not to `design-tokens` - a new test in `work-group-row.test.ts` resolves the real
+theme through `getNativeTheme`/`getNativeMotion` and asserts each consumed value, so the
+component's own suite goes red if a shared token drifts away from what this design needs.
+
+**A trap worth knowing about, found while proving that test fires.** Mutating `base: 12.5` in
+`packages/design-tokens/src/tokens.ts` did NOT make the test fail. The package resolves through
+its built `dist`, so a `src` edit alone changes nothing a consumer sees. That is `CLAUDE.md`'s
+documented stale-`dist` trap - the same mechanism that let two defects sit on `main` across
+many waves until the first push to CI - and it is a fact about the local loop, not a weak test:
+CI builds `dist` from `src`, so a real source change does fire it there. The mutation proof was
+completed against the resolved value.
+
+### P10-18 - two false frame counts in shipped prose, which cancelled each other in review
+
+`W5-PEND`'s entire argument is a census of the design's own frames, so its numbers are
+load-bearing rather than decorative. Two were wrong, in opposite directions:
+
+- "ten `.blk.pend` frames ... the other **eight** carry no `data-r`" - ten total, one with
+  `data-r`, so **nine** without.
+- "... also carries `data-r` - **nine** such frames", followed by an enumeration of **eight**.
+  Nine is the whole-file `data-r` total, which includes the pend frame the sentence had just
+  excluded.
+
+Because the two errors were inverse, the report read as internally consistent and neither the
+implementer nor the verifier caught them. The gate re-counted against the raw bytes. **The
+lesson is not "count more carefully"** - it is that a census in shipped prose is a claim that
+decays and that nothing in this repository can check. `CLAUDE.md`'s T217 section already
+decided against building a guard for count claims in prose, having measured a 100% false
+positive rate; this is a case that guard would have caught, and it is still not enough to
+reverse that decision, because the population it would have to scan is the same one T217
+measured. What is cheap and was done instead: the corrected prose states the rule and cites the
+one decisive frame by its markup, so a future reader re-derives it from the design rather than
+trusting a number.
+
+A third claim was an over-reach rather than an arithmetic error: "every `blk ok`/`blk err`
+frame that names a real tool carries `data-r`" is false, because `.blk.ok.hasx` frames name
+real tools, draw an `.xbtn`, and carry no `data-r` - they are drawn already expanded. Saying
+that instead strengthens the argument, since it shows `data-r` marks foldability rather than
+tool-ness.
+
+### P10-19 - the capability-prose guard now costs 20-25 minutes, and why
+
+Registering this wave's two capabilities took the full runner from roughly 8-10 minutes to
+20-25 on this machine. The cause is in `findCapabilityDenialViolations`: it recomputes
+`flattenProse(content)` inside the per-capability loop, so the work is capability-count times
+file-count full-text flattens - 84 x 2464 on this run. Every capability a wave registers makes
+every future gate slower, superlinearly in practice.
+
+This is disclosed, not fixed, and the reason is scope: no package in this wave owned
+`scripts/ci/guard-capability-prose.mjs` beyond adding entries to its `CAPABILITIES` list, and
+hoisting the flatten out of the loop is a change to the guard's own hot path that deserves its
+own task with its own before/after measurement. It is cheap to fix - flatten once per file,
+outside the loop - and the next wave that touches this file should do it and record the
+measured times.
