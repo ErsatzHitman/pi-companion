@@ -590,41 +590,56 @@ describe("shellBlockIsDimmed: which shell blocks lose their green (T359)", () =>
   });
 });
 
-describe("toolCardHasExpandButton: android-spec.html's `.xbtn`, ported (W4-TOOLBLOCK)", () => {
-  it("shows the button once a call has finished, one way or the other", () => {
-    expect(toolCardHasExpandButton("completed")).toBe(true);
-    expect(toolCardHasExpandButton("failed")).toBe(true);
-  });
+// W5-PEND: `toolCardHasExpandButton`/`toolBodyIsVisible` now take the whole
+// tool (not a bare `status`), because whether a call HAS a collapsible
+// result can no longer be read off its status word alone — see both
+// functions' own doc comments in `tool-call-row-model.ts` for
+// android-spec.html's exact frame count. `shellToolWith` below builds a
+// fixture from the family this file already has (`SHELL_TOOL`) for every
+// test in this section that is about the STATUS-only rules (finished /
+// canceled / "no button means always visible"), which are unchanged from
+// before this task for `shell` and every other family `foldableFamily
+// AlreadyHasResult` does not name.
+function shellToolWith(status: tools.ToolCallViewStatus): tools.ShellToolCallViewModel {
+  return { ...SHELL_TOOL, status };
+}
 
-  it("hides the button while nothing has resolved yet", () => {
-    // Every `.blk.pend` frame in android-spec.html omits `.xbtn` — there
-    // is nothing yet for it to reveal.
-    expect(toolCardHasExpandButton("running")).toBe(false);
-    expect(toolCardHasExpandButton("blocked")).toBe(false);
+describe("toolCardHasExpandButton: android-spec.html's `.xbtn`, ported (W4-TOOLBLOCK / W5-PEND)", () => {
+  it("shows the button once a call has finished, one way or the other", () => {
+    expect(toolCardHasExpandButton(shellToolWith("completed"))).toBe(true);
+    expect(toolCardHasExpandButton(shellToolWith("failed"))).toBe(true);
   });
 
   it("hides the button on a canceled call, the one finished status that produced nothing", () => {
     // android-spec.html's own "ctrl+c aborted" error frame — a call that
     // never got its result — also carries no `.xbtn`.
-    expect(toolCardHasExpandButton("canceled")).toBe(false);
+    expect(toolCardHasExpandButton(shellToolWith("canceled"))).toBe(false);
+  });
+
+  it("hides the button while running or blocked, for a family with no collapsible result of its own", () => {
+    // `shell` never carries `data-r` in android-spec.html in ANY status —
+    // see the function's own doc comment — so this stays `false` here
+    // exactly as it was before this task, regardless of running/blocked.
+    expect(toolCardHasExpandButton(shellToolWith("running"))).toBe(false);
+    expect(toolCardHasExpandButton(shellToolWith("blocked"))).toBe(false);
   });
 });
 
 describe('toolBodyIsVisible: "renderResult returns \\"\\" unless expanded or errored"', () => {
   it("is hidden by default (collapsed) for a successful call", () => {
-    expect(toolBodyIsVisible("completed", false)).toBe(false);
+    expect(toolBodyIsVisible(shellToolWith("completed"), false)).toBe(false);
   });
 
   it("shows once the caller's own toggle is expanded", () => {
-    expect(toolBodyIsVisible("completed", true)).toBe(true);
+    expect(toolBodyIsVisible(shellToolWith("completed"), true)).toBe(true);
   });
 
   it("shows a failed call's body even while the toggle is still collapsed", () => {
-    expect(toolBodyIsVisible("failed", false)).toBe(true);
+    expect(toolBodyIsVisible(shellToolWith("failed"), false)).toBe(true);
   });
 
   it("a failed call's body stays visible when the toggle is also expanded", () => {
-    expect(toolBodyIsVisible("failed", true)).toBe(true);
+    expect(toolBodyIsVisible(shellToolWith("failed"), true)).toBe(true);
   });
 
   // REWRITTEN at the P10-W4 merge gate, and a reviewer could disagree, so
@@ -638,25 +653,141 @@ describe('toolBodyIsVisible: "renderResult returns \\"\\" unless expanded or err
   // and `canceled` draw NO expand button, so "hidden by default" left
   // their bodies with no control that could ever reveal them — a running
   // shell command's streaming output was unreachable while it streamed.
-  // The design never says this: its eight `.blk.pend` frames without
-  // `data-r` all print their lines, and none carries an `.xbtn`.
+  // The design never says this: its `.blk.pend` frames without `data-r`
+  // all print their lines, and none carries an `.xbtn`. (CORRECTED at
+  // the P10-W5 merge gate: this said "its eight `.blk.pend` frames".
+  // Re-counted directly against the artifact there are ten `.blk.pend`
+  // frames, one of which carries `data-r`, so nine carry none. The
+  // count is dropped rather than re-pinned; the claim never needed it.)
+  //
+  // ADAPTED at W5-PEND: only the CALL FORM changed (a bare `status` string
+  // became a full tool, per this section's own header comment) — the
+  // statuses, the assertions, and the invariant they pin are byte-identical
+  // to what P10-W4 shipped. `shell` is used because it is one of the
+  // families W5-PEND deliberately left untouched for `running`/`blocked`
+  // (see `toolCardHasExpandButton`'s own doc comment), so this test still
+  // exercises exactly the defect P10-W4's comment names — a running SHELL
+  // command's streaming output.
   it("always shows the body of a status that draws no expand button", () => {
     for (const status of ["running", "blocked", "canceled"] as const) {
-      expect(toolCardHasExpandButton(status)).toBe(false);
+      const tool = shellToolWith(status);
+      expect(toolCardHasExpandButton(tool)).toBe(false);
       // Both toggle positions: there is no button, so the toggle is not
       // reachable and must not decide anything.
-      expect(toolBodyIsVisible(status, false)).toBe(true);
-      expect(toolBodyIsVisible(status, true)).toBe(true);
+      expect(toolBodyIsVisible(tool, false)).toBe(true);
+      expect(toolBodyIsVisible(tool, true)).toBe(true);
     }
   });
 
   it("never leaves a body hidden with no control able to reveal it", () => {
     // The invariant the rewritten test above is an instance of, stated
-    // once over every status rather than over a hand-picked three.
+    // once over every status rather than over a hand-picked three. Kept on
+    // `shell` (a family W5-PEND does not touch) so this test's guarantee —
+    // unweakened, per that task's own instruction — is exactly what P10-W4
+    // shipped, just called with a tool instead of a bare status.
     const statuses = ["completed", "failed", "running", "blocked", "canceled"] as const;
     for (const status of statuses) {
-      if (!toolBodyIsVisible(status, false)) {
-        expect(toolCardHasExpandButton(status)).toBe(true);
+      const tool = shellToolWith(status);
+      if (!toolBodyIsVisible(tool, false)) {
+        expect(toolCardHasExpandButton(tool)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("W5-PEND: a still-running tool block can be expanded once it has a result", () => {
+  // The one android-spec.html frame this task exists to port:
+  // `<div class="blk pend" data-r>` — a still-running `write` whose body is
+  // already a collapsed "187 lines" summary.
+  function writeToolWith(
+    status: tools.ToolCallViewStatus,
+    content: string | undefined,
+  ): tools.WriteToolCallViewModel {
+    return {
+      family: "write",
+      callId: "call-w5-pend-write",
+      toolName: "write",
+      status,
+      displayName: "Wrote Button.tsx",
+      updateCount: 1,
+      filePath: "packages/ui/src/Button.tsx",
+      content,
+    };
+  }
+
+  it("a running write that already has content gets the button and defaults collapsed, like any finished call", () => {
+    const tool = writeToolWith("running", "line 1\nline 2\n… (187 lines)");
+    expect(toolCardHasExpandButton(tool)).toBe(true);
+    expect(toolBodyIsVisible(tool, false)).toBe(false);
+    expect(toolBodyIsVisible(tool, true)).toBe(true);
+  });
+
+  it("a running write with nothing yet still shows whatever it has, with no button — the read-tsconfig.base.json sibling frame", () => {
+    const tool = writeToolWith("running", undefined);
+    expect(toolCardHasExpandButton(tool)).toBe(false);
+    expect(toolBodyIsVisible(tool, false)).toBe(true);
+    expect(toolBodyIsVisible(tool, true)).toBe(true);
+  });
+
+  it("a blocked call (waiting for approval) with content already available also gets the button", () => {
+    // Not itself an android-spec.html frame (the spec's own `blocked`
+    // analogue is `ask_user`, a family this task leaves untouched — see
+    // `toolCardHasExpandButton`'s own doc comment), but `blocked` shares
+    // `running`'s "no finished outcome to lean on" reasoning exactly, so it
+    // is proven here rather than left unexercised.
+    const tool = writeToolWith("blocked", "already written");
+    expect(toolCardHasExpandButton(tool)).toBe(true);
+    expect(toolBodyIsVisible(tool, false)).toBe(false);
+  });
+
+  it("the button's presence is the SAME for an edit whether it is running, blocked, or already finished — proving it now tracks the result, not the status word", () => {
+    // `editToolWith` (below) fixes `status: "completed"`; every other
+    // status is exercised here by overriding it, holding the diff itself
+    // constant. `diffLinesFor` — the same helper `EditBody` itself calls —
+    // is the "has a result" signal for `edit`, reused rather than
+    // re-derived (see `foldableFamilyAlreadyHasResult`'s own doc comment).
+    for (const status of ["running", "blocked", "completed"] as const) {
+      const withDiff = { ...editToolWith("+const a = 2;"), status };
+      expect(toolCardHasExpandButton(withDiff)).toBe(true);
+    }
+  });
+
+  it("the full status × has-result matrix: the invariant holds everywhere, and the button tracks the result exactly while running or blocked", () => {
+    const statuses: tools.ToolCallViewStatus[] = [
+      "running",
+      "blocked",
+      "completed",
+      "failed",
+      "canceled",
+    ];
+    for (const status of statuses) {
+      for (const hasResult of [true, false]) {
+        const tool = { ...editToolWith(hasResult ? "+line" : undefined), status };
+        const button = toolCardHasExpandButton(tool);
+
+        // The invariant W4-TOOLBLOCK added and this task must not weaken:
+        // a body is never hidden with no control able to reveal it.
+        if (!toolBodyIsVisible(tool, false)) {
+          expect(button).toBe(true);
+        }
+
+        // The rule this task changes: while running or blocked, the button
+        // tracks `hasResult` exactly — not `true` for every status
+        // (W4-TOOLBLOCK's bug) and not `false` for every status (which
+        // would just move the bug rather than fix it).
+        if (status === "running" || status === "blocked") {
+          expect(button).toBe(hasResult);
+        }
+        // Once finished, `completed`/`failed` still always draw the
+        // button (android-spec.html's nine finished `data-r` frames have
+        // zero counterexamples — see `toolCardHasExpandButton`'s own doc
+        // comment) regardless of `hasResult`, and `canceled` never does.
+        if (status === "completed" || status === "failed") {
+          expect(button).toBe(true);
+        }
+        if (status === "canceled") {
+          expect(button).toBe(false);
+        }
       }
     }
   });

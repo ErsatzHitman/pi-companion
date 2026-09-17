@@ -569,18 +569,120 @@ export const TOOL_XBTN_ROTATION_OPEN_DEG = 180;
 export const TOOL_XBTN_ROTATION_CLOSED_DEG = 0;
 
 /**
+ * Whether a known family already has a collapsible result sitting on its
+ * own view model, using only fields/helpers that already exist for that
+ * family's `*Body` component in `tool-call-row.tsx` — no new field is
+ * added anywhere. Only called for `running`/`blocked` calls
+ * (`toolCardHasExpandButton` below never reaches this for a finished
+ * status), which is exactly where "has this call already produced
+ * something?" cannot be answered by status alone.
+ *
+ * Five families only: `read`/`write`/`edit`/`search`/`fetch` — the same
+ * five families whose FINISHED (`completed`/`failed`) frames in
+ * android-spec.html are the ones `toolCardHasExpandButton`'s own doc
+ * comment counts as always carrying `data-r`. Every other family
+ * (`shell`, `worktree_setup`, `sub_agent`, `plan`, `plain_text`) returns
+ * `false` here unconditionally, unchanged from before this task — see
+ * that same doc comment for why.
+ */
+function foldableFamilyAlreadyHasResult(tool: KnownToolCallViewModel): boolean {
+  switch (tool.family) {
+    case "read":
+    case "write":
+      return tool.content !== undefined && tool.content.length > 0;
+    case "edit":
+      // Reuses the same cap-aware helper `EditBody` itself calls to decide
+      // whether it has a diff to draw — one owner for "does this edit have
+      // a diff", not a second, possibly-disagreeing check.
+      return diffLinesFor(tool) !== undefined;
+    case "search":
+      // Mirrors exactly what `SearchBody` itself would draw as content:
+      // matched lines, a file list, or web results.
+      return (
+        (tool.content !== undefined && searchMatchLines(tool.content).length > 0) ||
+        (tool.filePaths !== undefined && tool.filePaths.length > 0) ||
+        (tool.webResults !== undefined && tool.webResults.length > 0)
+      );
+    case "fetch":
+      return tool.result !== undefined && tool.result.length > 0;
+    default:
+      return false;
+  }
+}
+
+/**
  * Whether a tool call's header draws the `.xbtn` affordance at all.
  *
- * android-spec.html shows the button on every FINISHED call this app's own
- * families can produce — `completed` or `failed` — and never on a call
- * that is still `running`/`blocked` (every `.blk.pend` frame in the spec
- * omits it; there is nothing resolved yet for it to reveal) nor on
- * `canceled` (the spec's own "ctrl+c aborted" error frame — the one
- * finished-but-produced-nothing case — also omits it). This keys off
- * outcome, not merely "not running".
+ * android-spec.html's own evidence, re-counted directly against the file
+ * rather than assumed (W5-PEND): ten `<div class="blk pend...">` frames
+ * total. Exactly ONE carries `data-r`: a still-running `write` whose body
+ * is already a collapsed "187 lines" summary
+ * (`<div class="blk pend" data-r>`). The other NINE carry no `data-r`
+ * and draw no `.xbtn` at all — a running `edit` whose frame is a bare
+ * header line with no body at all, a running `read`
+ * (`tsconfig.base.json`), a running `grep` search, two waiting
+ * `ask_user` prompts, a running `advisor` sub-agent call, a
+ * provider-retry countdown
+ * (`<div class="blk pend cd" data-n="8" data-act="retry">`), the
+ * auto-compaction notice, and one frame that is not a tool call at all
+ * (the reasoning-effort chip row) — none of them has anything
+ * resolved yet. Of those nine, the running `edit` is the one that
+ * matters most to the five families below: it is an `edit` with no
+ * diff yet, which is exactly the case
+ * `foldableFamilyAlreadyHasResult` reports `false` for.
+ *
+ * Separately, every `<div class="blk ok...">`/`<div class="blk err...">`
+ * frame that names a real tool (`ls`, `find`, two `read`s, three `edit`s,
+ * one `peer_message`) also carries `data-r` — EIGHT such frames, with no
+ * finished frame among them contradicting it. (The artifact also draws
+ * `.blk.ok.hasx` frames that carry an `.xbtn` but no `data-r`: those are
+ * frames shown already EXPANDED, printing their lines inline, so the
+ * collapsed summary `data-r` carries has nothing to hold. They are not
+ * counterexamples to the button; they are the same button, opened.) `shell`
+ * (the artifact's `.bash` blocks), `worktree_setup`, `sub_agent`, `plan`
+ * and `plain_text` never carry `data-r` anywhere in the artifact, in ANY
+ * status, finished or not.
+ *
+ * So the artifact's real rule is about the RESULT, not the status word: a
+ * block earns `.xbtn` once it HAS something collapsible, whether or not
+ * the call itself has finished — the previous wave's status-only version
+ * (`completed || failed`) was a proxy for that which held everywhere
+ * except the one running-with-a-result frame above. For `completed`/
+ * `failed` the proxy is exact in every evidenced case (a finished call
+ * always has either real content or its `errorText` to show — see
+ * `toolBodyIsVisible`'s own override for why a *failed* call's `.xbtn`
+ * shows even though its body is never actually collapsed), so this keeps
+ * using it there rather than re-deriving per-family content rules the
+ * spec gives no reason to need. `canceled` keeps returning `false`
+ * unconditionally: it is the one *finished* status that, by definition,
+ * produced nothing to collapse (the artifact's own "ctrl+c aborted" frame
+ * carries no tool name and no `.xbtn` either).
+ *
+ * `running`/`blocked` cannot use "finished" as that proxy — there is no
+ * finished outcome to fall back on — so those two statuses ask the call's
+ * own view model instead (`foldableFamilyAlreadyHasResult`), which is
+ * what makes the one running-`write`-with-content frame get a button
+ * while the running-`read`-with-nothing-yet frame beside it does not.
+ *
+ * `shell`/`worktree_setup`/`sub_agent`/`plan`/`plain_text` and the
+ * `generic` fallback are deliberately left exactly as they were before
+ * this task for EVERY status, including `running`/`blocked` (still always
+ * `false` there): the spec gives zero evidence either way for changing
+ * those families' `running`/`blocked` behaviour, and whether their
+ * FINISHED behaviour should also stop being status-only is a separate
+ * question this task's own file list does not license answering — see
+ * this task's report.
  */
-export function toolCardHasExpandButton(status: tools.ToolCallViewStatus): boolean {
-  return status === "completed" || status === "failed";
+export function toolCardHasExpandButton(tool: tools.ToolCallViewModel): boolean {
+  if (tool.status === "completed" || tool.status === "failed") {
+    return true;
+  }
+  if (tool.status === "canceled") {
+    return false;
+  }
+  // running | blocked — no finished outcome to lean on; ask the view
+  // model itself whether a result is already there.
+  return isKnownToolCall(tool) && foldableFamilyAlreadyHasResult(tool);
 }
 
 /**
@@ -599,24 +701,27 @@ export function toolCardHasExpandButton(status: tools.ToolCallViewStatus): boole
  *
  * The third clause is the one that keeps this honest, and it was added at
  * the P10-W4 merge gate after the first version shipped without it: a
- * status that draws NO expand button always shows its body. Without that
+ * call that draws NO expand button always shows its body. Without that
  * clause `running`, `blocked` and `canceled` rendered no body and offered
  * no control to reveal one, so a running shell command's streaming output
- * became unreachable at the moment it matters most. The design agrees, and
- * says so by construction rather than in prose — its eight `.blk.pend`
- * frames without `data-r` and its eleven `.blk.ext` frames all print their
- * lines with no `.xbtn` anywhere near them. `data-r` marks a block that
- * HAS a collapsible result, and every block carrying it carries a button;
- * a block with neither is not collapsed, it simply has nothing to fold.
+ * became unreachable at the moment it matters most. `data-r` marks a
+ * block that HAS a collapsible result, and every block carrying it
+ * carries a button; a block with neither is not collapsed, it simply has
+ * nothing to fold.
  *
- * One frame is deliberately not ported, and naming it is the point: the
- * design has exactly one `<div class="blk pend" data-r>` — a still-running
- * `write` whose result IS expandable. Making `running` expandable is a
- * behaviour change, not a fold; it stays out until a wave owns it. See
- * `docs/issues-from-plan.md` P10-13.
+ * W5-PEND closed the one gap the P10-W4 comment above named and
+ * deliberately left open: `toolCardHasExpandButton` no longer keys off
+ * `status` alone, so a still-running call whose view model already has a
+ * result (android-spec.html's one `<div class="blk pend" data-r>` write
+ * frame) now gets the same button, and defaults to the same collapsed
+ * state, as any finished call — see that function's own doc comment for
+ * the full frame count this rests on. This function's own three-clause
+ * shape did not need to change to make that true: it was already asking
+ * `toolCardHasExpandButton`, not `status`, for the "is there a control"
+ * question.
  */
-export function toolBodyIsVisible(status: tools.ToolCallViewStatus, expanded: boolean): boolean {
-  return expanded || status === "failed" || !toolCardHasExpandButton(status);
+export function toolBodyIsVisible(tool: tools.ToolCallViewModel, expanded: boolean): boolean {
+  return expanded || tool.status === "failed" || !toolCardHasExpandButton(tool);
 }
 
 /**

@@ -330,7 +330,7 @@ function ToolCallHeader({
 }: {
   tool: tools.ToolCallViewModel;
   /** `.blk.hasx>.ln:first-child{padding-right:34px}` — true whenever
-   * `toolCardHasExpandButton(tool.status)` is, so the header's own text
+   * `toolCardHasExpandButton(tool)` is, so the header's own text
    * never sits under the absolutely positioned `.xbtn`. */
   reserveExpandButton: boolean;
   testId?: string;
@@ -780,9 +780,9 @@ function UnknownToolCard({
   // name for exactly this behaviour (see `tool-call-row-model.ts`'s
   // `genericInputSummary`), so both panels below (Input and, when shown,
   // Result/Error) are gated the same way a known card's family body is.
-  const hasExpandButton = toolCardHasExpandButton(tool.status);
+  const hasExpandButton = toolCardHasExpandButton(tool);
   const [expanded, setExpanded] = useState(false);
-  const bodyVisible = toolBodyIsVisible(tool.status, expanded);
+  const bodyVisible = toolBodyIsVisible(tool, expanded);
   const onToggleExpand = useCallback(() => setExpanded((value) => !value), []);
   return (
     <View style={[styles.block, blockStyle]} testID={testId}>
@@ -833,9 +833,9 @@ function KnownToolCard({
   // and a failed call's `errorText` stay OUTSIDE the gate: they are the
   // always-visible one-line facts the header itself sits beside, not the
   // "rest" the button reveals — the per-family `Body` below is.
-  const hasExpandButton = toolCardHasExpandButton(tool.status);
+  const hasExpandButton = toolCardHasExpandButton(tool);
   const [expanded, setExpanded] = useState(false);
-  const bodyVisible = toolBodyIsVisible(tool.status, expanded);
+  const bodyVisible = toolBodyIsVisible(tool, expanded);
   const onToggleExpand = useCallback(() => setExpanded((value) => !value), []);
   return (
     <View style={[styles.block, blockStyle]} testID={testId}>

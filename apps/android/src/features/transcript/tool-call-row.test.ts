@@ -228,7 +228,7 @@ describe("tool-call-row.tsx: the `.xbtn` expand affordance (W4-TOOLBLOCK)", () =
     const code = readCode();
     const matches = code.match(/hasExpandButton \? \(\s*<ExpandButton/g) ?? [];
     expect(matches).toHaveLength(2);
-    expect(code).toMatch(/const hasExpandButton = toolCardHasExpandButton\(tool\.status\);/g);
+    expect(code).toMatch(/const hasExpandButton = toolCardHasExpandButton\(tool\);/g);
   });
 
   it("drives the rotation with the artifact's own 280ms overshoot spring, not the shared press spring", () => {
@@ -264,7 +264,7 @@ describe('tool-call-row.tsx: "renderResult returns \\"\\" unless expanded or err
     const code = readCode();
     const matches = code.match(/\{bodyVisible \? \(/g) ?? [];
     expect(matches).toHaveLength(2);
-    expect(code).toMatch(/const bodyVisible = toolBodyIsVisible\(tool\.status, expanded\);/g);
+    expect(code).toMatch(/const bodyVisible = toolBodyIsVisible\(tool, expanded\);/g);
   });
 
   it("keeps the header-level one-liners (summary, failed errorText) OUTSIDE the gate", () => {
