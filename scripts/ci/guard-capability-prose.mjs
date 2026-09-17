@@ -3235,6 +3235,33 @@ export const CAPABILITIES = [
       /every (?:transcript )?row (?:is )?mounted (?:with|as) (?:a )?(?:hardcoded|literal) (?:`)?(?:streaming|live)(?:`)?/i,
     ],
   },
+  {
+    // W14-PMENU. A T168 AND-group, and the reason is narrower than the two
+    // groups above it. All three names are declared in ONE shipped file
+    // (`apps/android/src/ui/primitives/Sheet.tsx`), and each on its own is
+    // a number or a helper that proves nothing: a bottom offset with no
+    // padding and no entrance is a panel still drawn at the wrong size, and
+    // an entrance builder with neither is an animation on a panel sitting
+    // where the old bottom-anchored default put it. The capability the
+    // denying phrases below describe — a controls menu the artifact lifts
+    // clear of the composer and fades up, rather than a bottom sheet — is
+    // only real with all three.
+    //
+    // Phrased in this entry's own voice, never lifted from the
+    // `CORRECTED, W14-PMENU` markers this wave left in `Sheet.tsx`,
+    // `PromptControlsMenu.tsx`, `composer-accessibility.test.ts` and both
+    // of their test files: a phrase copied from one of those quotations
+    // would trip against the wave's own correct history, which is the
+    // collision T215 resolved by rephrasing rather than by adding another
+    // exclusion.
+    name: "the prompt controls menu opens as the spec's lifted, fading .pmenu rather than a bottom sheet (MENU_BOTTOM/MENU_PADDING/menuPanelEntering)",
+    methodNames: [["MENU_BOTTOM", "MENU_PADDING", "menuPanelEntering"]],
+    denyingPhrases: [
+      /(?:the )?(?:prompt )?controls menu (?:is|opens as|renders as) (?:a |an )?(?:ordinary |plain )?bottom sheet/i,
+      /(?:Sheet|the sheet primitive) (?:offers|has|exposes) (?:no|only one) (?:lifted |floating )?(?:menu )?variant/i,
+      /(?:no|nothing) (?:sheet |panel )?variant (?:ever )?(?:animates|fades) (?:itself )?(?:in )?on open/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

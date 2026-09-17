@@ -99,11 +99,58 @@ describe("PromptControlsMenu source", () => {
   // A-COMPOSER: the panel this trigger opens is unchanged, but the
   // ANCHOR it clears is — the pill row now sits above `.cmp`, not a ring
   // inside it, so the sheet must still clear both.
-  it("still anchors above the composer, per its own doc comment, rather than assuming Sheet already handles that", () => {
+  //
+  // CORRECTED at the W14-PMENU merge gate. This asserted that the source
+  // still contained the phrase `panel is bottom-anchored`, and was left
+  // passing on the grounds that the phrase survives inside W14-PMENU's
+  // own historical quotation. That made the assertion and the title mean
+  // two different things: the title claims the panel clears the
+  // composer, while the assertion had come to pin the mere PRESENCE of a
+  // sentence this wave proved false. A test that passes for a reason
+  // unrelated to its name is the shape this repository's own gate
+  // history exists to catch, so it is re-pointed at the live mechanism
+  // instead. The historical quotation is still pinned, once, by
+  // "marks the old bottom-anchored claim as corrected" below — which is
+  // where that assertion belongs.
+  it("clears the pill row and the prompt bar through Sheet's menu variant, not through the bottom-edge default", () => {
+    const code = readCode("PromptControlsMenu");
+    expect(code).toMatch(/variant="menu"/);
+    expect(code).not.toMatch(/variant="edge"/);
+  });
+});
+
+// W14-PMENU: the artifact draws `.pmenu` lifted `bottom:98px` clear of
+// both the pill row and the prompt bar, and says outright it is "Not a
+// bottom sheet" — this panel used to fall into `Sheet`'s bottom-anchored
+// `"edge"` default by omitting a `variant` prop entirely. These pin the
+// fix and, as a whole-file negative assertion, guard against a future
+// edit silently dropping the prop back to that default.
+describe("PromptControlsMenu: opens the lifted .pmenu shape, not a bottom sheet (W14-PMENU)", () => {
+  it("passes Sheet the menu variant", () => {
+    const code = readCode("PromptControlsMenu");
+    expect(code).toMatch(/<Sheet[\s\S]*?variant="menu"[\s\S]*?>/);
+  });
+
+  it("is never rendered with the edge variant, and the one <Sheet> call always carries a variant", () => {
+    const code = readCode("PromptControlsMenu");
+    expect(code).not.toMatch(/variant="edge"/);
+    // A `<Sheet ...>` open tag with no `variant=` at all would silently
+    // fall back to `Sheet`'s own `"edge"` default — exactly the
+    // regression this task fixes — so every opening tag in this file
+    // must itself carry `variant="menu"`, not just the file as a whole.
+    const sheetOpenTags = code.match(/<Sheet\b[\s\S]*?>/g) ?? [];
+    expect(sheetOpenTags.length).toBeGreaterThan(0);
+    for (const tag of sheetOpenTags) {
+      expect(tag).toMatch(/variant="menu"/);
+    }
+  });
+
+  it("marks the old bottom-anchored claim as corrected, with the T124 historical-quote marker", () => {
     const source = readFileSync(
       fileURLToPath(new URL("./PromptControlsMenu.tsx", import.meta.url)),
       "utf8",
     );
-    expect(source).toMatch(/panel is bottom-anchored/);
+    expect(source).toMatch(/CORRECTED, W14-PMENU:.*panel is bottom-anchored/s);
+    expect(source).toMatch(/Not a bottom sheet/);
   });
 });

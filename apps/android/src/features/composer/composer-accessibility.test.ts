@@ -176,9 +176,15 @@ describe("Composer.tsx", () => {
     // The controls that outgrow the keyboard-shrunk shell are still
     // never beside the prompt bar. T353 moved the model/effort and
     // queue pickers OUT of this ScrollView and into the prompt controls
-    // menu, which is a `Sheet` -- a bottom-anchored panel that is not
-    // in this flex column at all, so it cannot squeeze the prompt bar
-    // either. What this case guards is unchanged: neither control may
+    // menu, which is a `Sheet` rendered through a portal and not in
+    // this flex column at all, so it cannot squeeze the prompt bar
+    // either. (CORRECTED, W14-PMENU: this said the menu is "a
+    // bottom-anchored panel". W14-PMENU gave `Sheet` a `"menu"` variant
+    // and moved this caller onto it, because the artifact draws
+    // `.pmenu` lifted clear of the prompt bar and says outright it is
+    // "Not a bottom sheet" — so the panel is no longer bottom-anchored.
+    // Being outside the flex column is what this case actually rests
+    // on, and that was never a property of where the panel sits.) What this case guards is unchanged: neither control may
     // sit between the ScrollView and the PromptBar — `<FooterPills>`
     // (A-COMPOSER) now sits there too, but it renders none of the two
     // pickers this case forbids, so the assertions below still hold.

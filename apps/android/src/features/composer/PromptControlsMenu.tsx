@@ -33,8 +33,15 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
  * from the composer competes with a focused `TextInput`; `Sheet`
  * deliberately avoids React Native's `<Modal>` for exactly that reason
  * (see its own doc comment), and reproducing the layout by hand would
- * have re-opened the question. The panel is bottom-anchored, which is
- * where the artifact draws it.
+ * have re-opened the question. (CORRECTED, W14-PMENU: this said "The
+ * panel is bottom-anchored, which is where the artifact draws it."
+ * That was false — the artifact draws `.pmenu` lifted `bottom:98px`
+ * clear of both the pill row and the prompt bar beneath it, not welded
+ * to the edge, and says so outright: "**Not a bottom sheet.**" This
+ * component now passes `Sheet`'s own `variant="menu"` — `SheetVariant`,
+ * `ui/primitives/Sheet.tsx` — rather than falling into the
+ * bottom-anchored `"edge"` default by omitting a `variant` prop at
+ * all, which is what it used to do.)
  *
  * **The rows are slots, not implementations.** Model/effort and queue
  * mode already have working controls (`ModelThinkingPicker`,
@@ -221,6 +228,7 @@ export function PromptControlsMenu({
       title={MENU_TITLE}
       description={MENU_DESCRIPTION}
       onClose={onClose}
+      variant="menu"
       testId={testId}
     >
       {modeControl ? (

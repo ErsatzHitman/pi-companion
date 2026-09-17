@@ -22976,3 +22976,91 @@ countermeasure holds and is worth restating in its strongest form: **before buil
 document says is missing, run one command that would find the behaviour - never the document's name
 for it.** Here the command was a caller search; in P10-39 it was a vocabulary count against the
 spec; in P10-41 it was reading the envelope schema.
+
+## Wave P10-W14 (UI spec conformance, iteration 14)
+
+Shape lens, opened by P10-38's own leftover: `fade-up`'s three live targets in `android-spec.html`,
+of which W12-ENTRANCE closed one (`.t>*`). `.pmenu` is the second, and chasing its 240ms entrance
+found that the panel it animates was drawn wrong to begin with.
+
+### P10-43: `PromptControlsMenu` fell into `Sheet`'s bottom-anchored default, which the spec rules out in words
+
+`android-spec.html` draws `.pmenu{position:absolute;left:10px;right:10px;bottom:98px;padding:8px;
+border-radius:var(--r-lg);animation:fade-up 240ms cubic-bezier(.23,1,.32,1) both}` and annotates it
+**"Not a bottom sheet."** `PromptControlsMenu.tsx` rendered `<Sheet>` with no `variant` prop at all,
+so it took `Sheet`'s `"edge"` default: a panel welded to the bottom of the screen, square-bottomed,
+with the composer and the pill row behind it rather than clear above it.
+
+This is the sixth instance of the built-but-type-correctly-unwired shape this session, and the
+narrowest yet: `Sheet` already had a `"floating"` variant whose clearance is most of what `.pmenu`
+needs, and an omitted optional prop is exactly as well-typed as a supplied one. `Sheet` gained a
+third variant, `"menu"`, and this caller passes it.
+
+**The deferral note that hid it named the wrong fact, the same failure mode as P10-37.**
+`PromptControlsMenu.tsx`'s header said "The panel is bottom-anchored, which is where the artifact
+draws it." The first clause was true of the code and the second was false of the artifact, and a
+reader checking the sentence against the component would have confirmed it. Corrected in place with
+a `CORRECTED, W14-PMENU` marker rather than rewritten, per the convention `HISTORICAL_QUOTE_MARKERS`
+exempts.
+
+### P10-44: three of `Sheet`'s floating constants were quoted from the stale reference, not the spec
+
+T387 introduced the `"floating"` variant with `POP_INSET = 12`, `POP_PADDING_VERTICAL = 13` and a
+private `POP_RADIUS = 16`, citing the artifact. The confirmed spec's `.pop` reads
+`padding:12px 14px;border-radius:var(--r-lg)` at `left/right:10px`. All three were wrong, and the
+radius was wrong twice over: `--r-lg` resolves to 28, and the repository already had that number in
+a shared token, `EXPRESSIVE_RADIUS_LG`. `POP_RADIUS` is deleted; both lifted variants now read the
+token.
+
+The reason this matters beyond three numbers: a private constant quoted from a superseded reference
+is indistinguishable, at the call site, from one measured off the authority. Nothing typed it
+wrong. The check that would have caught it is the goal's own authority ordering, applied to each
+number rather than to the file.
+
+### P10-45: naming only `borderRadius` on a lifted variant leaves the top corners at the edge variant's radius
+
+Found at this wave's own merge gate, in the change under gate. `Sheet`'s base `panel` style names
+`borderTopLeftRadius`/`borderTopRightRadius` (`radii.window`, 14) so the `"edge"` variant draws a
+square-bottomed sheet. Both lifted variants set only the `borderRadius` shorthand, and React Native
+resolves a per-corner longhand ahead of the shorthand regardless of which object in the style array
+declared it. `[styles.panel, styles.panelMenu]` therefore flattens to a panel with 28px bottom
+corners above 14px top ones.
+
+`panelFloating` had carried this since T387; W14 makes it twice as visible by moving the shorthand
+from 16 to 28. Both variants now name all four corners, and `Sheet.test.ts` pins that they do,
+together with the fact that the base `panel` still names its two - which is the whole reason the
+lifted variants have to.
+
+**Why no test caught it and none could have.** `react-native` does not mount under this workspace's
+vitest, so every Android `.tsx` test here is a source-text assertion; the existing case asserted
+`panelMenu: { borderRadius: EXPRESSIVE_RADIUS_LG, padding: MENU_PADDING }` and passed, because the
+property it named was genuinely there. The defect is not in any one style object - it is in how two
+of them compose, and a text assertion over one file's source reads exactly the same either way.
+This belongs with P10-31, P10-32 and P10-35 as a "the check cannot fail" finding: the assertion was
+well-formed, specific, and blind to the thing that was wrong.
+
+### P10-46: a test that passed for a reason unrelated to its name
+
+`PromptControlsMenu.test.ts`'s `it("still anchors above the composer...")` asserted
+`expect(source).toMatch(/panel is bottom-anchored/)`. Once W14 corrected that sentence, the
+assertion kept passing - the false phrase survives verbatim inside the `CORRECTED` quotation that
+retires it. The implementing agent annotated this and left it.
+
+Re-pointed at the live mechanism (`variant="menu"` present, `variant="edge"` absent). The
+historical quotation is still pinned, once, by the case that exists to pin it. The general form,
+worth carrying forward: **a source-text assertion whose subject is a sentence, rather than a
+mechanism, survives that sentence being proven false** - the correction preserves the words, which
+is exactly what the assertion was reading.
+
+### T124: the capability was registered, and the grep found a live denial in a third file
+
+`composer-accessibility.test.ts` described the prompt controls menu as "a `Sheet` -- a
+bottom-anchored panel that is not in this flex column at all". W14 makes the first half false while
+leaving the case's actual load-bearing claim (outside the flex column, so it cannot squeeze the
+prompt bar) untouched, which is why the comment read as fine. Corrected in the same commit.
+
+The `CAPABILITIES` entry is a T168 AND-group over `MENU_BOTTOM`/`MENU_PADDING`/`menuPanelEntering` -
+all three declared in one shipped file, and each alone proves nothing: an offset without the
+padding is a panel still drawn at the wrong size, an entrance without either animates a panel
+sitting where the old default put it. Proven able to fire before being trusted, then restored from
+a scratchpad copy.
