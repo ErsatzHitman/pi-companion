@@ -32,7 +32,10 @@ const ICON_BUTTON_SIZE = 28;
 export function IconButton({ icon, accessibleName, onPress, disabled, testId }: IconButtonProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { style: pressStyle, onPressIn, onPressOut } = usePressScale();
+  // A-MOTION: the artifact's `.ic:active{transform:scale(.88)}` spring,
+  // not the shared Beautiful UI `.96` default — see `usePressScale`'s own
+  // doc comment for why this is the hook's `"icon"` variant.
+  const { style: pressStyle, onPressIn, onPressOut } = usePressScale("icon");
 
   return (
     <Pressable

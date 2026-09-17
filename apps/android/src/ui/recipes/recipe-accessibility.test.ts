@@ -137,31 +137,63 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
   // caught by the import it has to add, rather than by someone
   // remembering to extend an array. `ShimmerText` stays an exemption,
   // stated here and asserted below, instead of an omission.
-  const MOTION_TOKEN_EXEMPT = new Set(["ShimmerText"]);
+  //
+  // P10-GATE: `PixelLoader` joins it for the identical, stated reason,
+  // not as a way around a failing assertion. Its cycle is the artifact's
+  // `.pxl i{animation:pixel-on .65s ...}` — 650ms — while `motion.duration`
+  // tops out at `entrance` = 600ms (checked in `packages/design-tokens`'s
+  // own `MotionDurationTokens` table, not assumed), so there is no token
+  // for it to read either. Like `ShimmerText` it carries a named exported
+  // constant instead (`EXPRESSIVE_PIXEL_CYCLE_MS` and its siblings, in
+  // `../theme/expressive-motion`), and the loop below asserts that of
+  // every member of this set rather than taking an exemption on trust.
+  const MOTION_TOKEN_EXEMPT = new Set(["ShimmerText", "PixelLoader"]);
   /** Calls a Reanimated timing helper itself, rather than delegating to a shared hook that owns the duration. */
   const DECLARES_OWN_TIMING = /with(?:Timing|Repeat|Delay|Spring)\(/;
   const reanimated = RECIPE_FILES.filter((name) =>
     /react-native-reanimated/.test(readRecipeCode(name)),
   );
-  const animated = reanimated.filter(
-    (name) => DECLARES_OWN_TIMING.test(readRecipeCode(name)) && !MOTION_TOKEN_EXEMPT.has(name),
+  const timingDeclaring = reanimated.filter((name) =>
+    DECLARES_OWN_TIMING.test(readRecipeCode(name)),
   );
+  const animated = timingDeclaring.filter((name) => !MOTION_TOKEN_EXEMPT.has(name));
   const delegating = reanimated.filter((name) => !DECLARES_OWN_TIMING.test(readRecipeCode(name)));
 
   it("finds the animated recipes by their own source, and still finds several", () => {
     // Floors, so a regex that stopped matching would empty these loops
     // into a silent pass rather than a failure.
     expect(reanimated.length).toBeGreaterThanOrEqual(4);
-    expect(animated.length).toBeGreaterThanOrEqual(3);
+    // P10-GATE: this floor read `animated.length >= 3` — a count taken
+    // AFTER the exemptions were subtracted — so registering a second
+    // legitimate exemption broke it even though both regexes still match
+    // everything they ever matched. Narrowed to the population the floor
+    // actually protects, which is `DECLARES_OWN_TIMING` continuing to
+    // match: if that regex rots, `timingDeclaring` is empty and this
+    // fails, which is the entire stated reason the floor exists ("a regex
+    // that stopped matching would empty these loops into a silent pass").
+    // The post-exemption set is then pinned BY NAME below, which is
+    // strictly stronger than the count it replaces — `>= 3` never said
+    // which three, so it would have passed on the wrong three.
+    expect(timingDeclaring.length).toBeGreaterThanOrEqual(3);
+    expect(animated.length).toBeGreaterThanOrEqual(1);
     expect(animated).toContain("ThinkingSection");
     expect(animated).not.toContain("ShimmerText");
+    expect(animated).not.toContain("PixelLoader");
   });
 
-  it("ShimmerText is exempt because it animates and has no token to read, not because it is still", () => {
-    const code = readRecipeCode("ShimmerText");
-    expect(code).toMatch(DECLARES_OWN_TIMING);
-    expect(code).not.toMatch(/motion\.duration/);
-  });
+  for (const name of MOTION_TOKEN_EXEMPT) {
+    it(`${name} is exempt because it animates and has no token to read, not because it is still`, () => {
+      const code = readRecipeCode(name);
+      expect(code).toMatch(DECLARES_OWN_TIMING);
+      expect(code).not.toMatch(/motion\.duration/);
+      // P10-GATE: and it must carry a NAMED exported duration instead, so
+      // the exemption cannot be collected by a recipe that simply inlined
+      // a magic number — which is what requiring `motion.duration` was
+      // there to prevent in the first place.
+      expect(code).toMatch(/SHIMMER_DURATION_MS|EXPRESSIVE_PIXEL_CYCLE_MS/);
+      expect(code).not.toMatch(/duration:\s*\d/);
+    });
+  }
 
   for (const name of delegating) {
     // T377: a recipe can import Reanimated and own no duration at all —
@@ -184,15 +216,38 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
     });
   }
 
-  it("StreamingMessage checks reduceMotion before repeating its cursor animation", () => {
+  // P10-GATE: this test was titled "StreamingMessage checks reduceMotion
+  // before repeating its cursor animation" and asserted only that the word
+  // `reduceMotion` appears somewhere. Both halves were falsified by this
+  // wave: the artifact's `.stream-caret.is-streaming{animation:none}` means
+  // the caret is SOLID while streaming, so there is no cursor animation
+  // left to repeat, and the file no longer imports Reanimated at all. The
+  // title is corrected rather than left standing (CLAUDE.md T124), and the
+  // assertion is widened to pin the invariant that actually survives.
+  it("StreamingMessage holds its caret solid while streaming, and hands its only motion to ShimmerText", () => {
     const code = readRecipeCode("StreamingMessage");
     expect(code).toMatch(/reduceMotion/);
+    // The one animation it still shows is delegated, gated on the device
+    // setting, and owned by the recipe that holds the duration constant.
+    expect(code).toMatch(/<ShimmerText\b[^>]*active=\{!reduceMotion\}/);
+    // Nothing here drives its own timing any more: the caret is a plain View.
+    expect(code).not.toMatch(DECLARES_OWN_TIMING);
+    expect(code).not.toMatch(/react-native-reanimated/);
   });
 
-  it("PixelLoader renders every cell fully lit, and animates nothing, under reduced motion", () => {
+  // P10-GATE: this test was titled "renders every cell fully lit" and
+  // asserted `opacity.value = 1`. That pinned a defect, not a contract:
+  // the design artifact's own reduced-motion override, grepped directly
+  // from `android-spec.html`, is `.pxl i{opacity:.15}` — uniformly DIM,
+  // not lit. The expectation is corrected to match the artifact, rather
+  // than the implementation being reverted to satisfy a wrong assertion.
+  it("PixelLoader rests every cell at the artifact's dim opacity, and animates nothing, under reduced motion", () => {
     const code = readRecipeCode("PixelLoader");
     expect(code).toMatch(/animate=\{!reduceMotion\}/);
-    expect(code).toMatch(/if \(!animate\) \{\s*opacity\.value = 1;/);
+    expect(code).toMatch(/if \(!animate\) \{\s*opacity\.value = EXPRESSIVE_PIXEL_REST_OPACITY;/);
+    // The rest value arrives from the shared module, not as a number
+    // retyped here — and specifically is no longer full opacity.
+    expect(code).not.toMatch(/opacity\.value = 1;/);
   });
 });
 

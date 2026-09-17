@@ -5,10 +5,18 @@ import Animated, {
   useSharedValue,
   withDelay,
   withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, View } from "react-native";
 
+import {
+  EXPRESSIVE_PIXEL_CELL_DELAYS_MS,
+  EXPRESSIVE_PIXEL_CYCLE_MS,
+  EXPRESSIVE_PIXEL_EASING,
+  EXPRESSIVE_PIXEL_KEYFRAMES,
+  EXPRESSIVE_PIXEL_REST_OPACITY,
+} from "../theme/expressive-motion";
 import { useTheme } from "../theme/theme-context";
 
 /**
@@ -24,12 +32,15 @@ import { useTheme } from "../theme/theme-context";
  * spinner does not, and it costs nine tiny views.
  *
  * **Reduced motion** (plan.md §10.5): with the device setting on, every
- * cell renders at full opacity and nothing animates. The mark still
- * says "running", because a filled grid is visibly different from the
- * hollow ring a waiting row draws — the state never depends on the
- * motion. Every duration comes from `motion.duration`, which
- * `getNativeMotion(reduceMotion)` already collapses, so the guard here
- * is belt and braces rather than the only defence.
+ * cell sits at `EXPRESSIVE_PIXEL_REST_OPACITY` (`.15`) and nothing
+ * animates — the artifact's own `@media (prefers-reduced-motion:reduce)`
+ * override for `.pxl i`, not full opacity (a prior version of this file
+ * rendered the reduced-motion state at opacity `1`, read off no cited
+ * source; the artifact's literal override is dim, uniformly, across all
+ * nine cells). The mark still says "running" either way, because every
+ * caller already states the state in words beside it — the loader is
+ * decorative (see below) — so no information rides on which opacity a
+ * static grid happens to sit at.
  *
  * **Decorative.** The loader is hidden from assistive tech and carries
  * no label of its own: every caller already announces the state in
@@ -62,43 +73,61 @@ export interface PixelLoaderProps {
 const DEFAULT_CELL_SIZE = 4;
 /** The artifact's `.pxl` grid gap. */
 const CELL_GAP = 1.5;
-/** The artifact's dim cell — a lit cell at rest, not a second colour. */
-const DIM_OPACITY = 0.22;
 
 /**
- * The artifact's own per-cell delays, as a fraction of one cycle. Its
- * CSS staggers the nine cells 90ms apart on a 650ms cycle in the order
- * below, which reads as a wave crossing the grid rather than a
- * row-by-row sweep.
+ * The `pixel-on` keyframe's four segments, precomputed once from
+ * `EXPRESSIVE_PIXEL_KEYFRAMES`/`EXPRESSIVE_PIXEL_CYCLE_MS` rather than
+ * inside the component: each entry is "animate to this opacity, over
+ * this many ms", replayed in order every cycle. This is what makes the
+ * shape a ramp-up/hold/ramp-down/hold rather than a symmetric fade —
+ * `withRepeat(withTiming(...), -1, true)` (a ping-pong between two
+ * values) cannot produce an asymmetric keyframe like this one.
  */
-const CELL_PHASES = [0.14, 0.28, 0.42, 0, 0.14, 0.28, 0.14, 0.28, 0.42] as const;
+const PIXEL_SEGMENTS = EXPRESSIVE_PIXEL_KEYFRAMES.slice(1).map((keyframe, index) => ({
+  opacity: keyframe.opacity,
+  durationMs: Math.round(
+    (keyframe.offset - EXPRESSIVE_PIXEL_KEYFRAMES[index].offset) * EXPRESSIVE_PIXEL_CYCLE_MS,
+  ),
+}));
 
 function PixelCell({
-  phase,
-  durationMs,
+  delayMs,
   size,
   color,
   animate,
 }: {
-  phase: number;
-  durationMs: number;
+  delayMs: number;
   size: number;
   color: string;
   animate: boolean;
 }) {
-  const opacity = useSharedValue(animate ? DIM_OPACITY : 1);
+  // Both the animated rest value and the reduced-motion static value are
+  // the same `EXPRESSIVE_PIXEL_REST_OPACITY` — see this file's own
+  // "Reduced motion" doc paragraph above.
+  const opacity = useSharedValue(EXPRESSIVE_PIXEL_REST_OPACITY);
 
   useEffect(() => {
     if (!animate) {
-      opacity.value = 1;
+      opacity.value = EXPRESSIVE_PIXEL_REST_OPACITY;
       return;
     }
-    opacity.value = DIM_OPACITY;
+    opacity.value = EXPRESSIVE_PIXEL_REST_OPACITY;
     opacity.value = withDelay(
-      Math.round(phase * durationMs),
-      withRepeat(withTiming(1, { duration: durationMs, easing: Easing.linear }), -1, true),
+      delayMs,
+      withRepeat(
+        withSequence(
+          ...PIXEL_SEGMENTS.map((segment) =>
+            withTiming(segment.opacity, {
+              duration: segment.durationMs,
+              easing: Easing.bezier(...EXPRESSIVE_PIXEL_EASING),
+            }),
+          ),
+        ),
+        -1,
+        false,
+      ),
     );
-  }, [animate, phase, durationMs, opacity]);
+  }, [animate, delayMs, opacity]);
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
@@ -108,13 +137,9 @@ function PixelCell({
 }
 
 export function PixelLoader({ cellSize = DEFAULT_CELL_SIZE, color, testId }: PixelLoaderProps) {
-  const { theme, motion, reduceMotion } = useTheme();
+  const { theme, reduceMotion } = useTheme();
   const styles = useMemo(() => createStyles(), []);
   const litColor = color ?? theme.colors.accent;
-  // The artifact's cycle is 650ms; `slower` (400ms) is the nearest
-  // token, and a token is what plan.md §10.2 and this app's own
-  // reduced-motion contract require over a literal.
-  const durationMs = motion.duration.slower;
 
   return (
     <View
@@ -123,11 +148,10 @@ export function PixelLoader({ cellSize = DEFAULT_CELL_SIZE, color, testId }: Pix
       style={[styles.grid, { width: cellSize * 3 + CELL_GAP * 2 }]}
       testID={testId}
     >
-      {CELL_PHASES.map((phase, index) => (
+      {EXPRESSIVE_PIXEL_CELL_DELAYS_MS.map((delayMs, index) => (
         <PixelCell
           key={index}
-          phase={phase}
-          durationMs={durationMs}
+          delayMs={delayMs}
           size={cellSize}
           color={litColor}
           animate={!reduceMotion}

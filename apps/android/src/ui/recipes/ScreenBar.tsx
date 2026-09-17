@@ -89,7 +89,10 @@ const TITLE_LETTER_SPACING = -0.1;
 function BarAction({ action }: { action: ScreenBarAction }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { style: pressStyle, onPressIn, onPressOut } = usePressScale();
+  // A-MOTION: this bar's mark button is the artifact's `.ic` (see the
+  // radius comment on `markButton` below), so it presses like one —
+  // `usePressScale`'s `"icon"` variant, not the shared Beautiful UI default.
+  const { style: pressStyle, onPressIn, onPressOut } = usePressScale("icon");
 
   return (
     <Pressable

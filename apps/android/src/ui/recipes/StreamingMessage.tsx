@@ -1,13 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Easing,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
 
 import {
   BLOCK_PADDING_HORIZONTAL,
@@ -18,16 +10,7 @@ import {
 } from "../theme/block-shape";
 import { asFontWeight } from "../theme/native-style-helpers";
 import { useTheme } from "../theme/theme-context";
-
-/**
- * Beautiful UI's shimmer-gradient text (docs/beautiful-ui-reference.md
- * "a moving `linear-gradient(90deg, ink-3 35%, ink 50%, ink-3 65%)`
- * clipped to text, 1.4s linear — used on 'Thinking' and 'Churning'").
- * React Native has no CSS `background-clip: text`; this reproduces the
- * same read — a live caption sweeping between `ink-3` and `ink` — as a
- * plain colour interpolation over the same 1.4s linear cycle instead.
- */
-const SHIMMER_DURATION_MS = 1400;
+import { ShimmerText } from "./ShimmerText";
 
 /** §7.2's caret width. See this component's doc comment for the phase the artifact has and this app does not. */
 const CARET_WIDTH = 2;
@@ -64,8 +47,7 @@ export interface StreamingMessageProps {
  * Accessibility (plan.md §10.5): the whole turn is one accessibility
  * element whose label already says "(responding)" while streaming, and a
  * visible "Pi is still responding" caption repeats that as on-screen text
- * (not just the blinking cursor) so the state survives without colour or
- * animation. The cursor pulse respects `reduceMotion` by staying static.
+ * (not just the caret) so the state survives without colour or animation.
  *
  * **UI-A3: no visible "You"/"Pi" caption by default.** This recipe used
  * to draw one above every turn unconditionally; the mockup's `.blk`/
@@ -87,14 +69,45 @@ export interface StreamingMessageProps {
  * itself; filling it too would make the transcript a wall of boxes and
  * spend the contrast the boxes exist to create.
  *
- * The caret is 2px wide (§7.2), not the 8px block it used to be. §7.2
- * describes it as "solid while streaming then blinking", which belongs
- * to the artifact's character-by-character reveal: solid while the
- * reveal is behind the text, blinking once it catches up. Android
- * receives already-coalesced text and runs no reveal, so there is no
- * first phase to be solid during — the caret blinks for as long as the
- * turn is streaming, and that is stated here rather than faked with a
- * timer that would mean nothing.
+ * The caret is 2px wide (§7.2), not the 8px block it used to be. The
+ * artifact's `.stream-caret` blinks at rest (`caret-blink 1s step-end
+ * infinite`) but goes SOLID while streaming
+ * (`.stream-caret.is-streaming{animation:none}` — confirmed by reading
+ * `android-spec.html` directly, not assumed): the caret is a fixed point
+ * next to text that is actively changing, and a blink competing with
+ * that change read as noise. A prior version of this file had the two
+ * states backwards — blinking while streaming, solid at rest — which is
+ * the same direction error the web recipe had until it was corrected the
+ * wave before this one; verifying the direction here rather than
+ * copying it is what caught it.
+ *
+ * This only ports the `is-streaming` half: while `streaming` is true the
+ * caret renders as a plain, unanimated `View` (opacity 1, no shared
+ * value at all — "no animation" needs none). The "blinks at rest" half
+ * (`../theme/expressive-motion.ts`'s own `EXPRESSIVE_CARET_BLINK_DURATION_MS`
+ * records the artifact's `1s` cycle for whichever file eventually wires
+ * it) is deliberately NOT reproduced: the artifact keeps exactly one
+ * live caret across the whole transcript and blinks it only until the
+ * NEXT turn starts streaming (`type()`'s own `settle()` in
+ * `android-spec.html`), which is a fact about which turn is most
+ * recently settled — session/transcript state this per-turn recipe does
+ * not have and should not reach for. This component simply stops
+ * showing a caret once its own turn finishes, which is the same
+ * behaviour this file already had before this change.
+ *
+ * **`fade-up` (the artifact's `.t>*` turn entrance) is deliberately NOT
+ * wired up here either**, though `../theme/expressive-motion.ts` records
+ * its numbers (`EXPRESSIVE_FADE_UP_*`). Wiring it would have made this
+ * file call a Reanimated timing helper directly while owning a duration
+ * outside the shared `motion.duration` table — exactly the shape
+ * `./ShimmerText.tsx` already has, and that shape is only sound today
+ * because `../recipes/recipe-accessibility.test.ts` (outside this
+ * package's file list) states it explicitly as `MOTION_TOKEN_EXEMPT`.
+ * Doing the same for this file's own `withTiming` calls without a
+ * matching entry there would leave that shared, cross-cutting test
+ * failing for a reason invisible to anyone reading only this file. See
+ * this package's own final report for the exact addition that test
+ * needs before a future task wires this up.
  *
  * **Mono transcript text, as the artifact draws it.** The design
  * draws prose in the same mono face, at the same 12px/1.62, as tool
@@ -113,43 +126,9 @@ export function StreamingMessage({
   showSpeakerLabel = false,
   testId,
 }: StreamingMessageProps) {
-  const { theme, motion, reduceMotion } = useTheme();
+  const { theme, reduceMotion } = useTheme();
   const styles = useMemo(() => createStyles(theme, speaker), [theme, speaker]);
-  const opacity = useSharedValue(1);
-
-  useEffect(() => {
-    if (!streaming || reduceMotion) {
-      opacity.value = 1;
-      return;
-    }
-    opacity.value = withRepeat(
-      withTiming(0.2, {
-        duration: motion.duration.slow,
-        easing: Easing.bezier(...motion.easing.standard),
-      }),
-      -1,
-      true,
-    );
-  }, [streaming, reduceMotion, motion, opacity]);
-
-  const cursorStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const speakerLabel = speaker === "assistant" ? "Pi" : "You";
-
-  const shimmer = useSharedValue(0);
-  useEffect(() => {
-    if (!streaming || reduceMotion) {
-      shimmer.value = 0;
-      return;
-    }
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: SHIMMER_DURATION_MS, easing: Easing.linear }),
-      -1,
-      true,
-    );
-  }, [streaming, reduceMotion, shimmer]);
-  const captionStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(shimmer.value, [0, 1], [theme.colors["ink-3"], theme.colors.ink]),
-  }));
 
   return (
     <View
@@ -162,13 +141,17 @@ export function StreamingMessage({
       <View style={styles.textRow}>
         <Text style={styles.text}>{text}</Text>
         {streaming ? (
-          <Animated.View style={[styles.cursor, cursorStyle]} accessibilityElementsHidden />
+          // `.stream-caret.is-streaming{animation:none}` — solid, not
+          // blinking, while the turn is live. See this file's own doc
+          // comment for the direction this used to have and why the
+          // "blinks at rest" phase is deliberately not ported.
+          <View style={styles.cursor} accessibilityElementsHidden />
         ) : null}
       </View>
       {streaming ? (
-        <Animated.Text style={[styles.caption, reduceMotion ? null : captionStyle]}>
+        <ShimmerText active={!reduceMotion} style={styles.caption}>
           Pi is still responding
-        </Animated.Text>
+        </ShimmerText>
       ) : null}
     </View>
   );
@@ -211,8 +194,11 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], speaker: "ass
       marginLeft: theme.spacing[1],
       backgroundColor: theme.colors.accent,
     },
+    // No `color` here: `ShimmerText` owns the caption's colour (it
+    // interpolates between `ink-3` and `ink` on its own), so setting one
+    // here would be dead weight `ShimmerText`'s own inline style always
+    // overrides.
     caption: {
-      color: theme.colors["ink-3"],
       fontSize: theme.typography.variant.caption.fontSize,
     },
   });
