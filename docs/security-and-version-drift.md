@@ -317,6 +317,47 @@ object with `source`/`url`/`title` for the package an advisory was filed
 against directly) — not built here; revisit if this blind spot is ever
 actually hit.
 
+### 2.4 Baseline range re-syncs, and why they are bookkeeping rather than findings
+
+`AUDIT_BASELINE` matches on **(package, severity, range)**, and an advisory's
+`range` string is upstream's to edit. When GitHub's advisory database re-expresses
+one, this guard fails in both directions at once — the recorded entry reports as
+stale AND the live advisory reports as unbaselined — even though nothing about the
+installed tree changed. That signature is how a range edit is told apart from a
+genuinely new advisory, which reports in one direction only.
+
+Re-synced so far, each with the installed version checked against both the old and
+the new range before the entry was touched:
+
+| Wave   | Packages                                          | Edit                                                                                               | Installed version                                       | Exposure  |
+| ------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | --------- |
+| P9-Q   | `@ai-sdk/gateway`, `@ai-sdk/provider-utils`, `ai` | narrowed                                                                                           | inside both                                             | unchanged |
+| P10-W2 | `expo-linking`, `expo-notifications`              | narrowed by one canary build, `58.0.0-canary-20260909-ea7a89a` to `58.0.0-canary-20260908-e343e6e` | `8.0.12` / `0.32.17`, both far below the edited segment | unchanged |
+
+The P10-W2 re-sync was reproduced with `npm audit --json --cache <empty dir>` before
+either entry was edited, because `guard-audit-baseline.mjs`'s own T391 follow-up
+records that a stale local npm advisory cache reports a LONGER range than a fresh
+one and can manufacture exactly this disagreement. The empty-cache run returned the
+shorter range, and CI's fresh runner failed the same way, so the edit is upstream's
+and not this machine's.
+
+**What was deliberately NOT done.** The guard's failure message says "Never widen
+this guard's matching to make an unreviewed finding disappear", and dropping `range`
+from the match key would have made both this failure and the P9-Q one go away
+permanently. It would also have dissolved the one property that makes the baseline a
+gate rather than an allowlist: an existing package's advisory changing its affected
+range would stop being visible at all. The cost of re-syncing by hand, twice in two
+waves, is the price of that property.
+
+Several `@react-navigation` entries currently report as stale-but-harmless notes. They
+are left in place rather than pruned, and deliberately not counted here — the set moved
+between two runs of this guard an hour apart on one unchanged tree, because npm reads
+advisories through a cache that refreshes underneath it, so any figure written down is
+wrong by the next read. A pruned entry that comes back fails the job; a stale one only
+prints a note. Nothing has established that these are permanently gone rather than
+momentarily unreported, and the asymmetry between those two outcomes is the whole
+argument for leaving them.
+
 ---
 
 ## 3. Secret scan

@@ -229,8 +229,21 @@ export const AUDIT_BASELINE = [
     // `npm audit --json --cache <empty dir>` reproduces the string below.
     package: "expo-notifications",
     severity: "moderate",
+    // Range re-synced at the P10-W2 merge gate, both Expo entries together:
+    // upstream NARROWED each one's final canary segment by a single build,
+    // `58.0.0-canary-20260909-ea7a89a` becoming
+    // `58.0.0-canary-20260908-e343e6e`. Reproduced with
+    // `npm audit --json --cache <empty dir>`, as this entry's own T391
+    // follow-up prescribes, so a stale local advisory cache is ruled out
+    // rather than assumed; CI's fresh runner reported the same failure, in
+    // both directions at once (a stale entry AND an unbaselined advisory),
+    // which is the signature of a range edit and not of a new advisory.
+    // Installed versions are `expo-notifications@0.32.17` and
+    // `expo-linking@8.0.12`, both far below the edited segment and inside
+    // BOTH the old and the new range, so exposure is unchanged and this is
+    // bookkeeping.
     range:
-      "<=0.0.1-canary-20240418-8d74597 || 0.11.4 - 55.0.0-canary-20260223-05214f1 || 55.0.5-canary-20260128-67ce8d5 || 55.0.11-canary-20260424-7bedc9d - 55.0.11-canary-20260429-a5e59cf || 55.0.15-canary-20260327-0789fbc - 55.0.15-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 56.0.15-canary-20260526-6cd5e37 - 56.0.15-canary-20260701-9100865 || 57.0.0-canary-20260526-13e89ca - 57.0.0-canary-20260623-1c70a78 || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260909-ea7a89a",
+      "<=0.0.1-canary-20240418-8d74597 || 0.11.4 - 55.0.0-canary-20260223-05214f1 || 55.0.5-canary-20260128-67ce8d5 || 55.0.11-canary-20260424-7bedc9d - 55.0.11-canary-20260429-a5e59cf || 55.0.15-canary-20260327-0789fbc - 55.0.15-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 56.0.15-canary-20260526-6cd5e37 - 56.0.15-canary-20260701-9100865 || 57.0.0-canary-20260526-13e89ca - 57.0.0-canary-20260623-1c70a78 || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260908-e343e6e",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
@@ -448,6 +461,19 @@ export const AUDIT_BASELINE = [
   {
     package: "expo-linking",
     severity: "moderate",
+    // Range re-synced at the P10-W2 merge gate, both Expo entries together:
+    // upstream NARROWED each one's final canary segment by a single build,
+    // `58.0.0-canary-20260909-ea7a89a` becoming
+    // `58.0.0-canary-20260908-e343e6e`. Reproduced with
+    // `npm audit --json --cache <empty dir>`, as this entry's own T391
+    // follow-up prescribes, so a stale local advisory cache is ruled out
+    // rather than assumed; CI's fresh runner reported the same failure, in
+    // both directions at once (a stale entry AND an unbaselined advisory),
+    // which is the signature of a range edit and not of a new advisory.
+    // Installed versions are `expo-notifications@0.32.17` and
+    // `expo-linking@8.0.12`, both far below the edited segment and inside
+    // BOTH the old and the new range, so exposure is unchanged and this is
+    // bookkeeping.
     // Range re-synced THREE times, at the P9-P, P9-T and T348 merge gates. All
     // three moved only this entry's trailing arm, and none changed exposure.
     //
@@ -475,7 +501,7 @@ export const AUDIT_BASELINE = [
     // version, that is a new acceptance and needs the owner, not a range
     // edit.
     range:
-      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260909-ea7a89a",
+      "<=0.0.1-canary-20240418-8d74597 || 2.2.2 - 55.0.0-canary-20260223-05214f1 || 55.0.4-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.10-canary-20260327-0789fbc - 55.0.10-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d || 58.0.0-canary-20260806-8c2d007 - 58.0.0-canary-20260908-e343e6e",
     owner: ANDROID_TOOLCHAIN_OWNER,
     reason: NO_INSTALL_REASON,
   },
