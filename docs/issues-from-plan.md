@@ -21867,8 +21867,9 @@ mock's Android gesture bar, wired in the design's own script to `back`, not a pr
 A future wave that treats the uncited list as a backlog will "fix" these; it should not.
 
 Two survived as real, verified-absent features, and became the wave's two packages. **One of
-them, `W4-RUNFOLD`, was committed and then reverted after CI rejected it** - see P10-14; the
-wave's net delivery is `W4-TOOLBLOCK` alone.
+them, `W4-RUNFOLD`, was committed, reverted after CI rejected it, and then found to have been
+scoped on a false premise entirely** - see P10-14; the wave's net delivery is `W4-TOOLBLOCK`
+alone.
 
 ### P10-12 - a hand-rolled syntax highlighter was written beside the one already shipped
 
@@ -21943,7 +21944,7 @@ one `<div class="blk pend" data-r>` - a still-running `write` whose result IS ex
 `running` expandable is a behaviour change rather than a fold, and it stays out until a wave
 owns it.
 
-### P10-14 - `RunHeader` ships wired to nothing, and that is the SegmentedControl shape again
+### P10-14 - the run header was already built, under another name, and three analyses missed it
 
 `W4-RUNFOLD`'s model work is correct and was verified against the design's own bytes: the
 `.runhead` box metrics, the `U+00B7` middle-dot separator read at the byte level rather than
@@ -21994,19 +21995,66 @@ so that case is real and needs an answer, not an assumption), and inject `RunHea
 the route. That is a cross-package task, not a gate fix, and inventing the boundary at a gate -
 unreviewed, and unverifiable without a device - would have been worse than reporting it.
 
-**The wiring package, defined so the next wave does not re-derive it:** its file list spans
-`packages/protocol/src/agent-types.ts` (or wherever the entry shape is decided),
-`packages/frontend-core`'s transcript entry types, `apps/android/src/features/transcript/
-transcript-window-model.ts` and the route that builds the entries array. It restores the four
-files from the reverted commit, threads `turnId` down, answers the absent-`turnId` case
-explicitly, and injects `RunHeader` rows carrying their own `id`. It is one package, not a
-partitioned wave, because every file in it changes for one reason.
+**CORRECTED after the revert, and this correction supersedes everything above it in this
+entry.** The two paragraphs above said the wiring host was missing and specified a
+cross-package task to build it. That was wrong, and so was the merge gate's own reason, and so
+was the correction of the gate. **A collapsible run head with a derived summary already ships
+on Android, and is fully wired.**
+
+- `packages/frontend-core/src/timeline/work-groups.ts` is the pure model:
+  `buildTranscriptWorkGroups` groups a run of consecutive `thinking`/`tool-call` entries,
+  `formatWorkGroupMeta` derives its one-line summary, `visibleTranscriptEntries` hides a
+  collapsed group's members while keeping its head, and `isWorkGroupCollapsed` /
+  `toggleWorkGroupCollapsed` hold the host's override state.
+- `apps/android/src/features/transcript/work-group-row.tsx` renders it as
+  `TranscriptWorkGroupHead` - a `Pressable` with `accessibilityRole="button"`,
+  `accessibilityState={{ expanded }}`, a chevron that rotates when collapsed, and the summary.
+- The session route mounts it, holds the collapse state, and filters the entry list through
+  `visibleTranscriptEntries`. `apps/web` renders the same model through its own
+  `work-group-row.tsx`.
+
+So `RunHeader` was a second implementation of a shipped feature, and the correct outcome was
+the revert - for a better reason than the one the revert commit gives.
+
+**How three passes missed it, because the method is the reusable part.** The wave-4 audit
+extracted every class selector from the design and grepped the source for each. That lens
+finds a feature only if the source names it the way the design does. It already produced four
+known false positives in this wave, each recorded above: `.snack` ships as `Toast.tsx`,
+`.listening` as `voice-capture-indicator.tsx`, `.strike` as `todo-row-model.ts`,
+`.fp-drag`/`.fp-ready` as `FooterPills.tsx`'s `fpReadyRing`. `.runhead`/`.runfold` is the
+fifth and the one that cost a whole package: the greps run were `runhead`, `runfold`,
+`TurnHeader` and `turnFold`, and the shipped name is `work-group-row` /
+`TranscriptWorkGroupHead`. **A name-shaped grep cannot close the question; only searching for
+the BEHAVIOUR can.** The search that would have found it in one command is
+`git grep -l "accessibilityState={{ expanded" -- apps/android/src/features/transcript`.
+
+**The remaining delta is real but small, and one half of it should not be closed.**
+
+The box metrics are a genuine, portable gap: `.runhead{gap:6px;margin:4px 0 0;padding:4px 6px;
+border-radius:8px;font:12.5px/1}`, the chevron's `rotate(-90deg)` when folded, the `" - hidden"`
+suffix the design appends to a collapsed summary, and the two announcements `runheadTap` makes
+("Run collapsed to its header" / "Run expanded"). All of that is presentation on one Android
+file and is worth doing.
+
+The grouping itself is a deliberate disagreement, and **the repository's rule is being kept**.
+The design's `.t.runfold` hides `>.blk` AND `>.lbl` - the whole turn, answer included - and its
+sample summary "6 tool calls - 1 message" counts a message as a member. `work-groups.ts` says
+the opposite in its own doc comment, with a reason: "a group never spans a user or assistant
+message, and the answer is never swallowed into the work that preceded it." That is the
+stronger rule - hiding the agent's answer behind a disclosure is a worse outcome than a
+slightly narrower fold - it is already shared with `apps/web`, and the design never actually
+renders a folded turn, so the wider grouping exists only as a CSS rule and never as a frame a
+reader could judge. **A reviewer could disagree**: the brief says the spec wins over the apps,
+and this is a case where the app wins over the spec. The reason it does is that the spec is
+silent on the consequence - it shows no folded frame - while the repository wrote its reason
+down.
 
 ### P10-15 - the wave shipped no new `CAPABILITIES` entry, on purpose
 
 Every other wave in this phase registered what it shipped, per `CLAUDE.md`'s T124 rule. This
 one registers nothing, and the reason is that the rule is about capabilities that SHIP.
-`RunHeader` was reverted (P10-14), so an entry for it would assert a capability the product
+`RunHeader` was reverted as a duplicate of a shipped feature (P10-14), so an entry for it
+would assert a capability the product
 does not have. The tool block's expand affordance does ship - but its colour source changed at
 the gate (P10-12) and the `running`/`blocked`/`canceled` behaviour is explicitly unfinished
 (P10-13), so an entry pinned to a symbol either could still move would be registering a
