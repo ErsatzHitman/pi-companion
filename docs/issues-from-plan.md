@@ -22486,3 +22486,78 @@ authority, not the authority." **Before concluding shipped code has drifted from
 derivation against something the tree itself already computed correctly.** Here three tokens were
 available to cross-check against and one of them matched; that single match was enough to falsify
 the whole finding, and it was visible in the first measurement.
+
+## Wave P10-W9 (UI spec conformance, iteration 9)
+
+No implementation package. This wave measured the brief's "Work still open" list to the end and
+found every item already landed - including the one it opened intending to build. The record is
+the deliverable, because "we looked and found nothing" is only a finding if it is checkable.
+
+### P10-27 - every named open item, with the evidence that closes it
+
+`GOAL-PROMPT.md` carries seven named items across two lists. All seven are closed. Measured
+against the real tree at this wave's base, one command per row, not inferred from wave history:
+
+| item                                          | state  | evidence                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `A-COMPOSER`                                  | landed | `Composer.tsx` mounts `FooterPills` as the FIRST child of the `onLayout={handlePromptBarLayout}` wrapper and `PromptBar` second, so the four metadata pills sit above the prompt bar; `leading` carries only the attach mark, so nothing sits between `+` and the input. The context ring T353 added is gone.                                                                  |
+| `A-SHAPE`                                     | landed | `expressive-shape.ts` declares `EXPRESSIVE_RADIUS_XS/SM/MD/LG/FULL` as `10/16/22/28/9999` and `EXPRESSIVE_RADIUS_BLK` as `BLOCK_RADIUS` (`14`), matching the spec's `--r-xs:10 --r-sm:16 --r-md:22 --r-lg:28 --r-full:9999 --r-blk:14` value for value. The shared `radii` scale in `packages/design-tokens` is untouched, as the brief required.                              |
+| `A-MOTION`                                    | landed | `expressive-motion.ts`'s `EXPRESSIVE_PRESS_SPRING_EASING` is `[0.34, 1.7, 0.5, 1]`, matching the spec's `cubic-bezier(.34,1.7,.5,1)`; the `.88` press scale and the `.42s` duration are both present and named. `EXPRESSIVE_PIXEL_KEYFRAMES` backs `PixelLoader`, which has real call sites (`BashBlock.tsx`, `live-screen.tsx`, and as of P10-25's wave the retry countdown). |
+| `A-PIROLES`                                   | landed | P10-26's table: three exact oklab mixes, two structural role mappings.                                                                                                                                                                                                                                                                                                         |
+| file editor lost its height bound             | landed | `files.css`'s `.pc-file-editor__code` is `display: flex` with `max-height: min(60dvh, 640px)`, so SHELL-1's `flex: 1 1 auto; min-height: 0` on the `.cm-editor` child is no longer inert. `file-code-editor.test.tsx` pins both halves.                                                                                                                                        |
+| transcript entrance animation has no test     | landed | `transcript.test.tsx`'s `"Transcript turn-entrance stagger watermark (SHELL-1)"` describe, including a case for the defect the brief names - a later re-render that adds no rows must not replay the entrance.                                                                                                                                                                 |
+| `SegmentedControl` ships with zero call sites | landed | See P10-28.                                                                                                                                                                                                                                                                                                                                                                    |
+
+### P10-28 - `SegmentedControl` was wired, and the assertion was narrowed exactly as the brief asked
+
+The brief poses this one as a decision to make on evidence: read what
+`Composer.test.tsx`'s `"offers no button at all"` assertion actually guards, and either narrow it
+to the invariant it protects, or leave the control unwired and write the reason down.
+
+It was already decided, the same way, by `SEGMENTED-1`. `apps/web`'s `QueueModePicker.tsx`
+imports `SegmentedControl` and renders it twice; `component-lab.tsx` carries its lab case. The
+assertion was narrowed rather than deleted, and the narrowing carries its own rationale in
+`Composer.test.tsx`, which quotes the real invariant: no PER-MESSAGE cancel, remove or reorder
+command, because Pi exposes none (T38B1a's fourth acceptance criterion) - "never 'no buttons at
+all'". A queue-MODE selector is a whole-session setting, so its two segment tabs were always
+permitted by the invariant. That is the brief's first branch, taken, with the code quoted.
+
+**One correction to the brief's own framing, which is why this entry exists rather than a one-line
+"already done".** The brief locates the blocking assertion in `Composer.test.tsx`. There is also
+an assertion with that exact title in `apps/android/src/features/composer/QueueModePicker.test.ts`
+
+- a different file on a different platform - and it is NOT the one `SEGMENTED-1` narrowed, is not
+  blocking anything, and should not be narrowed. Android's `QueueModePicker` genuinely offers no
+  buttons beyond its two cycling rows, so `expect(code).not.toMatch(/cancel|reorder|remove\b/i)`
+  guards real wording there and still passes. Anyone re-reading the brief and grepping for that
+  title lands on the Android file first; this paragraph is here so the next reader does not "fix" a
+  correct test.
+
+Nor is Android's picker a spec deviation. `android-spec.html` draws no queue-mode control at all -
+`steer` appears only inside a delegate-monitor notification label and `Queued` only as a delegate
+status pill - so the spec is silent on this surface and the app's two cycling rows conform by
+silence rather than by accident.
+
+### P10-29 - four consecutive waves have now found a named "open" item already closed
+
+Stated plainly because the pattern is now the most reliable finding in this phase, and it has a
+cost: each instance spent real time, and two of them nearly shipped work.
+
+| wave   | item believed open                                           | what was actually true                                                                             |
+| ------ | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| P10-14 | run-fold header not built                                    | shipped as `TranscriptWorkGroupHead`; a package was built, committed, rejected by CI, and reverted |
+| P10-22 | retry countdown blocked on an unbuilt `frontend-core` domain | `pi_retry` already subscribed and wired on Android                                                 |
+| P10-26 | `A-PIROLES` colours drifted from the spec                    | already exact; the disagreement was a bug in the check itself                                      |
+| P10-28 | `SegmentedControl` has zero call sites                       | wired by `SEGMENTED-1`, with the blocking assertion already narrowed                               |
+
+The four have one mechanism in common and it is not carelessness: **each belief came from a
+document that was true when written.** `fix-plan.md`, `GOAL-PROMPT.md` and this ledger are all
+dated records, and the tree moves under them. A document cannot be wrong about the past; it can
+only be stale about the present, and nothing marks the moment it becomes so.
+
+The countermeasure is cheap and is now four-for-four: **before building anything a document says
+is missing, run one command that would find it if it already existed - and search for the
+BEHAVIOUR or the DATA, never the name the document uses.** The four commands that would each have
+saved a wave were `git grep -l "accessibilityState={{ expanded"`, `git grep -ln "pi_retry"`,
+re-running the mix against the shipped palette, and `git grep -n "SegmentedControl"`. None takes
+longer than reading the paragraph that motivated the work.
