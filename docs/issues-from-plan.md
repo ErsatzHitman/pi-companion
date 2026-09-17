@@ -22756,3 +22756,102 @@ todo-overlay binding. It is not. All five authored sites are delegate/roster row
 ui-implementer - same worktree", "0 violations across 4 routes - exit 0"), so it belongs to the
 delegate surface P10-21 already closed for want of `peer_message`/`delegate_resume` in the
 protocol. Recorded rather than quietly re-scoped, for the reason P10-22 gives.
+
+## Wave P10-W12 (UI spec conformance, iteration 12)
+
+Motion lens. Every `@keyframes` in `android-spec.html` enumerated and checked against a shipped
+Android consumer, rather than auditing components and asking what they animate.
+
+### P10-36: the spec's turn entrance ships on web and on nothing on Android
+
+The spec defines `@keyframes fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;
+transform:none}}` and applies it to `.t>*` - every direct child of the transcript - as
+`animation:fade-up .32s cubic-bezier(.23,1,.32,1) both`, with its own script staggering arrivals by
+`STAGGER=120`.
+
+`apps/web` ships this and tests it (`transcript.test.tsx`'s turn-entrance stagger watermark
+describe). Android shipped nothing: no transcript row animated in at all, while
+`apps/android/src/ui/theme/expressive-motion.ts` had recorded every number it would need -
+`EXPRESSIVE_FADE_UP_EASING`, `EXPRESSIVE_FADE_UP_FROM_TRANSLATE_Y`, and an
+`EXPRESSIVE_FADE_UP_DURATION_MS.transcriptTurn` of 320 - for several waves.
+
+`packages/frontend-core/src/timeline/transcript-entrance.ts` now owns the rule for both platforms:
+`advanceTranscriptEntranceWatermark` opens a batch only when the row count changes (idempotent, so
+a caller may run it every render), and `transcriptEntranceDelayMs` answers `null` for a settled row
+or a batch-relative delay for an entering one. `transcript-window.tsx` wraps each row in an
+`Animated.View` whose `entering` prop is supplied only when that answer is non-null.
+
+**Web's implementation was ported rather than re-derived, deliberately, because its own history is
+the argument.** Its first version keyed the stagger to a row's ABSOLUTE transcript index, which
+gave every turn past the seventh a flat 720ms delay: a single new turn arriving late in a long
+session sat invisible at `opacity: 0` for most of a second. Re-deriving the rule on Android would
+have meant an even chance of re-deriving that defect, and no Android test could have caught it -
+`react-native` does not mount under this workspace's vitest, so the Android half is source-text
+assertions only. Putting the rule in a package that DOES execute under test is what makes the
+batch-relative stagger provable at all; its regression test builds 50 settled rows, adds one, and
+pins the answer at `0ms`.
+
+**Two Android-specific hazards the web port does not have, both handled:**
+
+`FlatList` unmounts and remounts cells as they scroll, so a Reanimated `entering` animation
+supplied unconditionally replays every time an old row scrolls back into view - worse than shipping
+no entrance. The watermark gate is what prevents it: a row below `enteringFromRow` receives no
+`entering` prop at all.
+
+`ListRenderItem`'s `index` is a position within `snapshot.windowedEntries`, not an absolute
+transcript position. `TranscriptWindowSnapshot.hiddenOlderCount` is the model's own `start` for that
+slice, so the absolute index is `snapshot.hiddenOlderCount + index`. Using the window-local index
+would make rows re-enter every time the window slid, which is the same recycled-cell hazard arriving
+through a second door.
+
+### P10-37: a deferral that named the wrong file, and therefore never got revisited
+
+The entrance was not overlooked. `StreamingMessage.tsx` carried an explicit doc comment deferring
+it, and `expressive-motion.ts`'s header repeated the deferral - both naming `StreamingMessage.tsx`
+as `fade-up`'s intended consumer. Both were corrected in place (marked `CORRECTED, W12-ENTRANCE`,
+which is the convention `HISTORICAL_QUOTE_MARKERS` already exempts) rather than quietly rewritten.
+
+**The file was wrong, and that is the finding.** `.t>*` is every direct child of the transcript -
+message blocks, tool-call blocks, thinking rows, the todo overlay - so a recipe for one row kind
+could never have covered it. The real home was always the row wrapper.
+
+This is a different failure mode from the four built-but-unwired cases (P10-33 and its three
+predecessors), and worth separating: those were capabilities nobody had claimed were done, findable
+by asking "does anything call this". This one was **marked as decided**. A reader who greps for the
+capability finds a reasoned paragraph explaining why it is deferred, and stops. The reasoning was
+sound about the file it named; the file was simply not where the feature goes, and nothing in a
+deferral note is ever checked against the spec selector it claims to be deferring.
+
+The deferral's own stated blockers had also quietly expired: it argued the wiring would add "a
+THIRD Reanimated concern" to `StreamingMessage.tsx` and need that file added to
+`recipe-accessibility.test.ts`'s `MOTION_TOKEN_EXEMPT` set - both facts about a file the work never
+belonged in, and the second had already been satisfied for an unrelated reason.
+
+**The check that would have caught it:** a deferral note should name the spec SELECTOR or behaviour
+it defers, and the next reader should re-resolve that selector against the tree rather than trusting
+the file the note names. `.t>*` resolves to a container; the note named a leaf.
+
+### P10-38: the motion lens is spent, and what it returned
+
+All 13 `@keyframes` in `android-spec.html` were enumerated and each checked for a shipped consumer,
+searching for the BEHAVIOUR rather than the keyframe's name (the P10-29 countermeasure - two names
+would otherwise have read as gaps):
+
+- `shimmer-text` has no name match in `apps/android/src` and is not a gap: it ships as `ShimmerText`.
+- `fade-in` has no name match and is not a gap either: its only consumer is `.dchip.more`, a
+  delegate chip, and the delegate surface is already closed for want of `peer_message`/
+  `delegate_resume` in the protocol (P10-21 class 2).
+- `fade-up` was the one real gap, and is P10-36 above. Its two other live targets are the settings
+  pad's rows and cards (300ms) and the popup menu (240ms). Both remain unwired; their durations are
+  already recorded in `EXPRESSIVE_FADE_UP_DURATION_MS` as `listRow` and `menu`, and neither is a
+  transcript surface, so they are left as named follow-ups rather than folded into a transcript
+  package.
+- The remaining ten (`caret-blink`, `eq-bounce`, `fp-bubble`, `fp-halo`, `fp-swap`, `frin`,
+  `pixel-on`, `pop-in`, `records-pulse`, `spin`) all resolve to shipped consumers.
+
+The stagger number itself was deliberately NOT added to `expressive-motion.ts`. That module is the
+home for per-surface CSS figures read straight off the artifact, but `STAGGER=120` and the 720ms cap
+it produces are only meaningful beside the watermark rule that decides which rows a stagger applies
+to - a concern an RN-free theme module has no notion of. Both live in
+`timeline/transcript-entrance.ts` instead, and `expressive-motion.ts` carries a note saying so, for
+the same reason its header already argues against restating `motion.easing.standard` locally.

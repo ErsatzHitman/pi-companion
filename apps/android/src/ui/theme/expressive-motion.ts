@@ -62,11 +62,11 @@
  * it is the next task's work, not a capability that doesn't exist.
  *
  * The remaining exports (every `EXPRESSIVE_PRESS_SCALE` target but
- * `icon`, `EXPRESSIVE_POP_IN_*`, every `EXPRESSIVE_FADE_UP_*` export)
- * have no consumer in this package today. `.scr-btn`, `.pbtn`, `.row`,
- * `.chip`, `.blk`/`.bash`/`.ov`, `.dchip`/`.att`/`.dprev` all live in
- * files A-MOTION does not own (a navigation rail, the prompt bar's own
- * buttons, transcript block chrome, and tool-call detail chips).
+ * `icon`, `EXPRESSIVE_POP_IN_*`) have no consumer in this package today.
+ * `.scr-btn`, `.pbtn`, `.row`, `.chip`, `.blk`/`.bash`/`.ov`,
+ * `.dchip`/`.att`/`.dprev` all live in files A-MOTION does not own (a
+ * navigation rail, the prompt bar's own buttons, transcript block chrome,
+ * and tool-call detail chips).
  * `EXPRESSIVE_PRESS_SCALE.filePill` (`button.fp`'s own `:active{scale(.92)}`)
  * is the one target whose file — `../../features/composer/
  * FooterPills.tsx` — this package's own family DOES now touch
@@ -74,14 +74,33 @@
  * drives its own drag/pop physics (`playPop`, `footer-pill-drag-model.ts`)
  * rather than the shared `usePressScale` hook this target is meant for,
  * and retrofitting that split is outside this task's scope.
- * `fade-up`'s own intended consumer, the transcript turn's entrance (the
- * artifact's `.t>*`), IS a file this package owns —
- * `../recipes/StreamingMessage.tsx` — but is deliberately NOT wired
- * there this wave either; see that file's own doc comment for why. All
- * of these are recorded here anyway, exactly as `expressive-shape.ts`
- * recorded `xs`/`sm`/`md`/`lg` before any caller needed them, so the
- * next package (or task) that draws one of these elements has a
- * measured number to read instead of a fresh guess at the source CSS.
+ *
+ * (CORRECTED, W12-ENTRANCE: this used to say every `EXPRESSIVE_FADE_UP_*`
+ * export had no consumer, and that `fade-up`'s intended consumer was
+ * `../recipes/StreamingMessage.tsx`, deliberately left unwired there —
+ * The first was TRUE when written — nothing consumed those exports
+ * then, and this change is what makes it false. The second was wrong
+ * from the start, and the artifact says why:
+ * `.t>*`, the selector `fade-up` targets, is every direct child of the
+ * TRANSCRIPT, not one row kind's own recipe: message blocks, tool-call
+ * blocks, thinking rows, and the todo overlay alike — so its home was
+ * always the row wrapper, `../../features/transcript/
+ * transcript-window.tsx`, which now wraps each entering row in an
+ * `Animated.View` driven by `EXPRESSIVE_FADE_UP_EASING`,
+ * `EXPRESSIVE_FADE_UP_FROM_TRANSLATE_Y`, and
+ * `EXPRESSIVE_FADE_UP_DURATION_MS.transcriptTurn`, gated on
+ * `@picompanion/frontend-core`'s `timeline.advanceTranscriptEntranceWatermark`/
+ * `timeline.transcriptEntranceDelayMs` (`packages/frontend-core/src/
+ * timeline/transcript-entrance.ts`) so a recycled `FlatList` cell never
+ * replays the entrance. `StreamingMessage.tsx`'s own deferral comment,
+ * which reasoned about the same wrong file, is outside this task's file
+ * list and was reported rather than edited.)
+ *
+ * `EXPRESSIVE_PRESS_SCALE`'s remaining unconsumed targets are recorded
+ * here anyway, exactly as `expressive-shape.ts` recorded `xs`/`sm`/`md`/
+ * `lg` before any caller needed them, so the next package (or task) that
+ * draws one of those elements has a measured number to read instead of a
+ * fresh guess at the source CSS.
  */
 
 /** A CSS-style cubic-bezier control-point tuple: `[x1, y1, x2, y2]`. */
@@ -278,3 +297,26 @@ export const EXPRESSIVE_FADE_UP_DURATION_MS: Readonly<Record<ExpressiveFadeUpTar
   listRow: 300, // `.pad>.row,.pad>.card`
   menu: 240, // `.pmenu`
 };
+
+// ---------------------------------------------------------------------------
+// fade-up's stagger, and why this module does not own it.
+// ---------------------------------------------------------------------------
+/*
+ * The artifact's own script constant, `const CPT=2,TICK=9,TAIL=6,
+ * STAGGER=120` (see `EXPRESSIVE_STREAM_TAIL_CHAR_COUNT`'s doc comment for
+ * the same script quoted in full): the per-row delay step the script
+ * applies between one `.t>*` child entering and the next.
+ *
+ * Deliberately NOT re-declared here as a Reanimated-facing duration this
+ * file's own `EXPRESSIVE_FADE_UP_*` group owns: `STAGGER` and the
+ * measured 720ms cap it produces (`6 * STAGGER`) are consumed together
+ * with the entrance WATERMARK rule that keeps a virtualizing list's
+ * recycled rows from replaying the animation — a concern this RN-free,
+ * theme-free module has no notion of at all. `packages/frontend-core`'s
+ * `timeline/transcript-entrance.ts` (W12-ENTRANCE) owns both numbers as
+ * `TRANSCRIPT_ENTRANCE_STAGGER_MS`/`TRANSCRIPT_ENTRANCE_STAGGER_CAP_MS`,
+ * next to the watermark logic that actually needs them; restating either
+ * figure here would create exactly the kind of second, driftable copy
+ * this module's own header comment already argues against for
+ * `EXPRESSIVE_POP_IN_EASING` versus `motion.easing.standard`.
+ */

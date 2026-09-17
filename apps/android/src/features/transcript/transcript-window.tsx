@@ -65,11 +65,22 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import Animated, {
+  Easing,
+  withDelay,
+  withTiming,
+  type EntryExitAnimationFunction,
+} from "react-native-reanimated";
 
 import { timeline } from "@picompanion/frontend-core";
 
 import { Banner, Button } from "../../ui/primitives";
 import { BLOCK_GAP } from "../../ui/theme/block-shape";
+import {
+  EXPRESSIVE_FADE_UP_DURATION_MS,
+  EXPRESSIVE_FADE_UP_EASING,
+  EXPRESSIVE_FADE_UP_FROM_TRANSLATE_Y,
+} from "../../ui/theme/expressive-motion";
 import { useTheme } from "../../ui/theme/theme-context";
 import { TranscriptSearchBar } from "./transcript-search-bar";
 import {
@@ -146,6 +157,38 @@ export interface TranscriptWindowListProps<T extends TranscriptWindowEntry> {
   rowExtraData?: unknown;
 }
 
+/**
+ * The android spec's `.t>*` `fade-up` entrance — `@keyframes fade-up{
+ * from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}`,
+ * `animation:fade-up .32s cubic-bezier(.23,1,.32,1) both` — as a
+ * Reanimated `entering` animation, delayed by `delayMs` (the row's own
+ * stagger position within its entrance batch; see
+ * `@picompanion/frontend-core`'s `timeline.transcriptEntranceDelayMs`).
+ * Built fresh per call rather than shared, because the delay differs per
+ * row and Reanimated's `entering` builders are immutable once
+ * constructed. Every number comes from `EXPRESSIVE_FADE_UP_*`
+ * (`../../ui/theme/expressive-motion.ts`) — none is retyped here.
+ */
+function createTranscriptEntranceEntering(delayMs: number): EntryExitAnimationFunction {
+  return () => {
+    "worklet";
+    const config = {
+      duration: EXPRESSIVE_FADE_UP_DURATION_MS.transcriptTurn,
+      easing: Easing.bezier(...EXPRESSIVE_FADE_UP_EASING),
+    };
+    return {
+      initialValues: {
+        opacity: 0,
+        transform: [{ translateY: EXPRESSIVE_FADE_UP_FROM_TRANSLATE_Y }],
+      },
+      animations: {
+        opacity: withDelay(delayMs, withTiming(1, config)),
+        transform: [{ translateY: withDelay(delayMs, withTiming(0, config)) }],
+      },
+    };
+  };
+}
+
 function metricsFromScrollEvent(
   event: NativeSyntheticEvent<NativeScrollEvent>,
 ): TranscriptScrollMetrics {
@@ -190,7 +233,7 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
   footer,
   rowExtraData,
 }: TranscriptWindowListProps<T>) {
-  const { theme } = useTheme();
+  const { theme, reduceMotion } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const windowRef = useRef<TranscriptWindow<T> | null>(null);
@@ -198,6 +241,34 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
     windowRef.current = createTranscriptWindow<T>(config);
   }
   const listRef = useRef<FlatList<T> | null>(null);
+
+  /**
+   * W12-ENTRANCE: the turn-entrance watermark (`@picompanion/frontend-core`'s
+   * `timeline.advanceTranscriptEntranceWatermark`), held in a ref and
+   * advanced HERE, during render, rather than from a `useEffect`.
+   *
+   * An effect runs after commit, and `FlatList` — same as web's
+   * `@tanstack/react-virtual` — can schedule several renders for one
+   * logical arrival before any of them paints (a `scrollToIndex`, a
+   * measured-height update, ...). If the watermark only advanced from an
+   * effect, it would still be showing the PREVIOUS batch's boundary while
+   * those extra renders were computing `entering` for the CURRENT batch,
+   * and by the time the effect finally ran and advanced it, every row
+   * that should have animated would already have committed with
+   * `entering={undefined}`. Advancing during render means every one of
+   * those extra renders for the same arrival sees the same, already
+   * up-to-date watermark, because `advanceTranscriptEntranceWatermark` is
+   * idempotent: calling it again with an unchanged `entries.length`
+   * returns the exact same state, so re-running this line on every render
+   * (including a StrictMode double-render) is safe rather than a bug.
+   */
+  const entranceWatermarkRef = useRef<timeline.TranscriptEntranceWatermark>(
+    timeline.INITIAL_TRANSCRIPT_ENTRANCE_WATERMARK,
+  );
+  entranceWatermarkRef.current = timeline.advanceTranscriptEntranceWatermark(
+    entranceWatermarkRef.current,
+    entries.length,
+  );
 
   const [snapshot, setSnapshot] = useState(() => windowRef.current!.applyEntries(entries));
 
@@ -298,16 +369,39 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
     }
   };
 
-  const renderItem: ListRenderItem<T> = ({ item }) => {
+  const renderItem: ListRenderItem<T> = ({ item, index }) => {
     const rowTestId = testId ? `${testId}-row-${item.id}` : `transcript-window-row-${item.id}`;
     const row = renderRow(item, rowTestId);
-    if (item.id !== activeSearchEntryId) {
-      return row;
-    }
+    const content =
+      item.id !== activeSearchEntryId ? (
+        row
+      ) : (
+        <View style={styles.searchActive} testID={`${rowTestId}-search-active`}>
+          {row}
+        </View>
+      );
+    // `index` is the position within `snapshot.windowedEntries`, NOT the
+    // absolute transcript position -- `snapshot.hiddenOlderCount` is the
+    // model's own `start` of that slice (`windowedEntries =
+    // entries.slice(start, ...)`, `hiddenOlderCount = start`), so adding
+    // it back recovers the absolute index. Using the window-local `index`
+    // directly would make a row re-enter every time the window slides
+    // (`expandOlder`/`revealIndex`/tail-following all shift `start`),
+    // exactly the recycled-cell hazard this package's own `FlatList`
+    // choice (see this file's module doc comment) makes possible.
+    const absoluteIndex = snapshot.hiddenOlderCount + index;
+    const delayMs = reduceMotion
+      ? null
+      : timeline.transcriptEntranceDelayMs(
+          absoluteIndex,
+          entranceWatermarkRef.current.enteringFromRow,
+        );
     return (
-      <View style={styles.searchActive} testID={`${rowTestId}-search-active`}>
-        {row}
-      </View>
+      <Animated.View
+        entering={delayMs === null ? undefined : createTranscriptEntranceEntering(delayMs)}
+      >
+        {content}
+      </Animated.View>
     );
   };
 

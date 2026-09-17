@@ -125,6 +125,80 @@ describe("transcript-window.tsx: both windowed-out edges have a real, wired affo
   });
 });
 
+describe("transcript-window.tsx: turn-entrance fade-up (W12-ENTRANCE)", () => {
+  it("destructures renderItem's own index, and computes the absolute index as snapshot.hiddenOlderCount + index -- never the window-local index alone", () => {
+    const code = readCode();
+    expect(code).toMatch(/renderItem: ListRenderItem<T> = \(\{ item, index \}\) =>/);
+    expect(code).toMatch(/const absoluteIndex = snapshot\.hiddenOlderCount \+ index;/);
+  });
+
+  it("advances the watermark via the shared frontend-core function, never a local re-implementation", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /timeline\.advanceTranscriptEntranceWatermark\(\s*entranceWatermarkRef\.current,\s*entries\.length,?\s*\)/,
+    );
+    // Regression guard: no hand-rolled watermark comparison such as
+    // `entries.length !== ...Ref.current` sits anywhere in this file --
+    // that logic belongs to `advanceTranscriptEntranceWatermark` alone.
+    expect(code).not.toMatch(/entries\.length !== /);
+  });
+
+  it("takes the per-row stagger delay from the shared frontend-core function, never a local `* 120`", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /timeline\.transcriptEntranceDelayMs\(\s*absoluteIndex,\s*entranceWatermarkRef\.current\.enteringFromRow,?\s*\)/,
+    );
+    expect(code).not.toMatch(/\* 120/);
+    expect(code).not.toMatch(/\*\s*TRANSCRIPT_ENTRANCE_STAGGER/);
+  });
+
+  it("supplies the entering prop conditionally -- never an unconditional entering={...}", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /entering=\{delayMs === null \? undefined : createTranscriptEntranceEntering\(delayMs\)\}/,
+    );
+    // No literal `entering={createTranscriptEntranceEntering(...)}` with no
+    // conditional guarding it anywhere in the file.
+    expect(code).not.toMatch(/entering=\{createTranscriptEntranceEntering\(delayMs\)\}(?!\s*:)/);
+  });
+
+  it("skips the entrance entirely under reduced motion -- delayMs is forced null before the shared function is even asked", () => {
+    const code = readCode();
+    expect(code).toMatch(/const delayMs = reduceMotion\s*\?\s*null/);
+  });
+
+  it("destructures reduceMotion from useTheme()", () => {
+    expect(readCode()).toMatch(/const \{ theme, reduceMotion \} = useTheme\(\);/);
+  });
+
+  it("drives the fade-up animation from the shared EXPRESSIVE_FADE_UP_* tokens, not local literals", () => {
+    const code = readCode();
+    expect(code).toMatch(/EXPRESSIVE_FADE_UP_DURATION_MS\.transcriptTurn/);
+    expect(code).toMatch(/Easing\.bezier\(\.\.\.EXPRESSIVE_FADE_UP_EASING\)/);
+    expect(code).toMatch(/EXPRESSIVE_FADE_UP_FROM_TRANSLATE_Y/);
+    expect(code).toMatch(
+      /import \{\s*EXPRESSIVE_FADE_UP_DURATION_MS,\s*EXPRESSIVE_FADE_UP_EASING,\s*EXPRESSIVE_FADE_UP_FROM_TRANSLATE_Y,\s*\} from "\.\.\/\.\.\/ui\/theme\/expressive-motion";/,
+    );
+  });
+
+  it("advances the watermark during render, not from a useEffect", () => {
+    const code = readCode();
+    const advanceIndex = code.indexOf(
+      "timeline.advanceTranscriptEntranceWatermark(\n    entranceWatermarkRef.current",
+    );
+    expect(advanceIndex).toBeGreaterThan(-1);
+    // The nearest preceding `useEffect(` (if any) must close before the
+    // advance call -- i.e. the advance is not inside an effect body. The
+    // simplest real signal available to a source-text test: the advance
+    // call sits directly in the component body, not nested inside any
+    // `useEffect(() => {` ... `}, [` block, so no `useEffect` text appears
+    // between the ref declaration and the advance call.
+    const refIndex = code.indexOf("const entranceWatermarkRef = useRef");
+    const between = code.slice(refIndex, advanceIndex);
+    expect(between).not.toMatch(/useEffect/);
+  });
+});
+
 describe("transcript-window.tsx: transcript find bar", () => {
   it("renders the find bar above the list, driven by the search-model snapshot", () => {
     const code = readCode();

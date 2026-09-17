@@ -3199,6 +3199,23 @@ export const CAPABILITIES = [
     ],
   },
   {
+    // W12-ENTRANCE. A T168 AND-group, not two OR members, and the reason is
+    // the same one the tool-elapsed group gives: both names are declared in
+    // ONE shipped file and the capability is only real with both present.
+    // A watermark with no stagger rule animates every row identically; a
+    // stagger rule with no watermark replays the entrance every time a
+    // virtualizing list recycles a cell back into view, which is worse than
+    // shipping no entrance at all. Either half alone is a half-port an OR
+    // list would happily call shipped.
+    name: "transcript rows animate in with a staggered, non-replaying entrance (advanceTranscriptEntranceWatermark/transcriptEntranceDelayMs)",
+    methodNames: [["advanceTranscriptEntranceWatermark", "transcriptEntranceDelayMs"]],
+    denyingPhrases: [
+      /transcript rows? (?:do not|never|don't) animate in/i,
+      /no (?:staggered )?(?:turn.|arrival )?entrance animation (?:on|for|in) (?:the )?transcript/i,
+      /(?:the )?transcript (?:has|ships|renders) no (?:row )?(?:arrival|entrance) (?:animation|treatment)/i,
+    ],
+  },
+  {
     // W11-STREAMCARET. Registered because the defect this closed was NOT a
     // missing renderer: both apps already shipped the caret/blur treatment
     // and a `live`/`streaming` boolean to drive it, and both mounted those

@@ -169,6 +169,21 @@ describe("pop-in / records-pulse / fade-up (recorded for a caller outside this p
   });
 });
 
+describe("fade-up's stagger step (W12-ENTRANCE): owned by frontend-core's transcript-entrance module, not restated here", () => {
+  it("declares no local STAGGER/stagger-cap export of its own", () => {
+    // The artifact's own STAGGER=120 script constant and the 720ms cap it
+    // produces are owned by `packages/frontend-core/src/timeline/
+    // transcript-entrance.ts` (`TRANSCRIPT_ENTRANCE_STAGGER_MS`/
+    // `TRANSCRIPT_ENTRANCE_STAGGER_CAP_MS`), next to the entrance-watermark
+    // logic that actually consumes them. This file's own header comment
+    // explains why: restating either number here would be exactly the kind
+    // of second, driftable copy the header already argues against for
+    // `EXPRESSIVE_POP_IN_EASING` versus `motion.easing.standard`.
+    expect(readSource("./expressive-motion.ts")).not.toMatch(/EXPRESSIVE_FADE_UP_STAGGER/);
+    expect(readSource("./expressive-motion.ts")).not.toMatch(/STAGGER_CAP/);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Source-level contracts for this module's RN/Reanimated consumers.
 // ---------------------------------------------------------------------------

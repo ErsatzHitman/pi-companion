@@ -233,8 +233,19 @@ export interface StreamingMessageProps {
  * (outside this package's file list) only tolerates for a name explicitly
  * listed in its own `MOTION_TOKEN_EXEMPT` set — this file is now in that
  * set for the resting-caret blink, so adding `fade-up` here is a smaller
- * step than it was, but it is still a distinct capability nothing in
- * this task's brief asked for and no caller needs yet.
+ * step than it was.
+ *
+ * (CORRECTED, W12-ENTRANCE: this went on to say the entrance was "a
+ * distinct capability nothing in this task's brief asked for and no
+ * caller needs yet". The first half was true of that task; the second is
+ * now false, and the framing was wrong besides. `fade-up` targets `.t>*`
+ * — every direct child of the transcript, so tool-call blocks, thinking
+ * rows and the todo overlay too — which this recipe could never have
+ * covered from inside one row kind. Its real home is the row wrapper,
+ * `../../features/transcript/transcript-window.tsx`, where it now ships,
+ * gated on `@picompanion/frontend-core`'s entrance watermark so a
+ * recycled `FlatList` cell does not replay it. Nothing was added to this
+ * file; the deferral simply named the wrong one.)
  *
  * **Mono transcript text, as the artifact draws it.** The design
  * draws prose in the same mono face, at the same 12px/1.62, as tool

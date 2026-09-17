@@ -53,6 +53,16 @@
  * previous block's settled caret is retired by construction and both apps
  * derive the same id.
  *
+ * `./transcript-entrance.ts` (W12-ENTRANCE) adds the shared turn-entrance
+ * watermark rule behind the android spec's `.t>*` `fade-up` stagger:
+ * `advanceTranscriptEntranceWatermark` tracks, across renders, which rows
+ * have already been seen by a caller's own virtualizing list so a
+ * recycled/re-scrolled row never replays its entrance, and
+ * `transcriptEntranceDelayMs` answers the per-row stagger delay relative to
+ * the entering batch (never to the row's absolute transcript index) so a
+ * late-arriving turn in a long session is never held invisible behind the
+ * stagger cap.
+ *
  * T388 ("timeline upgrade") adds three pure modules on top of all of the
  * above, with zero wire change:
  *
@@ -142,3 +152,11 @@ export {
 } from "./transcript-search.js";
 export type { TranscriptSearchMatch, TranscriptSearchOptions } from "./transcript-search.js";
 export { streamingTranscriptEntryId } from "./streaming-entry.js";
+export {
+  advanceTranscriptEntranceWatermark,
+  INITIAL_TRANSCRIPT_ENTRANCE_WATERMARK,
+  TRANSCRIPT_ENTRANCE_STAGGER_CAP_MS,
+  TRANSCRIPT_ENTRANCE_STAGGER_MS,
+  transcriptEntranceDelayMs,
+} from "./transcript-entrance.js";
+export type { TranscriptEntranceWatermark } from "./transcript-entrance.js";
