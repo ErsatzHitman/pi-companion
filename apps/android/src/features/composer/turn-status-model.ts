@@ -152,6 +152,15 @@ export interface TurnRetryStatus {
   readonly maxAttempts: number;
   readonly delayMs?: number;
   readonly error?: string;
+  /**
+   * Wall-clock time this `pi_retry` event was applied, stamped by
+   * `applyTurnStreamEvent`'s injectable `now` clock (defaults to
+   * `Date.now`, never read directly by this render-free module — see
+   * that function below). `retryCountdownSecondsRemaining` measures
+   * elapsed time from this field, not from when a view happens to
+   * render.
+   */
+  readonly receivedAtMs: number;
 }
 
 /** The most recent compaction's own status for this agent, replaced (never merged) by the next `timeline`/compaction event. */
@@ -183,8 +192,70 @@ export const INITIAL_TURN_STATUS_STATE: TurnStatusState = {
   compaction: null,
 };
 
-/** Plain-language sentence for the current retry status, or `null` when nothing is retrying. */
-export function describeRetryStatus(retry: TurnRetryStatus | null): string | null {
+/**
+ * Whole seconds left before `retry` fires again, measured from `nowMs`
+ * against `retry.receivedAtMs + retry.delayMs`, clamped so it never goes
+ * negative. Returns `null` when there is no retry in progress, or when
+ * the `pi_retry` event that produced it carried no `delayMs` at all —
+ * that field is optional on the wire (the `AgentStreamEvent` union's
+ * `"pi_retry"` member in `packages/protocol/src/agent-types.ts`), and
+ * this function must never invent a countdown the daemon never sent.
+ * Pure and render-free, like every other function in this module — a
+ * caller re-derives this on each tick from the current time rather than
+ * this module owning a timer of its own.
+ */
+export function retryCountdownSecondsRemaining(
+  retry: TurnRetryStatus | null,
+  nowMs: number,
+): number | null {
+  if (!retry || retry.delayMs === undefined) return null;
+  const remainingMs = retry.receivedAtMs + retry.delayMs - nowMs;
+  return Math.max(0, Math.ceil(remainingMs / 1000));
+}
+
+/**
+ * Plain-language sentence for the current retry status, or `null` when
+ * nothing is retrying. `remainingSeconds` — normally the result of
+ * `retryCountdownSecondsRemaining` above — is optional so every existing
+ * single-argument call site keeps compiling unchanged; passing it only
+ * changes the sentence when `retry.delayMs` was actually present on the
+ * wire (never fabricated for a retry that carried none).
+ *
+ * **Deliberate spec deviation:** the confirmed Android design (frame
+ * `s6`) also appends "(ctrl+c to cancel)" to the countdown line. That is
+ * dropped here on purpose, not missed — there is no ctrl+c on a touch
+ * device, and the same frame's own label above the block ("tap to retry
+ * now") already says the real affordance is a tap, not a key chord.
+ *
+ * **A second deviation, in the opposite direction: the phase label is
+ * kept for `compaction`/`branchSummary`, even though it is absent from
+ * the countdown line this function's byte-for-byte match target came
+ * from.** That target frame draws exactly one countdown, and it is an
+ * `assistant` retry — the frame settles what an assistant countdown
+ * reads like, and says nothing at all about what a compaction or
+ * branch-summary countdown should read like, because the design never
+ * drew either. Copying the frame's wording onto those two phases
+ * regardless would make them indistinguishable from an assistant retry
+ * on-screen, throwing away information this reducer already has
+ * (`retry.phase`) and this function already surfaced for the
+ * no-countdown case just below. So only the `assistant` branch matches
+ * the frame verbatim; the other two keep their phase word, built from
+ * the same `phaseLabel` the no-countdown branch already computes.
+ *
+ * **No "tap to retry now" action.** The spec's block also carries
+ * `data-act="retry"`, an immediate-retry action. Checked, not assumed:
+ * `grep -rniE "retry.*now|force.*retry|retryImmediate|triggerRetry"
+ * packages/protocol/src packages/client/src` finds no request that forces
+ * an immediate `pi_retry` — the daemon's retry loop runs on its own
+ * schedule, and nothing in either package lets a caller cut a countdown
+ * short. So this function renders the countdown only; wiring a tap
+ * action would need a wire request that does not exist today, which is
+ * out of this module's scope regardless.
+ */
+export function describeRetryStatus(
+  retry: TurnRetryStatus | null,
+  remainingSeconds?: number | null,
+): string | null {
   if (!retry) return null;
   const phaseLabel =
     retry.phase === "compaction"
@@ -192,7 +263,20 @@ export function describeRetryStatus(retry: TurnRetryStatus | null): string | nul
       : retry.phase === "branchSummary"
         ? "Summary"
         : "Response";
-  const base = `${phaseLabel} retry ${retry.attempt}/${retry.maxAttempts}`;
+  let base: string;
+  if (retry.delayMs !== undefined && remainingSeconds !== undefined && remainingSeconds !== null) {
+    // "Response" is the no-countdown label; the countdown line for that
+    // same phase reads "Retrying", matching the design's one drawn
+    // frame verbatim. The other two phases keep `phaseLabel` — see this
+    // function's own doc comment above for why.
+    const countdownVerb = phaseLabel === "Response" ? "Retrying" : `${phaseLabel} retry`;
+    base =
+      remainingSeconds > 0
+        ? `${countdownVerb} (${retry.attempt}/${retry.maxAttempts}) in ${remainingSeconds}s`
+        : `${countdownVerb} (${retry.attempt}/${retry.maxAttempts}) now`;
+  } else {
+    base = `${phaseLabel} retry ${retry.attempt}/${retry.maxAttempts}`;
+  }
   return retry.error ? `${base} — ${retry.error}` : `${base}…`;
 }
 
@@ -248,14 +332,24 @@ export function describeCompactionStatus(compaction: TurnCompactionStatus | null
  * compaction item replaces `state.compaction` outright. Every other
  * event type is ignored, leaving `state` unchanged (referentially, so a
  * caller can cheaply skip re-rendering on an ignored event).
+ *
+ * `now` stamps a fresh `pi_retry`'s `receivedAtMs` — an injectable clock,
+ * defaulting to `Date.now`, threaded the same way
+ * `TurnStatusControllerDeps.clock` below threads it into the controller.
+ * Existing callers that only ever passed `(state, event)` keep compiling
+ * and keep using the real wall clock, unchanged.
  */
 export function applyTurnStreamEvent(
   state: TurnStatusState,
   event: TurnStreamEvent,
+  now: () => number = Date.now,
 ): TurnStatusState {
   if (event.type === "pi_retry") {
     const { phase, attempt, maxAttempts, delayMs, error } = event as TurnRetryEvent;
-    return { ...state, retry: { phase, attempt, maxAttempts, delayMs, error } };
+    return {
+      ...state,
+      retry: { phase, attempt, maxAttempts, delayMs, error, receivedAtMs: now() },
+    };
   }
   if (event.type === "timeline") {
     const item = (event as TurnTimelineEvent).item;
@@ -287,6 +381,8 @@ export function clearRetryForNewTurn(state: TurnStatusState): TurnStatusState {
 export interface TurnStatusControllerDeps {
   agentId: string;
   client?: DaemonTurnStatusSource;
+  /** Clock used to stamp a fresh `pi_retry`'s `receivedAtMs`, threaded into `applyTurnStreamEvent`. Defaults to `Date.now`; a test supplies a fake clock so `receivedAtMs` assertions are exact, not `expect.any(Number)`. */
+  clock?: () => number;
 }
 
 export interface TurnStatusController {
@@ -316,7 +412,7 @@ export interface TurnStatusController {
  * methods.
  */
 export function createTurnStatusController(deps: TurnStatusControllerDeps): TurnStatusController {
-  const { agentId, client } = deps;
+  const { agentId, client, clock = Date.now } = deps;
 
   let state: TurnStatusState = INITIAL_TURN_STATUS_STATE;
   let unsubscribeFn: (() => void) | null = null;
@@ -351,7 +447,7 @@ export function createTurnStatusController(deps: TurnStatusControllerDeps): Turn
         onChange?.();
         return;
       }
-      state = applyTurnStreamEvent(state, message.event);
+      state = applyTurnStreamEvent(state, message.event, clock);
       onChange?.();
     });
   }

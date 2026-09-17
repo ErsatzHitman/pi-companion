@@ -3131,6 +3131,29 @@ export const CAPABILITIES = [
       /no (?:live region|announcement|spoken feedback) (?:when|as) a run (?:is )?(?:folded|collapsed)/i,
     ],
   },
+  {
+    // P10-W7 (W7-COUNTDOWN): the Android retry banner counts the provider's
+    // own retry delay down, second by second, instead of printing a static
+    // attempt tally. The wire already carried the number - `delayMs`, an
+    // optional field on the `AgentStreamEvent` union's `"pi_retry"` member -
+    // and the reducer already stored it; nothing read it, so the banner said
+    // "Response retry 2/5" while the daemon was counting.
+    //
+    // A single bare member, not a T168 AND-group: this name is declared in
+    // exactly one shipped file, measured against the real tree before this
+    // entry was written rather than assumed. The T172 trap is the reason it
+    // is this name and not, say, the literal sentence fragments the banner
+    // prints - those are string VALUES, which `stripCommentsAndStrings`
+    // erases before any check runs, so an entry built on one could never
+    // report the capability as shipped.
+    name: "the Android retry banner counts down the provider's own delay (retryCountdownSecondsRemaining)",
+    methodNames: ["retryCountdownSecondsRemaining"],
+    denyingPhrases: [
+      /`?delayMs`? is (?:stored|kept|carried|held)(?: [a-z]+){0,3} but (?:is )?never (?:read|rendered|shown|surfaced|displayed)/i,
+      /(?:the )?retry (?:banner|status)(?: line)? (?:shows|offers|has|renders) no (?:live )?countdown/i,
+      /nothing (?:counts|ticks) (?:the |a )?retry (?:delay|countdown) down/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

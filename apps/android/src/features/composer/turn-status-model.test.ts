@@ -8,7 +8,9 @@ import {
   describeCompactionStatus,
   describeRetryStatus,
   describeTurnStatusUnavailable,
+  retryCountdownSecondsRemaining,
   type DaemonTurnStatusSource,
+  type TurnRetryStatus,
   type TurnStatusState,
   type TurnStreamMessage,
 } from "./turn-status-model.js";
@@ -62,21 +64,21 @@ describe("describeRetryStatus", () => {
   });
 
   it("names the phase and attempt count, without an error suffix when none is given", () => {
-    expect(describeRetryStatus({ phase: "assistant", attempt: 2, maxAttempts: 5 })).toBe(
-      "Response retry 2/5…",
-    );
+    expect(
+      describeRetryStatus({ phase: "assistant", attempt: 2, maxAttempts: 5, receivedAtMs: 0 }),
+    ).toBe("Response retry 2/5…");
   });
 
   it("names the compaction phase distinctly", () => {
-    expect(describeRetryStatus({ phase: "compaction", attempt: 1, maxAttempts: 3 })).toBe(
-      "Compaction retry 1/3…",
-    );
+    expect(
+      describeRetryStatus({ phase: "compaction", attempt: 1, maxAttempts: 3, receivedAtMs: 0 }),
+    ).toBe("Compaction retry 1/3…");
   });
 
   it("names the branchSummary phase as Summary", () => {
-    expect(describeRetryStatus({ phase: "branchSummary", attempt: 1, maxAttempts: 3 })).toBe(
-      "Summary retry 1/3…",
-    );
+    expect(
+      describeRetryStatus({ phase: "branchSummary", attempt: 1, maxAttempts: 3, receivedAtMs: 0 }),
+    ).toBe("Summary retry 1/3…");
   });
 
   it("appends the daemon's raw error when one is given", () => {
@@ -86,8 +88,189 @@ describe("describeRetryStatus", () => {
         attempt: 3,
         maxAttempts: 5,
         error: "rate limited",
+        receivedAtMs: 0,
       }),
     ).toBe("Response retry 3/5 — rate limited");
+  });
+
+  // The six countdown sentence shapes — two per phase (live, expired) —
+  // this module actually produces. Only `assistant` matches the confirmed
+  // Android design's one drawn countdown frame (s6) verbatim; `compaction`
+  // and `branchSummary` deliberately keep their phase word instead of
+  // copying that frame's wording, because the design never drew a
+  // countdown for either phase. See turn-status-model.ts's
+  // describeRetryStatus doc comment for the full reasoning, and for why
+  // "(ctrl+c to cancel)" is not among any of these six.
+  it("names a live assistant countdown as 'Retrying (a/m) in Ns…', matching the design frame verbatim", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 2,
+      maxAttempts: 5,
+      delayMs: 8000,
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 8)).toBe("Retrying (2/5) in 8s…");
+  });
+
+  it("names an expired assistant countdown as 'Retrying (a/m) now…'", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 2,
+      maxAttempts: 5,
+      delayMs: 8000,
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 0)).toBe("Retrying (2/5) now…");
+  });
+
+  // These two would fail if the compaction phase label were ever dropped
+  // from the countdown sentence (e.g. reverted to match assistant's bare
+  // "Retrying" wording) — the exact regression this correction guards.
+  it("keeps the Compaction phase label on a live countdown: 'Compaction retry (a/m) in Ns…'", () => {
+    const retry: TurnRetryStatus = {
+      phase: "compaction",
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 8000,
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 8)).toBe("Compaction retry (1/3) in 8s…");
+  });
+
+  it("keeps the Compaction phase label on an expired countdown: 'Compaction retry (a/m) now…'", () => {
+    const retry: TurnRetryStatus = {
+      phase: "compaction",
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 8000,
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 0)).toBe("Compaction retry (1/3) now…");
+  });
+
+  // Same regression guard as the two Compaction tests above, for branchSummary.
+  it("keeps the Summary phase label on a live countdown: 'Summary retry (a/m) in Ns…'", () => {
+    const retry: TurnRetryStatus = {
+      phase: "branchSummary",
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 8000,
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 8)).toBe("Summary retry (1/3) in 8s…");
+  });
+
+  it("keeps the Summary phase label on an expired countdown: 'Summary retry (a/m) now…'", () => {
+    const retry: TurnRetryStatus = {
+      phase: "branchSummary",
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 8000,
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 0)).toBe("Summary retry (1/3) now…");
+  });
+
+  it("keeps today's phase-labelled shape when delayMs is absent, even if a remaining count is passed", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 2,
+      maxAttempts: 5,
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 8)).toBe("Response retry 2/5…");
+  });
+
+  it("appends the daemon's error onto the live-countdown sentence instead of its ellipsis", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 2,
+      maxAttempts: 5,
+      delayMs: 8000,
+      error: "rate limited",
+      receivedAtMs: 0,
+    };
+    expect(describeRetryStatus(retry, 8)).toBe("Retrying (2/5) in 8s — rate limited");
+  });
+});
+
+describe("retryCountdownSecondsRemaining", () => {
+  it("returns null when there is no retry in progress", () => {
+    expect(retryCountdownSecondsRemaining(null, 1_000)).toBeNull();
+  });
+
+  // W7 merge gate. `delayMs: 0` is a legal wire value and is NOT the
+  // same as the field being absent: zero means "retrying immediately",
+  // absent means the daemon sent no schedule at all and this app must
+  // not invent one. Every other case below starts from `delayMs: 8000`,
+  // and the expiry cases reach the "now" wording by passing a literal
+  // `0` for `remainingSeconds` — which exercises the SENTENCE but never
+  // the computation that produces a zero from a zero delay. These two
+  // close that path.
+  it("returns 0, not null, for a retry whose delayMs is a real zero", () => {
+    expect(
+      retryCountdownSecondsRemaining(
+        { phase: "assistant", attempt: 2, maxAttempts: 5, delayMs: 0, receivedAtMs: 100_000 },
+        100_000,
+      ),
+    ).toBe(0);
+  });
+
+  it("renders the 'now' sentence when a zero delayMs is carried all the way through", () => {
+    const retry = {
+      phase: "assistant" as const,
+      attempt: 2,
+      maxAttempts: 5,
+      delayMs: 0,
+      receivedAtMs: 100_000,
+    };
+    expect(describeRetryStatus(retry, retryCountdownSecondsRemaining(retry, 100_000))).toBe(
+      "Retrying (2/5) now…",
+    );
+  });
+
+  it("returns null when the retry carries no delayMs", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 1,
+      maxAttempts: 5,
+      receivedAtMs: 1_000,
+    };
+    expect(retryCountdownSecondsRemaining(retry, 1_500)).toBeNull();
+  });
+
+  it("reports the whole seconds left at a live delay", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 2,
+      maxAttempts: 5,
+      delayMs: 8_000,
+      receivedAtMs: 100_000,
+    };
+    expect(retryCountdownSecondsRemaining(retry, 100_000)).toBe(8);
+    expect(retryCountdownSecondsRemaining(retry, 103_500)).toBe(5);
+  });
+
+  it("reports 0 exactly at expiry", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 2,
+      maxAttempts: 5,
+      delayMs: 8_000,
+      receivedAtMs: 100_000,
+    };
+    expect(retryCountdownSecondsRemaining(retry, 108_000)).toBe(0);
+  });
+
+  it("clamps to 0 rather than going negative past expiry", () => {
+    const retry: TurnRetryStatus = {
+      phase: "assistant",
+      attempt: 2,
+      maxAttempts: 5,
+      delayMs: 8_000,
+      receivedAtMs: 100_000,
+    };
+    expect(retryCountdownSecondsRemaining(retry, 200_000)).toBe(0);
   });
 });
 
@@ -152,15 +335,52 @@ describe("describeCompactionStatus", () => {
 
 describe("applyTurnStreamEvent", () => {
   const base: TurnStatusState = INITIAL_TURN_STATUS_STATE;
+  const fixedClock = () => 1_700_000_000_000;
 
   it("replaces state.retry on a pi_retry event", () => {
+    const next = applyTurnStreamEvent(
+      base,
+      {
+        type: "pi_retry",
+        phase: "assistant",
+        attempt: 1,
+        maxAttempts: 5,
+      },
+      fixedClock,
+    );
+    expect(next.retry).toEqual({
+      phase: "assistant",
+      attempt: 1,
+      maxAttempts: 5,
+      receivedAtMs: 1_700_000_000_000,
+    });
+  });
+
+  // Pins the exact stamped value from an injected fake clock — not
+  // `expect.any(Number)` — proving `receivedAtMs` really comes from the
+  // clock this call was given, not from the real wall clock.
+  it("stamps receivedAtMs from the injected clock, exactly", () => {
+    const fakeClock = vi.fn(() => 42_000);
+    const next = applyTurnStreamEvent(
+      base,
+      { type: "pi_retry", phase: "compaction", attempt: 3, maxAttempts: 5 },
+      fakeClock,
+    );
+    expect(next.retry?.receivedAtMs).toBe(42_000);
+    expect(fakeClock).toHaveBeenCalledTimes(1);
+  });
+
+  it("defaults to the real wall clock when no clock is given", () => {
+    const before = Date.now();
     const next = applyTurnStreamEvent(base, {
       type: "pi_retry",
       phase: "assistant",
       attempt: 1,
       maxAttempts: 5,
     });
-    expect(next.retry).toEqual({ phase: "assistant", attempt: 1, maxAttempts: 5 });
+    const after = Date.now();
+    expect(next.retry?.receivedAtMs).toBeGreaterThanOrEqual(before);
+    expect(next.retry?.receivedAtMs).toBeLessThanOrEqual(after);
   });
 
   it("replaces state.compaction on a timeline compaction item", () => {
@@ -212,20 +432,33 @@ describe("applyTurnStreamEvent", () => {
   });
 
   it("a later pi_retry event replaces, rather than merges with, an earlier one", () => {
-    const afterFirst = applyTurnStreamEvent(base, {
-      type: "pi_retry",
-      phase: "assistant",
-      attempt: 1,
-      maxAttempts: 5,
-      error: "timeout",
-    });
-    const afterSecond = applyTurnStreamEvent(afterFirst, {
-      type: "pi_retry",
+    const afterFirst = applyTurnStreamEvent(
+      base,
+      {
+        type: "pi_retry",
+        phase: "assistant",
+        attempt: 1,
+        maxAttempts: 5,
+        error: "timeout",
+      },
+      fixedClock,
+    );
+    const afterSecond = applyTurnStreamEvent(
+      afterFirst,
+      {
+        type: "pi_retry",
+        phase: "assistant",
+        attempt: 2,
+        maxAttempts: 5,
+      },
+      fixedClock,
+    );
+    expect(afterSecond.retry).toEqual({
       phase: "assistant",
       attempt: 2,
       maxAttempts: 5,
+      receivedAtMs: 1_700_000_000_000,
     });
-    expect(afterSecond.retry).toEqual({ phase: "assistant", attempt: 2, maxAttempts: 5 });
   });
 });
 
@@ -233,7 +466,7 @@ describe("clearRetryForNewTurn", () => {
   it("clears an existing retry", () => {
     const withRetry: TurnStatusState = {
       ...INITIAL_TURN_STATUS_STATE,
-      retry: { phase: "assistant", attempt: 1, maxAttempts: 5 },
+      retry: { phase: "assistant", attempt: 1, maxAttempts: 5, receivedAtMs: 0 },
     };
     expect(clearRetryForNewTurn(withRetry).retry).toBeNull();
   });
@@ -269,13 +502,44 @@ describe("createTurnStatusController: availability", () => {
 describe("createTurnStatusController: live updates", () => {
   it("updates state.retry when a matching-agent pi_retry event arrives", () => {
     const { fake, emit } = createFake();
-    const controller = createTurnStatusController({ agentId: "agt_1", client: fake });
+    const controller = createTurnStatusController({
+      agentId: "agt_1",
+      client: fake,
+      clock: () => 5_000,
+    });
     controller.subscribe();
     emit({
       agentId: "agt_1",
       event: { type: "pi_retry", phase: "assistant", attempt: 1, maxAttempts: 5 },
     });
-    expect(controller.getState().retry).toEqual({ phase: "assistant", attempt: 1, maxAttempts: 5 });
+    expect(controller.getState().retry).toEqual({
+      phase: "assistant",
+      attempt: 1,
+      maxAttempts: 5,
+      receivedAtMs: 5_000,
+    });
+  });
+
+  it("threads its clock dep into applyTurnStreamEvent for every retry event, not just the default Date.now", () => {
+    const { fake, emit } = createFake();
+    let tick = 1_000;
+    const controller = createTurnStatusController({
+      agentId: "agt_1",
+      client: fake,
+      clock: () => tick,
+    });
+    controller.subscribe();
+    emit({
+      agentId: "agt_1",
+      event: { type: "pi_retry", phase: "assistant", attempt: 1, maxAttempts: 5 },
+    });
+    expect(controller.getState().retry?.receivedAtMs).toBe(1_000);
+    tick = 9_000;
+    emit({
+      agentId: "agt_1",
+      event: { type: "pi_retry", phase: "assistant", attempt: 2, maxAttempts: 5 },
+    });
+    expect(controller.getState().retry?.receivedAtMs).toBe(9_000);
   });
 
   it("ignores an event for a different agentId", () => {
