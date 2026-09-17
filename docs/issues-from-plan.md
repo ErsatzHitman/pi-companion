@@ -21642,8 +21642,13 @@ elements at once — so it is a visible cross-feature change that deserves its o
 and its own verification, not an orchestrator's late edit to a green tree. It is wave 2's
 first item, alongside `A-COMPOSER`, which owns the composer half of the same surface.
 
-- [ ] `blockSurface("user")` returns the role the confirmed design paints
-- [ ] `block-shape.ts`'s citation points at a current authority, not at `docs/ui-reference/`
+- [x] `blockSurface("user")` returns the role the confirmed design paints
+- [x] `block-shape.ts`'s citation points at a current authority, not at `docs/ui-reference/`
+
+Both closed by `BLOCK-SURFACE` at wave 2. `blockSurface("user")` now returns `"field"`, the
+`BlockSurfaceToken` union drops `"accent-tint"` entirely, and the module's header quotes
+`.blk.usr { background: var(--usr-bg) }` with `--usr-bg: var(--field)` beside it instead of
+the reconstruction's rule.
 
 ### P10-3 — `ScreenBar.tsx` asserted a radius the same wave falsified
 
@@ -21658,3 +21663,89 @@ unnoticed.
 
 - [x] `ScreenBar.tsx` draws and describes the same radius `IconButton` does
 - [x] The Android-only Expressive scale is registered as a capability
+
+## Wave P10-W2 (UI spec conformance, iteration 2)
+
+Three file-disjoint packages: `A-COMPOSER` (the composer directory), `A-MOTION`
+(`apps/android/src/ui`), `BLOCK-SURFACE` (`ui/theme/block-shape.ts` and its test). The merge
+gate ran by hand: the wave's `opus` gate agent died on `Login expired`, and a gate nobody ran
+is not a gate.
+
+### P10-4 - a capability entry that had come to forbid the truth
+
+`scripts/ci/guard-capability-prose.mjs` carried a T353 entry named "The prompt bar shows this
+session's context fill and opens its controls (ContextRing / buildContextRingViewModel)". Two
+separate defects, either of which alone required retiring it.
+
+It could no longer fire. `A-COMPOSER` deleted `features/composer/ContextRing.tsx` and
+`context-ring-model.ts`, so neither member name is declared anywhere under `apps/android` -
+measured with a tree-wide grep, not assumed. An entry whose members can never be "shipped" is
+the check-that-cannot-fail shape `CLAUDE.md` names in three separate sections, and it is the
+exact inert-entry defect T147 and T156 each closed one scope out.
+
+Worse, its third `denyingPhrases` member matched the sentence "the session controls sit as
+four pills above the prompt bar". That was written when the ring had REPLACED those pills and
+the sentence was false. The confirmed design puts them back: `android-spec.html` ships a
+`.foot` row holding `.fp.f-mode`, `.fp.f-model`, `.fp.f-eff` and `.fp.f-ctx` immediately above
+`.cmp-box`. So the phrase had come to forbid a TRUE statement, and prose describing the
+shipped design in the obvious words would have failed the guard. A phrase that fires on the
+truth is worse than no entry - it is how a guard gets disabled.
+
+Replaced with an entry for what actually ships (`FooterPills` / `buildContextPillViewModel`,
+two bare-string members because the two names are declared in two different files), plus a new
+entry for `A-MOTION`'s Android-only Expressive motion scale
+(`EXPRESSIVE_PRESS_SPRING_EASING` / `EXPRESSIVE_PIXEL_KEYFRAMES`), the sibling of last wave's
+`expressive-shape.ts` registration and registered for the same reason. T386's web-ring entry
+also had its comment corrected: it said `ContextRing` "is declared for BOTH platforms", which
+this wave made false.
+
+A reviewer could disagree with retiring rather than rewording the old entry. The reason for
+retiring is that both its members are gone, so no rewording can make it fire again; a
+capability that no longer exists does not get a weakened entry kept alive in its name.
+
+### P10-5 - five sites naming a live menu after an opener this wave deleted
+
+`PromptControlsMenu` is still shipped and still holds the queue-mode picker; what changed is
+that a footer pill opens it instead of the context ring. Five files went on calling it "the
+context-ring menu" - the session route's `index.tsx` (twice),
+`app-shell/session-route-daemon-clients.ts`, `features/live/live-screen.tsx`,
+`features/settings/SettingsScreen.tsx` and its test. A live thing under a dead name is the
+T124 shape, corrected at the gate because all five sit outside every package's file list.
+
+`ui/recipes/ProgressRing.tsx` carried a live claim the same wave falsified: "One drawing, two
+callers". With `ContextRing.tsx` deleted, `features/transcript/todo-row.tsx` is the only
+production caller left - measured with a tree-wide grep. Corrected in place with the old
+sentence quoted, per this repository's historical-quotation rule, and the extraction is kept:
+a recipe with one caller and a source-level contract still beats an arc inlined into a
+feature. `ProgressRing.test.ts` cites `context-ring.test.ts` as where its three cases moved
+from; that is provenance, not authority, so it is kept and annotated rather than deleted.
+
+### P10-6 - seven files landed outside the partitions, every one of them forced
+
+The gate checked the changed-file set against the union of the three partitions, as the wave
+rules require. Seven files fell outside it. None is an agent wandering; each is a file that
+would have gone red had it not moved with its package, and each is recorded here rather than
+waved through:
+
+| File                                                             | Forced by       | Why it could not stay put                                                          |
+| ---------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------- |
+| `apps/android/src/features/transcript/message-row-model.test.ts` | `BLOCK-SURFACE` | Pinned `surfaceToken: "accent-tint"` for a user row                                |
+| `apps/android/src/ui/recipes/recipe-accessibility.test.ts`       | `A-MOTION`      | Owns the reduced-motion exemption set and the `PixelLoader` rest-opacity assertion |
+| `apps/android/e2e/flows/accessibility-audit.contract.test.ts`    | `A-COMPOSER`    | Asserts the documented testID table matches the flow                               |
+| `apps/android/e2e/flows/queue-retry-compaction-contract.ts`      | `A-COMPOSER`    | Names the tap target that opens the controls menu                                  |
+| `apps/android/e2e/flows/queue-retry-compaction.contract.test.ts` | `A-COMPOSER`    | Same contract, asserted                                                            |
+| `apps/android/maestro/queue-retry-compaction.yaml`               | `A-COMPOSER`    | Taps `composer-context-ring`, an id that no longer exists                          |
+| `docs/accessibility-talkback-procedure.md`                       | `A-COMPOSER`    | Its testID table is enforced by the contract test above                            |
+
+The rule the partitions exist to enforce - an agent must not write into another package's
+files - held: `packages/design-tokens` and every web file are untouched, and no two packages
+wrote the same file.
+
+### P10-7 - `maestro-comment-citations.contract.test.ts` times out under load, and is not a regression
+
+Running `apps/android/e2e` at `--maxWorkers=2` produced one failure: `accessibility-audit.yaml`'s
+citation case, `Error: Test timed out in 5000ms`, with ZERO assertion failures. Run alone the
+whole file passes in 2.41s for 33 tests. That is the contention signature `CLAUDE.md` documents
+at length for `packages/server`, in a package that has no serial lane to move it into. Recorded,
+not chased: the gate's android result is the `--dir apps/android/src` run, which is what CI's
+`android-tests` job compares against, and the e2e contract files are a separate concern.

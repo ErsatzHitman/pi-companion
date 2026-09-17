@@ -118,7 +118,7 @@ export interface SettingsScreenProps {
  * either a local preference nothing on the wire reads, or a control
  * that silently applied to one arbitrary session. Both are worse than
  * their absence, and both pairs of rows are already reachable where
- * they belong: the session's own context-ring menu.
+ * they belong: the session's own prompt controls menu.
  *
  * **UI-A5 — the other two of §7.5's regions are informational, not
  * per-agent state, and are drawn.** The "extensions that draw" list and

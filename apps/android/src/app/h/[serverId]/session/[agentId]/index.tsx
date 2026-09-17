@@ -1055,7 +1055,7 @@ function SessionApprovals({ sessionId }: { sessionId: string }) {
  * **T354 mount.** One more prop for `Composer`, off the same live
  * `DaemonClient`: `sessionControlsClient`, through
  * `resolveSessionControlsClient` — the tenth `resolve*Client`
- * narrowing on this route. It fills the context-ring menu's MODE group
+ * narrowing on this route. It fills the prompt controls menu's MODE group
  * with real Build/Plan segments and its CONTEXT group with a real
  * auto-compaction switch, both of which reach the daemon
  * (`setAgentMode`, `setAutoCompaction`). With no connection the
@@ -1471,7 +1471,7 @@ export default function SessionRoute() {
   // "Connect to a daemon…" state on a real build.
   const modelThinkingClient = resolveModelThinkingClient(core.connection);
   // T354: identical fresh-read cast, off the same live DaemonClient, for
-  // the context-ring menu's Build/Plan segments and its auto-compaction
+  // the prompt controls menu's Build/Plan segments and its auto-compaction
   // switch — see resolveSessionControlsClient's own doc comment.
   const sessionControlsClient = resolveSessionControlsClient(core.connection);
   const usageClient = resolveAgentUsageClient(core.connection);

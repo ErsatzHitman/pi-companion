@@ -61,7 +61,7 @@
  *
  * **T354 adds `resolveSessionControlsClient` below**, the same pattern a
  * tenth time, for the Build/Plan mode control and the auto-compaction
- * switch the context-ring menu grew in the same task.
+ * switch the prompt controls menu grew in the same task.
  * `DaemonSessionControlsSource` (`../features/composer/
  * session-controls-model.ts`) names its five methods identically to
  * `DaemonClient`'s real `fetchAgent`, `listProviderModes`,

@@ -199,7 +199,7 @@ describe("SettingsScreen source: T366 A3's shape", () => {
   it("draws none of the four per-agent controls, which have no session here", () => {
     // `setAgentMode`/`setAutoCompaction` and friends all take an
     // agentId; this screen is per-host. They live in the session's own
-    // context-ring menu.
+    // prompt controls menu.
     expect(code).not.toMatch(/setAutoCompaction/);
     expect(code).not.toMatch(/setAgentMode/);
     expect(code).not.toMatch(/Thinking effort/);

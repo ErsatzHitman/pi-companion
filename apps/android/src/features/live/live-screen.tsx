@@ -62,7 +62,7 @@ export interface LiveScreenProps {
   /**
    * Whether auto-compaction is on, when that is known. Left
    * `undefined` here: the control that reads and sets it is the
-   * context-ring menu's, and until that lands nobody has asked, so the
+   * prompt controls menu's, and until that lands nobody has asked, so the
    * card omits the clause rather than guessing.
    */
   autoCompaction?: boolean;

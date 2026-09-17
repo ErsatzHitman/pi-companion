@@ -2489,24 +2489,83 @@ export const CAPABILITIES = [
     ],
   },
   {
-    // T353: the prompt bar's context ring.
-    // `features/composer/context-ring-model.ts`'s
-    // `buildContextRingViewModel` is the geometry and the wording, and
-    // `ContextRing` is the control drawing it — the redesign's
-    // replacement for the four pills that used to sit above the prompt
-    // bar, showing the session's context fill and opening its
-    // mode/model/effort menu. A single-file pair would have been a
-    // T168 AND-group, but the two names are declared in two different
-    // files, each uniquely, so this is an OR-across-members pair like
-    // the two entries above it. The phrases avoid the ring's own
-    // "Context usage unknown" copy, which is a real product state and
-    // not a claim about what this app can draw.
-    name: "The prompt bar shows this session's context fill and opens its controls (ContextRing / buildContextRingViewModel)",
-    methodNames: ["ContextRing", "buildContextRingViewModel"],
+    // A-COMPOSER (P10-W2) RETIRES T353's "ContextRing /
+    // buildContextRingViewModel" entry and replaces it with what the
+    // confirmed Android design actually draws. Two independent reasons,
+    // either of which alone would be enough.
+    //
+    // First, that entry could no longer fire at all. A-COMPOSER deleted
+    // both `features/composer/ContextRing.tsx` and
+    // `context-ring-model.ts`, so neither name is declared anywhere
+    // under `apps/android` any more — measured with a tree-wide grep,
+    // not assumed. An entry whose members can never be "shipped" is the
+    // check-that-cannot-fail shape CLAUDE.md warns about in three
+    // separate sections, and leaving it would have been exactly the
+    // inert-entry defect T147 and T156 each closed one scope out.
+    //
+    // Second, and sharper: its third denying phrase matched the sentence
+    // "the session controls sit as four pills above the prompt bar",
+    // written when the ring had REPLACED those pills and that sentence
+    // was therefore false. The confirmed design puts them back —
+    // `android-spec.html` ships a `.foot` row holding `.fp.f-mode`,
+    // `.fp.f-model`, `.fp.f-eff` and `.fp.f-ctx` immediately above
+    // `.cmp-box`, read out of the artifact's own markup. So that phrase
+    // now forbids a TRUE statement, and any prose describing the shipped
+    // design in the obvious words would have failed this guard. A
+    // denying phrase that fires on the truth is worse than no entry: it
+    // is the shape that gets a guard disabled.
+    //
+    // The replacement protects the real capability. Two bare-string
+    // members rather than a T168 AND-group, the same shape the retired
+    // entry used and for the same measured reason: `FooterPills` is
+    // declared once (`features/composer/FooterPills.tsx`) and
+    // `buildContextPillViewModel` once
+    // (`features/composer/context-pill-model.ts`), in two different
+    // files, so no one file holds both and a group would never resolve.
+    // The phrases are worded in this entry's own voice and avoid both
+    // `Composer.tsx`'s and `queue-retry-compaction-contract.ts`'s
+    // CORRECTED narrations of the ring's removal, each of which carries
+    // a historical-quotation marker of its own.
+    name: "Android draws the design's four footer pills above the prompt bar (FooterPills / buildContextPillViewModel)",
+    methodNames: ["FooterPills", "buildContextPillViewModel"],
     denyingPhrases: [
-      /(?:the )?(?:android )?prompt bar (?:carries|has|shows) no context (?:ring|meter|fill)/i,
-      /context (?:usage|fill) cannot be seen (?:from|on) the (?:composer|prompt bar)/i,
-      /(?:the )?(?:session|per-turn) controls (?:sit|live) (?:as|in) (?:four )?pills above the (?:prompt bar|composer)/i,
+      /(?:the )?android composer (?:has|carries|draws) no (?:footer|metadata) pill (?:row|strip)/i,
+      /mode, model and (?:thinking )?effort (?:are|remain) reachable only (?:through|from|via) (?:a|the) (?:context )?ring/i,
+      /nothing (?:sits|is drawn) above the (?:android )?prompt (?:bar|box)/i,
+    ],
+  },
+  {
+    // A-MOTION (P10-W2): the Android-only MD3 Expressive motion scale,
+    // the sibling of last wave's `expressive-shape.ts` radius scale and
+    // registered for the same reason — `ScreenBar.tsx` shipped a doc
+    // comment asserting a radius the same wave falsified, and nothing
+    // was watching for it.
+    //
+    // `ui/theme/expressive-motion.ts` is the one place this app states
+    // the confirmed design's press spring (a .42s
+    // `cubic-bezier(.34,1.7,.5,1)` transform transition with an active
+    // scale, both read out of `android-spec.html`), the `.pxl` loader's
+    // 650ms `pixel-on` cycle and its dim rest opacity, `pop-in`,
+    // `records-pulse` and the fade-up. It is RN-free and theme-free in
+    // the same sense `expressive-shape.ts` is: it exports numbers and
+    // keyframe tables, so every claim it makes is provable by running it
+    // rather than by grepping for it.
+    //
+    // Bare OR-across-members, not a T168 group: both names are declared
+    // in exactly one shipped file each — this one — measured across
+    // `apps/android/src` before this entry was written, so neither can
+    // be kept alive by an unrelated declaration the way `cancel` could.
+    // The shared `motion` tokens in `@picompanion/design-tokens` are
+    // deliberately NOT retuned, because the web design measures its own
+    // timings and the two surfaces genuinely diverge; an Android-only
+    // module is what lets them diverge without either drifting.
+    name: "Android-only MD3 Expressive motion scale (expressive-motion.ts)",
+    methodNames: ["EXPRESSIVE_PRESS_SPRING_EASING", "EXPRESSIVE_PIXEL_KEYFRAMES"],
+    denyingPhrases: [
+      /Android (?:has |carries )?no (?:motion|spring|easing) scale of its own/i,
+      /(?:shares|share) (?:the|one) (?:single )?`?motion`? scale with the web/i,
+      /no Android-only (?:motion|spring|duration) tokens? exists?/i,
+      /(?:the )?press (?:feedback|scale) (?:is|remains) (?:a )?plain opacity/i,
     ],
   },
   {
@@ -2647,9 +2706,10 @@ export const CAPABILITIES = [
     // no ring at all — the ring itself and the hook that feeds it from the
     // session's own usage stream are what this entry protects.
     //
-    // Two bare-string members rather than a group: `ContextRing` is
-    // declared for BOTH platforms (Android shipped the ring first), so the
-    // web-only hook is the member that can only exist here, and
+    // Two bare-string members rather than a group: `ContextRing` was
+    // declared for BOTH platforms when this entry was written (Android
+    // shipped the ring first), so the web-only hook is the member that
+    // can only exist here, and
     // `TodoDock`-style file-uniqueness is not claimed for it. Both names
     // were measured against the tree before this entry was written.
     name: "The web composer carries a context ring fed by the session's own usage (useSessionContextTelemetry)",

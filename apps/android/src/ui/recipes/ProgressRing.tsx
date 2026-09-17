@@ -33,15 +33,22 @@ export interface ProgressRingProps {
  * ProgressRing recipe (T360) — a track circle with a progress arc over
  * it, which is how this design draws every fractional readout.
  *
- * **One drawing, two callers.** T353 drew it inside
- * `features/composer/ContextRing.tsx`, which was right while the prompt
- * bar's context meter was the only ring. T360's todo widget is the
- * second, and a second copy of an SVG arc — including the
+ * **Pulled out of a caller, and it outlived that caller.** T353 drew
+ * it inside `features/composer/ContextRing.tsx`, which was right while
+ * the prompt bar's context meter was the only ring; T360's todo widget
+ * became the second, and a second copy of an SVG arc — including the
  * twelve-o'clock rotation, which is easy to get wrong and invisible
  * when you do — is the duplication T356, T358 and T359 each removed for
- * a shape. Each caller keeps what is ITS own: the tap target, the
- * label, the band-to-colour mapping, and the model that produces the
- * numbers.
+ * a shape. (CORRECTED at the P10-W2 merge gate: this said "One drawing,
+ * two callers". A-COMPOSER deleted `ContextRing.tsx` — the confirmed
+ * Android design draws a row of footer pills above the prompt bar and
+ * no ring at all — so `features/transcript/todo-row.tsx` is now the one
+ * production caller, measured with a tree-wide grep rather than
+ * assumed. The extraction is still the right shape: a recipe with one
+ * caller and a source-level contract beats an arc inlined into a
+ * feature, and the next fractional readout has somewhere to go.) Each
+ * caller keeps what is ITS own: the tap target, the label, the
+ * band-to-colour mapping, and the model that produces the numbers.
  *
  * **The arc starts at twelve o'clock**, not at three, where an
  * unrotated SVG circle begins. A meter that fills from the right edge

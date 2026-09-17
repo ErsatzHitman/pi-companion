@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
  *
  * The three cases below MOVED here from
  * `../../features/composer/context-ring.test.ts` when T360 pulled the
- * drawing out of that control — the todo widget became this app's
+ * drawing out of that control (that file no longer exists: A-COMPOSER
+ * deleted it with `ContextRing.tsx` at P10-W2, which is precisely why
+ * these cases needed a home that did not depend on it) — the todo widget became this app's
  * second ring, and a second copy of the arc (the twelve-o'clock
  * rotation in particular, which is easy to get wrong and invisible when
  * you do) is the duplication T356, T358 and T359 each removed for a
