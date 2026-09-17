@@ -3503,13 +3503,29 @@ export function findShippedCapabilities(shippedFiles, capabilities = CAPABILITIE
 export function findCapabilityDenialViolations({ shippedFiles, appFiles }) {
   const violations = [];
 
+  // P10-20: flatten each app file ONCE, before the capability loop, rather
+  // than once per capability inside it. `flattenProse` is a pure function of
+  // `content`, so the per-capability repeat was recomputing an identical
+  // result — capability-count times file-count full-text flattens, which is
+  // 84 x 2464 at the time this was hoisted. That made every wave that
+  // registers a capability slow every future run of this guard, and the
+  // guard runs on every CI build and every merge gate.
+  //
+  // Measured on the P10-W5 tree, same commit, same machine, both runs to
+  // exit 0 with the identical summary line: 1219s before, 23s after. This is
+  // a pure hoist — no phrase, scope, marker or ordering rule changed, and
+  // `guard-capability-prose.test.mjs` is the proof that behaviour did not
+  // move with it.
+  const flattenedAppFiles = appFiles.map(({ path, content }) => ({
+    path,
+    flat: flattenProse(content),
+  }));
+
   // Every capability reaching this loop is shipped. `findShippedCapabilities`
   // has already dropped the ones that are not yet real — for those, prose
   // disclosing their absence is true today and must not be reported.
   for (const capability of findShippedCapabilities(shippedFiles)) {
-    for (const { path, content } of appFiles) {
-      const flat = flattenProse(content);
-
+    for (const { path, flat } of flattenedAppFiles) {
       for (const phrase of capability.denyingPhrases) {
         // T268: a `ScopedDenyingPhrase` (never a bare `RegExp`) restricts
         // itself to the `appFile` whose `path` matches `onlyOnPath` — used

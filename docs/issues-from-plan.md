@@ -22153,3 +22153,49 @@ hoisting the flatten out of the loop is a change to the guard's own hot path tha
 own task with its own before/after measurement. It is cheap to fix - flatten once per file,
 outside the loop - and the next wave that touches this file should do it and record the
 measured times.
+
+## Wave P10-W6 (UI spec conformance, iteration 6)
+
+### P10-20 - the capability guard was flattening the whole tree once per capability
+
+P10-19 disclosed that `run-guard-capability-prose.mjs` had grown from roughly 8-10 minutes to
+20-25, and named the cause without fixing it: `findCapabilityDenialViolations` called
+`flattenProse(content)` inside its per-capability loop. `flattenProse` is a pure function of
+`content`, so every capability after the first recomputed an identical result - 84 capabilities
+times 2464 app-source files, about 23MB of text, flattened 84 times instead of once.
+
+The fix is a hoist: build the flattened list once, above the capability loop. No phrase, scope,
+marker or ordering rule changed.
+
+**Measured, both runs on the same commit and the same machine, both to exit 0 with a
+byte-identical summary line:**
+
+|                                                          | before                                                  | after                  |
+| -------------------------------------------------------- | ------------------------------------------------------- | ---------------------- |
+| `node scripts/ci/run-guard-capability-prose.mjs`         | **1219s** (20m19s)                                      | **23s**                |
+| `node --test scripts/ci/guard-capability-prose.test.mjs` | ~90 min (recorded in CLAUDE.md's own guidance to gates) | **348s**, 243/243 pass |
+
+That is the whole reason this was worth doing rather than living with: the guard runs on every
+CI build and every merge gate, and the cost was growing with every capability any wave
+registered. It was a superlinear tax on the repository's own convention of registering what you
+ship.
+
+**Exit 0 is not evidence for a change like this**, because a hoist that broke detection would
+also exit 0. Three proofs were taken instead:
+
+1. `guard-capability-prose.test.mjs` - 243 tests, 0 failures. That suite is the behavioural
+   contract: the historical-quotation exemption, the T168 AND-groups, the T172 shape-anchored
+   members, the self-referential exclusions, and the T184 declaring-file case all still hold.
+2. A real firing proof. `A still-running tool call can never be expanded.` appended to
+   `docs/legacy-retirement.md` made the real runner exit 1, naming exactly
+   `foldableFamilyAlreadyHasResult`, in 22s.
+3. Restored from a scratchpad copy - never `git checkout --` - md5
+   `9a693004979a9a52b5919d0a10171951` before and after, `git status --porcelain` showing only
+   the guard file, and a final clean run at exit 0.
+
+**What this does NOT change, and a reader should not conclude otherwise.** The cost was never
+the reason to be sparing about registering capabilities, and a cheap guard is not a licence to
+register loosely: `CLAUDE.md`'s T124 section already gives the real constraint, which is that an
+entry the runner cannot see is a check that cannot fail, and that a bare `methodNames` token
+must disappear when its capability does (the T172 trap). Those are correctness rules, unchanged
+by this being 53 times faster.
