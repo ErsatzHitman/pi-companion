@@ -3175,6 +3175,29 @@ export const CAPABILITIES = [
       /auto-?retry (?:is )?(?:only|exclusively) (?:settable|changeable|toggleable) (?:from|on) (?:the )?web/i,
     ],
   },
+  {
+    // P10-W10 (W10-ELAPSED): a running tool call's elapsed time advances
+    // with the wall clock, in the confirmed design's own one-decimal
+    // format. Before this, the row rendered `durationMs`, which
+    // `frontend-core`'s `timingFields` sets to `updatedAt - startedAt` at
+    // BUILD time - frozen between stream events, so a long-running call
+    // with no intermediate output showed one stale number for its whole
+    // run.
+    //
+    // A T168 AND-group rather than two OR members, and that is the point:
+    // both names are declared in ONE shipped file, and the capability is
+    // only real with both halves present. A live value in the old
+    // whole-second format still contradicts the design, and the design's
+    // format applied to a frozen value is a prettier stale number. Either
+    // alone is a half-port an OR list would call shipped.
+    name: "a running tool call's elapsed time advances with the clock (toolElapsedMs/formatToolElapsedWithTenths)",
+    methodNames: [["toolElapsedMs", "formatToolElapsedWithTenths"]],
+    denyingPhrases: [
+      /elapsed (?:time )?(?:is )?frozen (?:between|until) (?:stream )?(?:events|updates)/i,
+      /(?:a |any )?running (?:tool )?call'?s? elapsed (?:time )?(?:does not|never) (?:advance|tick|move|update)/i,
+      /(?:the )?transcript (?:shows|renders) no (?:live )?elapsed (?:time )?(?:for|on) (?:a |any )?running/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

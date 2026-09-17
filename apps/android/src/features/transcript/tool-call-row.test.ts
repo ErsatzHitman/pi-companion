@@ -277,6 +277,40 @@ describe('tool-call-row.tsx: "renderResult returns \\"\\" unless expanded or err
   });
 });
 
+describe("tool-call-row.tsx: a running shell call's elapsed time ticks (W10-ELAPSED)", () => {
+  it("computes elapsedLabel from the live useToolElapsedMs value, not a static tool.durationMs read — the regression this package exists to prevent", () => {
+    const code = readCode();
+    expect(code).toMatch(/const elapsedMs = useToolElapsedMs\(tool, running\);/);
+    expect(code).toMatch(
+      /elapsedLabel=\{\s*elapsedMs === undefined\s*\?\s*undefined\s*:\s*running\s*\?\s*formatToolElapsedWithTenths\(elapsedMs\)\s*:\s*formatToolDuration\(elapsedMs\)\s*\}/,
+    );
+    // The old static read this task replaces — if this ever comes back,
+    // the row is frozen again and the assertion above already fails, but
+    // this pins the exact regression shape too.
+    expect(code).not.toMatch(
+      /elapsedLabel=\{\s*tool\.durationMs === undefined \? undefined : formatToolDuration\(tool\.durationMs\)\s*\}/,
+    );
+  });
+
+  it("re-seeds the tick clock in its own effect, keyed on running and the call's identity, before any tick fires", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /useEffect\(\(\) => \{\s*if \(!running\) return;\s*setNowMs\(Date\.now\(\)\);\s*\}, \[running, tool\.callId\]\);/,
+    );
+  });
+
+  it("ticks at the spec's own 100ms cadence, only while running, and clears the interval on cleanup", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /if \(!running\) return undefined;\s*const intervalId = setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 100\);\s*return \(\) => clearInterval\(intervalId\);\s*\}, \[running\]\);/,
+    );
+  });
+
+  it("derives the ticked value through the model's own toolElapsedMs, never re-deriving the elapsed math here", () => {
+    expect(readCode()).toMatch(/return toolElapsedMs\(tool, nowMs\);/);
+  });
+});
+
 describe("tool-call-row.tsx: the highlighted body (W4-TOOLBLOCK)", () => {
   it("renders a read call's content through the highlighter, not the plain CodeListing recipe", () => {
     const code = readCode();
@@ -321,5 +355,29 @@ describe("tool-call-row.tsx: the highlighted body (W4-TOOLBLOCK)", () => {
 
   it("shows a visible, named truncation notice when the 10-line cap hides lines, never a silent cut", () => {
     expect(readCode()).toMatch(/\{capped\.truncatedNotice \? <Text/);
+  });
+});
+
+/**
+ * W10-ELAPSED merge gate. The body's elapsed readout now ticks live off
+ * `toolElapsedMs`, while `ToolCallHeader`'s own duration reads the frozen
+ * `tool.durationMs`. Left as it was, a running call would have rendered
+ * two different numbers for the same elapsed time in one row — the stale
+ * header beside the live body. The confirmed design draws no duration at
+ * all on a running header (its running frames are a `.tt` tool name plus
+ * a `.pa.tchip` arg chip, nothing more), so the header waits for the call
+ * to settle.
+ */
+describe("ToolCallHeader: no duration while the call is still running (W10-ELAPSED)", () => {
+  it("gates the header duration on a settled status, not on durationMs alone", () => {
+    expect(readSource()).toMatch(
+      /\{tool\.status !== "running" && tool\.durationMs !== undefined \? \(/,
+    );
+  });
+
+  it("no longer renders the header duration off durationMs alone", () => {
+    expect(readSource()).not.toMatch(
+      /\{tool\.durationMs !== undefined \? \(\s*\n\s*<Text style=\{styles\.duration\}/,
+    );
   });
 });

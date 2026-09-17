@@ -18,6 +18,7 @@ import {
   diffLinesFor,
   filterToolCallEntries,
   formatToolDuration,
+  formatToolElapsedWithTenths,
   genericInputSummary,
   genericResultSummary,
   inkOverlayColor,
@@ -33,6 +34,7 @@ import {
   capHighlightedLines,
   toolBodyIsVisible,
   toolCardHasExpandButton,
+  toolElapsedMs,
   toolExpandButtonAccessibilityLabel,
   toolHeaderChipLabel,
   truncateBody,
@@ -148,6 +150,76 @@ describe("formatToolDuration", () => {
   });
   it("formats a minute or more as minutes and seconds", () => {
     expect(formatToolDuration(65_000)).toBe("1m 5s");
+  });
+});
+
+describe("toolElapsedMs: the live-vs-frozen elapsed value (W10-ELAPSED)", () => {
+  it("advances with nowMs for a running call, computed from startedAt", () => {
+    const tool: tools.ToolCallViewModel = {
+      ...SHELL_TOOL,
+      status: "running",
+      startedAt: 1_000,
+      durationMs: undefined,
+    };
+    expect(toolElapsedMs(tool, 1_000)).toBe(0);
+    expect(toolElapsedMs(tool, 5_200)).toBe(4_200);
+  });
+
+  it("stays at the stored durationMs for a finished call, ignoring nowMs entirely", () => {
+    const tool: tools.ToolCallViewModel = {
+      ...SHELL_TOOL,
+      status: "completed",
+      startedAt: 1_000,
+      durationMs: 4_200,
+    };
+    expect(toolElapsedMs(tool, 1_000)).toBe(4_200);
+    expect(toolElapsedMs(tool, 999_999)).toBe(4_200);
+  });
+
+  it("returns undefined when neither a live base (running, no startedAt) nor a stored duration is knowable", () => {
+    const runningNoStart: tools.ToolCallViewModel = {
+      ...SHELL_TOOL,
+      status: "running",
+      startedAt: undefined,
+      durationMs: undefined,
+    };
+    expect(toolElapsedMs(runningNoStart, 5_000)).toBeUndefined();
+
+    const blockedNoDuration: tools.ToolCallViewModel = {
+      ...SHELL_TOOL,
+      status: "blocked",
+      startedAt: undefined,
+      durationMs: undefined,
+    };
+    expect(toolElapsedMs(blockedNoDuration, 5_000)).toBeUndefined();
+  });
+
+  it("clamps a negative clock-skew delta to 0, never a negative duration", () => {
+    const tool: tools.ToolCallViewModel = {
+      ...SHELL_TOOL,
+      status: "running",
+      startedAt: 10_000,
+      durationMs: undefined,
+    };
+    expect(toolElapsedMs(tool, 4_000)).toBe(0);
+  });
+});
+
+describe("formatToolElapsedWithTenths: the spec's own tenths-below-60s readout", () => {
+  it("formats a value under 60s with exactly one decimal", () => {
+    expect(formatToolElapsedWithTenths(4_200)).toBe("4.2s");
+  });
+
+  it("formats a sub-second value the same way", () => {
+    expect(formatToolElapsedWithTenths(400)).toBe("0.4s");
+  });
+
+  it("formats exactly 60s as 1m 0.0s, not 60.0s", () => {
+    expect(formatToolElapsedWithTenths(60_000)).toBe("1m 0.0s");
+  });
+
+  it("formats a value above 60s as minutes plus a decimal-second remainder", () => {
+    expect(formatToolElapsedWithTenths(65_000)).toBe("1m 5.0s");
   });
 });
 

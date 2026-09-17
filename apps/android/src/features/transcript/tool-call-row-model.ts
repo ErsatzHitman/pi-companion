@@ -108,6 +108,76 @@ export function formatToolDuration(ms: number): string {
 }
 
 /**
+ * The elapsed time to actually display for one call (W10-ELAPSED).
+ *
+ * `packages/frontend-core/src/tools/util.ts`'s `timingFields` sets
+ * `durationMs` to `updatedAt - startedAt` at the moment a view model is
+ * built, and `types.ts`'s own field comment says `updatedAt` is "Most
+ * recent time this callId was **observed** by the view-model layer" — so
+ * between stream events `durationMs` is frozen: a tool running 30 seconds
+ * with no intermediate output would show the same stale number (or `0s`,
+ * if observed only once) for the whole 30 seconds. Confirmed by reading
+ * both of those sites before writing this function.
+ *
+ * A RUNNING call's displayed elapsed time is therefore recomputed live —
+ * `nowMs - tool.startedAt`, a base-plus-wall-clock-delta the caller ticks
+ * forward (mirrors the confirmed Android design spec's own
+ * `.elapsed[data-base]` script) — rather than read off the frozen
+ * `durationMs` a running call happens to already carry. A FINISHED call's
+ * `durationMs` is a fact, not a running total, so it stays exactly as
+ * `timingFields` computed it and `nowMs` is ignored.
+ *
+ * "Running" is read off `tool.status === "running"` directly, the same
+ * comparison this file's other call sites already use (e.g.
+ * `ShellBody`'s own `running` in `tool-call-row.tsx`) rather than a new
+ * predicate invented for this function alone.
+ *
+ * Returns `undefined` when neither a live base (`startedAt`, while
+ * running) nor a stored fact (`durationMs`, once finished or when
+ * `startedAt` itself is unknown) is available — there is nothing this
+ * call can honestly report yet. Clamped to never go negative: a clock
+ * skew between `nowMs` and `startedAt` must render `0s`, never a
+ * negative duration.
+ */
+export function toolElapsedMs(tool: tools.ToolCallViewModel, nowMs: number): number | undefined {
+  if (tool.status === "running" && tool.startedAt !== undefined) {
+    return Math.max(0, nowMs - tool.startedAt);
+  }
+  return tool.durationMs;
+}
+
+/**
+ * The confirmed Android design spec's own running-elapsed format (its
+ * `fmt`): one decimal place below 60s (`4.2s`), and `Xm Y.Ys` at and
+ * above it (`1m 5.0s`).
+ *
+ * **Deliberately a sibling of `formatToolDuration`, not a replacement.**
+ * `formatToolDuration` also renders a FINISHED call's duration — in this
+ * file's `ToolCallHeader` (every family, via `tool.durationMs`) and in
+ * `ShellBody`'s own non-running `elapsedLabel` — and the spec shows tenths
+ * only on the live, ticking `.elapsed` readout of a still-RUNNING block,
+ * never on a settled summary. Changing `formatToolDuration` in place would
+ * have silently restyled every already-completed call's duration (into a
+ * format the spec never asked for there) the moment this shipped. Keeping
+ * it separate means only the running case — the one this package's brief
+ * and the spec both actually target — changes at all; `formatToolDuration`
+ * keeps its existing whole-seconds behaviour, and its existing tests, byte
+ * for byte.
+ *
+ * Clamps like `toolElapsedMs` does, for the same reason: a caller could in
+ * principle hand this a raw skewed delta directly.
+ */
+export function formatToolElapsedWithTenths(ms: number): string {
+  const totalSeconds = Math.max(0, ms) / 1000;
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds.toFixed(1)}s`;
+}
+
+/**
  * Card-selection logic (plan.md §11.6): which family of purpose-built
  * card a call renders as. Trivially `tool.family` today, but named and
  * exported so the .tsx never re-derives "which card" logic of its own —

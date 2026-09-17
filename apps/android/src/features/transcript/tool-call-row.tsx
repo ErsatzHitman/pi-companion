@@ -125,6 +125,7 @@ import {
   diffLineInputsFor,
   diffLinesFor,
   formatToolDuration,
+  formatToolElapsedWithTenths,
   genericInputSummary,
   genericResultSummary,
   inkOverlayColor,
@@ -136,6 +137,7 @@ import {
   capHighlightedLines,
   toolBodyIsVisible,
   toolCardHasExpandButton,
+  toolElapsedMs,
   toolExpandButtonAccessibilityLabel,
   toolHeaderChipLabel,
   truncateBody,
@@ -348,7 +350,17 @@ function ToolCallHeader({
           </Text>
         </View>
       ) : null}
-      {tool.durationMs !== undefined ? (
+      {/* W10-ELAPSED gate. `durationMs` is frozen between stream events
+          (see `toolElapsedMs`), so a RUNNING call's header duration was
+          a stale number that never moved — and once the body began
+          ticking live, the two would have disagreed with each other in
+          the same row. The confirmed design settles it: every running
+          header it draws is a tool name plus an arg chip and nothing
+          else, and the elapsed readout lives only in the body's load
+          row. So the header reports a duration once the call has
+          SETTLED, which is when `durationMs` is a fact rather than a
+          snapshot. */}
+      {tool.status !== "running" && tool.durationMs !== undefined ? (
         <Text style={styles.duration}>{formatToolDuration(tool.durationMs)}</Text>
       ) : null}
       <StatusIndicator
@@ -526,6 +538,52 @@ function HighlightedFileBody({
 }
 
 /**
+ * W10-ELAPSED: ticks a running call's displayed elapsed time forward in
+ * place, so `ShellBody`'s `elapsedLabel` actually moves while a command
+ * runs rather than freezing at whatever `durationMs` happened to be the
+ * last time this call was observed (`tool-call-row-model.ts`'s
+ * `toolElapsedMs` doc comment has the full defect — confirmed there
+ * against `packages/frontend-core/src/tools/util.ts`'s `timingFields`
+ * before this was built).
+ *
+ * Mirrors `../composer/TurnStatusBanner.tsx`'s `useRetryCountdownSeconds`
+ * (read before writing this — same shape, and the same bug it exists to
+ * avoid): the displayed number always comes from re-calling
+ * `toolElapsedMs` with the current wall-clock time, never from a counter
+ * this hook increments itself.
+ *
+ * The clock is re-seeded to `Date.now()` in its OWN effect, keyed on the
+ * call's identity (`tool.callId`) and on `running` itself, rather than
+ * seeded once at mount — a row already mounted (e.g. `blocked`, waiting
+ * on approval) before this call starts running would otherwise measure
+ * it against a clock frozen at mount time until the first 100ms tick
+ * caught up, understating the very first paint. That is the exact defect
+ * `useRetryCountdownSeconds`'s own doc comment records being caught at
+ * the W7 merge gate, for a countdown rather than a stopwatch.
+ *
+ * The interval starts only while `running`, at the confirmed Android
+ * design spec's own 100ms cadence (its `setInterval(paint,100)`), and
+ * stops the moment it is not — on unmount, or the instant `running` goes
+ * false.
+ */
+function useToolElapsedMs(tool: tools.ToolCallViewModel, running: boolean): number | undefined {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!running) return;
+    setNowMs(Date.now());
+  }, [running, tool.callId]);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const intervalId = setInterval(() => setNowMs(Date.now()), 100);
+    return () => clearInterval(intervalId);
+  }, [running]);
+
+  return toolElapsedMs(tool, nowMs);
+}
+
+/**
  * T359: a shell call is the artifact's `.bash`, not a pair of code
  * blocks.
  *
@@ -535,6 +593,14 @@ function HighlightedFileBody({
  * turn on this platform, rather than the artifact's desktop-only "esc
  * to cancel"; see `BashBlock.tsx`'s own doc comment for why that string
  * is not shipped.
+ *
+ * **W10-ELAPSED:** `elapsedLabel` comes from `useToolElapsedMs`, not
+ * `tool.durationMs` directly, so it advances while the command runs. A
+ * RUNNING call formats with `formatToolElapsedWithTenths` (the spec's
+ * own tenths-below-60s readout, e.g. `4.2s`); once finished, the value
+ * `toolElapsedMs` returns is exactly `tool.durationMs`, formatted through
+ * the unchanged `formatToolDuration` — byte-identical to this block's
+ * pre-W10-ELAPSED finished-call output.
  */
 function ShellBody({
   tool,
@@ -547,6 +613,7 @@ function ShellBody({
 }) {
   const { reduceMotion } = useTheme();
   const running = tool.status === "running";
+  const elapsedMs = useToolElapsedMs(tool, running);
   return (
     <View style={styles.body}>
       <BashBlock
@@ -554,7 +621,11 @@ function ShellBody({
         output={tool.output === undefined ? undefined : truncateBody(tool.output)}
         running={running}
         elapsedLabel={
-          tool.durationMs === undefined ? undefined : formatToolDuration(tool.durationMs)
+          elapsedMs === undefined
+            ? undefined
+            : running
+              ? formatToolElapsedWithTenths(elapsedMs)
+              : formatToolDuration(elapsedMs)
         }
         cancelHint={running ? ABORT_ACTION_LABEL : undefined}
         dimmed={shellBlockIsDimmed(tool.status)}
