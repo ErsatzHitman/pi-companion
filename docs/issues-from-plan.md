@@ -22855,3 +22855,124 @@ it produces are only meaningful beside the watermark rule that decides which row
 to - a concern an RN-free theme module has no notion of. Both live in
 `timeline/transcript-entrance.ts` instead, and `expressive-motion.ts` carries a note saying so, for
 the same reason its header already argues against restating `motion.easing.standard` locally.
+
+## Wave P10-W13 (UI spec conformance, iteration 13)
+
+Reachability lens, and it produced no package: three closures, each with the measurement behind it.
+
+The lens was chosen from this session's own evidence rather than from the specs. The
+built-but-type-correctly-unwired shape had hit five times by iteration 12 (`SegmentedControl`,
+`RunHeader`, `onSetAutoRetry`, the streaming caret, the `fade-up` entrance), so instead of auditing
+the spec for a sixth, this wave audited the repo for the shape directly: for every exported recipe
+and primitive in both apps, does any production file reach it?
+
+**The first run was wrong, and the correction is the reusable part.** Excluding the whole
+`ui/recipes/` directory when looking for callers hid recipe-to-recipe use and reported `ShimmerText`
+as dead - it is reached by `ThinkingSection`, `StreamingMessage` and `BashBlock`, each of which is
+itself reached. Excluding only each component's OWN file gives the real answer. A reachability check
+has to exclude the definition, never the neighbourhood.
+
+Result: `apps/web` has no unreached recipe or primitive. `apps/android` has exactly two, and
+neither is a defect.
+
+### P10-39: `ToolChips` is unreached on both platforms, and the confirmed specs do not draw it
+
+`ToolChips` (both apps) renders "the row of tool-permission chips shown next to a tool call
+(Read/Write/Bash/Network, each with an allow/needs-approval/denied state)", per its own doc comment
+citing plan.md §10.4. Its only referents are each app's `dev/recipe-lab.tsx` gallery, the barrel
+export, and tests.
+
+Measured against the authority rather than against plan.md: `permission`, `Allowed`, `Denied` and
+`needs approval` each occur **zero** times in `android-spec.html` AND in `web-spec.html`. `tchip`
+occurs 20 times in the android spec and is a false friend - it is the PATH chip in
+`<span class="pa tchip">`, not a permission chip.
+
+What the android spec does draw for approvals is one settings row: `Ask before every tool`, with the
+sub-label `hold a block to approve` and a `data-sw` switch. That is a MODE, and the mode already
+ships: `bypassPermissions` is an `AgentMode` `modeId` on the wire, and
+`session-controls-model.ts`'s `listProviderModes`/`setAgentMode` already surface the provider's
+modes in the session's own prompt-controls menu. `SettingsScreen.tsx`'s doc comment claims exactly
+this - that the per-agent rows are "already reachable where they belong" - and the claim checks out;
+it was verified rather than trusted, because prose asserting a capability lives elsewhere is the
+same class of defect as prose asserting one is absent.
+
+**Decision: do not wire `ToolChips`.** The specs are the authority and the apps are not; wiring it
+would add a product surface neither spec draws, on the strength of an earlier plan.md section the
+confirmed specs supersede. A reviewer could disagree by arguing plan.md §10.4 still governs here -
+that is the live counter-argument, and it loses to the brief's own authority ordering.
+
+### P10-40: `SelectionActions` is unreached, and neither spec draws a selection toolbar
+
+`SelectionActions` is "a floating toolbar that appears after selecting transcript text (Copy / Quote
+in reply / Dismiss)". Same referents as above: the dev gallery, the barrel, tests.
+
+`Quote in reply` occurs zero times in both specs. `Copy` occurs zero times in the android spec and
+once in the web spec. `select` occurs 98 times in the android spec, and classifying them rather
+than counting them is what settles it: 75 are `querySelector`, 19 are `querySelectorAll`, and the
+remaining four are `select`/`selected`/`selectable` - none is a selection toolbar.
+
+**Decision: do not wire it, for the same reason as P10-39.** Recorded rather than deleted: both
+recipes are accessibility-tested and cost nothing to keep, and a later spec revision could ask for
+either.
+
+### P10-41: `pi_retry` cannot be a transcript row without a protocol change - this is why it has sat open twice
+
+This item was deliberately left open twice in this session. The reason is now measured, and it is
+not effort.
+
+Everything on the render side is built. `apps/web` has `RetryTranscriptEntry`, `isRetryEntry`,
+`TranscriptRetryRow`, and `retryEntryFromPiRetryEvent` (which converts a real `pi_retry` wire event
+into an entry, inventing nothing); `transcript.tsx` widens its accepted union to
+`WebTranscriptEntry` and dispatches on the retry kind. The entry shape is structurally identical to
+`TranscriptEntryBase & { kind: "retry"; phase; attempt; maxAttempts; delayMs?; error? }`, so folding
+it into the core union would be a clean drop-in.
+
+**The blocker is upstream of all of that.** `ingestAgentStreamMessage` returns `state` unchanged
+unless `event.type === "timeline"` and both `epoch` and `seq` are present. For `pi_retry` they never
+are:
+
+- `AgentStreamMessageSchema`'s payload declares `seq` and `epoch` as `.optional()`, above a comment
+  that states their scope outright: they are present for timeline events, and map one-to-one to
+  canonical in-memory timeline rows.
+- The Pi provider's three `pi_retry` emit sites pass only the event's own fields; no positional
+  metadata accompanies them.
+- `dispatchStream` takes `seq`/`epoch` as an optional `metadata` argument supplied by its caller,
+  and every `seq` value in `agent-manager.ts` traces back to a timeline row's own `seq`.
+
+So a retry carries a daemon `timestamp` but no daemon-assigned position. `TimelineRow.id` is
+`${epoch}:${seqStart}` for confirmed rows and `optimistic:${clientMessageId}` for local ones; a
+retry row would be a third class with neither. Placing it in stream order would mean synthesizing a
+sequence number - inventing the one fact that decides where the row goes, in the one domain
+(`plan.md` §7.4, "preserve daemon timestamps", "reconcile optimistic rows") whose whole discipline
+is not doing that.
+
+**Decision: closed as blocked on a protocol change, not on frontend work.** The two honest ways
+forward, so a reviewer can pick rather than re-derive:
+
+1. Give retries a real position server-side - have the Pi provider's `pi_retry` path carry `seq`/
+   `epoch` the way timeline events do. This is the only option that makes the shipped renderer
+   correct, and it is a `packages/server` + `packages/protocol` change, outside every UI package
+   this goal has run.
+2. Accept that retries are turn STATUS, not transcript history, and leave them where both platforms
+   already show them - Android's `TurnStatusBanner` (live countdown, W7-COUNTDOWN) and web's
+   equivalent. On this reading `retry-row.tsx` is the surface that should be retired, not the one
+   waiting to be fed.
+
+Option 2 is the cheaper and arguably more correct reading - a retry is not something that HAPPENED
+in the conversation, it is something happening to the current turn - but it deletes shipped, tested
+code on a judgement call, so it is recorded rather than taken. What is NOT acceptable is leaving
+`retry-row.tsx` described as "the renderer waiting for it": that framing implies a frontend gap, and
+the gap is in the envelope.
+
+### P10-42: `SegmentedControl`, a brief-listed open item, is closed - it has a real call site
+
+The brief lists "`SegmentedControl` ships with zero call sites" under work still open, with
+instructions to decide the `Composer.test.tsx` invariant question on evidence. The reachability run
+answers it without needing to: `apps/web/src/features/composer/QueueModePicker.tsx` imports and
+renders it. The wiring landed and the invariant question was resolved when it did (P10-28).
+
+This is the fifth named-as-open item this session that was already closed when checked. The
+countermeasure holds and is worth restating in its strongest form: **before building anything a
+document says is missing, run one command that would find the behaviour - never the document's name
+for it.** Here the command was a caller search; in P10-39 it was a vocabulary count against the
+spec; in P10-41 it was reading the envelope schema.

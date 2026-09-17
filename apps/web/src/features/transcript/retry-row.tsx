@@ -25,11 +25,23 @@ export type RetryPhase = PiRetryStreamEvent["phase"];
  * `packages/frontend-core`, which this task does not touch — so the
  * transcript accepts `WebTranscriptEntry` (see `transcript.tsx`) and
  * `retryEntryFromPiRetryEvent` below bridges a real wire event onto this
- * shape without inventing data. Closing the remaining core gap (projecting
- * `pi_retry` into timeline state upstream, the way `compaction` already
- * flows through `CompactionTimelineItem`) needs a small frontend-core
- * change outside this task; this row is the renderer waiting for it, fed
- * today by the bridge below rather than by a fabricated fixture.
+ * shape without inventing data.
+ *
+ * (CORRECTED, P10-41: this said closing the core gap - projecting
+ * `pi_retry` into timeline state the way `compaction` flows through
+ * `CompactionTimelineItem` - "needs a small frontend-core change outside
+ * this task", and called this row "the renderer waiting for it". Both
+ * point at the wrong layer. `ingestAgentStreamMessage` ignores any event
+ * that is not `timeline` OR that arrives without `epoch` and `seq`, and
+ * `AgentStreamMessageSchema` declares both optional, for timeline events
+ * only; the Pi provider's `pi_retry` emit sites carry neither, and every
+ * `seq` the agent manager attaches traces back to a real timeline row's
+ * own `seq`. A retry therefore has a daemon timestamp but no
+ * daemon-assigned position, so placing it in stream order would mean
+ * synthesizing a sequence number - inventing the single fact that decides
+ * where the row belongs. This is a protocol/server change, not a
+ * frontend-core one, and `docs/issues-from-plan.md`'s P10-41 records the
+ * two ways forward and why neither was taken unilaterally.)
  */
 export interface RetryTranscriptEntry {
   readonly kind: "retry";
