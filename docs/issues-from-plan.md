@@ -22328,6 +22328,9 @@ named are real and remain undone, and neither is what it thought was blocking:
 2. Android still has no equivalent of `apps/web/src/features/settings/use-auto-retry.ts` - the
    toggle that turns auto-retry on or off. `DaemonClient.setAutoRetry`/`getAutoRetry` are shipped
    and unused by Android. That is a settings-surface package, not a transcript one.
+   (CLOSED the very next wave by `W8-AUTORETRY` - see P10-25. Left in place rather than deleted,
+   because this entry is the record of what P10-22 found, and the wave that closed it is a
+   separate dated fact. The sentence above is no longer true of the tree.)
 
 The spec's `data-act="retry"` ("tap to retry now") is closed unbuilt for the `WEB-TEAL` reason
 (P10-8): no request in `packages/protocol/src` or `packages/client/src` forces an immediate retry,
@@ -22393,3 +22396,93 @@ The T124 grep was also run and came back clean: no shipped source anywhere in sc
 Android retry countdown is absent. The only prose that this wave falsifies is P10-21's own, which
 sits in `DOCS_LEDGER_DENIAL_EXCLUSIONS` where the guard cannot reach it - corrected by hand in
 P10-22 above, the same way P10-14 was.
+
+## Wave P10-W8 (UI spec conformance, iteration 8)
+
+One Android package, `W8-AUTORETRY`: the per-agent auto-retry toggle Android lacked, closing the
+parity gap P10-22 had just named. `A-PIROLES` was measured this wave and closed as already
+landed - see P10-26.
+
+### P10-25 - the toggle almost shipped wired to nothing, and the type system was fine with it
+
+`W8-AUTORETRY` built auto-retry as an exact sibling of the auto-compaction control already living
+in `session-controls-model.ts` / `SessionControlsPicker.tsx`: `autoRetry: boolean | null`, an
+`isChangingAutoRetry` in-flight guard, and a read-back after every write so the switch shows the
+value the daemon confirmed rather than the one the user asked for. That part is right, and the
+decision inside it worth recording is the one about `REQUIRED_METHODS`: `getAutoRetry`/
+`setAutoRetry` are deliberately NOT added to it, because `supportsSessionControls` requires every
+listed method and adding them would flip the whole picker - mode segments and auto-compaction
+included - to `"unsupported"` against any client lacking auto-retry. Regressing two shipped
+controls to add a third is not a trade worth making. Auto-retry's support is expressed by value
+instead: `autoRetry` stays `null`, which this module already means as "no truthful answer yet".
+
+**The defect the gate caught.** The implementer typed `SessionControlsPickerProps.onSetAutoRetry`
+as OPTIONAL and did not wire it, disclosing the reason honestly: `Composer.tsx` is the picker's
+sole mount site and sat outside the package's four-file list, so a required prop would have broken
+a file it was forbidden to edit. The consequence is what matters, not the reasoning: the picker
+would have shipped drawing a real switch that moved no state, and `tsc` would have stayed green
+the whole time, because an optional prop is satisfied by not passing it.
+
+That is the `SegmentedControl` shape (still open in the brief, still unwired) and the `RunHeader`
+shape (P10-14, reverted after CI caught it) for the third time in this phase. The partition was
+extended by one file at the gate and the control wired to the real
+`sessionControlsController.setAutoRetry`.
+
+**What is new here is the mechanism, and it generalises.** The two earlier cases were caught by a
+guard and by a re-read. This one could not have been: an optional prop makes "unwired" a
+type-correct state, so neither `tsc`, nor the orphan-module ceiling (the file is imported either
+way), nor the picker's own tests could see it. The only signal was the implementer saying so in
+its report.
+
+The cheap countermeasure is a mount-site assertion, and it is now in
+`composer-queue-retry-compaction.test.ts` - the file that exists for exactly this reason, having
+closed the same gap for `QueueModePicker`/`TurnStatusBanner` at T39C. Four assertions: the handler
+is built from the controller, it is passed to the picker, the write is followed by a state re-read,
+and - separately - `onSetAutoCompaction` is passed too. That last one was unpinned before this
+wave: the auto-compaction switch has been correctly wired for waves, but nothing proved it, and
+closing only the half this package introduced would leave the next reader assuming both were
+checked. Each new assertion was mutation-proven at the gate (delete the prop pass, confirm the
+specific `it` fails, restore from a scratchpad copy - never `git checkout --`).
+
+**The rule this suggests, stated so a later wave can disagree with it:** when a package adds a
+control whose only mount site is outside its own file list, the package is not finished. Either the
+mount site joins the partition, or the package does not ship. An optional prop is not a way to
+defer the wiring; it is a way to hide that the wiring never happened.
+
+### P10-26 - A-PIROLES was already landed, and the check that proved it nearly shipped a false fix
+
+`A-PIROLES` (the five Pi TUI roles as oklab mixes over Beautiful UI surfaces) is listed in the
+brief as ready to run. It is done. Measured against the real tree rather than assumed:
+
+| spec variable | spec definition                                        | shipped                                     | how it matches |
+| ------------- | ------------------------------------------------------ | ------------------------------------------- | -------------- |
+| `--tool-ok`   | `color-mix(in oklab,var(--green) 10%,var(--surface))`  | `tool-success-bg` `#28312e`                 | exact          |
+| `--tool-err`  | `color-mix(in oklab,var(--red) 13%,var(--surface))`    | `tool-error-bg` `#3b2f31`                   | exact          |
+| `--ext-bg`    | `color-mix(in oklab,var(--purple) 15%,var(--surface))` | `extension-bg` `#373340`                    | exact          |
+| `--tool-pend` | `var(--inset)`                                         | `blockSurface("pending")` returns `"inset"` | structural     |
+| `--usr-bg`    | `var(--field)`                                         | `blockSurface("user")` returns `"field"`    | structural     |
+
+`tokens.ts` already says so in its own comments, and those comments are accurate.
+
+**The part worth recording is the near-miss.** The first check of the three mixed values derived
+`--red` and `--purple` from the spec's `oklch()` notation and mixed THOSE. It produced `#3b2d2f`
+and `#35313e` - two tokens apparently off by 2/255 per channel - and a follow-up contrast
+calculation appeared to show the "spec" values clearing AA with more headroom, which read as
+evidence that the shipped values were a drifted approximation worth correcting. Every step of that
+was wrong, and it was heading for a two-token edit to `packages/design-tokens/src/tokens.ts` -
+the shared file an earlier wave destroyed, guarded by real AA contrast tests.
+
+What caught it was re-running the same mix against the **shipped palette hexes** instead of a
+reconstruction of them. That reproduces all three tokens exactly, which also identifies the bug:
+it was in the oklch-to-sRGB conversion of two base colours, not in the mixing, and not in the
+tree. The tell was there before the AA detour and was misread - `tool-success-bg` matched to the
+byte while the other two did not, which is not what drift looks like and is exactly what one bad
+input looks like.
+
+This is the same lesson as P10-14 and P10-22, in a third form. Those two were "the app already has
+it under another name" and "the app already receives it on another path". This one is "the app
+already has the right VALUE, and the thing that disagreed was my own reconstruction of the
+authority, not the authority." **Before concluding shipped code has drifted from a spec, check the
+derivation against something the tree itself already computed correctly.** Here three tokens were
+available to cross-check against and one of them matched; that single match was enough to falsify
+the whole finding, and it was visible in the first measurement.
