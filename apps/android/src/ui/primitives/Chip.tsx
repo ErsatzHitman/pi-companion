@@ -17,16 +17,33 @@ export interface ChipProps {
 }
 
 /**
+ * The confirmed Android design's own `.chip` rule (A-SIZE):
+ * `height:30px;padding:0 13px`. Radius is untouched here — `.chip` is one
+ * of the surfaces already drawn at `--r-full` (A-SHAPE), which this file
+ * reads as `theme.radii.full` below and which already matches; only the
+ * box's own height and horizontal padding were wrong.
+ */
+const CHIP_HEIGHT = 30;
+const CHIP_PADDING_HORIZONTAL = 13;
+
+/**
  * Chip primitive (plan.md §10.3). When `onRemove` is supplied the chip
  * becomes a real `Pressable` (accessible button) whose accessible name is
  * `"Remove <label>"`; tone always pairs the label text with a status
  * colour, never colour alone (plan.md §10.5).
  *
- * Beautiful UI's pill chips are visually tight (~24dp tall); the
- * removable variant keeps that footprint but grows its touch bounds to
+ * Drawn at `CHIP_HEIGHT` (30dp), the design artifact's own `.chip` height;
+ * the removable variant keeps that footprint but grows its touch bounds to
  * 48dp with `hitSlop` (plan.md T26C) rather than inflating the chip
  * itself, and carries the same `active:scale-[0.96]` press feedback as
- * `Button`/`IconButton`.
+ * `Button`/`IconButton`. The artifact's own `.chip:active{transform:
+ * scale(.9)}` spring (`../theme/expressive-motion.ts`'s
+ * `EXPRESSIVE_PRESS_SCALE.chip`) is NOT wired here: `usePressScale`
+ * (`../theme/use-press-scale.ts`) has no `"chip"` arm on its
+ * `PressScaleVariant` union today, only `"default"` and `"icon"`, and
+ * that file is outside this primitive's own exclusive file set — the fix
+ * is adding a `"chip"` arm there (mapping to `EXPRESSIVE_PRESS_SCALE.chip`)
+ * and calling `usePressScale("chip")` below, not a second hook.
  */
 export function Chip({ label, tone = "neutral", onRemove, testId }: ChipProps) {
   const { theme } = useTheme();
@@ -88,8 +105,8 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     chip: {
       flexDirection: "row",
       alignItems: "center",
-      height: 24,
-      paddingHorizontal: theme.spacing[2],
+      height: CHIP_HEIGHT,
+      paddingHorizontal: CHIP_PADDING_HORIZONTAL,
       borderRadius: theme.radii.full,
       borderWidth: 1,
     },

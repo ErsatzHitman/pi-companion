@@ -18,9 +18,20 @@ export interface ToggleProps {
   testId?: string;
 }
 
-const TRACK_WIDTH = 40;
-const KNOB_SIZE = 20;
-const KNOB_INSET = 3;
+/**
+ * The confirmed Android design's own `.sw`/`.sw i` rule (A-SIZE):
+ * `.sw{width:44px;height:26px;...}` with the knob `.sw i{top:4px;left:4px;
+ * width:18px;height:18px;...}` and, on `[data-on="on"]`, `i{left:22px}`.
+ * `TRACK_HEIGHT - KNOB_SIZE` is `8`, so a single `KNOB_INSET` of `4`
+ * centres the knob vertically (via `track`'s `justifyContent: "center"`
+ * below) at the same value the spec uses for the knob's own horizontal
+ * inset — both axes read `4px` in the source rule, not a coincidence this
+ * file has to reconcile.
+ */
+const TRACK_WIDTH = 44;
+const TRACK_HEIGHT = 26;
+const KNOB_SIZE = 18;
+const KNOB_INSET = 4;
 
 /**
  * Toggle primitive (plan.md §10.3): `accessibilityRole="switch"` with
@@ -80,7 +91,7 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     touchArea: { minHeight: 48, minWidth: 48, alignItems: "center", justifyContent: "center" },
     track: {
       width: TRACK_WIDTH,
-      height: 24,
+      height: TRACK_HEIGHT,
       borderRadius: theme.radii.full,
       justifyContent: "center",
     },

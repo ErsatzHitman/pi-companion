@@ -99,15 +99,19 @@ import { describe, expect, it } from "vitest";
  * not a magic number: `hitSlop` pads symmetrically (RN applies it on every
  * side), so the effective target is `content + 2 * hitSlop`. `Chip`'s
  * removable `Pressable` carries no `style` of its own — it shrink-wraps to
- * its `Animated.View` child, whose `chip.height: 24` is that content size
- * — so passing requires `24 + 2 * hitSlop >= 48`, i.e. `hitSlop >= 12`;
- * `hitSlop={14}` (52dp effective) passes, `hitSlop={1}` (26dp effective)
- * correctly fails. A `hitSlop`-only element with no resolvable content
- * size on any axis (own tag, then first JSX child) fails outright rather
- * than passing on the number's bare presence, closing the same hole for
- * any future component that lands in this branch. The strict-AND
- * `minHeight`/`minWidth` branch above is untouched by this fix — `hitSlop`
- * never entered its calculation before T90 and still doesn't.
+ * its `Animated.View` child, whose `chip.height: CHIP_HEIGHT` (A-SIZE: `30`,
+ * the design artifact's own `.chip` height — `24` before that fix) is that
+ * content size — so passing requires `30 + 2 * hitSlop >= 48`, i.e.
+ * `hitSlop >= 9`; `hitSlop={14}` (58dp effective) passes, `hitSlop={1}`
+ * (32dp effective) correctly fails — both stricter margins than the `24`dp
+ * example this section originally measured against, since growing the
+ * chip only widens the pass band. A `hitSlop`-only element with no
+ * resolvable content size on any axis (own tag, then first JSX child)
+ * fails outright rather than passing on the number's bare presence,
+ * closing the same hole for any future component that lands in this
+ * branch. The strict-AND `minHeight`/`minWidth` branch above is untouched
+ * by this fix — `hitSlop` never entered its calculation before T90 and
+ * still doesn't.
  */
 interface AuditedComponent {
   /** Display name used in test titles. */
@@ -340,7 +344,7 @@ function duplicateStyleKeys(code: string): Set<string> {
  * T376: without this, `minHeight: ACTION_BUTTON_SIZE` read as no
  * declared minimum at all. Every dimension in `sessions-screen.tsx` is
  * written that way (`ACTION_BUTTON_SIZE = 48`, `FILTER_CHIP_HEIGHT =
- * 30`), which is better style than a scattered literal and which this
+ * 28`), which is better style than a scattered literal and which this
  * audit punished: three compliant controls reported as violations, and —
  * the direction that matters — a control shrunk from 48 to 40 through
  * its constant would have been reported as declaring nothing rather than

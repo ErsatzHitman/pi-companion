@@ -9,6 +9,21 @@ import { describe, expect, it } from "vitest";
  * `Sheet.test.ts`'s doc comment names); `readCode()` strips comments
  * first, so a claim made only in a doc comment can never satisfy an
  * assertion.
+ *
+ * CORRECTED (A-SIZE): this file used to pin `TRACK_WIDTH` at `40` under
+ * the title "matches the reference's own `.sw` (UI-A2: 40, not 44)" —
+ * backwards from the confirmed spec. Grepped directly against the
+ * confirmed Android design, the real rule
+ * is `.sw{width:44px;height:26px;...}`; nothing in that file's `.sw`
+ * selector or its `.sw i` knob rule says `40` anywhere. `docs/ui-reference/`
+ * is the likely source of the old, wrong `40` — see `CLAUDE.md`'s warning
+ * that it is a stale reconstruction agents have twice cited as authority
+ * against the real spec — but this file cites no path, so that is
+ * inference, not a confirmed provenance. The 40/44 confusion is corrected
+ * here rather than merely reported, because this repository's own rule
+ * (`CLAUDE.md`, "reference-only documents") treats an assertion this
+ * concretely falsifiable, once it is caught, as a defect to fix rather
+ * than a historical curiosity to preserve.
  */
 function readSource(): string {
   return readFileSync(fileURLToPath(new URL("./Toggle.tsx", import.meta.url)), "utf8");
@@ -20,13 +35,38 @@ function readCode(): string {
     .replace(/\/\/.*$/gm, "");
 }
 
-describe("Toggle: track width matches the reference's own .sw (UI-A2: 40, not 44)", () => {
-  it("declares TRACK_WIDTH as 40", () => {
-    expect(readCode()).toMatch(/const TRACK_WIDTH = 40;/);
+describe("Toggle: track dimensions match the reference's own .sw (A-SIZE: 44x26, not 40x24)", () => {
+  it("declares TRACK_WIDTH as 44", () => {
+    expect(readCode()).toMatch(/const TRACK_WIDTH = 44;/);
   });
 
-  it("draws the track at TRACK_WIDTH, not a second, independent number", () => {
-    expect(readCode()).toMatch(/track: \{\s*width: TRACK_WIDTH,/);
+  it("declares TRACK_HEIGHT as 26", () => {
+    expect(readCode()).toMatch(/const TRACK_HEIGHT = 26;/);
+  });
+
+  it("draws the track at TRACK_WIDTH x TRACK_HEIGHT, not second, independent numbers", () => {
+    expect(readCode()).toMatch(/track: \{\s*width: TRACK_WIDTH,\s*height: TRACK_HEIGHT,/);
+  });
+});
+
+describe("Toggle: knob dimensions match the reference's own .sw i (A-SIZE: 18dp knob, 4dp inset, not 20dp/3dp)", () => {
+  it("declares KNOB_SIZE as 18", () => {
+    expect(readCode()).toMatch(/const KNOB_SIZE = 18;/);
+  });
+
+  it("declares KNOB_INSET as 4", () => {
+    expect(readCode()).toMatch(/const KNOB_INSET = 4;/);
+  });
+
+  it("draws the knob at KNOB_SIZE x KNOB_SIZE, not second, independent numbers", () => {
+    expect(readCode()).toMatch(/knob: \{\s*width: KNOB_SIZE,\s*height: KNOB_SIZE,/);
+  });
+
+  it("slides the knob to the reference's on-state left:22px (KNOB_INSET + (TRACK_WIDTH - KNOB_SIZE - KNOB_INSET * 2))", () => {
+    // 4 + 1 * (44 - 18 - 4*2) === 22, the spec's `.sw[data-on="on"] i{left:22px}`.
+    expect(readCode()).toMatch(
+      /translateX: KNOB_INSET \+ progress\.value \* \(TRACK_WIDTH - KNOB_SIZE - KNOB_INSET \* 2\),/,
+    );
   });
 });
 
