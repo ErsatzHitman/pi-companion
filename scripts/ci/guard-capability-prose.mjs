@@ -131,6 +131,8 @@ import { stripComments as sharedStripComments } from "./source-comment-stripper.
 // the exact `() => void` arrow shape both `FileUploadController.cancel` and
 // `FileDownloadController.cancel` declare — never a bare identifier, so it
 // cannot be satisfied by mentioning "cancel" in prose.
+const TEAL_ROLE_CONSUMER_MEMBER = /\bcolors\.teal\b/;
+
 const CONTROLLER_CANCEL_MEMBER = /\bcancel\s*:\s*\(\s*\)\s*=>\s*void\b/;
 
 // T172: `summary` alone — as a bare member name run through
@@ -340,6 +342,115 @@ const DECLARED_WORKSPACE_DEPS_OWN_SOURCE_FILES =
 
 /** @type {Capability[]} */
 export const CAPABILITIES = [
+  {
+    // P10-W3 (A-TEAL): the `teal` colour role finally reaches the product.
+    // It was deleted by TOKENS-1, restored when both confirmed designs were
+    // measured, and then sat in the palette with ZERO consumers for several
+    // waves - a role nothing painted. `tool-call-row.tsx` now paints a tool
+    // block's path chip LABEL with it and `markdown.tsx` its inline code,
+    // which is what the design draws: `.pa{color:var(--teal)}` and
+    // `.md code{...color:var(--teal)}`. Both are the TEXT colour; `.tchip`
+    // keeps a field-surface fill, and painting the chip teal is the obvious
+    // wrong reading this entry also protects against by naming the consumer
+    // rather than the token.
+    //
+    // A shape-anchored RegExp, not a bare `teal` string, and the reason is
+    // T172's trap: `teal` is declared in `packages/design-tokens/src` as a
+    // palette key and would keep this entry "shipped" forever even if every
+    // consumer were deleted again - which is exactly the state this entry
+    // exists to detect. `colors.teal` is a USE, so it disappears when the
+    // capability does. Measured before trusting it: the pattern matches
+    // `theme.colors.teal` in the two consumers above and matches nothing in
+    // `tokens.ts` itself, whose declaration is written `teal: "#8dc8c0"`.
+    name: "The teal role is painted by real Android product code (theme.colors.teal)",
+    methodNames: [TEAL_ROLE_CONSUMER_MEMBER],
+    denyingPhrases: [
+      /`?teal`? (?:has|carries) no consumer in shipped code/i,
+      /no(?:thing| screen| surface) (?:in|on) (?:the )?app(?:s)? paints (?:the )?`?teal`?/i,
+      /(?:the )?path chip(?:'s)? (?:label|text) (?:is|stays) (?:on )?`?accent-ink`?/i,
+    ],
+  },
+  {
+    // P10-W3 (A-MOTION-2): the Live/status pill's dot pulses while a turn is
+    // actually running. The design draws
+    // `.pill.run .dot{animation:records-pulse 1.1s ease-in-out infinite}`
+    // over a keyframe that rests at `opacity:.35;transform:scale(.8)` and
+    // peaks at full - and the previous wave landed
+    // EXPRESSIVE_RECORDS_PULSE_DURATION_MS, _EASING, _REST and _PEAK at
+    // exactly those values with nothing importing them, which is a
+    // capability that does not ship. `pulseDot` is the consumer.
+    //
+    // A bare member: it is declared in one shipped file, `StatusPill.tsx`,
+    // measured against the tree rather than assumed. The phrases are worded
+    // in this entry's own voice and avoid `StatusPill.tsx`'s own corrected
+    // narration of the pre-fix state, which carries a historical-quotation
+    // marker of its own.
+    name: "The running status pill's dot really pulses (pulseDot)",
+    methodNames: ["pulseDot"],
+    denyingPhrases: [
+      /(?:still )?no pulse(?:,| ) (?:now )?for a different reason/i,
+      /(?:the )?(?:running |run )?(?:pill|status)(?:'s)? dot (?:is|stays) (?:still|static|unanimated)/i,
+      /a pulse there would be honest/i,
+    ],
+  },
+  {
+    // P10-W3 (A-MOTION-2): the streaming caret blinks when the turn is at
+    // rest. The design draws
+    // `.stream-caret{...animation:caret-blink 1s step-end infinite}` with
+    // `.stream-caret.is-streaming{animation:none}` - solid WHILE streaming,
+    // blinking when not. The previous wave corrected a test that had the
+    // streaming half backwards but left the resting half undrawn, with
+    // EXPRESSIVE_CARET_BLINK_DURATION_MS consumed by nothing.
+    // `step-end` matters: it is a hard square wave, not a fade.
+    //
+    // A bare member, declared once in `StreamingMessage.tsx`.
+    name: "The streaming caret blinks at rest, and only at rest (showRestingCaret)",
+    methodNames: ["showRestingCaret"],
+    denyingPhrases: [
+      /(?:the )?caret (?:never|does not) blink(?:s)? (?:at rest|when idle|between turns)/i,
+      /no resting (?:caret|cursor) (?:state|blink) (?:exists|is drawn)/i,
+    ],
+  },
+  {
+    // P10-W3 (A-MOTION-2): the streaming tail fades. The design draws
+    // `.stream-tail{filter:blur(1.6px);mask-image:linear-gradient(to right,
+    // #000 20%,rgba(0,0,0,.2))}`, and turns both off under reduced motion.
+    // React Native has neither a CSS filter nor a mask, so the shipped form
+    // is a per-character opacity ramp over the trailing characters - the
+    // part of the intent that IS reachable without adding a dependency.
+    //
+    // Two bare members rather than one, because the pair is what makes the
+    // ramp a ramp: how many characters it covers and what opacities it
+    // steps through. Each is declared in `expressive-motion.ts` and read by
+    // `StreamingMessage.tsx`; neither name existed anywhere in the tree
+    // before this wave, measured rather than assumed.
+    name: "The streaming tail fades toward its trailing edge (EXPRESSIVE_STREAM_TAIL_*)",
+    methodNames: ["EXPRESSIVE_STREAM_TAIL_FADE_STOPS", "EXPRESSIVE_STREAM_TAIL_CHAR_COUNT"],
+    denyingPhrases: [
+      /(?:the )?stream(?:ing)? tail (?:is|renders) (?:a )?(?:flat|uniform|unfaded)/i,
+      /no (?:blur|fade|mask) (?:is applied to|reaches) the (?:streaming )?tail/i,
+      /react native has no (?:css )?filter, so the tail is drawn plain/i,
+    ],
+  },
+  {
+    // P10-W3 (A-MOTION-2): a footer pill's label really swaps when a drag
+    // commits. The design's `fp-swap` keyframes scale and offset the label
+    // through a four-stop curve as the value cycles;
+    // `footer-pill-drag-model.ts` already decided WHEN to cycle, and this is
+    // the drawing of it. `swapScale` is declared once, in `FooterPills.tsx`.
+    //
+    // Deliberately worded away from `fp-bubble` and `fp-halo`, the two
+    // sibling keyframes: `fpHalo` shipped a wave earlier, so a phrase naming
+    // the halo would be false for a different reason and would make this
+    // entry fire on correct prose - the defect this same wave had to retire
+    // an entry for.
+    name: "A footer pill's label animates through the design's fp-swap when a drag commits (swapScale)",
+    methodNames: ["swapScale"],
+    denyingPhrases: [
+      /(?:the )?(?:footer )?pill(?:'s)? label (?:just )?(?:snaps|changes) with no animation/i,
+      /`?fp-swap`? (?:is|remains) (?:not implemented|undrawn|unported)/i,
+    ],
+  },
   {
     // A-SHAPE (apps/android/src/ui/theme/expressive-shape.ts). The
     // confirmed Android design draws its chrome on an MD3 Expressive

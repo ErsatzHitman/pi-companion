@@ -46,8 +46,14 @@ import {
  * (T378): that sentence was written before this file was inside the
  * shared 48dp audit, and the pill declared no size of its own, so
  * `hitSlop={14}` padded outward from nothing a reader or a test could
- * check. `segment` now carries the `minHeight: 24` floor `Chip`
- * declares, which is what makes the claim true rather than intended.
+ * check. `segment` now carries a `minHeight: 24` floor of its own, which
+ * is what makes the claim true rather than intended. (CORRECTED at the
+ * P10-W3 merge gate: this said that floor was the one `Chip` declares.
+ * A-SIZE moved `CHIP_HEIGHT` to the confirmed design's
+ * `.chip{height:30px}`, so the two numbers no longer coincide. Nothing
+ * behavioural broke — `segment` always declared its own 24 and never
+ * read Chip's — but a reader following the old sentence to `Chip.tsx`
+ * would now find 30 and conclude one of the two files was wrong.)
  *
  * ## The switch is not drawn when nobody knows its value
  *

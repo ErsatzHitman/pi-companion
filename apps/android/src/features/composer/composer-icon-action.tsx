@@ -11,8 +11,8 @@ import { usePressScale } from "../../ui/theme/use-press-scale";
  * border-radius: var(--r-full) }` box — a full pill on a square, not a
  * fixed corner. (CORRECTED for A-COMPOSER: this constant read `9`, the
  * confirmed spec's OWN `border-radius:9px` shows up nowhere for `.ic` —
- * every declaration of that selector in `C:/Users/aksha/Downloads/
- * pi-ui-goal/android-spec.html` draws it at `--r-full`. `theme.radii.full`
+ * every declaration of that selector in the confirmed Android design
+ * draws it at `--r-full`. `theme.radii.full`
  * already equals that token's own value — see
  * `../../ui/theme/expressive-shape.ts`'s doc comment for why the FULL
  * point on the Expressive scale needs no Android-only entry of its own.)

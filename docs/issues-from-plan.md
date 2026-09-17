@@ -21749,3 +21749,102 @@ whole file passes in 2.41s for 33 tests. That is the contention signature `CLAUD
 at length for `packages/server`, in a package that has no serial lane to move it into. Recorded,
 not chased: the gate's android result is the `--dir apps/android/src` run, which is what CI's
 `android-tests` job compares against, and the e2e contract files are a separate concern.
+
+## Wave P10-W3 (UI spec conformance, iteration 3)
+
+Three file-disjoint packages: `A-TEAL` (transcript tool rows and the markdown renderer),
+`A-SIZE` (`ui/primitives`' chip and switch), `A-MOTION-2` (the motion the design draws that the
+repo had constants for and no consumers of). Every package returned SAFE TO COMMIT from the
+Opus merge gate, and **no file changed outside the union of the three partitions** -
+`packages/design-tokens` included, which was off limits to all three.
+
+### P10-8 - `WEB-TEAL` will not be built, and the reason is that the data does not exist
+
+`spec-delta.md` lists the web design's teal use as work not yet done, alongside the Android one.
+The Android half landed this wave. The web half is being closed unbuilt, deliberately.
+
+The web design paints `var(--teal)` in exactly one place. Grepped directly from `web-spec.html`,
+every occurrence is this:
+
+```js
+const CTX_SLICES = [
+  { k: "System + tools", v: 12400, c: "var(--teal)" },
+  { k: "Files read", v: 61200, c: "var(--accent)" },
+  { k: "Transcript", v: 48900, c: "var(--purple)" },
+  { k: "Tool results", v: 9100, c: "var(--orange)" },
+];
+```
+
+and it renders into `#menu-usebar` (a stacked proportional bar) and `#menu-legend` (a swatch
+legend), not into the context ring's arc. Teal is one of four category colours in a
+**four-way breakdown of the context window**.
+
+That breakdown has no source. The wire's usage payload carries `inputTokens`,
+`cachedInputTokens`, `outputTokens`, `totalCostUsd`, `contextWindowMaxTokens` and
+`contextWindowUsedTokens` - a single used-of-max figure and a cache split, with no per-category
+attribution anywhere. `apps/web`'s `useSessionContextTelemetry` subscribes to `agent_update`
+and runs `lastUsage` through `frontend-core`'s `deriveContextWindowTelemetry`; there is nothing
+in that path to divide into "System + tools" versus "Files read" versus "Transcript" versus
+"Tool results".
+
+So building it means inventing four numbers and presenting them as measurement. The spec's own
+values (12400 / 61200 / 48900 / 9100) are mockup demo data, the same way its example session
+titles are. A stacked bar whose four segments were fabricated from one real total would be
+worse than the single-arc ring shipped today, because it would look like a measurement.
+
+**A reviewer could disagree**, and here is the strongest version of the other case: the daemon
+could be extended to report the split, and the spec is evidence the owner wants it. That is
+true, and it is a backend feature with its own protocol change - not a UI conformance task, and
+not something a `apps/web` package can deliver. If it is wanted, it starts at
+`packages/protocol`'s usage payload, not at a CSS colour.
+
+What was NOT done, and is not being quietly dropped: the ring's own segment colours were not
+touched, and `teal` remains unused on the web surface. That is now the only remaining gap
+between `spec-delta.md` §1's teal note and the tree.
+
+### P10-9 - `CHIP_HEIGHT` and `CHIP_PADDING_HORIZONTAL` were named but pinned by nothing
+
+The wave's own rule was that every number taken from the spec lands in a NAMED constant with a
+test that would fail if it changed. `A-SIZE` did the first half - `CHIP_HEIGHT = 30` and
+`CHIP_PADDING_HORIZONTAL = 13`, from `.chip{height:30px;padding:0 13px}` - and nothing pinned
+either. The gate caught it and correctly declined to fix it: a new test file belongs to no
+partition, and a gate writing outside the partitions is the specific failure these waves guard
+against.
+
+`touch-targets.test.ts` does not close the gap, which was checked rather than assumed: its
+runtime check is a hit-area FLOOR, so it keeps passing if `CHIP_HEIGHT` silently returns to 24.
+
+`Chip.test.ts` was added at the gate, in the shape `Toggle.test.ts` already uses, and proven to
+fire before being trusted: mutating `CHIP_HEIGHT` to 24 produced `1 failed | 3 passed`, and
+restoring gave a byte-identical file and 4 passed. The real cause was a scoping mistake in the
+package definition - `A-SIZE`'s exclusive file list named `Toggle.test.ts` but no test for the
+other primitive it was changing - not agent negligence, and the fix for next wave is to check
+that every file a package may edit has a test in the same list.
+
+### P10-10 - a machine-local absolute path had become a citation convention
+
+`A-SIZE` cited the spec as `C:/Users/aksha/Downloads/pi-ui-goal/android-spec.html` in three
+shipped files. The gate flagged it as a new convention no file at HEAD used. **That was half
+right, and the correction matters more than the original finding**: `features/composer/
+composer-icon-action.tsx` already carried the same absolute path, and it landed in the PREVIOUS
+wave. So the convention was not introduced here - it was introduced a wave earlier, went
+uncaught, and was then copied.
+
+It breaks no rule this repository has written down. `CLAUDE.md`'s citation rule is about symbol
+names versus line numbers, and these citations name a CSS selector, which is the good form. But
+no other machine and no CI runner can follow the path, so as a citation it resolves to nothing
+for every reader except one.
+
+All four sites now cite "the confirmed Android design" plus the selector, which is the form
+`ui/recipes/ScreenBar.tsx` and `ui/theme/block-shape.ts` already use. No guard enforces this;
+if it reappears, the grep is `git grep -n "C:/Users"` restricted to `apps` and `packages`,
+excluding `scripts/ci/guard-format-check-per-commit.test.mjs`, whose own fixture string
+legitimately contains a Windows temp path.
+
+### P10-11 - `SessionControlsPicker.tsx` described a floor that had moved
+
+Its header said `segment` "carries the `minHeight: 24` floor `Chip` declares". `segment` does
+declare 24, and always did - but `Chip` now declares 30, so the two no longer coincide and the
+sentence pointed a reader at a file that would contradict it. Prose only: nothing read Chip's
+value, and no test or behaviour broke. Corrected at the gate with the old sentence quoted,
+since the file sits outside every partition.

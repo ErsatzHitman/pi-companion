@@ -55,11 +55,19 @@
  * any of them: both declare the six roles in their own `:root` block and
  * then never reference one through `var()`, and no Tooltip primitive is
  * planned (plan.md §10.3 lists the primitive layer; Tooltip is not in it).
- * `teal` was deleted in the same pass and RESTORED: it has no consumer in
- * shipped code yet, but both specs paint it — the Android design uses it
- * for the path chip inside a tool block, and the web design for the
- * "System + tools" segment of the context ring — so its absence is work
- * not yet done, not a role nothing wants.
+ * `teal` was deleted in the same pass and RESTORED, and as of P10-W3 it
+ * has real consumers: `apps/android/src/features/transcript/
+ * tool-call-row.tsx` paints a tool block path chip text with it and
+ * `features/extensions/renderers/markdown.tsx` paints inline code with
+ * it, which is what the Android design draws (`.pa{color:var(--teal)}`
+ * and `.md code{...color:var(--teal)}` — the TEXT, while `.tchip` keeps
+ * a field-surface fill). (CORRECTED at the P10-W3 merge gate: this said
+ * "it has no consumer in shipped code yet ... so its absence is work not
+ * yet done, not a role nothing wants". The first half is what that wave
+ * closed.) The web design paints `var(--teal)` in exactly one place, its
+ * `CTX_SLICES` context breakdown, and that stays unbuilt on purpose —
+ * see `docs/issues-from-plan.md` P10-8 for why the wire carries no
+ * per-category split to drive it.
  *
  * T54A1 nudges three roles off the published figure to clear WCAG AA (see
  * the file header and `docs/beautiful-ui-reference.md` "WCAG AA contrast
