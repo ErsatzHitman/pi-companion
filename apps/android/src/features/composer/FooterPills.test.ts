@@ -83,6 +83,36 @@ describe("FooterPills source", () => {
     expect(code).toMatch(/borderRadius: theme\.radii\.full/);
   });
 
+  it("carries the artifact's fp-swap overshoot (0.86 → 1.06 → 1), not just a slide-and-fade (A-MOTION-2)", () => {
+    // A-MOTION-2: a prior version of this file hardcoded `{ scale: 1 }`
+    // on the label transform, which is `fp-swap`'s 0% and 100% value but
+    // silently dropped its 70% keyframe (`scale(1.06)`) — the squash
+    // overshoot every other ported keyframe in this file keeps. Pinned by
+    // both the shared value existing and the label style actually
+    // reading it, so a future edit cannot quietly revert to `{ scale: 1 }`.
+    expect(code).toMatch(/const swapScale = useSharedValue\(1\);/);
+    expect(code).toMatch(
+      /transform: \[\{ translateX: swapX\.value \}, \{ scale: swapScale\.value \}\]/,
+    );
+    expect(code).toMatch(/swapScale\.value = 0\.86;/);
+    expect(code).toMatch(/withTiming\(1\.06, \{ duration: 294, easing: bezier \}\)/);
+  });
+
+  // P10-GATE: the three swap durations are derived from the artifact's own
+  // `.fp .fpl.fp-swap{animation:fp-swap 420ms ...}` and its keyframe
+  // percentages -- 42% -> 176ms, 70% -> 294ms, the remaining 30% -> 126ms.
+  // Only 294 was pinned above, so the other two could have drifted with
+  // nothing failing. They are inline literals here rather than named
+  // constants because every ported keyframe in `FooterPills.tsx` already
+  // is (the `fp-bubble`/`fp-halo` sequences predate this file's swap work);
+  // pinning the literals is the coverage that convention can still carry.
+  it("pins each fp-swap keyframe to its own percentage of the artifact's 420ms", () => {
+    expect(code).toMatch(/withTiming\(1, \{ duration: 176, easing: bezier \}\)/);
+    expect(code).toMatch(/withTiming\(0, \{ duration: 294, easing: bezier \}\)/);
+    expect(code).toMatch(/withTiming\(1, \{ duration: 126, easing: bezier \}\)/);
+    expect(code).toMatch(/swapX\.value = direction > 0 \? 9 : -9;/);
+  });
+
   it("only plays the bubble/halo/swap pop from a resolved drag, never from a plain tap", () => {
     // stepPill is the artifact's only caller of bubble(); toggleMode/
     // openMenu (this file's onPress path) never call it.

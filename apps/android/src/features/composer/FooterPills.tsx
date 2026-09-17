@@ -272,10 +272,18 @@ interface MetadataPillProps {
  *    (1 → 1.18) while its `opacity` fades (0.46 → 0) over the same
  *    520ms — the same "spread and fade" read, without a literal
  *    box-shadow.
- * 3. **`fp-swap`** — the label's own cross-slide, `opacity:0
- *    translateX(±9px) scale(.86) → opacity:1 translateX(0) scale(1)`
- *    over 420ms. Ported directly onto the label `Text`'s wrapping
- *    `Animated.View`.
+ * 3. **`fp-swap`** — the label's own cross-slide, quoted from the
+ *    artifact's real four-keyframe `@keyframes fp-swap` (A-MOTION-2
+ *    corrected this doc comment's own prior two-keyframe summary, which
+ *    dropped the overshoot): `0% opacity:0 translateX(±9px) scale(.86) →
+ *    42% opacity:1 → 70% translateX(0) scale(1.06) → 100% translateX(0)
+ *    scale(1)`, `cubic-bezier(.22,1,.28,1)` over 420ms. Ported as three
+ *    independent `withTiming`/`withSequence` calls on `swapOpacity`
+ *    (176ms, finishing at the 42% mark), `swapX` (294ms, finishing at
+ *    70%) and `swapScale` (294ms to the 1.06 overshoot, then a further
+ *    126ms settling to 1) — each stopping at its OWN keyframe's own
+ *    percentage rather than sharing one duration, which is what the
+ *    artifact's own staggered percentages state.
  *
  * **When these play, exactly matching the artifact.** `stepPill` is the
  * ONLY function that calls `bubble()` — a plain tap (`toggleMode`,
@@ -323,6 +331,7 @@ function MetadataPill({
   const haloScale = useSharedValue(1);
   const swapOpacity = useSharedValue(1);
   const swapX = useSharedValue(0);
+  const swapScale = useSharedValue(1);
 
   const drag = useRef({ startX: 0, dx: 0, armed: false });
 
@@ -358,14 +367,34 @@ function MetadataPill({
       if (direction !== 0) {
         // fp-swap: the label crosses in from the edge the drag came
         // from — direction 1 (forward) reads as the artifact's own
-        // dir>0 (`+9px`), direction -1 as `-9px`.
+        // dir>0 (`+9px`), direction -1 as `-9px`. Four keyframes at
+        // 0/42/70/100% of 420ms, quoted directly from `android-spec.html`:
+        // opacity 0→1 finishes at 42% (176ms); translateX dir→0 finishes
+        // at 70% (294ms); scale .86→1.06 also finishes at 70% (294ms) and
+        // then settles 1.06→1 over the remaining 30% (126ms) — the
+        // overshoot this file's own doc comment used to omit.
         swapOpacity.value = 0;
         swapX.value = direction > 0 ? 9 : -9;
-        swapOpacity.value = withTiming(1, { duration: 420, easing: bezier });
-        swapX.value = withTiming(0, { duration: 420, easing: bezier });
+        swapScale.value = 0.86;
+        swapOpacity.value = withTiming(1, { duration: 176, easing: bezier });
+        swapX.value = withTiming(0, { duration: 294, easing: bezier });
+        swapScale.value = withSequence(
+          withTiming(1.06, { duration: 294, easing: bezier }),
+          withTiming(1, { duration: 126, easing: bezier }),
+        );
       }
     },
-    [bubbleScaleX, bubbleScaleY, dragX, haloOpacity, haloScale, reduceMotion, swapOpacity, swapX],
+    [
+      bubbleScaleX,
+      bubbleScaleY,
+      dragX,
+      haloOpacity,
+      haloScale,
+      reduceMotion,
+      swapOpacity,
+      swapScale,
+      swapX,
+    ],
   );
 
   const handleResponderGrant = useCallback((event: GestureResponderEvent) => {
@@ -424,7 +453,7 @@ function MetadataPill({
   }));
   const labelStyle = useAnimatedStyle(() => ({
     opacity: swapOpacity.value,
-    transform: [{ translateX: swapX.value }, { scale: 1 }],
+    transform: [{ translateX: swapX.value }, { scale: swapScale.value }],
   }));
 
   const variantTextStyle =

@@ -23,6 +23,8 @@ import {
   EXPRESSIVE_RECORDS_PULSE_EASING,
   EXPRESSIVE_RECORDS_PULSE_PEAK,
   EXPRESSIVE_RECORDS_PULSE_REST,
+  EXPRESSIVE_STREAM_TAIL_CHAR_COUNT,
+  EXPRESSIVE_STREAM_TAIL_FADE_STOPS,
   type ExpressivePressTarget,
 } from "./expressive-motion.js";
 
@@ -121,9 +123,23 @@ describe("pixel-on (the .pxl 3x3 grid loader)", () => {
   });
 });
 
-describe("caret-blink (recorded, not wired — see StreamingMessage.tsx)", () => {
+describe("caret-blink (wired behind StreamingMessage.tsx's own showRestingCaret opt-in)", () => {
   it("carries the artifact's own 1s cycle", () => {
     expect(EXPRESSIVE_CARET_BLINK_DURATION_MS).toBe(1000);
+  });
+});
+
+describe("stream-tail (the mask-image half wired behind StreamingMessage.tsx; no filter/blur equivalent exists on this platform)", () => {
+  it("carries the mask gradient's own three stops, holding full alpha flat from 0 to .2", () => {
+    expect(EXPRESSIVE_STREAM_TAIL_FADE_STOPS).toEqual([
+      { offset: 0, opacity: 1 },
+      { offset: 0.2, opacity: 1 },
+      { offset: 1, opacity: 0.2 },
+    ]);
+  });
+
+  it("carries the artifact's own TAIL=6 character count, not a guessed width", () => {
+    expect(EXPRESSIVE_STREAM_TAIL_CHAR_COUNT).toBe(6);
   });
 });
 
@@ -263,17 +279,62 @@ describe("StreamingMessage.tsx: the caret direction is corrected, and the shimme
     expect(src).not.toMatch(/interpolateColor/);
   });
 
-  it("no longer imports react-native-reanimated at all — nothing left in this file animates directly", () => {
-    // Both the caret (now static) and the caption (now ShimmerText's own
-    // animation, not this file's) stopped calling Reanimated directly.
-    // This is a deliberate, disclosed scope decision — see this file's
-    // own "fade-up ... deliberately NOT wired up here" doc paragraph —
-    // not an oversight: wiring the artifact's turn-entrance fade-up here
-    // would reintroduce a direct Reanimated call that owns a duration
-    // outside the shared `motion.duration` table, which
-    // `../recipes/recipe-accessibility.test.ts` (outside this package)
-    // only tolerates for a name explicitly listed in its own
-    // `MOTION_TOKEN_EXEMPT` set.
-    expect(code()).not.toMatch(/from "react-native-reanimated"/);
+  it("imports react-native-reanimated again (A-MOTION-2), but only to drive the resting caret's own hard blink", () => {
+    // P10-GATE said "nothing left in this file animates directly", which
+    // A-MOTION-2 makes false: the "blinks at rest" half of `.stream-caret`
+    // (recorded but unwired at that gate) is now implemented, behind a
+    // caller opt-in prop — see `showRestingCaret` below — the same shape
+    // as `showSpeakerLabel` above it. The streaming caret and the caption
+    // are exactly as static/delegated as the superseded assertion said;
+    // only the previously-absent resting phase now calls Reanimated.
+    const src = code();
+    expect(src).toMatch(/from "react-native-reanimated"/);
+    expect(src).toMatch(/showRestingCaret\?: boolean;/);
+    expect(src).toMatch(/showRestingCaret = false,/);
+  });
+
+  it("blinks the resting caret as a hard on/off square wave — step-end, never an eased fade", () => {
+    const src = code();
+    // Two half-cycle holds, each snapping instantly (duration 0) to the
+    // opposite opacity, rather than a single withTiming interpolating
+    // smoothly across the full cycle — the CSS `step-end` shape, not
+    // `ease`. Named constants throughout: no bare millisecond literal
+    // sits next to a `duration:` key anywhere in this file.
+    expect(src).toMatch(/CARET_BLINK_HALF_MS = EXPRESSIVE_CARET_BLINK_DURATION_MS \/ 2/);
+    expect(src).toMatch(/withDelay\(\s*CARET_BLINK_HALF_MS/);
+    expect(src).not.toMatch(/duration:\s*\d/);
+  });
+
+  it("still renders a plain, unanimated caret when the device asks for reduced motion", () => {
+    const src = code();
+    expect(src).toMatch(/showRestingCaret && !reduceMotion/);
+    // Reduced motion draws the same plain View the streaming case uses —
+    // solid, not hidden, so the resting caret still marks the line
+    // either way (plan.md §10.5's "no information lost" rule).
+    expect(src).toMatch(
+      /showRestingCaret \? \(\s*<View style=\{styles\.cursor\} accessibilityElementsHidden \/>/,
+    );
+  });
+});
+
+describe("StreamingMessage.tsx: the streaming tail's opacity fade (A-MOTION-2, the reachable half of .stream-tail)", () => {
+  const code = () => readSource("../recipes/StreamingMessage.tsx");
+
+  it("imports the mask gradient's own stops and character count rather than inventing new ones", () => {
+    const src = code();
+    expect(src).toMatch(/EXPRESSIVE_STREAM_TAIL_FADE_STOPS/);
+    expect(src).toMatch(/EXPRESSIVE_STREAM_TAIL_CHAR_COUNT/);
+  });
+
+  it("draws no blur and no mask-image — there is no React Native equivalent, and none is invented", () => {
+    const src = code();
+    expect(src).not.toMatch(/[Bb]lur/);
+    expect(src).not.toMatch(/expo-blur/);
+    expect(src).not.toMatch(/MaskedView/);
+  });
+
+  it("only fades the tail while actually streaming, and not at all under reduced motion", () => {
+    const src = code();
+    expect(src).toMatch(/streaming && !reduceMotion/);
   });
 });

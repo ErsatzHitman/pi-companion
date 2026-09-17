@@ -147,7 +147,11 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
   // constant instead (`EXPRESSIVE_PIXEL_CYCLE_MS` and its siblings, in
   // `../theme/expressive-motion`), and the loop below asserts that of
   // every member of this set rather than taking an exemption on trust.
-  const MOTION_TOKEN_EXEMPT = new Set(["ShimmerText", "PixelLoader"]);
+  //
+  // A-MOTION-2: `StreamingMessage` joins it too, for its own resting-caret
+  // blink (`EXPRESSIVE_CARET_BLINK_DURATION_MS` — the artifact's `1s`
+  // `caret-blink`, likewise absent from `motion.duration`).
+  const MOTION_TOKEN_EXEMPT = new Set(["ShimmerText", "PixelLoader", "StreamingMessage"]);
   /** Calls a Reanimated timing helper itself, rather than delegating to a shared hook that owns the duration. */
   const DECLARES_OWN_TIMING = /with(?:Timing|Repeat|Delay|Spring)\(/;
   const reanimated = RECIPE_FILES.filter((name) =>
@@ -179,6 +183,7 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
     expect(animated).toContain("ThinkingSection");
     expect(animated).not.toContain("ShimmerText");
     expect(animated).not.toContain("PixelLoader");
+    expect(animated).not.toContain("StreamingMessage");
   });
 
   for (const name of MOTION_TOKEN_EXEMPT) {
@@ -190,7 +195,9 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
       // the exemption cannot be collected by a recipe that simply inlined
       // a magic number — which is what requiring `motion.duration` was
       // there to prevent in the first place.
-      expect(code).toMatch(/SHIMMER_DURATION_MS|EXPRESSIVE_PIXEL_CYCLE_MS/);
+      expect(code).toMatch(
+        /SHIMMER_DURATION_MS|EXPRESSIVE_PIXEL_CYCLE_MS|EXPRESSIVE_CARET_BLINK_DURATION_MS/,
+      );
       expect(code).not.toMatch(/duration:\s*\d/);
     });
   }
@@ -218,21 +225,31 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
 
   // P10-GATE: this test was titled "StreamingMessage checks reduceMotion
   // before repeating its cursor animation" and asserted only that the word
-  // `reduceMotion` appears somewhere. Both halves were falsified by this
+  // `reduceMotion` appears somewhere. Both halves were falsified by that
   // wave: the artifact's `.stream-caret.is-streaming{animation:none}` means
   // the caret is SOLID while streaming, so there is no cursor animation
-  // left to repeat, and the file no longer imports Reanimated at all. The
-  // title is corrected rather than left standing (CLAUDE.md T124), and the
-  // assertion is widened to pin the invariant that actually survives.
-  it("StreamingMessage holds its caret solid while streaming, and hands its only motion to ShimmerText", () => {
+  // left to repeat, and the file no longer imported Reanimated at all. The
+  // title was corrected rather than left standing (CLAUDE.md T124).
+  //
+  // A-MOTION-2 (CORRECTED here again, same rule): the file imports
+  // Reanimated once more, for the resting-caret blink `showRestingCaret`
+  // now wires up — see `../theme/expressive-motion.test.ts`'s own
+  // consumer-contract block for the full shape of that blink. The
+  // streaming-caret half this test already pinned (solid, not animated)
+  // is unchanged; only the "no Reanimated at all" claim needed correcting.
+  it("StreamingMessage holds its caret solid while streaming, hands its shimmer caption to ShimmerText, and owns only the resting caret's own timing", () => {
     const code = readRecipeCode("StreamingMessage");
     expect(code).toMatch(/reduceMotion/);
-    // The one animation it still shows is delegated, gated on the device
-    // setting, and owned by the recipe that holds the duration constant.
+    // The shimmer caption is still delegated, gated on the device setting,
+    // and owned by the recipe that holds that duration constant.
     expect(code).toMatch(/<ShimmerText\b[^>]*active=\{!reduceMotion\}/);
-    // Nothing here drives its own timing any more: the caret is a plain View.
-    expect(code).not.toMatch(DECLARES_OWN_TIMING);
-    expect(code).not.toMatch(/react-native-reanimated/);
+    // The streaming caret itself is still a plain, unanimated View.
+    expect(code).toMatch(/<View style=\{styles\.cursor\} accessibilityElementsHidden \/>/);
+    // Its only own Reanimated timing is the resting caret's hard blink,
+    // behind the `showRestingCaret` opt-in — this file is a declared
+    // MOTION_TOKEN_EXEMPT member below for exactly that reason.
+    expect(code).toMatch(DECLARES_OWN_TIMING);
+    expect(code).toMatch(/react-native-reanimated/);
   });
 
   // P10-GATE: this test was titled "renders every cell fully lit" and
@@ -388,5 +405,46 @@ describe("§10.4 recipes: TalkBack roles, states, and non-colour status text", (
     expect(code).toMatch(
       /\{showSpeakerLabel \? <Text style=\{styles\.speaker\}>\{speakerLabel\}<\/Text> : null\}/,
     );
+  });
+});
+
+/**
+ * A-MOTION-2: `StatusPill` (`../primitives/StatusPill.tsx`) is not a
+ * recipe — it is outside `RECIPE_FILES`, and outside `../primitives`'
+ * own `touch-targets.test.ts` and `component-lab.test.ts` coverage too —
+ * so its own `records-pulse` animation has no home in either of this
+ * file's derived loops. Extended here by explicit request (this task's
+ * brief): read directly, the same `readFileSync`-plus-comment-stripping
+ * shape every check above already uses, not folded into `RECIPE_FILES`
+ * itself, since that set is genuinely `ui/recipes`-only and widening its
+ * `readdirSync` root to cover a primitives directory too would change
+ * what every OTHER assertion above means for every other recipe.
+ */
+function readPrimitiveCode(name: string): string {
+  return readFileSync(fileURLToPath(new URL(`../primitives/${name}.tsx`, import.meta.url)), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+}
+
+describe("StatusPill (../primitives): the records-pulse is a caller opt-in, reduced-motion gated (A-MOTION-2)", () => {
+  const code = () => readPrimitiveCode("StatusPill");
+
+  it("drives the pulse from react-native-reanimated, using the shared records-pulse numbers rather than a re-derived literal", () => {
+    const src = code();
+    expect(src).toMatch(/from "react-native-reanimated"/);
+    expect(src).toMatch(/EXPRESSIVE_RECORDS_PULSE_DURATION_MS/);
+    expect(src).toMatch(/EXPRESSIVE_RECORDS_PULSE_EASING/);
+    expect(src).toMatch(/EXPRESSIVE_RECORDS_PULSE_REST/);
+    expect(src).toMatch(/EXPRESSIVE_RECORDS_PULSE_PEAK/);
+  });
+
+  it("takes pulseDot as an explicit caller opt-in and infers nothing from tone", () => {
+    const src = code();
+    expect(src).toMatch(/pulseDot\?: boolean;/);
+    expect(src).toMatch(/pulseDot = false,/);
+  });
+
+  it("never pulses under reduced motion, regardless of what the caller asked for", () => {
+    expect(code()).toMatch(/pulseDot && showDot && !reduceMotion/);
   });
 });

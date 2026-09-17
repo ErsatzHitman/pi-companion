@@ -31,27 +31,57 @@
  * `./use-press-scale.ts`'s `"icon"` variant, consumed by
  * `../primitives/IconButton.tsx` and `../recipes/ScreenBar.tsx`.
  * `EXPRESSIVE_PIXEL_*` drives `../recipes/PixelLoader.tsx` in full.
- * `EXPRESSIVE_CARET_BLINK_DURATION_MS` is recorded but NOT wired to an
- * animation — see `../recipes/StreamingMessage.tsx`'s own doc comment
- * for why the "blinks at rest" phase needs session-level state this
- * package does not own.
  *
- * The remaining exports (`EXPRESSIVE_PRESS_SCALE`'s five other targets,
- * `EXPRESSIVE_POP_IN_*`, `EXPRESSIVE_RECORDS_PULSE_*`, every
- * `EXPRESSIVE_FADE_UP_*` export) have no consumer in this package today.
- * `.scr-btn`, `.pbtn`, `.row`, `.chip`, `.blk`/`.bash`/`.ov`, `.fp`,
- * `.dchip`/`.att`/`.dprev` and `.pill.run .dot` all live in files
- * A-MOTION does not own (a navigation rail, the prompt bar's own
- * buttons, transcript block chrome, the composer's file pills, tool-call
- * detail chips, and the status pill's running dot). `fade-up`'s own
- * intended consumer, the transcript turn's entrance (the artifact's
- * `.t>*`), IS a file this package owns — `../recipes/StreamingMessage.tsx`
- * — but is deliberately NOT wired there this wave; see that file's own
- * doc comment for why. All of these are recorded here anyway, exactly as
- * `expressive-shape.ts` recorded `xs`/`sm`/`md`/`lg` before any caller
- * needed them, so the next package (or task) that draws one of these
- * elements has a measured number to read instead of a fresh guess at the
- * source CSS.
+ * **A-MOTION-2** wired three more of this file's own exports, each
+ * behind an explicit caller opt-in prop rather than an inferred one —
+ * the same "the caller decides" shape `StreamingMessage.tsx`'s
+ * `showSpeakerLabel` already used, because none of these three states
+ * can be told apart from the tone/text a component already receives
+ * (see each consumer's own doc comment for why):
+ *
+ * - `EXPRESSIVE_RECORDS_PULSE_*` drives `../primitives/StatusPill.tsx`'s
+ *   dot when a caller passes `pulseDot`, gated on `reduceMotion` the
+ *   same way every other animated recipe in this tree is.
+ * - `EXPRESSIVE_CARET_BLINK_DURATION_MS` drives
+ *   `../recipes/StreamingMessage.tsx`'s resting caret when a caller
+ *   passes `showRestingCaret`, as a hard on/off square wave (matching
+ *   the artifact's `step-end` timing function, not a fade).
+ * - `EXPRESSIVE_STREAM_TAIL_FADE_STOPS` / `EXPRESSIVE_STREAM_TAIL_CHAR_COUNT`
+ *   drive the same file's streaming-tail opacity fade — the reachable
+ *   half of `.stream-tail`; see that file's own doc comment for the
+ *   `filter:blur()` half this app has no equivalent for and does not
+ *   attempt.
+ *
+ * **No shipped caller passes `pulseDot` or `showRestingCaret` yet.**
+ * Both need session/transcript-level state (which pill really means "a
+ * turn is running", which turn is the most recently settled one) that
+ * the files A-MOTION-2 owns do not have and should not reach for —
+ * `../../features/transcript/header.tsx` and `../../features/transcript/
+ * message-row.tsx` own that state and are outside this task's file list.
+ * The mechanism is real and proven by its own tests; wiring a caller to
+ * it is the next task's work, not a capability that doesn't exist.
+ *
+ * The remaining exports (every `EXPRESSIVE_PRESS_SCALE` target but
+ * `icon`, `EXPRESSIVE_POP_IN_*`, every `EXPRESSIVE_FADE_UP_*` export)
+ * have no consumer in this package today. `.scr-btn`, `.pbtn`, `.row`,
+ * `.chip`, `.blk`/`.bash`/`.ov`, `.dchip`/`.att`/`.dprev` all live in
+ * files A-MOTION does not own (a navigation rail, the prompt bar's own
+ * buttons, transcript block chrome, and tool-call detail chips).
+ * `EXPRESSIVE_PRESS_SCALE.filePill` (`button.fp`'s own `:active{scale(.92)}`)
+ * is the one target whose file — `../../features/composer/
+ * FooterPills.tsx` — this package's own family DOES now touch
+ * (A-MOTION-2); it stays unconsumed because that file's `MetadataPill`
+ * drives its own drag/pop physics (`playPop`, `footer-pill-drag-model.ts`)
+ * rather than the shared `usePressScale` hook this target is meant for,
+ * and retrofitting that split is outside this task's scope.
+ * `fade-up`'s own intended consumer, the transcript turn's entrance (the
+ * artifact's `.t>*`), IS a file this package owns —
+ * `../recipes/StreamingMessage.tsx` — but is deliberately NOT wired
+ * there this wave either; see that file's own doc comment for why. All
+ * of these are recorded here anyway, exactly as `expressive-shape.ts`
+ * recorded `xs`/`sm`/`md`/`lg` before any caller needed them, so the
+ * next package (or task) that draws one of these elements has a
+ * measured number to read instead of a fresh guess at the source CSS.
  */
 
 /** A CSS-style cubic-bezier control-point tuple: `[x1, y1, x2, y2]`. */
@@ -158,13 +188,52 @@ export const EXPRESSIVE_PIXEL_CELL_DELAYS_MS: readonly number[] = [
 // caret-blink: `.stream-caret{animation:caret-blink 1s step-end infinite}`,
 // `.stream-caret.is-streaming{animation:none}`.
 //
-// Recorded, not wired: see `../recipes/StreamingMessage.tsx`'s own doc
-// comment for why only the `is-streaming` half (no animation — a solid
-// caret) is ported this wave.
+// Both halves are now ported in `../recipes/StreamingMessage.tsx`: solid
+// while `streaming`, and this hard blink behind `showRestingCaret` — see
+// that file's own doc comment for why the second half is a caller opt-in
+// rather than something this component infers on its own.
 // ---------------------------------------------------------------------------
 
 /** `caret-blink 1s step-end infinite` — a hard, un-eased flip every half-cycle, not a fade. */
 export const EXPRESSIVE_CARET_BLINK_DURATION_MS = 1000;
+
+// ---------------------------------------------------------------------------
+// stream-tail: `.stream-tail{filter:blur(1.6px);mask-image:linear-gradient(
+// to right,#000 20%,rgba(0,0,0,.2))}`, reduced under
+// `@media(prefers-reduced-motion:reduce)` to `filter:none;mask-image:none`.
+//
+// React Native has no `filter`/`mask-image` — no consumer of this module
+// attempts the blur half. `EXPRESSIVE_STREAM_TAIL_FADE_STOPS` records the
+// mask gradient's own (offset, alpha) stops for a consumer to interpolate
+// an opacity ramp from, which is the reachable half.
+// ---------------------------------------------------------------------------
+
+/** One stop of the artifact's `mask-image` gradient: `offset` 0–1 along the mask axis, `opacity` its alpha at that point. */
+export interface ExpressiveStreamTailFadeStop {
+  readonly offset: number;
+  readonly opacity: number;
+}
+
+/**
+ * `linear-gradient(to right,#000 20%,rgba(0,0,0,.2))` as three stops: full
+ * alpha from `0` to `.2`, then a straight ramp down to `.2` alpha by `1`.
+ * CSS gradients hold a colour-stop's value flat until the NEXT stop, so
+ * `0` and `.2` share the same `1` — this is not a rounding duplicate.
+ */
+export const EXPRESSIVE_STREAM_TAIL_FADE_STOPS: readonly ExpressiveStreamTailFadeStop[] = [
+  { offset: 0, opacity: 1 },
+  { offset: 0.2, opacity: 1 },
+  { offset: 1, opacity: 0.2 },
+];
+
+/**
+ * `TAIL` in the artifact's own streaming script (`const CPT=2,TICK=9,
+ * TAIL=6,STAGGER=120`, quoted directly from `android-spec.html`, itself
+ * quoting `D:/beautiful-ui`'s `StreamText.tsx`'s `blurTail 6`): the
+ * character count of the live `.stream-tail` span trailing the settled
+ * text while a line is still typing.
+ */
+export const EXPRESSIVE_STREAM_TAIL_CHAR_COUNT = 6;
 
 // ---------------------------------------------------------------------------
 // pop-in: `@keyframes pop-in{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}`.

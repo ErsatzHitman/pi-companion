@@ -1,5 +1,13 @@
-import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo } from "react";
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
 import {
   BLOCK_PADDING_HORIZONTAL,
@@ -8,6 +16,12 @@ import {
   blockRing,
   blockSurface,
 } from "../theme/block-shape";
+import {
+  EXPRESSIVE_CARET_BLINK_DURATION_MS,
+  EXPRESSIVE_STREAM_TAIL_CHAR_COUNT,
+  EXPRESSIVE_STREAM_TAIL_FADE_STOPS,
+  type ExpressiveStreamTailFadeStop,
+} from "../theme/expressive-motion";
 import { asFontWeight } from "../theme/native-style-helpers";
 import { useTheme } from "../theme/theme-context";
 import { ShimmerText } from "./ShimmerText";
@@ -21,6 +35,84 @@ const CARET_WIDTH = 2;
  */
 const LINE_FONT_SIZE = 12;
 const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
+
+/** Half of `caret-blink`'s own 1s cycle — one hold, in either state. */
+const CARET_BLINK_HALF_MS = EXPRESSIVE_CARET_BLINK_DURATION_MS / 2;
+/**
+ * `step-end` snaps instantly at the end of its hold rather than
+ * interpolating toward it — a `withTiming` of this duration, reached
+ * only after a `withDelay(CARET_BLINK_HALF_MS, ...)` hold, is what makes
+ * the flip a hard edge instead of a fade.
+ */
+const CARET_BLINK_INSTANT_MS = 0;
+
+/**
+ * Linear-interpolates the artifact's `mask-image` gradient
+ * (`EXPRESSIVE_STREAM_TAIL_FADE_STOPS`) at one point along its axis.
+ * `offset` below the first stop or above the last one clamps to that
+ * stop's own opacity, matching how a CSS gradient holds its end colours
+ * flat outside its declared stops.
+ */
+function interpolateStreamTailOpacity(
+  offset: number,
+  stops: readonly ExpressiveStreamTailFadeStop[],
+): number {
+  if (offset <= stops[0].offset) return stops[0].opacity;
+  for (let i = 1; i < stops.length; i++) {
+    const previous = stops[i - 1];
+    const current = stops[i];
+    if (offset <= current.offset) {
+      const span = current.offset - previous.offset;
+      const t = span === 0 ? 1 : (offset - previous.offset) / span;
+      return previous.opacity + (current.opacity - previous.opacity) * t;
+    }
+  }
+  return stops[stops.length - 1].opacity;
+}
+
+/**
+ * The `.stream-tail`'s trailing characters of `text`, each paired with
+ * the opacity the artifact's mask gradient gives that character's own
+ * midpoint — sampled per character rather than per pixel, since React
+ * Native has no sub-glyph gradient to lean on.
+ */
+function streamTailFadeChars(text: string): readonly { char: string; opacity: number }[] {
+  const tailLength = Math.min(EXPRESSIVE_STREAM_TAIL_CHAR_COUNT, text.length);
+  if (tailLength === 0) return [];
+  const tail = text.slice(text.length - tailLength);
+  return tail.split("").map((char, index) => ({
+    char,
+    opacity: interpolateStreamTailOpacity(
+      (index + 0.5) / tailLength,
+      EXPRESSIVE_STREAM_TAIL_FADE_STOPS,
+    ),
+  }));
+}
+
+/**
+ * The artifact's `.stream-caret` with no `.is-streaming` class: a hard
+ * on/off square wave at `caret-blink 1s step-end infinite`. Rendered
+ * only when `showRestingCaret` is set and motion is not reduced — see
+ * this file's own doc comment.
+ */
+function RestingCaret({ style }: { style: StyleProp<ViewStyle> }) {
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withDelay(CARET_BLINK_HALF_MS, withTiming(0, { duration: CARET_BLINK_INSTANT_MS })),
+        withDelay(CARET_BLINK_HALF_MS, withTiming(1, { duration: CARET_BLINK_INSTANT_MS })),
+      ),
+      -1,
+      false,
+    );
+  }, [opacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return <Animated.View style={[style, animatedStyle]} accessibilityElementsHidden />;
+}
 
 export interface StreamingMessageProps {
   speaker: "assistant" | "user";
@@ -36,6 +128,19 @@ export interface StreamingMessageProps {
    * speaker, whether or not this prop also draws it as visible text.
    */
   showSpeakerLabel?: boolean;
+  /**
+   * Draws the artifact's `.stream-caret` (no `.is-streaming`) once this
+   * turn has settled — a hard, un-eased blink at `caret-blink 1s
+   * step-end infinite`. Defaults to `false`, and — exactly like
+   * `showSpeakerLabel` above — a caller decision this recipe cannot make
+   * for itself: the artifact keeps exactly ONE live caret across the
+   * whole transcript, blinking on whichever turn is the most recently
+   * settled one, which is session/transcript state this per-turn recipe
+   * does not have (see this component's own doc comment). No shipped
+   * caller passes `true` yet; see `../theme/expressive-motion.ts`'s own
+   * doc comment for what wiring one would need.
+   */
+  showRestingCaret?: boolean;
   testId?: string;
 }
 
@@ -81,33 +186,55 @@ export interface StreamingMessageProps {
  * wave before this one; verifying the direction here rather than
  * copying it is what caught it.
  *
- * This only ports the `is-streaming` half: while `streaming` is true the
- * caret renders as a plain, unanimated `View` (opacity 1, no shared
- * value at all — "no animation" needs none). The "blinks at rest" half
- * (`../theme/expressive-motion.ts`'s own `EXPRESSIVE_CARET_BLINK_DURATION_MS`
- * records the artifact's `1s` cycle for whichever file eventually wires
- * it) is deliberately NOT reproduced: the artifact keeps exactly one
- * live caret across the whole transcript and blinks it only until the
- * NEXT turn starts streaming (`type()`'s own `settle()` in
+ * While `streaming` is true the caret renders as a plain, unanimated `View`
+ * (opacity 1, no shared value at all — "no animation" needs none). The
+ * "blinks at rest" half is now ported too (A-MOTION-2), behind
+ * `showRestingCaret` (see this file's own prop doc comment): the artifact
+ * keeps exactly one live caret across the whole transcript and blinks it
+ * only until the NEXT turn starts streaming (`type()`'s own `settle()` in
  * `android-spec.html`), which is a fact about which turn is most
- * recently settled — session/transcript state this per-turn recipe does
- * not have and should not reach for. This component simply stops
- * showing a caret once its own turn finishes, which is the same
- * behaviour this file already had before this change.
+ * recently settled — session/transcript state this per-turn recipe still
+ * does not have and should not reach for, which is why the prop is an
+ * explicit opt-in rather than something this file infers from `streaming`
+ * alone. With `showRestingCaret` false (every shipped caller today) this
+ * component behaves exactly as it did before: it simply stops showing a
+ * caret once its own turn finishes. The blink itself is a hard on/off
+ * square wave — `caret-blink 1s step-end infinite` holds each opacity
+ * value for the full half-cycle and then snaps, rather than fading —
+ * built from two `withDelay`+`withTiming(..., {duration:
+ * CARET_BLINK_INSTANT_MS})` holds rather than one eased `withTiming`
+ * across the whole cycle, which is the one shape that cannot produce a
+ * hard edge. Reduced motion draws the same plain, unanimated `View` the
+ * streaming case already uses — solid, not hidden, matching the
+ * artifact's own reduced-motion behaviour (its blanket
+ * `*{animation:none!important}` leaves `.stream-caret` at its un-animated
+ * base opacity of 1, not removed) — so no information is lost.
+ *
+ * **The streaming tail's opacity fade is ported too (A-MOTION-2), the
+ * reachable half of `.stream-tail{filter:blur(1.6px);mask-image:
+ * linear-gradient(to right,#000 20%,rgba(0,0,0,.2))}`.** React Native has
+ * neither a `filter` nor a `mask-image` — no `expo-blur` or
+ * `MaskedView` dependency exists in this app, and this task adds none —
+ * so the blur is dropped and ONLY the fade is ported, as a per-character
+ * opacity ramp over the trailing
+ * `../theme/expressive-motion.ts`'s own `EXPRESSIVE_STREAM_TAIL_CHAR_COUNT`
+ * (`6`, the artifact's own `TAIL` constant) characters, sampled from
+ * `EXPRESSIVE_STREAM_TAIL_FADE_STOPS` (the mask gradient's own stops) at
+ * each character's midpoint. It only plays while `streaming` is true and
+ * only when motion is not reduced, matching the artifact's own
+ * `@media(prefers-reduced-motion:reduce){.stream-tail{filter:none;
+ * mask-image:none}}` override exactly (full opacity, no ramp).
  *
  * **`fade-up` (the artifact's `.t>*` turn entrance) is deliberately NOT
- * wired up here either**, though `../theme/expressive-motion.ts` records
- * its numbers (`EXPRESSIVE_FADE_UP_*`). Wiring it would have made this
- * file call a Reanimated timing helper directly while owning a duration
- * outside the shared `motion.duration` table — exactly the shape
- * `./ShimmerText.tsx` already has, and that shape is only sound today
- * because `../recipes/recipe-accessibility.test.ts` (outside this
- * package's file list) states it explicitly as `MOTION_TOKEN_EXEMPT`.
- * Doing the same for this file's own `withTiming` calls without a
- * matching entry there would leave that shared, cross-cutting test
- * failing for a reason invisible to anyone reading only this file. See
- * this package's own final report for the exact addition that test
- * needs before a future task wires this up.
+ * wired up here**, though `../theme/expressive-motion.ts` records its
+ * numbers (`EXPRESSIVE_FADE_UP_*`). Wiring it would add a THIRD
+ * Reanimated concern to this file with a duration outside the shared
+ * `motion.duration` table, which `../recipes/recipe-accessibility.test.ts`
+ * (outside this package's file list) only tolerates for a name explicitly
+ * listed in its own `MOTION_TOKEN_EXEMPT` set — this file is now in that
+ * set for the resting-caret blink, so adding `fade-up` here is a smaller
+ * step than it was, but it is still a distinct capability nothing in
+ * this task's brief asked for and no caller needs yet.
  *
  * **Mono transcript text, as the artifact draws it.** The design
  * draws prose in the same mono face, at the same 12px/1.62, as tool
@@ -124,11 +251,17 @@ export function StreamingMessage({
   text,
   streaming,
   showSpeakerLabel = false,
+  showRestingCaret = false,
   testId,
 }: StreamingMessageProps) {
   const { theme, reduceMotion } = useTheme();
   const styles = useMemo(() => createStyles(theme, speaker), [theme, speaker]);
   const speakerLabel = speaker === "assistant" ? "Pi" : "You";
+  // `.stream-tail` only ever appears on the live line, and never under
+  // reduced motion — see this file's own doc comment.
+  const tailFadeChars = streaming && !reduceMotion ? streamTailFadeChars(text) : [];
+  const headText =
+    tailFadeChars.length > 0 ? text.slice(0, text.length - tailFadeChars.length) : text;
 
   return (
     <View
@@ -139,12 +272,22 @@ export function StreamingMessage({
     >
       {showSpeakerLabel ? <Text style={styles.speaker}>{speakerLabel}</Text> : null}
       <View style={styles.textRow}>
-        <Text style={styles.text}>{text}</Text>
+        <Text style={styles.text}>
+          {headText}
+          {tailFadeChars.map(({ char, opacity }, index) => (
+            <Text key={index} style={{ opacity }}>
+              {char}
+            </Text>
+          ))}
+        </Text>
         {streaming ? (
           // `.stream-caret.is-streaming{animation:none}` — solid, not
           // blinking, while the turn is live. See this file's own doc
-          // comment for the direction this used to have and why the
-          // "blinks at rest" phase is deliberately not ported.
+          // comment for the direction this used to have.
+          <View style={styles.cursor} accessibilityElementsHidden />
+        ) : showRestingCaret && !reduceMotion ? (
+          <RestingCaret style={styles.cursor} />
+        ) : showRestingCaret ? (
           <View style={styles.cursor} accessibilityElementsHidden />
         ) : null}
       </View>

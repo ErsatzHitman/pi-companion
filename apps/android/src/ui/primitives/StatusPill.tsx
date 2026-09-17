@@ -1,7 +1,7 @@
 /**
  * The S7 status pill (T350) — an app bar's state readout.
  *
- * The design artifact's `.pill`: 22dp tall, fully rounded, a
+ * The design artifact's `.pill`: 26dp tall, fully rounded, a
  * tone-tinted background with the SAME tone as its text, a 6dp dot in
  * `currentColor` for every state except the neutral one, and a hairline
  * ring on the neutral one alone. `Chip` (`./Chip.tsx`) is deliberately
@@ -20,24 +20,51 @@
  * direction. When web gains it, add the name there and both labs pick it
  * up together.
  *
- * **Still no pulse, now for a different reason (T351).** The artifact
- * animates its dot only on the `run` state, which means "a turn is in
- * flight". T350 shipped this pill against the CONNECTION state, where
- * "connected" is a resting state and a pulsing dot would have animated
- * forever claiming work that was not happening. T351's session app bar
- * changed that: `features/transcript/header-model.ts` gives the pill the
- * SESSION's own state, so its `Working` pill really does mean a turn is
- * running, and a pulse there would be honest. It is still not drawn,
- * deliberately — the dot plus the word already carry the state without
- * colour or motion (plan.md §10.5), an indefinite animation over a
- * multi-minute turn is a real battery and attention cost, and a reduced-
- * motion path would have to switch it off anyway, at which point the
- * static rendering has to be the correct one regardless. A later task
- * may add the pulse; nothing here depends on its absence.
+ * **The pulse is drawn now (A-MOTION-2), behind an explicit opt-in
+ * (T351's own deferral, answered).** The artifact animates its dot only
+ * on the `run` state, which means "a turn is in flight". T350 shipped
+ * this pill against the CONNECTION state, where "connected" is a resting
+ * state and a pulsing dot would have animated forever claiming work that
+ * was not happening — the SAME shape `settings-host-model.ts`'s "Online"
+ * pill still is today (`tone: "success"`, drawn with `showDot`, and
+ * genuinely a resting state — see `../../features/settings/
+ * SettingsScreen.tsx`). Because more than one caller can share a tone
+ * that means "resting" in one place and "a turn is running" in another,
+ * the pulse cannot be inferred from `tone` the way T351 first
+ * considered — it has to be a caller decision, exactly like `showDot`
+ * above: "is this state worth a dot" was already a product question
+ * about the state, not the tone, and "is this state worth ANIMATING the
+ * dot" is the same question one level further. `pulseDot` (below) is
+ * that opt-in. T351's battery/attention worry is real and is answered,
+ * not dismissed, by making it exactly that: a caller-level choice for
+ * the one state that is genuinely "a turn is in flight" — most likely
+ * `features/transcript/header-model.ts`'s `Working` pill — rather than
+ * a blanket animation this primitive would force on every tone-`success`
+ * caller including a resting "Online" host status. Reduced motion still
+ * switches it off regardless of what the caller asks for (see `pulseDot`'s
+ * own doc comment), so the static rendering stays correct either way,
+ * exactly as this paragraph used to argue for withholding the mechanism
+ * altogether. No shipped caller passes `pulseDot` yet — see
+ * `../theme/expressive-motion.ts`'s own doc comment for what wiring one
+ * would need and why that is outside this task's file list. A later task
+ * wires a caller to it; nothing here depends on that wiring happening.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
+import {
+  EXPRESSIVE_RECORDS_PULSE_DURATION_MS,
+  EXPRESSIVE_RECORDS_PULSE_EASING,
+  EXPRESSIVE_RECORDS_PULSE_PEAK,
+  EXPRESSIVE_RECORDS_PULSE_REST,
+} from "../theme/expressive-motion";
 import { useTheme } from "../theme/theme-context";
 import { asFontWeight } from "../theme/native-style-helpers";
 import type { StatusTone } from "./StatusIndicator";
@@ -54,6 +81,20 @@ export interface StatusPillProps {
    */
   showDot?: boolean;
   /**
+   * Runs the artifact's `records-pulse` (`.pill.run .dot{animation:
+   * records-pulse 1.1s ease-in-out infinite}`) on the dot. Defaults to
+   * `false`. The caller decides for the same reason `showDot` does — see
+   * this file's own module doc comment — plus a sharper one: `tone`
+   * alone cannot tell the artifact's resting `.pill.run`-shaped tone
+   * apart from a genuinely resting use of the same tone (e.g. an "Online"
+   * host status), so inferring the pulse from `tone` would pulse a
+   * connection indicator that is never going to stop. Has no effect
+   * unless `showDot` is also true, and never animates under reduced
+   * motion regardless of what the caller asks for — the dot then simply
+   * sits at the pulse's own rest frame.
+   */
+  pulseDot?: boolean;
+  /**
    * The announced name, when the drawn text is not the whole claim
    * (T385: the Live bar's pill DRAWS an elapsed reading while a turn runs
    * and announces `Working, 4m 12s`). Defaults to `label`, which is what
@@ -63,14 +104,23 @@ export interface StatusPillProps {
   testId?: string;
 }
 
-/** The artifact's `.pill` height, in dp (its CSS px map 1:1 at the 412dp reference width). */
-const PILL_HEIGHT = 22;
-/** The artifact's `.pill { padding: 0 9px }`. */
-const PILL_PADDING_HORIZONTAL = 9;
-/** The artifact's `.pill { gap: 5px }`. */
-const PILL_GAP = 5;
-/** The artifact's `.pill .dot`. */
+/** The artifact's `.pill { height: 26px }`, in dp (its CSS px map 1:1 at the 412dp reference width). */
+const PILL_HEIGHT = 26;
+/** The artifact's `.pill { padding: 0 11px }`. */
+const PILL_PADDING_HORIZONTAL = 11;
+/** The artifact's `.pill { gap: 6px }`. */
+const PILL_GAP = 6;
+/** The artifact's `.pill .dot { width: 6px; height: 6px }`. */
 const DOT_SIZE = 6;
+/**
+ * Half of `records-pulse`'s own 1.1s cycle — the keyframe is a true
+ * two-value ping-pong (`0%,100%` rest, `50%` peak), so a single
+ * `withRepeat(withTiming(peak, {duration: PULSE_HALF_MS}), -1, true)`
+ * reproduces it exactly, the same shape `records-pulse`'s own symmetry
+ * allows and `pixel-on`'s asymmetric keyframe (`../theme/
+ * expressive-motion.ts`) does not.
+ */
+const PULSE_HALF_MS = EXPRESSIVE_RECORDS_PULSE_DURATION_MS / 2;
 
 /**
  * The pill's fill and its text share a tone. Both are keyed by
@@ -104,13 +154,15 @@ export function StatusPill({
   label,
   tone = "neutral",
   showDot = false,
+  pulseDot = false,
   accessibilityLabel,
   testId,
 }: StatusPillProps) {
-  const { theme } = useTheme();
+  const { theme, reduceMotion } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fillColor = theme.colors[TONE_FILL[tone]];
   const textColor = theme.colors[TONE_TEXT[tone]];
+  const pulsing = pulseDot && showDot && !reduceMotion;
 
   return (
     <View
@@ -126,12 +178,62 @@ export function StatusPill({
       {showDot ? (
         // `currentColor` in the artifact; React Native has no such
         // cascade, so the dot takes the tone's own colour explicitly.
-        <View style={[styles.dot, { backgroundColor: textColor }]} />
+        pulsing ? (
+          <PulseDot color={textColor} />
+        ) : (
+          <View style={[styles.dot, { backgroundColor: textColor }]} />
+        )
       ) : null}
       <Text style={[styles.label, { color: textColor }]} numberOfLines={1}>
         {label}
       </Text>
     </View>
+  );
+}
+
+/** The artifact's `records-pulse` on `.pill.run .dot`. Rendered only when `pulseDot`, `showDot` and `!reduceMotion` all hold — see `StatusPillProps.pulseDot`'s own doc comment. */
+function PulseDot({ color }: { color: string }) {
+  const { theme } = useTheme();
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withRepeat(
+      withTiming(1, {
+        duration: PULSE_HALF_MS,
+        easing: Easing.bezier(...EXPRESSIVE_RECORDS_PULSE_EASING),
+      }),
+      -1,
+      true,
+    );
+  }, [progress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity:
+      EXPRESSIVE_RECORDS_PULSE_REST.opacity +
+      (EXPRESSIVE_RECORDS_PULSE_PEAK.opacity - EXPRESSIVE_RECORDS_PULSE_REST.opacity) *
+        progress.value,
+    transform: [
+      {
+        scale:
+          EXPRESSIVE_RECORDS_PULSE_REST.scale +
+          (EXPRESSIVE_RECORDS_PULSE_PEAK.scale - EXPRESSIVE_RECORDS_PULSE_REST.scale) *
+            progress.value,
+      },
+    ],
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: DOT_SIZE,
+          height: DOT_SIZE,
+          borderRadius: theme.radii.full,
+          backgroundColor: color,
+        },
+        animatedStyle,
+      ]}
+    />
   );
 }
 
