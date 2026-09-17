@@ -46,6 +46,13 @@
  * apps' transcript search bars navigate — no regex, no filters, no
  * persistence.
  *
+ * `./streaming-entry.ts` adds `streamingTranscriptEntryId`: the one shared
+ * answer for which entry, if any, should render the live streaming caret
+ * over plan.md §11.1's incrementally-arriving "assistant text and thinking
+ * deltas" — turnActive plus a look at only the tail entry, so a
+ * previous block's settled caret is retired by construction and both apps
+ * derive the same id.
+ *
  * T388 ("timeline upgrade") adds three pure modules on top of all of the
  * above, with zero wire change:
  *
@@ -134,3 +141,4 @@ export {
   previousTranscriptSearchIndex,
 } from "./transcript-search.js";
 export type { TranscriptSearchMatch, TranscriptSearchOptions } from "./transcript-search.js";
+export { streamingTranscriptEntryId } from "./streaming-entry.js";

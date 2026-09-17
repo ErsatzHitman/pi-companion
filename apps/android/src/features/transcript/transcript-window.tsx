@@ -44,6 +44,17 @@
  * respectively (see those files' own doc comments) — this component
  * supplies real, state-derived labels/counts to them, not a static
  * string.
+ *
+ * **`rowExtraData` (W11-STREAMCARET).** `FlatList` only repaints a row when
+ * `data` or `extraData` changes identity; it cannot see that `renderRow`
+ * is a caller-supplied closure that may read state `data` does not carry
+ * (e.g. which entry id is currently streaming). This component had no
+ * `extraData` prop at all until W11-STREAMCARET, invisible until then
+ * because every streaming delta also produced a new `data` identity and
+ * repainted regardless -- the gap only shows up once a turn ends with no
+ * further entry arriving, which is exactly when a stale caret needs to go
+ * out. See `TranscriptWindowListProps.rowExtraData`'s own doc comment for
+ * the full reasoning.
  */
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import {
@@ -108,6 +119,31 @@ export interface TranscriptWindowListProps<T extends TranscriptWindowEntry> {
    * artifact draws in the transcript itself.
    */
   footer?: ReactElement | null;
+  /**
+   * Forwarded verbatim to `FlatList`'s own `extraData` prop. `renderRow`
+   * is the caller's closure, not a pure function of `data` alone — it can
+   * (and, since W11-STREAMCARET, does) read state that lives outside the
+   * windowed entries, such as which entry id is currently streaming.
+   * `FlatList`/`VirtualizedList` only re-renders a row when either `data`
+   * changes identity or `extraData` changes identity; it has no way to
+   * know `renderRow` closed over anything else, so a value that changes
+   * with no accompanying `data` change is invisible to it without this.
+   *
+   * Measured, not hypothetical: this was invisible before W11-STREAMCARET
+   * because every streaming delta also produced a new windowed-entries
+   * array (a new `data` identity), which repainted the whole
+   * window anyway and hid the missing `extraData` wiring. The gap becomes
+   * observable at exactly the moment `streamingTranscriptEntryId`
+   * (`@picompanion/frontend-core`'s `timeline` module) exists to catch:
+   * the turn ends, `turnActive` flips to `false`, and no new entry
+   * arrives — so with no `extraData`, the caret row `renderRow` last drew
+   * would stay lit on a now-settled line forever, the exact thing the
+   * spec's retire-the-previous-caret rule exists to prevent. Passing the
+   * live streaming entry id here (or any other value `renderRow` closes
+   * over but `data` does not carry) makes that final, entry-less repaint
+   * happen.
+   */
+  rowExtraData?: unknown;
 }
 
 function metricsFromScrollEvent(
@@ -152,6 +188,7 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
   config = DEFAULT_TRANSCRIPT_WINDOW_CONFIG,
   testId,
   footer,
+  rowExtraData,
 }: TranscriptWindowListProps<T>) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -305,6 +342,7 @@ export function TranscriptWindowList<T extends TranscriptWindowEntry>({
         style={styles.list}
         contentContainerStyle={styles.listContent}
         data={snapshot.windowedEntries as T[]}
+        extraData={rowExtraData}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         onScroll={handleScroll}

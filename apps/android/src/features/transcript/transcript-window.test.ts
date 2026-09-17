@@ -34,6 +34,25 @@ describe("transcript-window.tsx: FlatList renders the bounded window, never the 
   });
 });
 
+describe("transcript-window.tsx: rowExtraData (W11-STREAMCARET)", () => {
+  it("declares rowExtraData on TranscriptWindowListProps", () => {
+    expect(readCode()).toMatch(/rowExtraData\?:\s*unknown;/);
+  });
+
+  it("destructures rowExtraData and forwards it to FlatList's own extraData prop", () => {
+    const code = readCode();
+    expect(code).toMatch(/rowExtraData,\s*\}: TranscriptWindowListProps<T>\)/);
+    expect(code).toMatch(/extraData=\{rowExtraData\}/);
+  });
+
+  it("still passes snapshot.windowedEntries as FlatList's data alongside extraData -- extraData is additive, not a replacement", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /data=\{snapshot\.windowedEntries as T\[\]\}\s*extraData=\{rowExtraData\}/,
+    );
+  });
+});
+
 describe("transcript-window.tsx: entries changes flow through the model, not a private list", () => {
   it("calls windowRef.current.applyEntries(entries) when entries changes", () => {
     expect(readCode()).toMatch(/windowRef\.current!\.applyEntries\(entries\)/);

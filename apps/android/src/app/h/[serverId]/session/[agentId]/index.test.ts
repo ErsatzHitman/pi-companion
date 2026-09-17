@@ -372,10 +372,11 @@ describe("SessionRoute source", () => {
     expect(code).toMatch(/from "\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/features\/transcript"/);
     // SessionTranscript takes the same TranscriptStatus the statusStrip
     // slot renders, so the haptic and its visible signal cannot disagree.
-    // (It also takes `onTodoEntryChange`, which reports the pinned .ov
-    // widget's data upward — that does not change this contract.)
+    // (It also takes `turnActive`, `onTodoEntryChange`, and
+    // `onHeadEntryChange` — W11-STREAMCARET added the first; none of the
+    // three changes this contract.)
     expect(code).toMatch(
-      /function SessionTranscript\(\{\s*status,\s*agentId,\s*onTodoEntryChange,\s*onHeadEntryChange,?\s*\}: \{[\s\S]*?status: TranscriptStatus;[\s\S]*?agentId: string;/,
+      /function SessionTranscript\(\{\s*status,\s*agentId,\s*turnActive,\s*onTodoEntryChange,\s*onHeadEntryChange,?\s*\}: \{[\s\S]*?status: TranscriptStatus;[\s\S]*?agentId: string;/,
     );
     expect(code).toMatch(
       /transcript=\{\s*<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}/,
@@ -733,15 +734,18 @@ describe("SessionRoute source", () => {
   it("renderRow keeps the exact same per-kind switch and passes TranscriptWindowList's own row testId straight through, never reconstructing a literal", () => {
     const code = readCode();
     // Same three branches, same components, as before the swap - only the
-    // container changed.
+    // container changed. W11-STREAMCARET: `live`/`streaming` are now
+    // `entry.id === streamingEntryId`, not the fixed `false` literal -
+    // see the dedicated "W11-STREAMCARET" describe block below for the
+    // negative pin on the old literals.
     expect(code).toMatch(
-      /renderRow=\{\(entry, testId\) => \{[\s\S]*?entry\.kind === "thinking"[\s\S]*?<TranscriptThinkingRow key=\{entry\.id\} entry=\{entry\} live=\{false\} testId=\{testId\} \/>/,
+      /renderRow=\{\(entry, testId\) => \{[\s\S]*?entry\.kind === "thinking"[\s\S]*?<TranscriptThinkingRow\s+key=\{entry\.id\}\s+entry=\{entry\}\s+live=\{entry\.id === streamingEntryId\}\s+testId=\{testId\}\s*\/>/,
     );
     expect(code).toMatch(
       /entry\.kind === "tool-call"[\s\S]*?<TranscriptToolCallRow key=\{entry\.id\} entry=\{entry\} testId=\{testId\} \/>/,
     );
     expect(code).toMatch(
-      /<TranscriptMessageRow\s+key=\{entry\.id\}\s+entry=\{entry\}\s+streaming=\{false\}\s+resolveImageUri=\{resolveImageUri\}\s+testId=\{testId\}\s*\/>/,
+      /<TranscriptMessageRow\s+key=\{entry\.id\}\s+entry=\{entry\}\s+streaming=\{entry\.id === streamingEntryId\}\s+resolveImageUri=\{resolveImageUri\}\s+testId=\{testId\}\s*\/>/,
     );
     // Never a hand-built `session-transcript-row-${entry.id}` template
     // literal anymore - TranscriptWindowList (features/transcript/
@@ -749,6 +753,45 @@ describe("SessionRoute source", () => {
     // assembled now (as `${testId}-row-${item.id}`, off this route's own
     // `testId="session-transcript"` - byte-identical to the old literal).
     expect(code).not.toMatch(/`session-transcript-row-\$\{entry\.id\}`/);
+  });
+
+  // --- W11-STREAMCARET: the streaming caret/blur tail is wired to a real
+  // live entry. Before this task both TranscriptThinkingRow's `live` and
+  // TranscriptMessageRow's `streaming` were the fixed `false` literal
+  // pinned above (pre-W11-STREAMCARET) - type-correct but permanently
+  // inert, since `StreamingMessage.tsx`'s caret/blur treatment and
+  // `thinking-row.tsx`'s `live`-dependent elapsed readout could never
+  // receive `true` from this mount. These cases would fail if any link in
+  // that chain were removed again. ---------------------------------------
+
+  it("W11-STREAMCARET: SessionTranscript's props type declares a required turnActive: boolean", () => {
+    const body = readComponentCode("SessionTranscript");
+    expect(body).toMatch(/turnActive: boolean;/);
+  });
+
+  it("W11-STREAMCARET: the mount site passes turnActive={turnRunning}, never a literal", () => {
+    const code = readCode();
+    expect(code).toMatch(/<SessionTranscript[\s\S]*?turnActive=\{turnRunning\}/);
+    expect(code).not.toMatch(/turnActive=\{false\}/);
+    expect(code).not.toMatch(/turnActive=\{true\}/);
+  });
+
+  it("W11-STREAMCARET: streamingEntryId is derived by calling coreTimeline.streamingTranscriptEntryId(entries, turnActive), not re-implemented inline", () => {
+    const body = readComponentCode("SessionTranscript");
+    expect(body).toMatch(
+      /const streamingEntryId = useMemo\(\s*\(\) => coreTimeline\.streamingTranscriptEntryId\(entries, turnActive\),\s*\[entries, turnActive\],?\s*\);/,
+    );
+  });
+
+  it("W11-STREAMCARET: TranscriptWindowList receives rowExtraData={streamingEntryId}", () => {
+    const body = readComponentCode("SessionTranscript");
+    expect(body).toMatch(/<TranscriptWindowList[\s\S]*?rowExtraData=\{streamingEntryId\}/);
+  });
+
+  it("W11-STREAMCARET: neither row is ever mounted with the old streaming={false}/live={false} literals anywhere in this file", () => {
+    const code = readCode();
+    expect(code).not.toMatch(/streaming=\{false\}/);
+    expect(code).not.toMatch(/live=\{false\}/);
   });
 
   it("T388: derives work groups from the full entry list and renders a head above a run's first member, dropping a collapsed group's other members from the list", () => {
@@ -916,7 +959,7 @@ describe("session route: the todo widget lives in the pinned slot (T360)", () =>
     );
     expect(code).toMatch(/onTodoEntryChange\?:\s*\(entry: TodoTranscriptEntry \| null\) => void;/);
     expect(code).toMatch(
-      /<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}\s+onTodoEntryChange=\{setLatestTodo\}\s+onHeadEntryChange=\{setTreeHeadEntryId\}\s*\/>/,
+      /<SessionTranscript\s+status=\{status\}\s+agentId=\{agentId \?\? ""\}\s+turnActive=\{turnRunning\}\s+onTodoEntryChange=\{setLatestTodo\}\s+onHeadEntryChange=\{setTreeHeadEntryId\}\s*\/>/,
     );
   });
 

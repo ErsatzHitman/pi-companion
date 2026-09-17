@@ -232,11 +232,35 @@ function handleAttachPress() {}
 function SessionTranscript({
   status,
   agentId,
+  turnActive,
   onTodoEntryChange,
   onHeadEntryChange,
 }: {
   status: TranscriptStatus;
   agentId: string;
+  /**
+   * `true` while this session has a turn in flight, `false` once it has
+   * settled. Required, not derived here, for the same "only the value
+   * travels" reason `onTodoEntryChange` below stays a callback: the real
+   * turn-boundary signal already lives on the route (`SessionRoute`'s own
+   * `turnRunning = submitting || signalRunning`, built from T64's
+   * `createTurnRunningSignal` over real `turn_started`/`turn_completed`/
+   * `turn_failed`/`turn_canceled` wire events), which is itself one
+   * subscription to the same `agent_stream` fan-out this component's own
+   * batcher already reads. Deriving a second turn-liveness signal in here
+   * would mean a second subscription to that same feed, not a cheaper
+   * one.
+   *
+   * `entries.some((entry) => entry.pending)` -- the signal
+   * `useRewindToHere` already reads below, for an unrelated purpose -- is
+   * deliberately NOT reused for this: `pending` is the LOCAL
+   * optimistic-row flag for a user message awaiting daemon
+   * reconciliation, and it goes `false` as soon as the daemon acks that
+   * user message, well before the assistant has finished (or even
+   * started) streaming its reply. Using it here would retire the
+   * streaming caret mid-turn, the opposite of what `turnActive` is for.
+   */
+  turnActive: boolean;
   /**
    * Reports the newest `todo` entry on every batch, so the pinned `.ov`
    * widget above the composer can draw it. `null` when this timeline
@@ -305,6 +329,21 @@ function SessionTranscript({
   const entries = useMemo(
     () => coreTimeline.visibleTranscriptEntries(rawEntries, grouping, collapsedGroups),
     [rawEntries, grouping, collapsedGroups],
+  );
+
+  // W11-STREAMCARET: which entry (if any) is the one currently receiving
+  // streaming deltas, per `@picompanion/frontend-core`'s
+  // `streamingTranscriptEntryId` (see that module's own doc comment for
+  // the retire-the-previous-caret rule and why `turnActive` has to be a
+  // parameter rather than derived from `entries`). Feeds both
+  // `TranscriptThinkingRow`'s `live` prop and `TranscriptMessageRow`'s
+  // `streaming` prop below, and `TranscriptWindowList`'s `rowExtraData`
+  // so a settled caret actually repaints even when no new entry arrives
+  // on the batch that ends the turn (see that component's own
+  // `rowExtraData` doc comment).
+  const streamingEntryId = useMemo(
+    () => coreTimeline.streamingTranscriptEntryId(entries, turnActive),
+    [entries, turnActive],
   );
 
   // T395: the Android rewind surface. The client is read the same way
@@ -494,13 +533,19 @@ function SessionTranscript({
         entries={entries}
         testId="session-transcript"
         footer={<SessionInlineExtensions agentId={agentId} />}
+        rowExtraData={streamingEntryId}
         renderRow={(entry, testId) => {
           const entryKey = coreTimeline.transcriptEntryListKey(entry);
           const group = grouping.groupByMemberKey.get(entryKey) ?? null;
           const row = (() => {
             if (entry.kind === "thinking") {
               return (
-                <TranscriptThinkingRow key={entry.id} entry={entry} live={false} testId={testId} />
+                <TranscriptThinkingRow
+                  key={entry.id}
+                  entry={entry}
+                  live={entry.id === streamingEntryId}
+                  testId={testId}
+                />
               );
             }
             if (entry.kind === "tool-call") {
@@ -510,7 +555,7 @@ function SessionTranscript({
               <TranscriptMessageRow
                 key={entry.id}
                 entry={entry}
-                streaming={false}
+                streaming={entry.id === streamingEntryId}
                 resolveImageUri={resolveImageUri}
                 testId={testId}
               />
@@ -1520,6 +1565,7 @@ export default function SessionRoute() {
           <SessionTranscript
             status={status}
             agentId={agentId ?? ""}
+            turnActive={turnRunning}
             onTodoEntryChange={setLatestTodo}
             onHeadEntryChange={setTreeHeadEntryId}
           />

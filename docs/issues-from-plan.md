@@ -22645,3 +22645,114 @@ quantity has just become inconsistent with it, and nothing in the type system re
 are two calls to two formatters on one field. The check is to grep for the field, not the
 component: `formatToolDuration` had two call sites in this one file, and only one of them was in
 the package's brief.
+
+## Wave P10-W11 (UI spec conformance, iteration 11)
+
+Data lens, continued onto the read bindings iteration 10 did not reach. Two of the three closed
+with no package; the third found a shipped defect on both surfaces.
+
+### P10-33: the streaming caret ships on both platforms and is lit on no line, ever
+
+The android spec's most detailed motion claim is its StreamText note: two characters every 9ms, a
+six-character blurred leading edge, a caret held SOLID while streaming that blinks only once the
+text settles, and one cross-row rule stated as a correction to the source component - the previous
+block's settled caret is retired when the next stream opens, so only the newest line is live.
+
+Every renderer for this already shipped. `apps/android/src/ui/recipes/StreamingMessage.tsx` carries
+the solid-while-streaming caret and the reachable half of the tail treatment (A-MOTION-2, and the
+P10 gate that corrected the caret's direction). `apps/android/src/features/transcript/thinking-row.tsx`
+carries a whole `live`-dependent treatment of its own: a ticking elapsed readout, the shimmer, and a
+`live`-aware announced label, so seen and heard state move together.
+
+Both were mounted with hardcoded literals. The Android session route's `renderRow` passed
+`live={false}` to the thinking row and `streaming={false}` to the message row, so neither treatment
+could ever appear in a real session. `apps/web/src/features/transcript/transcript.tsx` already
+expressed the rule correctly - `streaming={entry.id === streamingEntryId}` - but its
+`streamingEntryId` prop defaults to `null` and `host-session-screen.tsx` never supplies it, so web
+renders exactly the same dead transcript by a different mechanism.
+
+This is the FOURTH instance of the built-but-type-correctly-unwired shape in five waves, after the
+`SegmentedControl`, the `RunHeader`, and the `onSetAutoRetry` toggle. The mechanism repeats
+because nothing about an inert mount is ill-typed: a literal `false` and an optional prop left
+unpassed are both perfectly legal, and every unit test of the renderer still passes, because the
+renderer is not what is broken.
+
+**What did not exist anywhere was the answer to WHICH entry the boolean is true for**, and
+measuring why is the useful part. No field on `TranscriptEntry` distinguishes "the assistant is
+still appending to this row" from "this row is simply the last thing said". The closest candidate,
+`TranscriptEntryBase.pending`, is the LOCAL optimistic-row flag for a user message awaiting
+reconciliation - it goes false when the daemon acks the user's own message, well before the
+assistant has finished streaming. So the entry list alone can never answer the question, and both
+screens approximated it with `entries.some((entry) => entry.pending)` for unrelated purposes while
+leaving the caret unwired. That is why this was never built: the derivation needs a turn-boundary
+signal the entry list does not carry.
+
+`streamingTranscriptEntryId` (`packages/frontend-core/src/timeline/streaming-entry.ts`) is that one
+shared answer - `turnActive` plus a look at the tail entry only, which makes "at most one live
+entry" true by construction rather than by every renderer independently agreeing not to light up an
+earlier row. Android now derives it from the route's real `turn-running-signal.ts` boundary signal
+and compares with the same `entry.id === streamingEntryId` idiom web already uses, so the two
+platforms read identically.
+
+### P10-34: web's half is closed unbuilt, because web has no turn-boundary signal at all
+
+Wiring web needs one fact web does not have. `git grep turn_started -- apps/web/src` returns ZERO
+consumers; web's only `turnRunning` is the rewind hook's
+`transcriptEntries.some((entry) => entry.pending)`, which P10-33 above establishes is the wrong
+signal for this - it retires the caret mid-turn.
+
+Both real turn-liveness derivations in this repository are Android-local:
+`apps/android/src/features/sessions/turn-running-signal.ts` (real `turn_started`/`turn_completed`/
+`turn_failed`/`turn_canceled` boundaries) and
+`apps/android/src/features/transcript/session-activity-signal.ts` (`deriveSessionActivity`).
+Supplying web's `streamingEntryId` honestly therefore means first porting one of them into
+`packages/frontend-core`, which is a different package with a different blast radius - it changes a
+shared workspace to serve a second consumer, and it is framework-neutral logic currently sitting in
+an app.
+
+Closed as a named follow-up rather than built here, and deliberately NOT closed by passing web's
+`pending`-derived approximation, which would ship a caret that goes out while the assistant is
+still typing - a visibly wrong behaviour in place of an absent one.
+
+### P10-35: two "the check cannot fail" findings, one in the product and one in this wave's own gate
+
+**In the product.** `TranscriptWindowList`'s `FlatList` had no `extraData` prop, while `renderRow`
+is a caller-supplied closure free to read state `data` does not carry. This was invisible for as
+long as it existed, because every streaming delta also produced a new windowed-entries array and
+repainted the whole window regardless. It becomes observable at exactly the moment this feature
+depends on and at no other: the turn ends, `turnActive` flips false, and NO new entry arrives - so
+the caret the last render drew would stay lit on a settled line indefinitely. The same class as
+P10-31/P10-32: a value that must track a transition, where the transition is the one event that
+produces no data change to ride along with.
+
+**In the gate.** The `guard-capability-prose.mjs` entry for `streamingTranscriptEntryId` was
+registered, the guard exited 0, and the mandatory firing proof - append a denying sentence to a
+real tracked file, confirm exit 1 - **silently did not fire**. The regex was correct and the
+capability was genuinely shipped; the module was simply still UNTRACKED, and the guard resolves
+shipped source through git, so a brand-new file is invisible to the declaration scan. The entry
+would have been registered inert, passing forever, which is the precise shape this guard's own
+history has closed four times at the scope boundary and never before at the tracking boundary.
+
+**The rule that follows:** when a capability's declaring file is NEW, `git add` it before running
+the firing proof. A firing proof that does not fire is not a passing gate - it is the gate failing
+to run, and the two are indistinguishable from the exit code alone.
+
+### Closed with no package: the todo overlay's remaining read bindings
+
+`data-subj`, the three `data-todo` states, the progress ring and the `Todos (n/m)` head all already
+ship on Android: `todo-row-model.ts` exports `todoItemStates` (deriving `current` as the first
+incomplete item), `RING_RADIUS`/`RING_STROKE`/`RING_CIRCUMFERENCE`, `todoProgress` and the
+`struck` flag, and `todo-row.tsx` draws the arc offset and the head from them.
+
+`data-form` (the spec's ` (activeForm)` suffix, appended only while a row is `now`) has NO wire
+data behind it. `activeForm` appears nowhere in `packages/protocol/src`,
+`packages/frontend-core/src`, `apps/android/src` or `apps/web/src`, and the wire's todo item is
+`{ text: string; completed: boolean }` - two fields, with a boolean where the spec draws three
+states. Building it would mean inventing a protocol field, which puts it in the same class as the
+delegate chips (P10-8, P10-21 class 2).
+
+**A correction to this session's own earlier framing:** `data-detail` was described mid-audit as a
+todo-overlay binding. It is not. All five authored sites are delegate/roster rows ("waits on
+ui-implementer - same worktree", "0 violations across 4 routes - exit 0"), so it belongs to the
+delegate surface P10-21 already closed for want of `peer_message`/`delegate_resume` in the
+protocol. Recorded rather than quietly re-scoped, for the reason P10-22 gives.

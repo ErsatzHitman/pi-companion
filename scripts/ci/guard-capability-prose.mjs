@@ -3198,6 +3198,26 @@ export const CAPABILITIES = [
       /(?:the )?transcript (?:shows|renders) no (?:live )?elapsed (?:time )?(?:for|on) (?:a |any )?running/i,
     ],
   },
+  {
+    // W11-STREAMCARET. Registered because the defect this closed was NOT a
+    // missing renderer: both apps already shipped the caret/blur treatment
+    // and a `live`/`streaming` boolean to drive it, and both mounted those
+    // rows with a hardcoded literal, so every surface rendered a transcript
+    // in which no line is ever live. What did not exist anywhere was the
+    // answer to WHICH entry that boolean is true for. A single bare member
+    // is the right shape here (not a T168 AND-group): the name is declared
+    // in exactly one shipped file, and it is the whole capability — the
+    // renderers it feeds predate it and would still be present, and still
+    // inert, if this function were deleted, which is precisely the state
+    // this entry's phrases describe.
+    name: "the transcript knows which entry is streaming, so exactly one line renders live (streamingTranscriptEntryId)",
+    methodNames: ["streamingTranscriptEntryId"],
+    denyingPhrases: [
+      /(?:nothing|no (?:caller|screen|route|surface)) (?:ever )?(?:computes|supplies|derives) which (?:transcript )?entry is (?:currently )?streaming/i,
+      /(?:the )?(?:streaming )?caret (?:is )?(?:never|not) (?:lit|shown|rendered) in (?:the |a )?real transcript/i,
+      /every (?:transcript )?row (?:is )?mounted (?:with|as) (?:a )?(?:hardcoded|literal) (?:`)?(?:streaming|live)(?:`)?/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather
