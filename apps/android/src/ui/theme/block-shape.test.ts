@@ -27,7 +27,7 @@ const EVERY_KIND: readonly BlockKind[] = [
 
 describe("blockSurface", () => {
   it("gives each filled kind the token role the design names for it", () => {
-    expect(blockSurface("user")).toBe("accent-tint");
+    expect(blockSurface("user")).toBe("field");
     expect(blockSurface("pending")).toBe("inset");
     expect(blockSurface("tool-ok")).toBe("tool-success-bg");
     expect(blockSurface("tool-error")).toBe("tool-error-bg");
@@ -61,7 +61,7 @@ describe("blockOutline", () => {
 });
 
 describe("blockRing", () => {
-  it("rings every filled block except the user's tinted one (`.blk.usr { box-shadow: none }`)", () => {
+  it("rings every filled block except the user's field-shaded one (`.blk.usr { box-shadow: none }`)", () => {
     expect(blockRing("user")).toBeNull();
     expect(blockRing("pending")).toBe("line");
     expect(blockRing("tool-ok")).toBe("line");

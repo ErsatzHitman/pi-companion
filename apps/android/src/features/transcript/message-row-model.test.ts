@@ -225,9 +225,11 @@ describe("message-row-model: shared fixture — message-attachments", () => {
       speaker: "user",
       speakerLabel: "You",
       blockKind: "user",
-      // `.blk.usr { background: var(--accent-tint) }` — the model asks the
-      // shared block table, so this follows the token it names.
-      surfaceToken: "accent-tint",
+      // `.blk.usr { background: var(--usr-bg) }`, and `--usr-bg: var(--field)`
+      // — the model asks the shared block table, so this follows the token
+      // it names. (P10-GATE: this cited `var(--accent-tint)`, a rule the
+      // design artifact does not contain.)
+      surfaceToken: "field",
     });
     // T52A2's images passthrough survives this model unchanged, even
     // though this task's view does not render it yet (see

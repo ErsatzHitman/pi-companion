@@ -9,8 +9,15 @@
  * ```css
  * .blk { border-radius: 14px; padding: 9px 11px; box-shadow: var(--sh-hairline); }
  * .t   { padding: 12px 12px 4px; gap: 9px; }
- * .blk.usr { background: var(--accent-tint); box-shadow: none; }
+ * .blk.usr { background: var(--usr-bg); box-shadow: none; }
  * ```
+ *
+ * `--usr-bg` is itself `var(--field)` (the artifact's own comment on that
+ * declaration reads `userMessageBg #343541`) — the confirmed design paints
+ * the user block on the same surface role `TextField`/`TextArea`/`SearchField`
+ * already draw their own fields on, not on the accent tint. `blockSurface`
+ * below returns `"field"`, the `theme.colors` key that resolves to, for
+ * exactly that reason.
  *
  * `usr` is a prompt the user sent, `pend` one still queued, `ok` and
  * `err` a tool call that finished either way, `ext` an extension's own
@@ -65,7 +72,7 @@ export type BlockKind = "user" | "assistant" | "pending" | "tool-ok" | "tool-err
  * boxes are for.
  */
 export type BlockSurfaceToken =
-  | "accent-tint"
+  | "field"
   | "inset"
   | "tool-success-bg"
   | "tool-error-bg"
@@ -74,10 +81,10 @@ export type BlockSurfaceToken =
 export function blockSurface(kind: BlockKind): BlockSurfaceToken | null {
   switch (kind) {
     case "user":
-      // `.blk.usr { background: var(--accent-tint) }` — the user's own
-      // prompt is the one block tinted with the accent, so a reader can
-      // find what they sent in a wall of tool output.
-      return "accent-tint";
+      // `.blk.usr { background: var(--usr-bg) }`, and `--usr-bg:
+      // var(--field)` — the user's own prompt sits on the same field
+      // surface every text input does, not on the accent tint.
+      return "field";
     case "assistant":
       return null;
     case "pending":
