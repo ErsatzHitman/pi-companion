@@ -52,6 +52,17 @@
    * absent entirely — the list is rendered conditionally (loading, error
    * and empty states replace it), which a fixed four-row grid template
    * would mis-assign.
+   *
+   * THE SCROLL REGION fix added a second, independent mechanism alongside
+   * this one, and both stay: `margin-top: auto` on the foot (below) is what
+   * pins the foot to this element's bottom edge in a flex column of
+   * variable height; separately, `.pc-session-rail__scroll` (below) now
+   * carries its own `flex: 1; overflow-y: auto` so it — not the whole
+   * rail — is the thing that scrolls. Giving the scroll region `flex: 1`
+   * does not make the foot's `margin-top: auto` redundant: an auto margin
+   * on a flex item only pushes that item to consume LEADING free space, it
+   * does not by itself keep a sibling pinned below a scrolling middle
+   * region, so both rules are still doing real, separate work.
    */
   height: 100%;
   min-height: 0;
@@ -156,8 +167,25 @@
 
 /* Rows -------------------------------------------------------------------- */
 
+/*
+ * THE SCROLL REGION: the reference's `.rail-scroll { overflow-y: auto;
+ * padding: 0 8px 10px; min-height: 0 }` — the only region of the rail that
+ * actually scrolls, so the head, search field, and foot stay pinned on a
+ * long session list. `flex: 1` is what claims the remaining height inside
+ * `.pc-session-rail`'s flex column (this element opens BEFORE the
+ * loading/error/ready/empty branches below, in every state alike, so it is
+ * correct regardless of which of those renders inside it); `overflow-y:
+ * auto` is what makes it the scroll boundary now that
+ * `ui/shell.css`'s `.shell__rail--session` cancels the shared
+ * `.shell__rail` rule's own `overflow-y: auto`, which used to make the
+ * whole rail scroll as one block instead. See this file's own UI-X4
+ * comment above (on `.pc-session-rail`) for how this composes with the
+ * foot's separate `margin-top: auto`.
+ */
 .pc-session-rail__scroll {
+  flex: 1;
   min-height: 0;
+  overflow-y: auto;
   padding: 0 var(--spacing-2) var(--spacing-3);
 }
 

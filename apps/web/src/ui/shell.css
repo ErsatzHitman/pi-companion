@@ -37,8 +37,21 @@
 .shell {
   --shell-header-height: 48px;
   --shell-header-gap: 10px;
+  /* The reference's `.mark` (brand row) and `.mark-dot` (the tile inside
+     it) are two distinct dimensions — 28px and 20px — that used to share
+     this one property, which fixed whichever consumer was edited last and
+     silently broke the other. Kept as two properties for exactly that
+     reason: `--shell-brand-height` sizes the row alone, and
+     `--shell-brand-tile-size` (below) keeps sizing the tile alone. */
+  --shell-brand-height: 28px;
   --shell-brand-tile-size: 20px;
   --shell-head-control-size: 30px;
+  /* The reference's `.bar-tools { gap: 6px }` sits exactly between
+     `--spacing-1` (4px) and `--spacing-2` (8px) with no nearer token, so
+     it is quoted as its own literal here rather than rounded to either —
+     the pattern `features/transcript/tool-call-row.css` already uses for
+     its own token-less fixed figures. */
+  --shell-header-tools-gap: 6px;
   /* The narrower step of the reference's ladder (below 1360px) is the
      default; the `min-width: 1360px` tier below widens it. */
   --shell-rail-l: 232px;
@@ -70,7 +83,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
-  height: var(--shell-brand-tile-size);
+  height: var(--shell-brand-height);
   min-width: 0;
   padding-inline-end: var(--spacing-3);
   border-inline-end: 1px solid var(--color-line);
@@ -109,7 +122,7 @@
 .shell__header-tools {
   display: flex;
   align-items: center;
-  gap: var(--spacing-1);
+  gap: var(--shell-header-tools-gap);
 }
 
 .shell__rail-toggle {
@@ -236,6 +249,17 @@
      the head, search, list, and foot can each sit flush against the rail's
      edges, the way the design reference's `.rail` does. */
   padding: 0;
+  /*
+   * Cancels the shared `.shell__rail` rule's `overflow-y: auto` above —
+   * mirroring `.shell__rail--extension`'s own explicit `overflow-y:
+   * visible` a few rules down. Without this, the SESSION rail's own
+   * `overflow-y: auto` (inherited from `.shell__rail`) made the whole
+   * `<nav>` — eyebrow, `New session`, search field, and connection foot
+   * included — the scroll container on a long session list, instead of
+   * only `.pc-session-rail__scroll` (`session-rail.css`), which now owns
+   * that scrolling itself so the head/search/foot stay pinned.
+   */
+  overflow-y: visible;
 }
 
 .shell__rail-fallback {
@@ -243,17 +267,23 @@
 }
 
 /*
- * UI-P9: unlike `.shell__rail--session` (which zeroes the shared
- * `.shell__rail` padding and lets `.pc-session-rail` own its own edges),
- * the extension rail also needs to cancel the shared rule's `overflow-y:
- * auto` — the reference's `.live` does not scroll itself; only its
- * `.live-scroll` child (above) does, so the head can stay fixed while the
- * body scrolls beneath it. `display: grid` plus `grid-template-rows: auto
- * minmax(0, 1fr)` is the reference `.live`'s own layout technique,
- * verbatim; `min-height: 0` matches its `min-height: 0` and is what lets
- * row 2 shrink to the rail's real height instead of growing to its
- * content's, which is what makes that row's own `overflow-y: auto` do
- * anything.
+ * UI-P9: like `.shell__rail--session` above, the extension rail zeroes
+ * the shared `.shell__rail` padding and cancels its `overflow-y: auto` —
+ * the reference's `.live` does not scroll itself; only its `.live-scroll`
+ * child (above) does, so the head can stay fixed while the body scrolls
+ * beneath it. Where the two rails differ is HOW the head stays fixed:
+ * `.shell__rail--session`'s own child (`.pc-session-rail`, a flex column)
+ * owns that split itself, so cancelling the shared overflow there is
+ * enough. This rail's own head and scroll body are instead direct
+ * children of THIS element (`shell.tsx`'s `ExtensionRailContent`/
+ * `EmptyState` fallback render `.shell__live-head` and
+ * `.shell__live-scroll` flat, with no flex-column wrapper of their own),
+ * so `display: grid` plus `grid-template-rows: auto minmax(0, 1fr)` is
+ * this rail's OWN version of that same split — the reference `.live`'s
+ * layout technique, verbatim; `min-height: 0` matches its `min-height: 0`
+ * and is what lets row 2 shrink to the rail's real height instead of
+ * growing to its content's, which is what makes that row's own
+ * `overflow-y: auto` do anything.
  */
 .shell__rail--extension {
   grid-area: extension;

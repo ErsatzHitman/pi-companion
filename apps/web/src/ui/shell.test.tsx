@@ -242,6 +242,21 @@ describe("Shell", () => {
     expect(css).toContain(`@media (min-width: ${breakpoints.wide}px)`);
   });
 
+  it("cancels the shared rail's inherited scroll on the session rail, so only its own inner scroll region scrolls", () => {
+    // jsdom lays out nothing, so the only way to pin "the session rail's
+    // OWN overflow rule, not just the shared `.shell__rail` one it sits
+    // beside" is to read the stylesheet text directly, the same technique
+    // the breakpoint test above already uses. Without this, a long session
+    // list made the whole `<nav>` — eyebrow, `New session`, search field
+    // and connection foot included — scroll as one block instead of only
+    // `features/sessions/session-rail.css`'s `.pc-session-rail__scroll`.
+    const cssPath = join(dirname(fileURLToPath(import.meta.url)), "shell.css");
+    const css = readFileSync(cssPath, "utf8");
+    const sessionRailRule = css.match(/\.shell__rail--session\s*\{[^}]*\}/);
+    expect(sessionRailRule).toBeTruthy();
+    expect(sessionRailRule![0]).toContain("overflow-y: visible");
+  });
+
   it("T54A2: renders exactly one level-one heading, naming the current route", async () => {
     renderShell({});
     // `renderShell` mounts the shell at `/connect`, so the heading is that

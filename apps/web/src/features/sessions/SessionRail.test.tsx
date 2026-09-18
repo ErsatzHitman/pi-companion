@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SessionRail } from "./SessionRail.js";
@@ -169,6 +172,24 @@ describe("SessionRail", () => {
     const foot = screen.getByTestId("shell-session-rail-foot");
     expect(foot.textContent).toContain("offline");
     expect(foot.textContent).not.toContain("relay");
+  });
+
+  it("gives its own scroll region the flex-grow and overflow that make it the rail's only scroll boundary", () => {
+    // jsdom lays out nothing, so a real overflow/scroll assertion has to
+    // read the stylesheet text directly rather than compare rendered box
+    // heights — the same technique `shell.test.tsx`'s sibling assertion
+    // (on `ui/shell.css`'s `.shell__rail--session`, which this pairs with)
+    // uses for the same reason. Without `flex: 1`, this region was only as
+    // tall as its own content and never claimed the rail's remaining
+    // height; without its own `overflow-y: auto`, the rail's shared
+    // `.shell__rail` ancestor rule was the only thing scrolling, which
+    // scrolled the head/search/foot away instead of pinning them.
+    const cssPath = join(dirname(fileURLToPath(import.meta.url)), "session-rail.css");
+    const css = readFileSync(cssPath, "utf8");
+    const scrollRule = css.match(/\.pc-session-rail__scroll\s*\{[^}]*\}/);
+    expect(scrollRule).toBeTruthy();
+    expect(scrollRule![0]).toMatch(/flex:\s*1\s*;/);
+    expect(scrollRule![0]).toContain("overflow-y: auto");
   });
 
   it("keeps every pre-existing state test id", () => {
