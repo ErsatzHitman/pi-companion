@@ -20051,13 +20051,50 @@ jobs in the first place.
 
 ##### Acceptance criteria
 
-- [ ] `docker` and `nix` in `.github/ci-paths.yml` select the real `packaging/docker/**` and
+- [x] `docker` and `nix` in `.github/ci-paths.yml` select the real `packaging/docker/**` and
       `packaging/nix/**` inputs
-- [ ] The landing commit also touches a path each filter selects, so both jobs actually run
-- [ ] The first run's id and per-job conclusion are recorded here — including a red one
-- [ ] If either job is red, the measured failure is recorded and the filter change is reverted on
-      its own rather than left gating `main`
-- [ ] `ci.yml`'s and `packaging/README.md`'s disclosures are corrected to match the outcome
+- [x] The landing commit also touches a path each filter selects, so both jobs actually run
+- [x] The first run's id and per-job conclusion are recorded here — including a red one
+- [x] If either job is red, the measured failure is recorded and the filter change is reverted on
+      its own rather than left gating `main` (neither was; the clause stands for the next change
+      to either path, which is when it will next matter)
+- [x] `ci.yml`'s and `packaging/README.md`'s disclosures are corrected to match the outcome
+
+##### Landed at `fa68757`, and the second cause is the part to carry forward
+
+**The filters were the cause everyone had already found. The job BODIES were a second cause
+nobody had, and a filter-only fix would have hidden it one more time.** `docker build -t
+picompanion-ci-check .` carries no `-f`, and there is no repository-root Dockerfile — the build
+context IS the root (`COPY . .` and the root `.dockerignore` are both written for that), but the
+file has to be named, exactly as `guard-docker-packaging-paths.mjs` had already documented. `nix
+flake check` with no path resolves the flake in the working directory, and there is no root
+`flake.nix`. Repointing the filters alone would have started two jobs and watched each fail on a
+missing file rather than on anything about the packaging inputs, and the obvious reading of that
+red would have been "the packaging is broken" rather than "the job was never wired". **A dormant
+job hides more than its trigger** — that is the reusable finding, and it is why this task landed
+the filters and both bodies together.
+
+**The first execution, observed rather than deferred.** The commit changed
+`packaging/docker/README.md` and `packaging/nix/README.md`, which the corrected filters select, so
+the landing push ran both jobs rather than arming them for somebody else's commit. Run
+`35314409932` at `fa68757`, whole run **success**:
+
+| Job                                                                                       | Conclusion | Wall time |
+| ----------------------------------------------------------------------------------------- | ---------- | --------- |
+| `docker-checks` (`docker build -f packaging/docker/Dockerfile -t picompanion-ci-check .`) | success    | 4m 07s    |
+| `nix-checks` (`nix flake check ./packaging/nix`)                                          | success    | 38s       |
+
+Both passed on their first-ever execution, so the revert clause was not exercised. That is a
+better outcome than the task planned for and a weaker result than it looks: T43A3's packaging has
+been correct this whole time, and the only thing wrong was the wiring that would have told anyone.
+
+**What a green `nix-checks` does NOT settle, stated because the job name invites the opposite
+reading.** `nix flake check` EVALUATES a flake's outputs and builds its `checks` output; this
+flake declares no `checks`, so a green run proves the flake parses and its `packages.default` and
+`devShells.default` evaluate — the first bullet under `packaging/nix/README.md`'s "Not verified",
+now answered. It does not reach `npmDepsHash = pkgs.lib.fakeHash`, which fails at FETCH time, so
+`nix build .#default` remains unverified and still needs someone with a `nix` binary. Both
+packaging READMEs now say this where a reader will meet it.
 
 #### T395 — A checkpoint could be taken but no client or screen could ask to restore one, or answer a conflict
 
