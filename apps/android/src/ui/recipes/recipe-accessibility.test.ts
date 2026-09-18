@@ -268,6 +268,39 @@ describe("§10.4 recipes: reduced-motion via shared motion tokens", () => {
   });
 });
 
+// P10-W17: none of these four caret constants is asserted anywhere in the
+// repository (`git grep -ln` on each name returns only StreamingMessage.tsx
+// itself), so a revert of any one back to its pre-fix value would pass
+// every other check silently. Pinned against android-spec.html's own
+// `.stream-caret{width:2px;height:1.05em;margin-left:1.5px;
+// border-radius:1px;background:var(--ink)}`, read directly from
+// StreamingMessage.tsx's source rather than retyped from this task's brief.
+describe("StreamingMessage: the resting caret's own size/position constants match the artifact's .stream-caret (P10-W17)", () => {
+  it("sizes the caret's height off the transcript font, at the spec's 1.05 ratio (CARET_HEIGHT_TO_FONT_SIZE_RATIO)", () => {
+    const code = readRecipeCode("StreamingMessage");
+    expect(code).toMatch(/const CARET_HEIGHT_TO_FONT_SIZE_RATIO = 1\.05;/);
+    expect(code).toMatch(/const CARET_HEIGHT = LINE_FONT_SIZE \* CARET_HEIGHT_TO_FONT_SIZE_RATIO;/);
+  });
+
+  it("rounds the caret's corners by the spec's 1px (CARET_CORNER_RADIUS)", () => {
+    const code = readRecipeCode("StreamingMessage");
+    expect(code).toMatch(/const CARET_CORNER_RADIUS = 1;/);
+    expect(code).toMatch(/borderRadius: CARET_CORNER_RADIUS,/);
+  });
+
+  it("offsets the caret from the text by the spec's 1.5px literal (CARET_MARGIN_LEFT)", () => {
+    const code = readRecipeCode("StreamingMessage");
+    expect(code).toMatch(/const CARET_MARGIN_LEFT = 1\.5;/);
+    expect(code).toMatch(/marginLeft: CARET_MARGIN_LEFT,/);
+  });
+
+  it("draws the caret in theme.colors.ink, not the accent hue it used to borrow", () => {
+    const code = readRecipeCode("StreamingMessage");
+    expect(code).toMatch(/backgroundColor: theme\.colors\.ink,/);
+    expect(code).not.toMatch(/backgroundColor: theme\.colors\.accent/);
+  });
+});
+
 describe("BashBlock: the shell block states its state in words (T359)", () => {
   it("prints a literal $ and the literal word Running, so neither colour nor the shimmer is load-bearing", () => {
     const code = readRecipeCode("BashBlock");
@@ -351,6 +384,24 @@ describe("§10.4 recipes: TalkBack roles, states, and non-colour status text", (
     expect(code).toMatch(/importantForAccessibility="no-hide-descendants"/);
     // The bar itself is the screen's heading, so TalkBack can jump to it.
     expect(code).toMatch(/accessibilityRole="header"/);
+  });
+
+  // P10-W17: `MARK_BUTTON_SIZE` is asserted nowhere else in the repository
+  // (`git grep -ln MARK_BUTTON_SIZE` returns only this recipe's own file),
+  // so a revert of its 34->36 fix (matching android-spec.html's
+  // `.ic{width:36px;height:36px}`) would pass every other check silently.
+  it("ScreenBar sizes its mark box (MARK_BUTTON_SIZE) at the artifact's 36dp .ic square", () => {
+    const code = readRecipeCode("ScreenBar");
+    expect(code).toMatch(/const MARK_BUTTON_SIZE = 36;/);
+  });
+
+  // P10-W17: the title's fontWeight was moved from `semibold` to `medium`
+  // to match android-spec.html's `.bar-t{font:500 13.5px/1.3
+  // Inter,sans-serif}`; nothing else in the repository names this field.
+  it("ScreenBar's title uses the artifact's 500-weight (fontWeight.medium), not semibold", () => {
+    const code = readRecipeCode("ScreenBar");
+    expect(code).toMatch(/fontWeight: asFontWeight\(theme\.typography\.fontWeight\.medium\)/);
+    expect(code).not.toMatch(/fontWeight\.semibold/);
   });
 
   it("TaskRows folds each row's status word into its accessible label", () => {
