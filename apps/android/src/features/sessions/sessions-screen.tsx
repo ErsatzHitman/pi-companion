@@ -118,12 +118,19 @@
  * the body carries the artifact's 12dp padding and 8dp gap, the row
  * is its 52dp/12-radius raised pill with an `ink-3` mono `.s` line,
  * the status pill prints the artifact's words (`Working`, `Needs you`)
- * with the fuller sentence kept for TalkBack, the filter chips use its
- * `surface`/`accent-tint` fills, and the gear is its bare `.ic` button
- * rather than a second surface card. The `.s` line still says what
- * `SessionSummary` actually carries (provider, working directory, age)
- * rather than the mock's invented turn count and token total — see the
- * T363 paragraph above, which is unchanged.
+ * with the fuller sentence kept for TalkBack, and the gear is its bare
+ * `.ic` button rather than a second surface card. The `.s` line still
+ * says what `SessionSummary` actually carries (provider, working
+ * directory, age) rather than the mock's invented turn count and token
+ * total — see the T363 paragraph above, which is unchanged.
+ *
+ * CORRECTED (AND-SESSIONS-CHIP): this paragraph used to end "...with the
+ * fuller sentence kept for TalkBack, the filter chips use its
+ * `surface`/`accent-tint` fills, and the gear is..." — grepped directly
+ * against `android-spec.html`, `accent-tint` occurs zero times and the
+ * real `.chip`/`.chip[data-on]` rules use `--inset`/`--accent`, never
+ * `--surface`/`--accent-tint`. See `FilterChip`'s own doc comment below
+ * for the measured rule and the fix.
  *
  * **PAD-FADEUP — A1's own `.pad>.row,.pad>.card` entrance
  * (`android-spec.html`).** The spec's raw `a1` markup is one flat `.pad`
@@ -340,18 +347,32 @@ const ROW_GAP = 10;
 const ACTION_BUTTON_SIZE = 48;
 /** The artifact's `.ic { font-size: 15px }`, the same mark size `ScreenBar` uses. */
 const ACTION_MARK_FONT_SIZE = 15;
-/** The artifact's `.newbtn { font-size: 11.5px }`, A1's own label size. */
-const NEW_SESSION_FONT_SIZE = 11.5;
+/**
+ * CORRECTED (AND-SESSIONS-CHIP): this cited a `.newbtn { font-size:
+ * 11.5px }` rule. Counted directly against `android-spec.html`: `newbtn`
+ * occurs zero times in the whole file — there is no such class. The real
+ * "+ New session" element is markup, not a dedicated rule:
+ * `<span class="chip" data-act="new" style="flex:1;justify-content:
+ * center;height:44px">+ New session</span>` — base `.chip` with only an
+ * inline `height` override, so its type comes from `.chip`'s own rule
+ * (`font:500 12px/1 Inter,sans-serif`): 12px, not 11.5.
+ */
+const NEW_SESSION_FONT_SIZE = 12;
 /** The artifact's `.actbar { padding: 0 12px 14px }`; 14 is not on the spacing scale. */
 const ACTION_ROW_PADDING_BOTTOM = 14;
 
 /**
- * A1's `.chip { height: 28px; padding: 0 11px; font-size: 11.5px }`.
- * The touch target around it is 48dp; see `FilterChip`.
+ * CORRECTED (AND-SESSIONS-CHIP): this cited `.chip { height: 28px;
+ * padding: 0 11px; font-size: 11.5px }`, which matches no rule in
+ * `android-spec.html` verbatim. Extracted directly:
+ * `.chip{display:inline-flex;align-items:center;height:30px;padding:0
+ * 13px;border-radius:var(--r-full);font:500 12px/1 Inter,sans-serif;
+ * background:var(--inset);color:var(--ink);box-shadow:var(--shadow-btn);
+ * ...}`. The touch target around it is 48dp; see `FilterChip`.
  */
-const FILTER_CHIP_HEIGHT = 28;
-const FILTER_CHIP_PADDING_HORIZONTAL = 11;
-const FILTER_CHIP_FONT_SIZE = 11.5;
+const FILTER_CHIP_HEIGHT = 30;
+const FILTER_CHIP_PADDING_HORIZONTAL = 13;
+const FILTER_CHIP_FONT_SIZE = 12;
 /** A1's `.sbar` magnifier, 14px in the artifact. */
 const SEARCH_MARK_SIZE = 14;
 
@@ -884,7 +905,10 @@ export function SessionsScreen({
         follows `.pad` in the artifact), so it is always reachable
         without scrolling a long list to its end (T385). The gear is
         the artifact's own bare `.ic` button — no surface, no ring —
-        while `+ New session` keeps the raised `newbtn` look; the two
+        while `+ New session` keeps the raised look of its own markup
+        (`<span class="chip" data-act="new" ...>+ New session</span>` —
+        base `.chip`, not a `.newbtn` class; see `NEW_SESSION_FONT_SIZE`'s
+        doc for the grep proving `.newbtn` doesn't exist); the two
         stop sharing one style.
 
         The artifact's third control, a `home` button, is deliberately
@@ -1001,11 +1025,31 @@ function CreateSessionForm({
  * optional remove button, and widening it to carry a selected state
  * would change every chip already mounted from it.
  *
- * Selection reaches TalkBack through `accessibilityState.selected`, and
- * is drawn the artifact's own way (T385): an `accent-tint` fill with
- * `accent-ink` text and no ring when on (`.chip[data-on]`), a `surface`
- * fill with the hairline `--sh-btn` ring and `ink-2` text when off. The
- * visible pill is the artifact's 28dp; `hitSlop` grows the touch bounds
+ * Selection reaches TalkBack through `accessibilityState.selected`.
+ *
+ * CORRECTED (AND-SESSIONS-CHIP): this said selection was drawn "an
+ * `accent-tint` fill with `accent-ink` text and no ring when on
+ * (`.chip[data-on]`), a `surface` fill with the hairline `--sh-btn` ring
+ * and `ink-2` text when off" at "the artifact's 28dp". Grepped directly
+ * against `android-spec.html`: `--sh-btn` occurs zero times (the real
+ * token is `--shadow-btn`, three occurrences) and `accent-tint`/
+ * `accent-ink` occur zero times in this file at all. The real rules are
+ * `.chip{height:30px;padding:0 13px;...background:var(--inset);
+ * box-shadow:var(--shadow-btn);...}` (off) and
+ * `.chip[data-on]{background:var(--accent);color:#08131f}` (on) — the
+ * `data-on` rule sets only background and text colour, no `box-shadow`,
+ * so the base ring is NOT dropped on selection the way this comment used
+ * to claim. `#08131f` has no exact token in
+ * `packages/design-tokens/src/tokens.ts` (read-only from this package);
+ * `accent`/`accentContrast` is the same solid-fill/on-accent-text pair
+ * `ui/primitives/Button.tsx`'s primary variant already paints, and the
+ * same near-miss `ui/recipes/PromptBar.tsx`'s send icon and
+ * `ui/primitives/Toggle.tsx`'s knob already disclose for the identical
+ * literal (measured there: `accentContrast` resolves to
+ * `beautifulDark.page`, `#17181a`, in dark and `#f7f8f9` in light —
+ * close, not byte-identical, to `#08131f`), so it is read the same way
+ * here rather than hardcoding another near-miss of the same hex. The
+ * visible pill is the artifact's 30dp; `hitSlop` grows the touch bounds
  * to the 48dp minimum (plan.md §9.3) rather than inflating the pill,
  * the split `Chip` and `IconButton` already use.
  */
@@ -1156,13 +1200,15 @@ function createStyles(theme: NativeTheme) {
       paddingHorizontal: theme.spacing[3],
       paddingBottom: ACTION_ROW_PADDING_BOTTOM,
     },
-    // A1's `+ New session`: the `newbtn` look — a raised surface chip at
-    // the artifact's `.chip { border-radius: 999px }`, a fully rounded
-    // pill. T385 drew it at `radii.control` (8) instead, behind a comment
-    // citing a small fixed corner radius that appears nowhere in the
-    // artifact's own CSS; UI-A3 corrected the token to `radii.full`, the
-    // same fully-round step the filter chips below already use.
-    // `flex: 1` takes the row's remaining width.
+    // A1's `+ New session`: a raised surface chip at the artifact's own
+    // `.chip { border-radius: var(--r-full) }`, a fully rounded pill —
+    // the element's markup is base `.chip` (see `NEW_SESSION_FONT_SIZE`'s
+    // doc), not a `.newbtn` class, which occurs nowhere in
+    // `android-spec.html`. T385 drew it at `radii.control` (8) instead,
+    // behind a comment citing a small fixed corner radius that appears
+    // nowhere in the artifact's own CSS; UI-A3 corrected the token to
+    // `radii.full`, the same fully-round step the filter chips below
+    // already use. `flex: 1` takes the row's remaining width.
     newSessionButton: {
       minHeight: ACTION_BUTTON_SIZE,
       minWidth: ACTION_BUTTON_SIZE,
@@ -1189,8 +1235,19 @@ function createStyles(theme: NativeTheme) {
       fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
     actionMark: { color: theme.colors["ink-2"], fontSize: ACTION_MARK_FONT_SIZE },
-    // A1's unselected `.chip`: surface fill with the `--sh-btn` hairline
-    // ring, `ink-2` label, 28dp tall and 11dp of side padding.
+    // CORRECTED (AND-SESSIONS-CHIP): this said "surface fill with the
+    // `--sh-btn` hairline ring ... 28dp tall and 11dp of side padding" —
+    // `--sh-btn` occurs zero times in `android-spec.html` (the real
+    // token is `--shadow-btn`), and the real `.chip` rule is 30dp tall
+    // with 13dp of side padding (see `FILTER_CHIP_HEIGHT`'s doc for the
+    // full verbatim rule). The rule's own fill is `background:
+    // var(--inset)`, and `theme.colors.inset` is a real token
+    // (`packages/design-tokens/src/tokens.ts`) — left un-swapped from
+    // `theme.colors.surface` below because this task's two named
+    // findings are the height/padding/font-size trio and the selected
+    // state's colour pair, not the unselected fill token; flagged here
+    // rather than silently changed. `ink-2` label is unchanged and
+    // correct.
     filterChip: {
       height: FILTER_CHIP_HEIGHT,
       justifyContent: "center",
@@ -1200,19 +1257,29 @@ function createStyles(theme: NativeTheme) {
       borderWidth: 1,
       borderColor: theme.colors["line-strong"],
     },
-    // `.chip[data-on] { background: var(--accent-tint); color:
-    // var(--accent-ink); box-shadow: none }` — the ring goes away on
-    // selection, not just the fill change.
+    // CORRECTED (AND-SESSIONS-CHIP): this said `.chip[data-on] {
+    // background: var(--accent-tint); color: var(--accent-ink);
+    // box-shadow: none }`, a rule that doesn't exist — `accent-tint`
+    // occurs zero times in `android-spec.html`. The real rule is
+    // `.chip[data-on]{background:var(--accent);color:#08131f}`: a SOLID
+    // `accent` fill, not the translucent `accent-tint` pair, and it sets
+    // no `box-shadow`, so the base ring above is NOT dropped on
+    // selection — `borderWidth: 0` here was the opposite of the real
+    // rule and is removed. `#08131f` has no exact token
+    // (`packages/design-tokens/src/tokens.ts` is read-only from this
+    // package); `accentContrast` is the same near-miss on-accent text
+    // role `Button.tsx`'s primary variant, `PromptBar.tsx`'s send icon
+    // and `Toggle.tsx`'s knob already use for this identical literal —
+    // see `FilterChip`'s own doc comment above for the measured values.
     filterChipSelected: {
-      backgroundColor: theme.colors["accent-tint"],
-      borderWidth: 0,
+      backgroundColor: theme.colors.accent,
     },
     filterChipText: {
       color: theme.colors["ink-2"],
       fontSize: FILTER_CHIP_FONT_SIZE,
       fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
-    filterChipTextSelected: { color: theme.colors["accent-ink"] },
+    filterChipTextSelected: { color: theme.colors.accentContrast },
     // A1's `.pad { gap: 8px }` separates adjacent rows of a group.
     rows: { gap: theme.spacing[2] },
     rowContainer: { gap: theme.spacing[1] },

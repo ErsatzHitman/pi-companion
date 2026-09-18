@@ -294,10 +294,25 @@ describe("SessionsScreen source: T362 A1's bar, search field and filter chips", 
     expect(code).toMatch(/accessibilityLabel=\{sessionFilterChipAccessibilityLabel\(chip\)\}/);
   });
 
-  it("paints a selected chip with the artifact's accent-tint/accent-ink pair, and rings only the unselected one", () => {
-    expect(code).toMatch(/backgroundColor: theme\.colors\["accent-tint"\]/);
-    expect(code).toMatch(/color: theme\.colors\["accent-ink"\]/);
+  // CORRECTED (AND-SESSIONS-CHIP): this pinned `theme.colors["accent-tint"]`
+  // background and `theme.colors["accent-ink"]` text, and its title claimed
+  // the ring dropped only on the unselected chip. Grepped directly against
+  // `android-spec.html`: `accent-tint`/`accent-ink` occur zero times: the
+  // real `.chip[data-on]` rule is a SOLID `background:var(--accent)` with
+  // `color:#08131f`, and it sets no `box-shadow`, so the base ring is kept
+  // on BOTH states, not dropped on selection. `#08131f` has no exact token;
+  // `accent`/`accentContrast` is the same solid-fill/on-accent-text pair
+  // `Button.tsx`'s primary variant, `PromptBar.tsx`'s send icon and
+  // `Toggle.tsx`'s knob already use for this identical literal — see
+  // `sessions-screen.tsx`'s `FilterChip` doc comment for the measured values.
+  it("paints a selected chip with the artifact's solid accent/accentContrast pair, ringed in both states", () => {
+    expect(code).toMatch(/backgroundColor: theme\.colors\.accent,/);
+    expect(code).toMatch(/color: theme\.colors\.accentContrast/);
     expect(code).not.toMatch(/#[0-9a-fA-F]{6}/);
+    // The base ring (borderWidth/borderColor on `filterChip`) must not be
+    // zeroed out again by a `filterChipSelected` override — the real
+    // `.chip[data-on]` rule sets no `box-shadow`.
+    expect(code).not.toMatch(/filterChipSelected: \{[^}]*borderWidth: 0/);
   });
 
   it("renders the filtered groups, with the model's name-and-count heading", () => {
@@ -458,8 +473,13 @@ describe("SessionsScreen source: T385 A1 chrome, body and rows", () => {
     expect(code).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
   });
 
-  it("sizes the chips to the artifact's 28dp and pads the touch target back to 48", () => {
-    expect(code).toMatch(/const FILTER_CHIP_HEIGHT = 28;/);
+  // CORRECTED (AND-SESSIONS-CHIP): this pinned 28dp. Extracted directly
+  // from `android-spec.html`'s real `.chip` rule (`height:30px;padding:0
+  // 13px;font:500 12px/1 Inter,sans-serif`), which matches no site's prior
+  // "28dp, 11dp padding, 11.5px font" citation verbatim: the true figures
+  // are 30/13/12.
+  it("sizes the chips to the artifact's 30dp and pads the touch target back to 48", () => {
+    expect(code).toMatch(/const FILTER_CHIP_HEIGHT = 30;/);
     expect(code).toMatch(/hitSlop=\{10\}/);
   });
 

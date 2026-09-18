@@ -344,8 +344,12 @@ function duplicateStyleKeys(code: string): Set<string> {
  * T376: without this, `minHeight: ACTION_BUTTON_SIZE` read as no
  * declared minimum at all. Every dimension in `sessions-screen.tsx` is
  * written that way (`ACTION_BUTTON_SIZE = 48`, `FILTER_CHIP_HEIGHT =
- * 28`), which is better style than a scattered literal and which this
- * audit punished: three compliant controls reported as violations, and —
+ * 30` — CORRECTED at AND-SESSIONS-CHIP, which fixed `FILTER_CHIP_HEIGHT`
+ * from a stale 28 to the value `android-spec.html`'s real `.chip` rule
+ * actually declares; this comment's own figure is updated to match so
+ * it doesn't go stale the same way), which is better style than a
+ * scattered literal and which this audit punished: three compliant
+ * controls reported as violations, and —
  * the direction that matters — a control shrunk from 48 to 40 through
  * its constant would have been reported as declaring nothing rather than
  * as declaring too little.
