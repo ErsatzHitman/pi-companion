@@ -84,36 +84,89 @@ export interface ThinkingSectionProps {
  * stops passing a `durationLabel`, so the number appears once rather
  * than in two places disagreeing about rounding.
  *
- * **The artifact's own `.think` column.** Quoting the artifact's CSS:
- * `.think { border-left: 2px solid var(--line-strong); padding: 1px 0
- * 1px 11px }`, `.thead { font-size: 11.5px; color: var(--ink-3) }`,
- * `.think .ln { color: var(--ink-3); font-style: italic }`, where `.ln`
- * is the transcript's mono 12px/1.62. The rule and its inset sit on
- * this component's WRAPPER, so the head and the body share the one
- * column the design draws — the body used to carry the rule by itself,
- * which left the head floating outside the mark.
+ * **The artifact's own `.think` column — corrected (AND-THINK).** This
+ * paragraph used to quote `.think { border-left: 2px solid
+ * var(--line-strong); padding: 1px 0 1px 11px }`, `.thead { font-size:
+ * 11.5px; color: var(--ink-3) }` and `.think .ln { color: var(--ink-3);
+ * font-style: italic }`. None of those three rules exists in the
+ * confirmed spec — grepped directly this session with
+ * `grep -oE '\.think\{[^}]{0,200}\}'` (and the equivalent for `.thead`
+ * and `.think .ln`) against
+ * `C:/Users/aksha/Downloads/pi-ui-goal/android-spec.html`
+ * (md5 `498c3bd38ac8da0636e0bc05b705a7be`), not assumed. The rules that
+ * are actually there:
+ *
+ * ```css
+ * .think{padding:2px 2px 0;font:italic 12.5px/1.6 Inter,system-ui,sans-serif;color:var(--ink-2)}
+ * .thead{display:flex;align-items:center;gap:7px;margin:0 0 4px -4px;padding:3px 6px;
+ *   border-radius:8px;font:500 12.5px/1 Inter,system-ui,sans-serif;font-style:normal;
+ *   color:var(--ink-3)}
+ * ```
+ *
+ * `.think .ln` declares nothing (confirmed empty by the same grep): the
+ * italic, `ink-2` body treatment comes from `.think` itself and is
+ * inherited, not a rule on a nested `.ln`. `.thead`'s own `font-style:
+ * normal` is what keeps the head upright against that inherited italic.
+ * Removing the 2px `line-strong` rule is a real, visible design change,
+ * not a refinement — the confirmed `.think` declares no `border` of any
+ * kind. The rule and its inset still sit on this component's WRAPPER
+ * (now padding only, no border), so the head and the body still share
+ * the one column the design draws.
+ *
+ * The body's mono family was also wrong: `.think` names
+ * `Inter,system-ui,sans-serif`, the same sans role `PromptBar.tsx`'s own
+ * doc comment identifies as `theme.typography.variant.body.fontFamily`
+ * (native Android resolves it to the registered `Inter_400Regular`
+ * face). `.thead` is the same family at weight 500, which in this theme
+ * is `theme.typography.variant.label.fontFamily` — `packages/design-
+ * tokens/src/native.ts`'s `buildTypeStyle` call for the `label` variant
+ * passes weight `"medium"`, and `tokens.ts` maps `medium` to `500` — so
+ * the headline now reads that variant's `fontFamily` alongside the
+ * `fontWeight` it already read.
  */
-/** The artifact's `.thead { font-size: 11.5px; color: var(--ink-3) }`. */
-const HEAD_FONT_SIZE = 11.5;
+/** `.thead { font: 500 12.5px/1 Inter,system-ui,sans-serif; color: var(--ink-3) }`. */
+const HEAD_FONT_SIZE = 12.5;
 const SPARKLE_SIZE = 14;
 const CHEVRON_SIZE = 11;
-/** `.think { border-left: 2px solid var(--line-strong) }`. */
-const THINK_RULE_WIDTH = 2;
-/** `.think { padding: 1px 0 1px 11px }`. */
-const THINK_PADDING_VERTICAL = 1;
-const THINK_PADDING_LEFT = 11;
-/** `.ln { font-size: 12px; line-height: 1.62 }` — the transcript line's own mono metrics. */
-const LINE_FONT_SIZE = 12;
-const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
 /**
- * UI-X8: `.thead { gap: 6px }`. No spacing token holds 6 (the scale
- * steps 4 -> 8), and the trigger row was reading `spacing[2]` (8)
- * instead — a real 2px stretch between the sparkle, the headline and
- * the chevron. Kept as its own literal, the same treatment this file's
- * other artifact-only figures (`THINK_RULE_WIDTH`, `THINK_PADDING_LEFT`)
- * already get.
+ * `.think { padding: 2px 2px 0 }` — CSS's 3-value shorthand: top 2px,
+ * left+right 2px, bottom 0 (no named constant for a bare 0).
  */
-const THEAD_GAP = 6;
+const THINK_PADDING_TOP = 2;
+const THINK_PADDING_HORIZONTAL = 2;
+/**
+ * `.think { font: italic 12.5px/1.6 ... }` governs the body text.
+ * `.ln` — the transcript-line selector this constant used to cite —
+ * declares no font of its own (`grep -oE` for `.ln{...}` returns
+ * `white-space`/`display` rules only, confirmed empty of any font
+ * property). The transcript's OWN line font, `.t`, is `12.5px/1.62` —
+ * a different ratio this component does not use.
+ */
+const LINE_FONT_SIZE = 12.5;
+const LINE_HEIGHT = LINE_FONT_SIZE * 1.6;
+/**
+ * `.thead { gap: 7px }`. No spacing token holds 7 (the scale steps
+ * 4 -> 8), so it stays a literal, the same treatment this file's other
+ * artifact-only figures already get. UI-X8 replaced this trigger row's
+ * 8px spacing token with a literal 6, reading the number off the wrong
+ * document; the non-token decision was right, the digit was not.
+ * Corrected here (AND-THINK) to 7, measured against the confirmed
+ * `android-spec.html` above.
+ */
+const THEAD_GAP = 7;
+/**
+ * The same `.thead` rule's `padding: 3px 6px` and `border-radius: 8px`
+ * — a pill the trigger row did not draw before. Landed here because
+ * both map cleanly onto RN `padding`/`borderRadius`. NOT landed:
+ * `margin: 0 0 4px -4px`. RN accepts a negative `marginLeft`
+ * syntactically, but nothing in this session measured how pulling the
+ * whole trigger row 4px left would interact with the wrapper's own left
+ * padding or the 48dp touch floor `plan.md` §9.3 requires here, so it
+ * is left undrawn rather than approximated silently.
+ */
+const THEAD_PADDING_VERTICAL = 3;
+const THEAD_PADDING_HORIZONTAL = 6;
+const THEAD_BORDER_RADIUS = 8;
 
 export function ThinkingSection({
   headline,
@@ -178,25 +231,28 @@ export function ThinkingSection({
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
-    // `.think`'s own rule and inset: the reasoning column is marked once
-    // around everything it contains, head included, rather than around
-    // the body only.
+    // `.think`'s own inset: the reasoning column is marked once around
+    // everything it contains, head included, rather than around the
+    // body only. No border — the confirmed `.think` declares none.
     wrapper: {
       gap: theme.spacing[1],
-      borderLeftWidth: THINK_RULE_WIDTH,
-      borderLeftColor: theme.colors["line-strong"],
-      paddingVertical: THINK_PADDING_VERTICAL,
-      paddingLeft: THINK_PADDING_LEFT,
+      paddingTop: THINK_PADDING_TOP,
+      paddingHorizontal: THINK_PADDING_HORIZONTAL,
+      paddingBottom: 0,
     },
     trigger: {
       flexDirection: "row",
       alignItems: "center",
       gap: THEAD_GAP,
+      paddingVertical: THEAD_PADDING_VERTICAL,
+      paddingHorizontal: THEAD_PADDING_HORIZONTAL,
+      borderRadius: THEAD_BORDER_RADIUS,
       minHeight: 48,
     },
     headline: {
       flex: 1,
       fontSize: HEAD_FONT_SIZE,
+      fontFamily: theme.typography.variant.label.fontFamily,
       fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
     },
     // Elapsed-time readout: the mono family with tabular figures — the
@@ -208,9 +264,11 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: theme.typography.variant.caption.fontSize,
     },
+    // `.think { font: italic 12.5px/1.6 Inter,system-ui,sans-serif;
+    // color: var(--ink-2) }` — sans, not mono; ink-2, not ink-3.
     bodyText: {
-      color: theme.colors["ink-3"],
-      fontFamily: theme.typography.variant.code.fontFamily,
+      color: theme.colors["ink-2"],
+      fontFamily: theme.typography.variant.body.fontFamily,
       fontSize: LINE_FONT_SIZE,
       lineHeight: LINE_HEIGHT,
       fontStyle: "italic",

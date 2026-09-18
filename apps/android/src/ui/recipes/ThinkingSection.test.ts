@@ -34,37 +34,74 @@ describe("ThinkingSection.tsx: the artifact's .thead (T357)", () => {
 
   it("carries the artifact's own head sizes", () => {
     const code = readCode();
-    expect(code).toMatch(/const HEAD_FONT_SIZE = 11\.5;/);
+    // `.thead { font: 500 12.5px/1 ... }` — was 11.5, the wrong document's figure.
+    expect(code).toMatch(/const HEAD_FONT_SIZE = 12\.5;/);
+    expect(code).not.toMatch(/const HEAD_FONT_SIZE = 11\.5;/);
     expect(code).toMatch(/const SPARKLE_SIZE = 14;/);
     expect(code).toMatch(/const CHEVRON_SIZE = 11;/);
+  });
+
+  it("AND-THINK: reads the head in the theme's sans-medium face, matching .thead's weight 500", () => {
+    const code = readCode();
+    expect(code).toMatch(/fontFamily: theme\.typography\.variant\.label\.fontFamily,/);
   });
 
   it("tints the head ink-3, expanded or not, as `.thead { color: var(--ink-3) }` specifies", () => {
     expect(readCode()).toMatch(/const headTint = theme\.colors\["ink-3"\];/);
   });
 
-  it("UI-X8: uses the artifact's own `.thead { gap: 6px }`, not the 8px spacing token", () => {
+  it("AND-THINK: uses the artifact's own `.thead { gap: 7px }`, not UI-X8's 6px misread", () => {
     const code = readCode();
-    expect(code).toMatch(/const THEAD_GAP = 6;/);
+    expect(code).toMatch(/const THEAD_GAP = 7;/);
+    expect(code).not.toMatch(/const THEAD_GAP = 6;/);
     expect(code).toMatch(/gap: THEAD_GAP,/);
     expect(code).not.toMatch(/gap: theme\.spacing\[2\],\s*minHeight: 48/);
   });
 
-  it("draws the artifact's single .think rule and inset on the wrapper, not on the body", () => {
+  it("AND-THINK: draws the artifact's own .thead pill padding and radius", () => {
     const code = readCode();
-    expect(code).toMatch(/borderLeftWidth: THINK_RULE_WIDTH/);
-    expect(code).toMatch(/borderLeftColor: theme\.colors\["line-strong"\]/);
-    expect(code).toMatch(/paddingLeft: THINK_PADDING_LEFT/);
-    expect(code).toMatch(/const THINK_RULE_WIDTH = 2;/);
-    expect(code).toMatch(/const THINK_PADDING_LEFT = 11;/);
+    expect(code).toMatch(/const THEAD_PADDING_VERTICAL = 3;/);
+    expect(code).toMatch(/const THEAD_PADDING_HORIZONTAL = 6;/);
+    expect(code).toMatch(/const THEAD_BORDER_RADIUS = 8;/);
+    expect(code).toMatch(/paddingVertical: THEAD_PADDING_VERTICAL,/);
+    expect(code).toMatch(/paddingHorizontal: THEAD_PADDING_HORIZONTAL,/);
+    expect(code).toMatch(/borderRadius: THEAD_BORDER_RADIUS,/);
   });
 
-  it("draws the reasoning body in the transcript's italic ink-3 mono", () => {
+  it("AND-THINK: draws no .think border — the confirmed spec declares none", () => {
     const code = readCode();
-    expect(code).toMatch(/const LINE_FONT_SIZE = 12;/);
-    expect(code).toMatch(/const LINE_HEIGHT = LINE_FONT_SIZE \* 1\.62;/);
+    expect(code).not.toMatch(/THINK_RULE_WIDTH/);
+    expect(code).not.toMatch(/borderLeftWidth/);
+    expect(code).not.toMatch(/borderLeftColor/);
+  });
+
+  it("AND-THINK: pins the artifact's own .think padding shorthand (2px 2px 0)", () => {
+    const code = readCode();
+    expect(code).toMatch(/const THINK_PADDING_TOP = 2;/);
+    expect(code).toMatch(/const THINK_PADDING_HORIZONTAL = 2;/);
+    expect(code).toMatch(/paddingTop: THINK_PADDING_TOP,/);
+    expect(code).toMatch(/paddingHorizontal: THINK_PADDING_HORIZONTAL,/);
+    expect(code).toMatch(/paddingBottom: 0,/);
+    expect(code).not.toMatch(/paddingLeft: THINK_PADDING_LEFT/);
+    expect(code).not.toMatch(/const THINK_PADDING_LEFT = 11;/);
+    expect(code).not.toMatch(/const THINK_PADDING_VERTICAL = 1;/);
+  });
+
+  it("draws the reasoning body in the artifact's own italic ink-2 sans, not the transcript's mono", () => {
+    const code = readCode();
+    // `.think { font: italic 12.5px/1.6 ...; color: var(--ink-2) }` — was
+    // LINE_FONT_SIZE = 12 citing `.ln`, which sets no font at all.
+    expect(code).toMatch(/const LINE_FONT_SIZE = 12\.5;/);
+    expect(code).not.toMatch(/const LINE_FONT_SIZE = 12;/);
+    expect(code).toMatch(/const LINE_HEIGHT = LINE_FONT_SIZE \* 1\.6;/);
+    expect(code).not.toMatch(/const LINE_HEIGHT = LINE_FONT_SIZE \* 1\.62;/);
     expect(code).toMatch(/fontStyle: "italic"/);
-    expect(code).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
+    expect(code).toMatch(
+      /color: theme\.colors\["ink-2"\],\s*\n\s*fontFamily: theme\.typography\.variant\.body\.fontFamily,/,
+    );
+    expect(code).not.toMatch(
+      /fontFamily: theme\.typography\.variant\.code\.fontFamily,\s*\n\s*fontSize: LINE_FONT_SIZE/,
+    );
   });
 
   it("shows the mono duration only while there is one to show", () => {
