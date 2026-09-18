@@ -39,6 +39,19 @@ describe("todo-row.tsx: the artifact's .ov widget (T360)", () => {
     expect(code).not.toMatch(/Math\.PI/);
   });
 
+  it("passes the recipe already-resolved motion tokens and the device's reduce-motion flag, from this row's own useTheme()", () => {
+    // ProgressRing cannot call useTheme() itself (recipe-accessibility.
+    // test.ts's stated colour exemption), so the ring only eases its
+    // `dashOffset` between todo states if this row hands it what
+    // useTheme() already resolved — pinned here so a caller that drops
+    // either prop, or stops destructuring them, fails loudly instead of
+    // silently leaving the ring snapping between states again.
+    const code = readCode();
+    expect(code).toMatch(/const \{ theme, motion, reduceMotion \} = useTheme\(\);/);
+    expect(code).toMatch(/motion=\{motion\}/);
+    expect(code).toMatch(/reduceMotion=\{reduceMotion\}/);
+  });
+
   it("sizes the ring box from the radius and stroke, not from a second literal", () => {
     expect(readCode()).toMatch(/const RING_SIZE = RING_RADIUS \* 2 \+ RING_STROKE;/);
   });

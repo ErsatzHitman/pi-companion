@@ -142,7 +142,7 @@ export interface TranscriptTodoRowProps {
 }
 
 function TranscriptTodoRowImpl({ entry, testId }: TranscriptTodoRowProps) {
-  const { theme } = useTheme();
+  const { theme, motion, reduceMotion } = useTheme();
   const styles = createStyles(theme);
   const [collapsed, setCollapsed] = useState(false);
   const progress = todoProgress(entry.items);
@@ -168,6 +168,8 @@ function TranscriptTodoRowImpl({ entry, testId }: TranscriptTodoRowProps) {
             dashOffset={ringDashOffset(progress.fraction)}
             trackColor={theme.colors.inset}
             arcColor={theme.colors[ringInk(progress)]}
+            motion={motion}
+            reduceMotion={reduceMotion}
           />
         </View>
         <Text style={[styles.headLabel, { color: headTint }]}>
