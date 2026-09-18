@@ -29,15 +29,27 @@ describe("registry-view.tsx: every extension element draws in the .blk.ext block
     expect(code).not.toMatch(/rgba?\(/);
   });
 
-  it("draws the reference's own 9/11 padding and card-tier line ring", () => {
+  it("draws the confirmed spec's shared block geometry, no phantom 11px override", () => {
     const code = readCode();
     expect(code).toMatch(/borderRadius: BLOCK_RADIUS/);
     expect(code).toMatch(/paddingVertical: BLOCK_PADDING_VERTICAL/);
-    expect(code).toMatch(/paddingHorizontal: EXTENSION_BLOCK_PADDING_HORIZONTAL/);
-    // The reference's `.blk { padding: 9px 11px }`; `block-shape.ts` has 12.
-    expect(code).toMatch(/const EXTENSION_BLOCK_PADDING_HORIZONTAL = 11;/);
-    // `--sh-hairline` drawn as the card-tier ring, in the theme's `line`.
-    expect(code).toMatch(/ringShadow\(theme, "card"\)/);
+    // Confirmed spec (android-spec.html): `.blk{...padding:9px 12px...}`
+    // and its only `.blk.ext` rule is `.blk.ext{background:var(--ext-bg)}`
+    // — no padding override, so the extension block reads the same
+    // `BLOCK_PADDING_HORIZONTAL` every other transcript block does,
+    // never a locally-declared 11.
+    expect(code).toMatch(/paddingHorizontal: BLOCK_PADDING_HORIZONTAL/);
+    expect(code).not.toMatch(/EXTENSION_BLOCK_PADDING_HORIZONTAL/);
+  });
+
+  it("draws no ring: the confirmed spec has no --sh-hairline and no box-shadow on .blk", () => {
+    const code = readCode();
+    // `grep -c -- '--sh-hairline'` is 0 over the confirmed spec (it is 9
+    // only in the stale docs/ui-reference/pi-companion-app.html
+    // reconstruction), and `.blk` carries no box-shadow/border in any
+    // state there — the same fact `../../ui/theme/block-shape.ts`'s
+    // `blockRing` already encodes by always returning `null`.
+    expect(code).not.toMatch(/ringShadow/);
   });
 
   it("draws the artifact's [ns] tag for every placement that is not a sheet", () => {

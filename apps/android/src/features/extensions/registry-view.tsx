@@ -49,8 +49,13 @@ import { extensions } from "@picompanion/frontend-core";
 import type { Logger, LogFields } from "@picompanion/frontend-core";
 import type { PiUiAction, PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
-import { BLOCK_PADDING_VERTICAL, BLOCK_RADIUS, blockSurface } from "../../ui/theme/block-shape";
-import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
+import {
+  BLOCK_PADDING_HORIZONTAL,
+  BLOCK_PADDING_VERTICAL,
+  BLOCK_RADIUS,
+  blockSurface,
+} from "../../ui/theme/block-shape";
+import { asFontWeight } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
 import { DangerousActionConfirmDialog } from "./registry-confirm";
 import { ExtensionDiagnostic } from "./registry-diagnostic";
@@ -287,28 +292,24 @@ export function PiUiElementView({
   );
 }
 
-/**
- * `.blk`'s own padding in the reference artboard is `9px 11px`
- * (`docs/ui-reference/pi-companion-app.html`, `.blk { ...; padding: 9px
- * 11px; ... }`). `block-shape.ts`'s `BLOCK_PADDING_HORIZONTAL` is 12 for
- * the transcript's other blocks, so the extension block declares the
- * artifact's own 11 here instead of reusing 12.
- */
-const EXTENSION_BLOCK_PADDING_HORIZONTAL = 11;
-
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     // T356: the `.blk.ext` block. `blockSurface("extension")` is never
     // `null` — only `assistant` is — so this reads the token directly.
-    // The `.blk` hairline (`--sh-hairline`) is drawn as the card-tier
-    // ring, whose colour is the theme's `line` token.
+    // Geometry comes from `../../ui/theme/block-shape.ts`'s own
+    // constants — `BLOCK_RADIUS`/`BLOCK_PADDING_VERTICAL`/
+    // `BLOCK_PADDING_HORIZONTAL`, the same `.blk` every other transcript
+    // block draws in, confirmed against the spec at that module's own
+    // doc comment. No ring: `block-shape.ts`'s `blockRing` always
+    // returns `null` (the confirmed spec draws no border or box-shadow
+    // on `.blk` in any state), matching the treatment already applied to
+    // `../transcript/tool-call-row.tsx`.
     wrapper: {
       gap: theme.spacing[1],
       borderRadius: BLOCK_RADIUS,
       paddingVertical: BLOCK_PADDING_VERTICAL,
-      paddingHorizontal: EXTENSION_BLOCK_PADDING_HORIZONTAL,
+      paddingHorizontal: BLOCK_PADDING_HORIZONTAL,
       backgroundColor: theme.colors[blockSurface("extension") ?? "extension-bg"],
-      ...ringShadow(theme, "card"),
     },
     nsTag: {
       color: theme.colors.purple,
