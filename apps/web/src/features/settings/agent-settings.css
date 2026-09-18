@@ -1,0 +1,113 @@
+/**
+ * `AgentSettingsPanel` styles. Confirmed unstyled before this file:
+ * `grep -rn pc-agent-settings --include=*.css apps/web/src` returned
+ * nothing, so every auto-compaction/auto-retry row rendered as a bare
+ * unstyled `<div>` with no background, padding, or grouping.
+ *
+ * Values below are the confirmed
+ * `C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html`'s `.set-g`/`.set`
+ * family (a group of settings rows, each with a visible label and an
+ * optional trailing value). This repository's own
+ * `docs/ui-reference/pi-companion-web.html` is byte-identical to that
+ * confirmed copy (md5 `9c49b1a697dff4a6fbc547dc6c257e96` for both,
+ * verified this session) — citing the confirmed path directly rather than
+ * the tracked copy is a provenance preference, not a rule: the citation
+ * stays valid even if the tracked copy ever drifts, and CLAUDE.md's
+ * "reference-only documents" section does not govern `docs/ui-reference/`
+ * at all (`grep -c 'ui-reference' CLAUDE.md` is 0 — that section is a
+ * closed enumeration of 14 other files).
+ *
+ * Every value is a design token (repository invariant: no raw hex,
+ * pixel-spacing, or duration literal) except where the spec literal has no
+ * exact match on the shared scale (9px/11px padding, 10px gap, the 12px
+ * `.k` label size below) — those are declared as local custom properties
+ * quoting the spec's literal, the pattern
+ * `features/transcript/tool-call-row.css` already uses for its own
+ * token-less `.tool-h`/`.tool-out` insets, rather than rounded to the
+ * nearest step.
+ *
+ * `host-settings-screen.css` (the stylesheet already imported on this
+ * route) owns `.pc-agent-settings__note`, a paragraph in a different
+ * section of that route (the agent picker's loading/empty copy) that
+ * happens to share this file's class prefix by coincidence — it is not
+ * rendered by this component and stays there. This file owns every class
+ * `AgentSettingsPanel.tsx` itself renders, co-located with the component
+ * the way `features/transcript/tool-call-row.css` sits beside
+ * `tool-call-row.tsx` rather than living on the route.
+ */
+
+/* `.set-g`: the group wrapper. A 1px gap between opaque `--color-surface`
+   rows is the spec's own divider technique — the page background shows
+   through as a hairline seam, so no border is drawn. */
+.pc-agent-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* `.set` */
+.pc-agent-settings__row {
+  --pc-agent-settings-row-gap: 10px;
+  --pc-agent-settings-row-pad-block: 9px;
+  --pc-agent-settings-row-pad-inline: 11px;
+  display: flex;
+  align-items: center;
+  gap: var(--pc-agent-settings-row-gap);
+  padding: var(--pc-agent-settings-row-pad-block) var(--pc-agent-settings-row-pad-inline);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-hairline);
+}
+
+/* `.set:first-of-type` / `:last-of-type` / `:only-of-type`: rounds the
+   group's outer corners while interior seams stay square. `:only-of-type`
+   has no live caller today (`AgentSettingsPanel` always renders both the
+   auto-compaction and auto-retry rows), kept for the same reason the spec
+   itself defines it — a future caller rendering a single row should not
+   have to add this rule. */
+.pc-agent-settings__row:first-of-type {
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+.pc-agent-settings__row:last-of-type {
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+}
+.pc-agent-settings__row:only-of-type {
+  border-radius: var(--radius-card);
+}
+
+/*
+ * `.set .k`: the row's visible label. `Toggle` (`ui/primitives/Toggle.tsx`)
+ * already renders it as `.pc-toggle-row__label`
+ * (`ui/primitives/primitives.css`); styled here by descendant selector
+ * rather than by editing that shared primitive, since only this row's
+ * label needs the `.set` size. 12px sits exactly equidistant between
+ * `--font-size-md` (11.5px) and `--font-size-base` (12.5px) — tied, not
+ * nearest to either — so it is a local custom property rather than a
+ * rounded token.
+ *
+ * `.set .k small`: the spec also gives a row's label an optional
+ * secondary line (10.5px, `--ink-3`). `Toggle`'s `label` prop is a single
+ * string with no such secondary slot, so nothing in this row renders one
+ * today; no rule is declared for it, the same "no DOM counterpart today"
+ * treatment `features/rail/pi-extension-rail.css` already gives its own
+ * spec fields with nothing to attach to.
+ */
+.pc-agent-settings__row .pc-toggle-row__label {
+  --pc-agent-settings-row-key-size: 12px;
+  font-size: var(--pc-agent-settings-row-key-size);
+}
+
+/*
+ * `.set .v`: the row's trailing value, right-aligned by `margin-left:
+ * auto`. This row's only optional trailing content is `StatusIndicator`
+ * (`pc-status`), which already carries its own font/colour treatment
+ * (`ui/primitives/primitives.css`: tone-coloured dot, sans-serif label and
+ * text) for the "explain rather than silently disable" copy it renders
+ * elsewhere (`DiagnosticsScreen`, `BootstrapConnectStatus`,
+ * `ModelThinkingPicker`) — the spec's mono/`--ink-2` value styling is for a
+ * short literal readout (e.g. `127.0.0.1:6768`), not prose status text, so
+ * only the positioning is adopted here and the primitive's own type
+ * treatment is left alone.
+ */
+.pc-agent-settings__row .pc-status {
+  margin-left: auto;
+}

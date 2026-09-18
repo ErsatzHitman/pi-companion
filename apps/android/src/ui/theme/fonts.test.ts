@@ -88,9 +88,16 @@ describe("apps/android font bundling (T13C)", () => {
    * T345 swapped Android's mono face from Geist Mono to JetBrains Mono.
    * Seven comments across `apps/android/src` still explained a mono
    * `fontFamily` by quoting `docs/beautiful-ui-reference.md`'s own "Geist
-   * Mono for all numerals" — a reference-only document, so the citation
-   * is legitimate PROVENANCE under `CLAUDE.md`'s T253 test, but the face
-   * name in it stopped describing this app. `HANDOFF.md` §9.3 listed all
+   * Mono for all numerals" — `docs/beautiful-ui-reference.md` is not one
+   * of the 14 files CLAUDE.md's "reference-only documents" section names
+   * (`grep -c 'ui-reference' CLAUDE.md` is 0, and that section is a
+   * closed enumeration), and `plan.md` §10 treats it as the product's
+   * live, citable design-system spec ("The full extracted specification
+   * — tokens, shapes, shadows, type, motion, and signature traits —
+   * lives in `docs/beautiful-ui-reference.md`"), so the citation was
+   * always an ordinary live citation, not provenance under a
+   * reference-only-document rule — but the face name in it stopped
+   * describing this app. `HANDOFF.md` §9.3 listed all
    * seven; T356 reworded six while restyling the transcript, and the
    * extension `progress` renderer's was still standing at T367.
    *

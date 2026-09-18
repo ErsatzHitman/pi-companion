@@ -23,11 +23,17 @@
  * process detail rather than something either party said.
  *
  * **UI-P8 correction**: T308 drew that time as a visible caption under
- * every row. The authoritative reference
- * (`docs/ui-reference/pi-companion-app.html`, its `add('<div class="blk
- * usr">...` and `say(m, ...)` calls building the `.md` prose block) draws
- * no time at all under any turn it renders — not even the asymmetric
- * `who`+time line web's `TranscriptMeta` cites from the *other* mockup.
+ * every row. `docs/ui-reference/pi-companion-app.html` is not the
+ * confirmed Android design: measured this session, it genuinely differs
+ * (md5 `3ff70c21a0b512f169bad358608144f0`) from the confirmed
+ * `android-spec.html` (md5 `498c3bd38ac8da0636e0bc05b705a7be`), so it
+ * cannot be cited as this row's authority — unlike the web pair, which
+ * really is byte-identical. The confirmed `android-spec.html` was
+ * re-checked directly for this correction: its own `add('<div class="blk
+ * usr">...` and `say(msg){}` calls building the `.md` prose block draw no
+ * time at all under any turn either — not even the asymmetric `who`+time
+ * line web's `TranscriptMeta` cites from the *other* mockup — so the
+ * value below is unchanged, only the citation was wrong.
  * The visible `<Text>` below is now styled off-screen
  * (`styles.timestamp`, mirroring web's own `.pc-visually-hidden` recipe in
  * `ui/primitives/primitives.css` in RN terms) rather than deleted: the

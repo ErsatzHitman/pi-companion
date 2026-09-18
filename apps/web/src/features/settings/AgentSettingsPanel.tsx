@@ -1,6 +1,7 @@
 import { StatusIndicator, Toggle } from "../../ui/primitives/index.js";
 
 import type { AgentSettingState } from "./agent-setting-state.js";
+import "./agent-settings.css";
 
 /**
  * Auto-compaction / auto-retry settings surface (T38B2). Composes the

@@ -4,15 +4,18 @@
  * the reference Live pane's `.live` region (`docs/ui-reference/
  * pi-companion-web.html`: `.card`, `.card-h`, `.agent`, `.agent-t`,
  * `.agent-s`, `.track`, `.phase`)", citing that file as this component's
- * design authority. Nothing under `docs/ui-reference/` may be cited as
- * authority for a product decision — see CLAUDE.md's "reference-only
- * documents" section, whose corollary requires the fact to be restated in
- * a citable home and that home cited instead. The values were not wrong:
- * that file and the confirmed `web-spec.html` were md5-compared before
- * repointing and are byte-identical
- * (`9c49b1a697dff4a6fbc547dc6c257e96`), so this is a provenance fix, not
- * a value fix — a fact about the WEB pair alone, since the Android pair's
- * two files differ.) The card/agent/track/
+ * design authority, and a later revision said CLAUDE.md's "reference-only
+ * documents" section forbids citing it — that section does not mention
+ * `docs/ui-reference/` at all (`grep -c 'ui-reference' CLAUDE.md` is 0; the
+ * section is a closed enumeration of 14 other files), so that was a false
+ * attribution too. The honest reason to cite the confirmed
+ * `web-spec.html` instead is provenance, not a rule: the values were never
+ * wrong — `docs/ui-reference/pi-companion-web.html` and the confirmed
+ * `web-spec.html` were md5-compared and are byte-identical
+ * (`9c49b1a697dff4a6fbc547dc6c257e96`) — but naming the confirmed copy
+ * keeps this citation valid even if the tracked copy ever drifts. That
+ * identity is a fact about the WEB pair alone; the Android pair's two
+ * files differ.) The card/agent/track/
  * phase layout this file implements is governed by plan.md §8.3 (rail
  * layout) and §11.5 (placement routing) instead. Every value below is a
  * design token (`apps/web/src/styles/global.css`'s "no raw hex/
@@ -20,8 +23,7 @@
  * raw colour, and every spacing/radius/font-size is the nearest token on
  * the shared scale to the mockup's literal px value where the scale has no
  * exact match (documented per rule below, kept as provenance recording
- * where a figure came from — not as this file's current authority, per
- * the corollary in CLAUDE.md's "reference-only documents" section). The
+ * where a figure came from, not as this file's current authority). The
  * handful of remaining raw pixel values are structural alignment (glyph
  * column width, connector offsets, track height) with no themed
  * equivalent.
