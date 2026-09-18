@@ -23958,3 +23958,135 @@ being deleted; the old trap survives only inside narration of what the walk used
   `pc-agent-settings` classes, so there is no second unstyled row family on that route — but the rest
   of the route was not re-audited against the spec this wave, and that is stated as unfinished rather
   than claimed as clean.
+
+## Wave P10-W20 (the conversion that was missing from the file that already had its twin)
+
+Two implement packages, two verifiers, one gate — 5 agents, 0 errors, one workflow, no red pass.
+Partition check clean: 6 changed paths, all inside the union, and `packages/design-tokens/src/tokens.ts`
+— the file destroyed in the P6-W24 incident — verified untouched, which matters this wave because
+TOKENS-TRACKING is the first package since then to edit inside that package at all. Three commits,
+`17a9c3b..9baac5d`. Green at CI run **35351676824** (success, `9baac5d`).
+
+### P10-64: the helper that was missing was the twin of one already in the same file
+
+P10-61 fixed the em-versus-dp letter-spacing error at one call site and recorded the underlying gap as
+open. This wave closed it.
+
+`packages/design-tokens/src/tokens.ts`'s `letterSpacing` map holds em RATIOS (`tight: -0.02`,
+`normal: 0`, `wide: 0.09`). `web.ts`'s emitter writes each one with an `em` suffix, which is the
+load-bearing proof that they are ratios and not lengths. React Native's `letterSpacing` is absolute
+dp, and `buildTypeStyle` passed the ratio through unchanged — so every affected variant under-tracked
+by a factor of its own font size, always toward no tracking at all.
+
+The striking part is that `native.ts` already solved this exact problem for the sibling relative token,
+and had since it was written: `resolveNativeLineHeight(fontSize, lineHeightMultiplier)` is exported,
+documented, and called inside `buildTypeStyle` three lines from where the letter-spacing ratio went
+through raw. The defect was not a missing idea. It was an asymmetry between two adjacent lines.
+
+`resolveNativeLetterSpacing(fontSize, letterSpacingEm)` is the counterpart. It deliberately does NOT
+round, unlike its sibling: an em ratio at these sizes yields sub-pixel values (0.09 x 10 = 0.9) that
+rounding would erase outright, where a line-height resolves to whole pixels worth rounding to. That
+divergence from the precedent is stated in the helper's own doc comment rather than left for a reader
+to notice.
+
+`NativeTypography` also gained the raw em map, exposed the way `fontFamily` already is. That is what a
+call site overriding a variant's font size needs, and there is exactly one: `Section.tsx` renders
+`.lbl` at 10 while `variant.label` is built at `typography.fontSize.sm` = 11.
+
+**The trap this wave had to avoid was the fix itself.** `Section.tsx` carried P10-61's local
+`variant.label.letterSpacing * LABEL_FONT_SIZE` workaround. The moment `buildTypeStyle` started
+pre-scaling, that line computed 0.99 x 10 = 9.9dp. Three values all read as a plausible diff — 0.09
+(scale missed), 0.99 (scaled at the variant's size rather than the element's), 9.9 (double) — and only
+0.9 is right. So the arithmetic was done BY HAND at three independent points, by the implementer, the
+verifier and the gate, rather than inferred from a green test run. All three landed on 0.9dp.
+
+`native.test.ts` had ZERO `letterSpacing` assertions before this wave, which is the whole reason the
+original error survived. It now covers the helper's arithmetic and each affected variant's resolved
+value as real unit tests of a pure function. 10 -> 14 cases.
+
+Only three variants were ever affected — `display` and `title` (`tight`) and `label` (`wide`). The
+other five take `normal`, and zero times anything is zero. Nothing reads `variant.display
+.letterSpacing` or `variant.title.letterSpacing` today, so those two moved no pixel and are simply
+correct for the next reader.
+
+### P10-65: the guard entry was missing, and writing it reproduced P10-62 inside its own test
+
+The wave shipped two new capabilities and registered nothing in `guard-capability-prose.mjs`'s
+`CAPABILITIES` list — the same omission CLAUDE.md's T215, T228 and T281 sections were each filed for.
+The implementers could not have complied: that file sat outside both declared partitions. The wave's
+own merge gate raised it, and it was registered at the gate the way T215 registered T211's and T213's.
+
+The entry was proven able to FIRE before being trusted, per this repository's rule that an unproven
+entry is a check that cannot fail. Each of its three denying phrases was appended in turn to a real
+tracked in-scope file, `run-guard-capability-prose.mjs` was confirmed to exit 1 naming this capability
+by name, and the file was restored from a scratchpad copy — never `git checkout --` — with
+`git status --porcelain` clean and the guard back to exit 0 after each.
+
+**Then the fixture test failed, and it failed for P10-62's reason.** The test asserted that exactly one
+shipped file declares the helper, matching `/export function resolveNativeLetterSpacing\b/` against raw
+file text. It reported TWO: `native.ts`, and `guard-capability-prose.mjs` itself — because the new
+capability entry's own comment quotes that exact command as its evidence. Quoting the command changed
+what the command returned.
+
+That is worth more than the fix. P10-62 was a comment quoting a method that could not measure what it
+claimed. This is a TEST quoting a method whose own act of being quoted falsified it, written one wave
+later, by the agent that had just recorded P10-62. The test now runs through
+`isCapabilityMemberDeclared`, the guard's own shipping predicate, which strips comments before deciding
+— so a comment naming a symbol can never count as shipping it. `guard-capability-prose.test.mjs`
+243 -> 246 cases.
+
+A separate, standing protection was confirmed rather than assumed along the way: the existing
+whole-tree case asserting `findShippedCapabilities(shippedFiles).length === CAPABILITIES.length` means
+a newly registered entry that cannot resolve as shipped fails immediately. The new entry passes it, so
+it is not inert.
+
+### P10-66: the toggle was two pixels over on both axes, and one thing that looked wrong was not
+
+`.sw{width:34px;height:20px;...padding:2px}` with a `.sw i` 16px knob, against `.pc-toggle` at 36 x 22
+with an 18px knob.
+
+The finding had been raised by the orchestrator while auditing the P10-W19 gate's shadow verdict and
+had never been re-derived by a verifier, so it was carried in as UNCONFIRMED and measured again from
+the spec before anything moved. That is the correct handling of an orchestrator-found item and is
+recorded here as the precedent.
+
+Two neighbouring values look like they must move with the track and must not:
+
+- `translateX(0.875rem)` = 14px is correct under BOTH geometries, by arithmetic rather than luck: the
+  old travel was 36 - 18 - (2 x 2) = 14, and the new is 34 - 16 - (2 x 2) = 14.
+- The `0.125rem` (2px) knob inset already matches `.sw`'s own `padding:2px`.
+
+`.pc-chip` also declares `height: 1.375rem` a few rules below `.pc-toggle`, so a sweep by value would
+have moved an unrelated component. The change edits only declarations inside the `.pc-toggle` and
+`.pc-toggle__knob` rules.
+
+### The reports were wrong twice, and the shipped files were not
+
+Both verifiers caught defect-class-2 errors in their implementer's SELF-REPORT, neither of which
+reached a shipped file. TOKENS-TRACKING's report claimed a grep returned "3 hits, all in Section.tsx"
+where the real answer was 12 across 4 files, and separately listed `Section.tsx` among the files
+containing `NativeTypography` when that file never names the type at all. WEB-TOGGLE-BOX's report
+quoted `grep -n '"field"|field:' tokens.ts` as having produced two hex values; re-run verbatim it exits
+1 with no output, because GNU grep without `-E` treats `|` as a literal — the underlying claim was
+true, but the quoted method could not have established it.
+
+This is the third consecutive wave in which a false MEASUREMENT was caught somewhere in the pipeline.
+The pattern across all three is consistent and worth stating plainly: the values being shipped have
+been right, and the evidence offered for them has repeatedly not been. The verify stage's instruction
+to re-run every quoted command, rather than to re-check every value, is what has been catching these.
+
+### Still open, with reasons
+
+- **`packages/design-tokens/src/native.test.ts` is typechecked by no tsconfig in the repository.**
+  `packages/design-tokens/tsconfig.json` excludes `src` test files and no app tsconfig includes that
+  package's source, so the 58 lines this wave added there are covered by vitest (14/14 green) and by
+  no type check at all. Surfaced by the gate. Not fixed here because the fix is a tsconfig decision
+  affecting the whole package, not this wave's four files.
+- **`Popover.tsx` still cannot take an external controlled trigger** — carried unchanged from P10-W19.
+- **`.thead`'s `margin: 0 0 4px -4px`** — carried unchanged from P10-W18.
+- **A stale `packages/design-tokens/dist` made a bare `npx tsc -p apps/android/tsconfig.json` fail with
+  two errors that read exactly like a real API break.** Rebuilding it cleared them. `dist` is gitignored
+  and CI is unaffected, because `apps/android`'s own `typecheck` script builds design-tokens first.
+  Recorded not as a defect but because CLAUDE.md names a stale `dist` as the standing first suspect when
+  a local build disagrees with CI, and this wave is a clean worked example of it behaving exactly as
+  documented.
