@@ -124,10 +124,34 @@ export function sessionModeLabel(session: SessionSummary): string | null {
  * The head's model-and-effort chip label (`opus-5 · xhigh` in the design
  * reference), built only from parts the session actually carries.
  * `null` when neither is available.
+ *
+ * Kept for its existing callers/exports; `SessionResumeView`'s own head
+ * chip now renders `sessionModelNameLabel`/`sessionModelEffortLabel`
+ * separately instead, so the model half can be emphasised the way the
+ * reference's `<b>opus-5</b> · xhigh` markup does — a single joined
+ * string can't carry that split.
  */
 export function sessionModelChipLabel(session: SessionSummary): string | null {
   const parts: string[] = [];
   if (session.model) parts.push(session.model);
   if (session.thinkingOptionId) parts.push(session.thinkingOptionId);
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/**
+ * The head chip's model-name half alone — the design reference's
+ * `<b>opus-5</b>` (`.chip b`, emphasised). `null` when the session
+ * carries no model.
+ */
+export function sessionModelNameLabel(session: SessionSummary): string | null {
+  return session.model ?? null;
+}
+
+/**
+ * The head chip's effort/thinking half alone — the design reference's
+ * un-emphasised `. xhigh` suffix. `null` when the session carries no
+ * thinking option.
+ */
+export function sessionModelEffortLabel(session: SessionSummary): string | null {
+  return session.thinkingOptionId ?? null;
 }

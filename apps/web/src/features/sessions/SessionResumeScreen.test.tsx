@@ -135,6 +135,30 @@ describe("SessionResumeScreen (T27B3)", () => {
     expect(screen.getByTestId("session-head-mode").textContent).toBe("Plan");
   });
 
+  it("renders the model name as a pc-chip-emphasis <b>, the effort suffix as plain text, and keeps the announced text unchanged by the split", async () => {
+    const rich: SessionSummary = {
+      ...SESSION,
+      model: "opus-5",
+      thinkingOptionId: "xhigh",
+    };
+    const client: SessionResumeClient = {
+      resumeSession: async () => ({ session: rich, timeline: timelineWithMessages(1) }),
+    };
+    renderSessionScreenAt("/h/host-1/session/agent-1", { client });
+
+    await screen.findByTestId("session-resume-ready");
+    const modelChip = screen.getByTestId("session-head-model");
+
+    const emphasis = modelChip.querySelector("b.pc-chip-emphasis");
+    expect(emphasis).toBeTruthy();
+    expect(emphasis?.textContent).toBe("opus-5");
+
+    // The accessible text of the span is the same joined "model · effort"
+    // string it announced before the model half was split into its own
+    // <b> element — the split changes only how the model half is drawn.
+    expect(modelChip.textContent).toBe("opus-5 · xhigh");
+  });
+
   it("omits the model and mode chips when the snapshot carries neither", async () => {
     const client: SessionResumeClient = {
       resumeSession: async () => ({ session: SESSION, timeline: timelineWithMessages(1) }),

@@ -2,7 +2,11 @@ import { timeline as coreTimeline } from "@picompanion/frontend-core";
 
 import { Button, ErrorState, LoadingState } from "../../ui/primitives/index.js";
 import "./session-resume.css";
-import { sessionModeLabel, sessionModelChipLabel } from "./session-meta.js";
+import {
+  sessionModeLabel,
+  sessionModelEffortLabel,
+  sessionModelNameLabel,
+} from "./session-meta.js";
 import { SessionStatusPill } from "./session-status-pill.js";
 import type { SessionSummary } from "./types.js";
 import type { SessionResumeController } from "./use-resume-session.js";
@@ -88,7 +92,8 @@ interface SessionHeadProps {
 }
 
 function SessionHead({ session, timeline, queue }: SessionHeadProps) {
-  const modelChip = sessionModelChipLabel(session);
+  const modelName = sessionModelNameLabel(session);
+  const modelEffort = sessionModelEffortLabel(session);
   const modeChip = sessionModeLabel(session);
   const messageCount = timeline ? coreTimeline.buildTranscriptEntries(timeline).length : null;
 
@@ -105,11 +110,21 @@ function SessionHead({ session, timeline, queue }: SessionHeadProps) {
         ) : null}
       </div>
       <SessionStatusPill session={session} testId="session-head-status" />
-      {modelChip || modeChip ? (
+      {modelName || modelEffort || modeChip ? (
         <div className="pc-session-head__right">
-          {modelChip ? (
+          {modelName || modelEffort ? (
             <span className="pc-session-head__chip" data-testid="session-head-model">
-              {modelChip}
+              {/* The design reference's `<b>opus-5</b> · xhigh`: only the
+                  model name is emphasised (`.pc-chip-emphasis`,
+                  `primitives.css`'s port of the reference's `.chip b`); the
+                  effort suffix stays the chip's own plain text. Both text
+                  nodes still sit inside the one labelled span, so a screen
+                  reader announces the same "opus-5 · xhigh" it did before
+                  this split — nothing here changes what gets read, only
+                  how the model half is drawn. */}
+              {modelName ? <b className="pc-chip-emphasis">{modelName}</b> : null}
+              {modelName && modelEffort ? " · " : null}
+              {modelEffort}
             </span>
           ) : null}
           {modeChip ? (

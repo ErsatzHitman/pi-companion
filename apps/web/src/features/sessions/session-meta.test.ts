@@ -7,6 +7,8 @@ import {
   sessionMetaParts,
   sessionModeLabel,
   sessionModelChipLabel,
+  sessionModelEffortLabel,
+  sessionModelNameLabel,
 } from "./session-meta.js";
 import type { SessionSummary } from "./types.js";
 
@@ -129,5 +131,33 @@ describe("sessionModelChipLabel", () => {
     expect(sessionModelChipLabel({ ...BASE, model: "opus-5" })).toBe("opus-5");
     expect(sessionModelChipLabel({ ...BASE, thinkingOptionId: "high" })).toBe("high");
     expect(sessionModelChipLabel({ ...BASE, model: null, thinkingOptionId: null })).toBeNull();
+  });
+});
+
+describe("sessionModelNameLabel", () => {
+  it("returns the real model name alone, ignoring the effort id", () => {
+    expect(sessionModelNameLabel({ ...BASE, model: "opus-5", thinkingOptionId: "xhigh" })).toBe(
+      "opus-5",
+    );
+  });
+
+  it("returns null when the session carries no model", () => {
+    expect(sessionModelNameLabel({ ...BASE, model: null, thinkingOptionId: "xhigh" })).toBeNull();
+    expect(sessionModelNameLabel(BASE)).toBeNull();
+  });
+});
+
+describe("sessionModelEffortLabel", () => {
+  it("returns the real effort id alone, ignoring the model name", () => {
+    expect(sessionModelEffortLabel({ ...BASE, model: "opus-5", thinkingOptionId: "xhigh" })).toBe(
+      "xhigh",
+    );
+  });
+
+  it("returns null when the session carries no thinking option", () => {
+    expect(
+      sessionModelEffortLabel({ ...BASE, model: "opus-5", thinkingOptionId: null }),
+    ).toBeNull();
+    expect(sessionModelEffortLabel(BASE)).toBeNull();
   });
 });

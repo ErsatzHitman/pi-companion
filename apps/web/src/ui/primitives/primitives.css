@@ -436,6 +436,46 @@
   box-shadow: var(--shadow-hairline);
 }
 
+/* The design reference's `.pill-run .dot` pulse: an in-flight turn's dot
+   breathes, every other tone's dot stays solid.
+   `features/sessions/status-presentation.ts`'s `STATUS_TONE` maps
+   `"running"` to `"info"` (`status.info`, the same accent-tint/accent-ink
+   pair the reference calls `.pill-run`), so scoping the animation to the
+   tone class reaches it. `STATUS_TONE` also maps `"initializing"` to the
+   same `"info"` tone, so an initializing session's dot pulses too — this
+   app's `StatusTone` vocabulary (`ui/primitives/StatusPill.tsx`) has no
+   member for the reference's separate purple `.pill-info` ("thinking"),
+   so the two reference states cannot be told apart at this layer. */
+.pc-status-pill--info .pc-status-pill__dot {
+  animation: pc-status-pill-breathe 1.6s ease-in-out infinite;
+}
+@keyframes pc-status-pill-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-status-pill--info .pc-status-pill__dot {
+    animation: none;
+  }
+}
+
+/* Emphasised text inside a plain mono chip (not the tone-tinted `.pc-chip`
+   above) — the design reference's `.chip b { color: var(--ink);
+   font-weight: 500; }`, e.g. the session head's `<b>opus-5</b> · xhigh`
+   model chip (`features/sessions/SessionResumeView.tsx`'s `SessionHead`).
+   Declared here as a shared primitive rule, not in that feature's own
+   stylesheet, so a second plain chip that needs the same bold sub-value
+   does not have to duplicate it. */
+.pc-chip-emphasis {
+  color: var(--color-ink);
+  font-weight: var(--font-weight-medium);
+}
+
 /* SegmentedControl — the mockup's `.seg` (ATOMS-1) ----------------------- */
 
 .pc-segmented {

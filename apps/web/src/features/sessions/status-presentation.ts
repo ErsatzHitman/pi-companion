@@ -12,7 +12,14 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
 const STATUS_TONE: Record<SessionStatus, StatusTone> = {
   initializing: "info",
   idle: "neutral",
-  running: "success",
+  // A running session is the design reference's `.pill-run`
+  // (`background: var(--accent-tint); color: var(--accent-ink);`), which is
+  // this app's `"info"` tone (`packages/design-tokens/src/tokens.ts`'s
+  // `status.info` is built from the same `accent`/`accent-tint` pair).
+  // `"success"` (`status.success`, `green`/`green-tint`) is the reference's
+  // `.pill-ok` — a settled/finished state, not an in-flight turn — so it
+  // was the wrong tone for a session actively running.
+  running: "info",
   error: "danger",
   closed: "neutral",
 };
