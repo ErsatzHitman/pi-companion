@@ -3292,6 +3292,47 @@ export const CAPABILITIES = [
       /(?:nothing|no screen) (?:ever )?(?:uses|consumes|reads) (?:the )?`?listRow`? (?:fade.up )?duration/i,
     ],
   },
+  {
+    // Registered at the P10-W20 merge gate, for the wave that shipped it.
+    // TOKENS-TRACKING added `resolveNativeLetterSpacing` to
+    // `packages/design-tokens/src/native.ts` — the missing counterpart to
+    // that file's own `resolveNativeLineHeight` — plus the raw em-ratio
+    // `letterSpacing` map on the `NativeTypography` interface, which is what
+    // a call site overriding a variant's font size needs. Before it, every
+    // `letterSpacing` token reached React Native as the em RATIO it is in
+    // `tokens.ts` rather than the absolute dp React Native reads, so every
+    // affected variant under-tracked by a factor of its own font size.
+    //
+    // The gate that ran this wave filed the omission itself: the wave shipped
+    // the capability and registered nothing here, which is the same miss
+    // T215, T228 and T281 were each filed for. The implementers could not
+    // have complied — this file sat outside both declared partitions — so it
+    // is registered here instead, the way T215 registered T211's and T213's.
+    //
+    // A bare, uniquely-declared name rather than T168's AND-group or T169's
+    // shape-anchored RegExp, measured rather than assumed:
+    // `git grep -ln 'export function resolveNativeLetterSpacing'` over
+    // `packages`, `apps` and `scripts/ci` returns exactly one file, its own.
+    // The interface field is deliberately NOT a second member: `letterSpacing`
+    // is an ordinary property name appearing in hundreds of style objects
+    // across both apps, so using it as a token would make this entry
+    // permanently satisfied — T172's "token that outlives the capability"
+    // trap, one level earlier.
+    //
+    // Phrased in this entry's own voice. Nothing is lifted from `native.ts`,
+    // whose new doc comments legitimately explain why the helper does not
+    // round and how it differs from `resolveNativeLineHeight`, nor from
+    // `Section.tsx`, whose `CORRECTED twice` paragraph narrates both earlier
+    // states of this value at length and is exempt by
+    // `HISTORICAL_QUOTE_MARKERS` regardless.
+    name: "Android letter-spacing tokens resolve from em ratios into absolute dp (resolveNativeLetterSpacing)",
+    methodNames: ["resolveNativeLetterSpacing"],
+    denyingPhrases: [
+      /(?:design-tokens|the native theme|`?NativeTypography`?) (?:exposes|provides|has|offers) no (?:top-level )?(?:raw )?`?letterSpacing`? (?:map|field|ratios?)/i,
+      /no (?:exported )?helper (?:resolves|converts|scales) (?:a )?letter.?spacing (?:token|ratio|em value) into (?:an )?(?:absolute )?dp/i,
+      /`?buildTypeStyle`? (?:passes|hands) (?:the |its )?letter.?spacing (?:token|ratio|value) (?:straight )?through unscaled/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

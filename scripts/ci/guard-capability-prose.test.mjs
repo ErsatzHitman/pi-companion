@@ -5535,3 +5535,92 @@ test("T369: the entry's shipped members are read from the real CAPABILITIES list
     );
   }
 });
+
+const P10_W20_TRACKING_CAPABILITY =
+  "Android letter-spacing tokens resolve from em ratios into absolute dp (resolveNativeLetterSpacing)";
+
+test("P10-W20: each denying phrase for resolveNativeLetterSpacing fires against a shipped declaration", () => {
+  // Registered at the P10-W20 merge gate. The three phrases were each proven
+  // able to fire against a real tracked file before being trusted (appended
+  // to `docs/legacy-retirement.md`, confirmed `run-guard-capability-prose.mjs`
+  // exited 1 naming this capability, restored from a scratchpad copy — never
+  // `git checkout --` — and confirmed exit 0 again). This pins that proof at
+  // the fixture level so a future rewording cannot silently make the entry
+  // inert, which is the failure mode CLAUDE.md's T215/T228/T281 sections all
+  // describe.
+  const entry = CAPABILITIES.find((c) => c.name === P10_W20_TRACKING_CAPABILITY);
+  assert.ok(entry, "the P10-W20 letter-spacing capability entry must exist");
+
+  const shippedFiles = [
+    {
+      path: "packages/design-tokens/src/native.ts",
+      content: "export function resolveNativeLetterSpacing(a, b) { return a * b; }",
+    },
+  ];
+
+  const denials = [
+    "NativeTypography exposes no raw letterSpacing map.",
+    "No exported helper resolves a letter-spacing ratio into absolute dp.",
+    "buildTypeStyle passes its letter-spacing ratio straight through unscaled.",
+  ];
+
+  assert.equal(denials.length, entry.denyingPhrases.length);
+
+  for (const sentence of denials) {
+    const violations = findCapabilityDenialViolations({
+      shippedFiles,
+      appFiles: [{ path: "docs/legacy-retirement.md", content: sentence }],
+    }).filter((v) => v.capability === P10_W20_TRACKING_CAPABILITY);
+
+    assert.equal(violations.length, 1, `expected "${sentence}" to trip this capability`);
+  }
+});
+
+test("P10-W20: the letter-spacing entry stays silent when the helper is not declared", () => {
+  // The other half of the proof, and the half that matters more: an entry
+  // whose capability has NOT shipped must not fire, or it would report a
+  // denial that is simply true. `methodNames` is the bare, uniquely-declared
+  // `resolveNativeLetterSpacing` — the interface's `letterSpacing` field is
+  // deliberately not a second member, because that property name appears in
+  // hundreds of style objects across both apps and would make the entry
+  // permanently satisfied.
+  const violations = findCapabilityDenialViolations({
+    shippedFiles: [
+      { path: "packages/design-tokens/src/native.ts", content: "export const x = 1;" },
+    ],
+    appFiles: [
+      {
+        path: "docs/legacy-retirement.md",
+        content: "NativeTypography exposes no raw letterSpacing map.",
+      },
+    ],
+  }).filter((v) => v.capability === P10_W20_TRACKING_CAPABILITY);
+
+  assert.deepEqual(violations, []);
+});
+
+test("P10-W20: the real tree declares resolveNativeLetterSpacing in exactly one shipped file", () => {
+  // The entry uses a bare-string member rather than T168's AND-group or
+  // T169's shape-anchored RegExp, and this is the measurement that justifies
+  // that choice rather than an assumption about it.
+  //
+  // It runs through `isCapabilityMemberDeclared`, the guard's OWN shipping
+  // test, rather than a hand-written regex. An earlier revision of this test
+  // matched `/export function resolveNativeLetterSpacing\b/` against raw file
+  // text and failed, reporting TWO declaring files — the second being
+  // `guard-capability-prose.mjs` itself, because this capability's own entry
+  // comment quotes that exact command as its evidence. That is the same
+  // defect class this wave is about: a method quoted as proof, where the act
+  // of quoting it changed what the measurement returned.
+  // `isCapabilityMemberDeclared` strips comments first, so a comment naming
+  // the symbol never counts as shipping it.
+  const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8", cwd: repoRoot })
+    .split("\n")
+    .filter(Boolean);
+
+  const declaring = tracked
+    .filter(isShippedSourcePath)
+    .filter((p) => isCapabilityMemberDeclared(readRepoFile(p), "resolveNativeLetterSpacing"));
+
+  assert.deepEqual(declaring, ["packages/design-tokens/src/native.ts"]);
+});
