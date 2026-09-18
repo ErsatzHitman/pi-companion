@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import Animated, {
   Easing,
@@ -96,7 +96,7 @@ export function FooterPills({
   controlsMenuOpen,
   testId = "footer-pills",
 }: FooterPillsProps) {
-  const { theme } = useTheme();
+  const { theme, motion, reduceMotion } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const modeReady = sessionControlsState.availability === "ready";
@@ -123,6 +123,34 @@ export function FooterPills({
     warning: theme.colors.orange,
     critical: theme.colors.red,
   };
+
+  // `.fbar i{...transition:width .4s cubic-bezier(.23,1,.32,1)}`
+  // (`android-spec.html`, `.fp.f-ctx .fbar i`) — the fill animates its
+  // own width rather than snapping. `.4s` is `motion.duration.slower`
+  // and `cubic-bezier(.23,1,.32,1)` is `motion.easing.easeOutStrong`
+  // (`@picompanion/design-tokens`'s `tokens.ts`, the token whose own doc
+  // comment reads "Beautiful UI's signature easing" — plan.md's "The
+  // signature easing is `cubic-bezier(.23,1,.32,1)`" is the same curve).
+  // `motion` already comes from `useTheme()`'s `getNativeMotion(reduceMotion)`,
+  // but this still gates explicitly, the same way every other animated
+  // primitive in this tree does (`Sheet.tsx`'s `menuPanelEntering` call
+  // site, `PadEntrance.tsx`, and this file's own `playPop` above): under
+  // reduced motion the fill jumps straight to its new fraction instead of
+  // animating.
+  const ctxBarFraction = useSharedValue(contextPill.barFraction);
+  useEffect(() => {
+    if (reduceMotion) {
+      ctxBarFraction.value = contextPill.barFraction;
+    } else {
+      ctxBarFraction.value = withTiming(contextPill.barFraction, {
+        duration: motion.duration.slower,
+        easing: Easing.bezier(...motion.easing.easeOutStrong),
+      });
+    }
+  }, [contextPill.barFraction, ctxBarFraction, motion, reduceMotion]);
+  const ctxBarFillStyle = useAnimatedStyle(() => ({
+    width: `${ctxBarFraction.value * 100}%`,
+  }));
 
   const commitMode = useCallback(
     (step: SwipeStep): "changed" | "unchanged" => {
@@ -221,13 +249,11 @@ export function FooterPills({
           <Text style={styles.ctxTokens}>{contextPill.tokensLabel}</Text>
         ) : null}
         <View style={styles.ctxBarTrack}>
-          <View
+          <Animated.View
             style={[
               styles.ctxBarFill,
-              {
-                width: `${contextPill.barFraction * 100}%`,
-                backgroundColor: barColors[contextPill.band],
-              },
+              { backgroundColor: barColors[contextPill.band] },
+              ctxBarFillStyle,
             ]}
           />
         </View>

@@ -138,4 +138,38 @@ describe("FooterPills source", () => {
   it("takes the context pill's numbers from context-pill-model.ts rather than computing them inline", () => {
     expect(code).toMatch(/buildContextPillViewModel\(usage\)/);
   });
+
+  // AND-FOOT: `.fbar i{...transition:width .4s cubic-bezier(.23,1,.32,1)}`
+  // (`android-spec.html`, `.fp.f-ctx .fbar i`) — the fill animates its own
+  // width instead of snapping to a new percentage. `.4s` is
+  // `motion.duration.slower` and `cubic-bezier(.23,1,.32,1)` is
+  // `motion.easing.easeOutStrong`, both read from `useTheme()`'s `motion`
+  // rather than retyped as literals.
+  it("animates the context bar fill's width from motion.duration.slower / motion.easing.easeOutStrong, not literal numbers", () => {
+    expect(code).toMatch(/const \{ theme, motion, reduceMotion \} = useTheme\(\);/);
+    expect(code).toMatch(
+      /duration: motion\.duration\.slower,\s*easing: Easing\.bezier\(\.\.\.motion\.easing\.easeOutStrong\)/,
+    );
+    expect(code).not.toMatch(/duration: 400/);
+    expect(code).not.toMatch(/0\.23,\s*1,\s*0\.32,\s*1/);
+  });
+
+  it("drives the fill from a shared value animated width, not a plain percentage style", () => {
+    expect(code).toMatch(/const ctxBarFraction = useSharedValue\(contextPill\.barFraction\);/);
+    expect(code).toMatch(/const ctxBarFillStyle = useAnimatedStyle\(\(\) => \(\{/);
+    expect(code).toMatch(/width: `\$\{ctxBarFraction\.value \* 100\}%`/);
+    expect(code).toMatch(/<Animated\.View[\s\S]{0,80}styles\.ctxBarFill/);
+    expect(code).not.toMatch(/width: `\$\{contextPill\.barFraction \* 100\}%`/);
+  });
+
+  it("gates the fill animation on reduceMotion — snaps instead of animating, the same gate every other animated primitive in this tree uses", () => {
+    const effect = code.slice(
+      code.indexOf("useEffect(() => {\n    if (reduceMotion) {"),
+      code.indexOf("const ctxBarFillStyle"),
+    );
+    expect(effect).toMatch(
+      /if \(reduceMotion\) \{\s*ctxBarFraction\.value = contextPill\.barFraction;/,
+    );
+    expect(effect).toMatch(/ctxBarFraction\.value = withTiming\(contextPill\.barFraction, \{/);
+  });
 });
