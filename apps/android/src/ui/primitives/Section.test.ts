@@ -40,23 +40,30 @@ describe("Section: the redesign's quiet `.lbl` heading (T366)", () => {
     expect(code).not.toMatch(/theme\.typography\.fontWeight\.bold/);
   });
 
-  it("scales the theme's em-ratio tracking into React Native's absolute dp", () => {
-    // `NativeTypography` (packages/design-tokens/src/native.ts) exposes no
-    // top-level `letterSpacing` map, only `variant.<name>.letterSpacing`,
-    // and `variant.label` carries `typography.letterSpacing.wide` UNSCALED.
-    // That token is an em RATIO, not a length: `web.ts`'s emitter writes
-    // every `letterSpacing` token as `${value}em`. `.lbl` is `.09em` on a
-    // `10px` font, so the design figure is 0.9dp; spending the variant
-    // value directly would track at 0.09dp, 10x too tight. `buildTypeStyle`
-    // converts the sibling relative token via `resolveNativeLineHeight`
-    // (`fontSize * multiplier`) and has no `letterSpacing` counterpart, so
-    // the multiplication is done at this call site.
+  it("resolves the theme's raw em-ratio tracking into React Native's absolute dp", () => {
+    // `NativeTypography` (packages/design-tokens/src/native.ts) now
+    // exposes both a top-level raw `letterSpacing` em-ratio map AND a
+    // `resolveNativeLetterSpacing(fontSize, letterSpacingEm)` helper that
+    // resolves one of those ratios into an absolute dp value —
+    // `buildTypeStyle` uses the same helper internally to scale every
+    // `variant.<name>.letterSpacing` against that variant's OWN font size
+    // (`typography.fontSize.sm` = 11 for `label`). This element renders at
+    // `LABEL_FONT_SIZE` = 10, a different size, so it must resolve the raw
+    // `theme.typography.letterSpacing.wide` ratio against its own size
+    // rather than read the `label` variant's already-scaled value, which
+    // is bound to size 11.
     const code = readCode();
     expect(code).toMatch(
+      /letterSpacing: resolveNativeLetterSpacing\(\s*LABEL_FONT_SIZE,\s*theme\.typography\.letterSpacing\.wide,?\s*\)/,
+    );
+    // The bare, unscaled read is one regression this pins against.
+    expect(code).not.toMatch(/letterSpacing: theme\.typography\.variant\.label\.letterSpacing,/);
+    // The now-wrong, double-scaling multiplication (correct only before
+    // `buildTypeStyle` itself scaled `variant.label.letterSpacing`) is the
+    // other.
+    expect(code).not.toMatch(
       /letterSpacing: theme\.typography\.variant\.label\.letterSpacing \* LABEL_FONT_SIZE,/,
     );
-    // The bare, unscaled read is the regression this pins against.
-    expect(code).not.toMatch(/letterSpacing: theme\.typography\.variant\.label\.letterSpacing,/);
   });
 
   it("takes every colour and face from the theme", () => {

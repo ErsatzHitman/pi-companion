@@ -5,9 +5,10 @@ import {
   getNativeTheme,
   getNativeTypography,
   nativeFontFamily,
+  resolveNativeLetterSpacing,
   resolveNativeLineHeight,
 } from "./native.js";
-import { nativeFontFamilyNames } from "./tokens.js";
+import { nativeFontFamilyNames, typography } from "./tokens.js";
 
 describe("getNativeTheme", () => {
   it("returns typed theme objects for each scheme and contrast level", () => {
@@ -55,6 +56,29 @@ describe("resolveNativeLineHeight", () => {
   });
 });
 
+describe("resolveNativeLetterSpacing", () => {
+  it("converts an em ratio into an absolute dp value by multiplying against the font size", () => {
+    expect(resolveNativeLetterSpacing(10, 0.09)).toBeCloseTo(0.9, 10);
+    expect(resolveNativeLetterSpacing(21, -0.02)).toBeCloseTo(-0.42, 10);
+    expect(resolveNativeLetterSpacing(12.5, 0)).toBe(0);
+  });
+
+  it("does not round, unlike resolveNativeLineHeight, so a sub-pixel result survives", () => {
+    // `tokens.ts`'s own `wide` ratio (0.09) against a sub-12px font size
+    // produces a sub-pixel dp value; rounding would collapse it to 1 (or
+    // to 0 for `tight`'s negative ratio at these sizes) and destroy the
+    // only variation this helper exists to produce.
+    const result = resolveNativeLetterSpacing(10, 0.09);
+    expect(result).toBeCloseTo(0.9, 10);
+    expect(Number.isInteger(result)).toBe(false);
+    // `Math.round`, which `resolveNativeLineHeight` uses, would collapse
+    // this same input to 1 — confirming the two helpers genuinely differ,
+    // not just asserting this one doesn't call `Math.round` by name.
+    expect(Math.round(result)).toBe(1);
+    expect(Math.round(result)).not.toBe(result);
+  });
+});
+
 describe("getNativeTypography", () => {
   it("produces ready-to-use text style variants", () => {
     const typography = getNativeTypography();
@@ -82,6 +106,39 @@ describe("getNativeTypography", () => {
     expect(typography.variant.body.fontFamily).toBe(nativeFontFamilyNames.sans.regular);
     expect(typography.variant.label.fontFamily).toBe(nativeFontFamilyNames.sans.medium);
     expect(typography.variant.code.fontFamily).toBe(nativeFontFamilyNames.mono.regular);
+  });
+
+  it("scales every variant's letterSpacing against that variant's own font size, not the bare em ratio", () => {
+    const typo = getNativeTypography();
+    // `label` (`wide`, 0.09) is built at `typography.fontSize.sm` (11):
+    // the bare token is no longer what `variant.label.letterSpacing` holds.
+    expect(typo.variant.label.letterSpacing).not.toBe(typography.letterSpacing.wide);
+    expect(typo.variant.label.letterSpacing).toBe(
+      resolveNativeLetterSpacing(typography.fontSize.sm, typography.letterSpacing.wide),
+    );
+    // `display` and `title` (`tight`, -0.02) are the other two non-zero
+    // roles; each variant's own font size scales its result differently.
+    expect(typo.variant.display.letterSpacing).not.toBe(typography.letterSpacing.tight);
+    expect(typo.variant.display.letterSpacing).toBe(
+      resolveNativeLetterSpacing(typography.fontSize["4xl"], typography.letterSpacing.tight),
+    );
+    expect(typo.variant.title.letterSpacing).toBe(
+      resolveNativeLetterSpacing(typography.fontSize["2xl"], typography.letterSpacing.tight),
+    );
+    expect(typo.variant.display.letterSpacing).not.toBe(typo.variant.title.letterSpacing);
+    // The other five variants take `normal` (0 em): 0 times any font size
+    // is still 0, so scaling changes nothing for them.
+    for (const name of ["heading", "body", "bodySmall", "caption", "code"] as const) {
+      expect(typo.variant[name].letterSpacing).toBe(0);
+    }
+  });
+
+  it("exposes the raw, unresolved em-ratio map for a call site that overrides the font size", () => {
+    const typo = getNativeTypography();
+    expect(typo.letterSpacing).toEqual(typography.letterSpacing);
+    expect(typo.letterSpacing.wide).toBe(0.09);
+    expect(typo.letterSpacing.tight).toBe(-0.02);
+    expect(typo.letterSpacing.normal).toBe(0);
   });
 
   it("exposes both bundled families through nativeFontFamily() for every weight", () => {

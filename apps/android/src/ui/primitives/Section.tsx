@@ -1,3 +1,4 @@
+import { resolveNativeLetterSpacing } from "@picompanion/design-tokens";
 import { useMemo, type ReactNode } from "react";
 import {
   StyleSheet,
@@ -51,15 +52,25 @@ export interface SectionProps {
  * padding:2px 4px}`, measured directly against the confirmed spec. An
  * earlier `9.5px` at `fontWeight.bold` and a `paddingTop`-only 8 matched
  * no rule there. Weight 500 comes from the theme below; so does the
- * tracking, scaled — see the `letterSpacing` comment in `titleLabel`.
+ * tracking, resolved against this size via `resolveNativeLetterSpacing`
+ * — see the `letterSpacing` comment in `titleLabel` for why this element
+ * resolves the raw `theme.typography.letterSpacing.wide` ratio itself
+ * rather than reading `theme.typography.variant.label.letterSpacing`.
  *
- * (CORRECTED, at the wave's merge gate: an earlier revision of this
- * paragraph listed the previous `hardcoded 0.95 letter-spacing` beside
- * those two as a third value that "matched no rule there", and the
- * change that landed replaced it with an unscaled read of the theme's
- * `variant.label.letterSpacing`. That was backwards. `.09em` on this
- * 10px font IS 0.9dp, so `0.95` was very nearly right and the unscaled
- * token, at 0.09dp, was 10x too tight.)
+ * (CORRECTED twice. First, at an earlier merge gate: a hardcoded `0.95`
+ * dp guess was replaced with a bare, unscaled read of the theme's
+ * `variant.label.letterSpacing` (then still the raw `0.09` em ratio,
+ * since `native.ts` did not yet scale it), then multiplied by
+ * `LABEL_FONT_SIZE` here to reach the correct `0.9` dp. Second, this
+ * wave: `native.ts`'s `buildTypeStyle` now resolves every variant's own
+ * `letterSpacing` into an absolute dp value internally, via the same
+ * `resolveNativeLetterSpacing` helper, so `variant.label.letterSpacing`
+ * is no longer that raw ratio — it is already dp, pre-scaled against
+ * `label`'s own font size (11). Multiplying it by `LABEL_FONT_SIZE` here
+ * would now double-scale it, so this element calls
+ * `resolveNativeLetterSpacing` directly against the raw
+ * `theme.typography.letterSpacing.wide` ratio and its own font size
+ * instead.)
  */
 const LABEL_FONT_SIZE = 10;
 /** `.lbl`'s `10px/1` — line-height equal to the font size. */
@@ -114,23 +125,23 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       lineHeight: LABEL_LINE_HEIGHT,
       fontWeight: asFontWeight(theme.typography.fontWeight.medium),
       // `.lbl`'s `letter-spacing:.09em`, resolved against this element's own
-      // font size because React Native's `letterSpacing` is absolute dp, not
-      // a ratio.
+      // font size (`LABEL_FONT_SIZE`) via `resolveNativeLetterSpacing`
+      // (packages/design-tokens/src/native.ts), the same helper
+      // `buildTypeStyle` uses internally to scale every `variant.<name>.
+      // letterSpacing` value against that variant's own font size.
       //
-      // `NativeTypography` (packages/design-tokens/src/native.ts) exposes no
-      // top-level `letterSpacing` map — only `variant.<name>.letterSpacing` —
-      // and `variant.label` carries `typography.letterSpacing.wide` UNSCALED.
-      // That token is an em RATIO: `web.ts`'s token emitter writes it as
-      // `${value}em`, and `.lbl` is `.09em` on a `10px` font, i.e. 0.9dp.
-      // Spending `variant.label.letterSpacing` directly therefore tracks at
-      // 0.09dp — 10x too tight, visually none — so it is multiplied here.
-      // `buildTypeStyle` already does the matching conversion for the other
-      // relative token in the same struct via `resolveNativeLineHeight`
-      // (`fontSize * multiplier`); it has no `letterSpacing` counterpart, so
-      // every `variant.<name>.letterSpacing` consumer on this surface carries
-      // the same 1/fontSize error. Fixing that belongs in design-tokens, not
-      // in this primitive.
-      letterSpacing: theme.typography.variant.label.letterSpacing * LABEL_FONT_SIZE,
+      // This label does NOT read `theme.typography.variant.label.
+      // letterSpacing`: that value is pre-scaled against `label`'s own font
+      // size (`typography.fontSize.sm` = 11), while this element renders at
+      // `LABEL_FONT_SIZE` = 10, the size `.lbl` itself declares — spending
+      // the pre-scaled variant value here would bind the tracking to the
+      // wrong font size, ~10% off. `theme.typography.letterSpacing.wide` is
+      // the raw, unscaled em ratio design-tokens exposes for exactly this —
+      // a call site that overrides the font size away from a named variant.
+      letterSpacing: resolveNativeLetterSpacing(
+        LABEL_FONT_SIZE,
+        theme.typography.letterSpacing.wide,
+      ),
       paddingVertical: LABEL_PADDING_VERTICAL,
       paddingHorizontal: LABEL_PADDING_HORIZONTAL,
       textTransform: "uppercase",

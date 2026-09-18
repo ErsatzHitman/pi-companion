@@ -87,9 +87,40 @@ export function resolveNativeLineHeight(fontSize: number, lineHeightMultiplier: 
   return Math.round(fontSize * lineHeightMultiplier);
 }
 
+/**
+ * React Native's `letterSpacing` is an absolute dp value, not an em ratio
+ * like CSS. `tokens.ts`'s `letterSpacing` map (`tight`/`normal`/`wide`)
+ * holds em ratios — confirmed by `web.ts`'s token emitter, which writes
+ * each one with an `em` suffix — so this resolves one of those ratios
+ * against a font size into the absolute dp value RN expects, the same
+ * role `resolveNativeLineHeight` plays for the sibling relative token.
+ *
+ * Deliberately does NOT round, unlike `resolveNativeLineHeight`. At the
+ * sizes this token scale actually uses, an em ratio produces sub-pixel
+ * results (`0.09 * 10 = 0.9`); `Math.round` would collapse every `wide`
+ * value at a font size under ~11px to `1` and every `tight` value to `0`,
+ * destroying the only variation this function exists to produce. RN's
+ * `letterSpacing` accepts a fractional dp value, so nothing requires
+ * rounding it the way whole-pixel line-height layout does.
+ */
+export function resolveNativeLetterSpacing(fontSize: number, letterSpacingEm: number): number {
+  return fontSize * letterSpacingEm;
+}
+
 export interface NativeTypography {
   fontFamily: TypographyTokens["fontFamily"];
   fontWeight: Record<keyof TypographyTokens["fontWeight"], string>;
+  /**
+   * The raw em-ratio map, unresolved, exposed the same way `fontFamily`
+   * is exposed raw above. `variant.<name>.letterSpacing` is already an
+   * absolute dp value resolved for that variant's own font size (see
+   * `resolveNativeLetterSpacing`); this is for a call site that overrides
+   * the font size away from the variant's own (e.g. `Section.tsx`'s
+   * `.lbl` label, which renders at a size the `label` variant does not
+   * use) and must resolve the ratio against its own size instead of
+   * inheriting a value bound to a different one.
+   */
+  letterSpacing: TypographyTokens["letterSpacing"];
   /** Ready-to-spread text styles for common roles. */
   variant: {
     body: NativeTypeStyle;
@@ -109,20 +140,21 @@ function buildTypeStyle(
   fontSize: number,
   weight: keyof TypographyTokens["fontWeight"],
   lineHeight: number,
-  letterSpacing: number,
+  letterSpacingEm: number,
 ): NativeTypeStyle {
   return {
     fontFamily: nativeFontFamily(family, weight),
     fontSize,
     fontWeight: String(tokens.fontWeight[weight]),
     lineHeight: resolveNativeLineHeight(fontSize, lineHeight),
-    letterSpacing,
+    letterSpacing: resolveNativeLetterSpacing(fontSize, letterSpacingEm),
   };
 }
 
 export function getNativeTypography(): NativeTypography {
   return {
     fontFamily: typography.fontFamily,
+    letterSpacing: typography.letterSpacing,
     fontWeight: {
       regular: String(typography.fontWeight.regular),
       medium: String(typography.fontWeight.medium),
