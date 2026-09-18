@@ -1,16 +1,30 @@
 /**
- * `PiExtensionRail` / `RailElementCard` styles (plan.md §8.3, §10.1, §11.5),
- * rebuilt to match the reference Live pane's `.live` region
- * (`docs/ui-reference/pi-companion-web.html`: `.card`, `.card-h`, `.agent`,
- * `.agent-t`, `.agent-s`, `.track`, `.phase`). Every value below is a design
- * token (`apps/web/src/styles/global.css`'s "no raw hex/pixel-spacing/
- * duration literal" rule, extended here to typography): no raw colour, and
- * every spacing/radius/font-size is the nearest token on the shared scale
- * to the mockup's literal px value where the scale has no exact match
- * (documented per rule below). The handful of remaining raw pixel values
- * are structural alignment (glyph column width, connector offsets, track
- * height) with no themed equivalent, matching how `.track`/`.phase`'s own
- * hairline connector is specified in the reference itself.
+ * `PiExtensionRail` / `RailElementCard` styles (plan.md §8.3, §10.1, §11.5).
+ * (CORRECTED, WEB-EXT-FIX: this said the component was "rebuilt to match
+ * the reference Live pane's `.live` region (`docs/ui-reference/
+ * pi-companion-web.html`: `.card`, `.card-h`, `.agent`, `.agent-t`,
+ * `.agent-s`, `.track`, `.phase`)", citing that file as this component's
+ * design authority. Nothing under `docs/ui-reference/` may be cited as
+ * authority for a product decision — see CLAUDE.md's "reference-only
+ * documents" section, whose corollary requires the fact to be restated in
+ * a citable home and that home cited instead. The values were not wrong:
+ * that file and the confirmed `web-spec.html` were md5-compared before
+ * repointing and are byte-identical
+ * (`9c49b1a697dff4a6fbc547dc6c257e96`), so this is a provenance fix, not
+ * a value fix — a fact about the WEB pair alone, since the Android pair's
+ * two files differ.) The card/agent/track/
+ * phase layout this file implements is governed by plan.md §8.3 (rail
+ * layout) and §11.5 (placement routing) instead. Every value below is a
+ * design token (`apps/web/src/styles/global.css`'s "no raw hex/
+ * pixel-spacing/duration literal" rule, extended here to typography): no
+ * raw colour, and every spacing/radius/font-size is the nearest token on
+ * the shared scale to the mockup's literal px value where the scale has no
+ * exact match (documented per rule below, kept as provenance recording
+ * where a figure came from — not as this file's current authority, per
+ * the corollary in CLAUDE.md's "reference-only documents" section). The
+ * handful of remaining raw pixel values are structural alignment (glyph
+ * column width, connector offsets, track height) with no themed
+ * equivalent.
  */
 
 .pi-extension-rail {
@@ -104,11 +118,18 @@
   color: var(--color-orange);
 }
 
-/* `.agent-t .el` */
+/*
+ * `.agent-t .el`: mockup literal is 10px. `--font-size-sm` (11px) overshot
+ * by a full pixel; `--font-size-xs` (10.5px) is the closer token and is
+ * what every other 10-10.5px figure in this file already resolves to
+ * (`.pi-extension-rail__card-count`'s `.card-h .n`, `.pi-extension-rail__
+ * agent-detail`'s `.agent-s`, `.pi-extension-rail__phase-detail`'s
+ * `.phase .d` — all 10/10.5px in the mockup, all `--font-size-xs` here).
+ */
 .pi-extension-rail__elapsed {
   margin-left: auto;
   font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-ink-3);
   font-variant-numeric: tabular-nums;
 }

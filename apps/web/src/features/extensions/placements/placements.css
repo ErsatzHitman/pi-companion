@@ -12,10 +12,34 @@
  * (plan.md §11.3's "extension-bg" role, already a token).
  */
 .pi-extension-flow-block {
+  /*
+   * (CORRECTED, WEB-EXT-FIX: this rounded the spec's 14px horizontal
+   * padding figure up to `--spacing-4` (16px), picked as "the tie-break"
+   * between the equidistant `--spacing-3` (12px) and `--spacing-4` (16px)
+   * tokens. That is not the discipline this repository holds for an
+   * off-scale spec value: sibling files such as
+   * `apps/web/src/features/transcript/tool-call-row.css` keep such a
+   * figure as a LOCAL CUSTOM PROPERTY quoting the literal, rather than
+   * rounding to the nearest token — followed here instead.)
+   */
+  --pi-extension-flow-block-pad-inline: 14px;
   background-color: var(--color-extension-bg);
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-control);
-  padding: var(--spacing-2) var(--spacing-3);
+  /*
+   * The confirmed web console mockup's extension-panel rule is tighter and
+   * squarer than this shipped 8px `--radius-control`: it uses the 14px
+   * "big-block" radius the todo dock and the user-message bubble also use.
+   * `radii.window` in `packages/design-tokens/src/tokens.ts` is that exact
+   * 14px figure (emitted on web as `--radius-window`), an exact match.
+   */
+  border-radius: var(--radius-window);
+  /*
+   * Padding: spec literal is `12px 14px`. `--spacing-3` (12px) matches the
+   * vertical figure exactly; the horizontal figure has no token match and
+   * is kept as `--pi-extension-flow-block-pad-inline` above, quoting the
+   * literal instead of rounding to `--spacing-3` or `--spacing-4`.
+   */
+  padding: var(--spacing-3) var(--pi-extension-flow-block-pad-inline);
 }
 
 .pi-extension-screen-host__list,

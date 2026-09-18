@@ -300,10 +300,11 @@ describe("PiExtensionRail", () => {
       );
     });
 
-    it("sizes the elapsed label mono at the mockup's 11px (--font-size-sm)", () => {
+    it("sizes the elapsed label mono at the mockup's 10px (--font-size-xs, not --font-size-sm)", () => {
       const body = ruleBodyFor(".pi-extension-rail__elapsed");
       expect(body).toMatch(/font-family:\s*var\(--font-family-mono\)/);
-      expect(body).toMatch(/font-size:\s*var\(--font-size-sm\)/);
+      expect(body).toMatch(/font-size:\s*var\(--font-size-xs\)/);
+      expect(body).not.toMatch(/font-size:\s*var\(--font-size-sm\)/);
     });
 
     it("colours each status glyph by a distinct token, not one shared colour", () => {

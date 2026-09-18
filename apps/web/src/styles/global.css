@@ -34,6 +34,24 @@ body {
   height: 100dvh;
   background-color: var(--color-page);
   color: var(--color-ink);
+  /*
+   * The confirmed web console mockup declares a type baseline on `body`
+   * (`font-size: 13px; -webkit-font-smoothing: antialiased;`) that this
+   * file never had. Every component in this app sets its own
+   * `--font-size-*` per element, so most text never falls back to this —
+   * but it is not purely declarative: `apps/web/src/features/extensions/
+   * placements/placements.css`'s `.pi-extension-flow-block`,
+   * `features/connect/connect.css`, `features/connect/qr-capture.css`,
+   * `features/rail/pi-extension-status-strip.css`, and
+   * `features/transcript/recovered-turn-banner.css` declare no font-size
+   * of their own anywhere in the file, so any text painted directly inside
+   * them (not already sized by a nested primitive) inherits this baseline
+   * for the first time. `--font-size-lg` is `typography.fontSize.lg`
+   * (13, in `packages/design-tokens/src/tokens.ts`) — an exact match, no
+   * approximation.
+   */
+  font-size: var(--font-size-lg);
+  -webkit-font-smoothing: antialiased;
 }
 
 .component-lab {
