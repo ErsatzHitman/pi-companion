@@ -29,12 +29,39 @@ import { ShimmerText } from "./ShimmerText";
 /** §7.2's caret width. See this component's doc comment for the phase the artifact has and this app does not. */
 const CARET_WIDTH = 2;
 /**
- * The transcript line's own mono metrics: `.ln { font-size: 12px;
- * line-height: 1.62 }`. The code variant is 11px/1.625, one px below
- * the transcript's size, so this is stated here rather than borrowed.
+ * The transcript's own mono metrics, read directly from `android-spec.html`'s
+ * `.t{...font:12.5px/1.62 'JetBrains Mono',ui-monospace,monospace;...}`.
+ *
+ * (CORRECTED: this constant used to read `12` with a comment claiming
+ * "The transcript line's own mono metrics: `.ln { font-size: 12px;
+ * line-height: 1.62 }`" — a `.ln` selector and a `12px` size that do not
+ * exist in `android-spec.html`; `.t` is the rule that actually sets the
+ * transcript's font, and it is `12.5px`, not `12px`. `LINE_HEIGHT` below
+ * still derives from this constant, so correcting it also moves the
+ * caret's own height by the same factor — see `CARET_HEIGHT` below,
+ * which was checked against this dependency before either value changed.
+ * The identical `12`-vs-`12.5` constant in `tool-call-row.tsx` belongs to
+ * a different package's file list and is untouched here.)
  */
-const LINE_FONT_SIZE = 12;
+const LINE_FONT_SIZE = 12.5;
 const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
+
+/**
+ * `.stream-caret{...height:1.05em...}` — 1.05 times the transcript's own
+ * FONT SIZE, not its line height. Named so the multiplication below reads
+ * as "the spec's own ratio" rather than an unexplained `1.05`.
+ */
+const CARET_HEIGHT_TO_FONT_SIZE_RATIO = 1.05;
+const CARET_HEIGHT = LINE_FONT_SIZE * CARET_HEIGHT_TO_FONT_SIZE_RATIO;
+/** `.stream-caret{...border-radius:1px...}`. */
+const CARET_CORNER_RADIUS = 1;
+/**
+ * `.stream-caret{...margin-left:1.5px...}`. A literal, not
+ * `theme.spacing[*]`: the spacing scale (4/8/12/16/…) has nothing at 1.5,
+ * and this is one of the rare places the artifact's own raw pixel value is
+ * correct as-is — do not "fix" this back onto the scale.
+ */
+const CARET_MARGIN_LEFT = 1.5;
 
 /** Half of `caret-blink`'s own 1s cycle — one hold, in either state. */
 const CARET_BLINK_HALF_MS = EXPRESSIVE_CARET_BLINK_DURATION_MS / 2;
@@ -120,12 +147,20 @@ export interface StreamingMessageProps {
   streaming: boolean;
   /**
    * Draws a visible "You"/"Pi" caption above the turn. Defaults to
-   * `false` (UI-A3): the mockup's `.blk`/`.blk.usr`
-   * (`docs/ui-reference/pi-companion-app.html`) distinguishes a turn's
-   * speaker by tint alone and draws no label at all, and every shipped
-   * caller composes this recipe over that same transcript. TalkBack is
-   * unaffected either way — `accessibilityLabel` always states the
-   * speaker, whether or not this prop also draws it as visible text.
+   * `false` (UI-A3): `android-spec.html`'s own transcript frames render a
+   * user turn as `<div class="blk usr"><div class="ln">…</div></div>` —
+   * the block and its tint, with no speaker-name element at all — so
+   * `.blk`/`.blk.usr` distinguishes a turn's speaker by tint alone, and
+   * every shipped caller composes this recipe over that same transcript.
+   * TalkBack is unaffected either way — `accessibilityLabel` always
+   * states the speaker, whether or not this prop also draws it as
+   * visible text.
+   *
+   * (CORRECTED: this cited `docs/ui-reference/pi-companion-app.html`, the
+   * stale reconstruction, as the source for "no visible label". The
+   * behaviour was already right — confirmed directly in
+   * `android-spec.html`'s own markup above — so only the citation was
+   * wrong, not the rendering.)
    */
   showSpeakerLabel?: boolean;
   /**
@@ -174,9 +209,14 @@ export interface StreamingMessageProps {
  * itself; filling it too would make the transcript a wall of boxes and
  * spend the contrast the boxes exist to create.
  *
- * The caret is 2px wide (§7.2), not the 8px block it used to be. The
- * artifact's `.stream-caret` blinks at rest (`caret-blink 1s step-end
- * infinite`) but goes SOLID while streaming
+ * The caret is 2px wide (§7.2), not the 8px block it used to be, `CARET_HEIGHT`
+ * tall (`CARET_HEIGHT_TO_FONT_SIZE_RATIO` of the transcript's own font size,
+ * not its line height), `CARET_MARGIN_LEFT` off the text it follows, rounded
+ * by `CARET_CORNER_RADIUS`, and drawn in `theme.colors.ink` — the transcript's
+ * own foreground, not the accent hue the caret used to borrow (a visible hue
+ * change, not a shade: see `android-spec.html`'s `.stream-caret{…
+ * background:var(--ink)…}`). The artifact's `.stream-caret` blinks at rest
+ * (`caret-blink 1s step-end infinite`) but goes SOLID while streaming
  * (`.stream-caret.is-streaming{animation:none}` — confirmed by reading
  * `android-spec.html` directly, not assumed): the caret is a fixed point
  * next to text that is actively changing, and a blink competing with
@@ -342,11 +382,26 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"], speaker: "ass
     // §7.2's 2px caret. A rule, not a block: at 8px wide it read as a
     // highlight sitting after the text rather than as the place the
     // next character lands.
+    //
+    // (CORRECTED: `height` used to be `LINE_HEIGHT` — the full computed
+    // line height (19.44px at the old 12px `LINE_FONT_SIZE`) — where
+    // `android-spec.html`'s `.stream-caret{height:1.05em…}` sizes off the
+    // FONT size, not the line box; `CARET_HEIGHT` (13.125px at the
+    // corrected 12.5px `LINE_FONT_SIZE`) is roughly half again shorter.
+    // `marginLeft` used to be `theme.spacing[1]` (4px); the spec's
+    // `margin-left:1.5px` has no home on the spacing scale, so
+    // `CARET_MARGIN_LEFT` is a deliberate raw literal — see its own doc
+    // comment above. `backgroundColor` used to be `theme.colors.accent`;
+    // the spec's `background:var(--ink)` is the transcript's foreground
+    // colour, a visible hue change from the accent blue, not a shade of
+    // it. `borderRadius` was missing entirely against the spec's
+    // `border-radius:1px`.)
     cursor: {
       width: CARET_WIDTH,
-      height: LINE_HEIGHT,
-      marginLeft: theme.spacing[1],
-      backgroundColor: theme.colors.accent,
+      height: CARET_HEIGHT,
+      marginLeft: CARET_MARGIN_LEFT,
+      borderRadius: CARET_CORNER_RADIUS,
+      backgroundColor: theme.colors.ink,
     },
     // No `color` here: `ShimmerText` owns the caption's colour (it
     // interpolates between `ink-3` and `ink` on its own), so setting one

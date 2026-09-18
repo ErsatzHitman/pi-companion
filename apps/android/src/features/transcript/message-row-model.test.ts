@@ -452,10 +452,18 @@ describe("roleAffordanceFor: matches the shared StreamingMessage recipe it docum
     expect(code).toMatch(/paddingHorizontal: BLOCK_PADDING_HORIZONTAL/);
   });
 
-  it("draws every transcript line in the artifact's `.ln` mono at 12px/1.62", () => {
+  it("draws every transcript line in the artifact's `.t` mono at 12.5px/1.62", () => {
     const code = readStreamingMessageCode();
-    // `.ln { font-family: var(--mono); font-size: 12px; line-height: 1.62 }`
-    expect(code).toMatch(/const LINE_FONT_SIZE = 12;/);
+    // CORRECTED: this case used to read "draws every transcript line in
+    // the artifact's `.ln` mono at 12px/1.62" and cite `.ln { font-family:
+    // var(--mono); font-size: 12px; line-height: 1.62 }` — a `.ln`
+    // selector and a `12px` size that do not exist in `android-spec.html`.
+    // `.t` is the rule that actually sets the transcript's font
+    // (`font:12.5px/1.62 'JetBrains Mono',ui-monospace,monospace`); `.ln`
+    // declares no font of its own, so it inherits `.t`'s. See
+    // `../../ui/recipes/StreamingMessage.tsx`'s own `LINE_FONT_SIZE`
+    // doc comment for the identical correction on the source side.
+    expect(code).toMatch(/const LINE_FONT_SIZE = 12\.5;/);
     expect(code).toMatch(/const LINE_HEIGHT = LINE_FONT_SIZE \* 1\.62;/);
     expect(code).toMatch(/fontFamily: theme\.typography\.variant\.code\.fontFamily/);
     expect(code).toMatch(/fontSize: LINE_FONT_SIZE/);
