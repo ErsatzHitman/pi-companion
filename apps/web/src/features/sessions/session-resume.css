@@ -2,16 +2,36 @@
  * SessionResumeView styles (plan.md §10.2, T27B3). Token-only, same
  * rule as `terminal-route.css`/`files.css`.
  *
- * The head row's values are the design reference's `.main-head` block
- * (`docs/ui-reference/pi-companion-web.html`: 10px/20px padding, 1px
- * `--line` bottom border, `--page` background, 13.5px/600/-0.1px-tracked
- * title with `text-wrap: balance`, 22px mono chips) mapped onto
+ * (CORRECTED, WEB-CITE: this cited "the design reference's `.main-head`
+ * block (`docs/ui-reference/pi-companion-web.html`: 10px/20px padding,
+ * 1px `--line` bottom border, `--page` background,
+ * 13.5px/600/-0.1px-tracked title with `text-wrap: balance`, 22px mono
+ * chips)" as this head row's authority, and separately cited "the
+ * reference's identical `.mark-name` literal" for the title's tracking
+ * conversion. Nothing under `docs/ui-reference/` may be cited as
+ * authority for a product decision — see CLAUDE.md's "reference-only
+ * documents" section, whose corollary requires the fact to be restated
+ * in a citable home and that home cited instead. The values were not
+ * wrong: `docs/ui-reference/pi-companion-web.html` and the confirmed
+ * `web-spec.html` were md5-compared before repointing and are
+ * byte-identical (`9c49b1a697dff4a6fbc547dc6c257e96`), so this is a
+ * provenance fix, not a value fix. Calling that file "stale" here, as
+ * an earlier revision of this paragraph did, was itself wrong and
+ * contradicted its own next sentence. The identity is a fact about the
+ * WEB pair alone — the Android pair's two files differ, which is how a
+ * whole class of Android components came to be built against the wrong
+ * document.) The head row's values are
+ * `web-spec.html`'s `.main-head` / `.main-head h1` / `.chip` rules:
+ * 10px/20px padding, 1px `--line` bottom border, `--page` background,
+ * 13.5px/600/-0.1px-tracked title with `text-wrap: balance`, 22px mono
+ * chips (`.chip`, under `.head-right`) — mapped onto
  * `@picompanion/design-tokens`; the 13.5px title size and 6px chip gap
  * have no token, so they are declared once here as custom properties.
  * The title's -0.1px tracking maps to `--letter-spacing-tight` (-0.02em),
  * the same conversion `ui/shell.css`'s `.shell__brand-name` already uses
- * for the reference's identical `.mark-name` literal; `text-wrap` has no
- * token (it is a layout keyword, not a themed value) and is set directly.
+ * for `web-spec.html`'s identical `.mark-name` literal; `text-wrap` has
+ * no token (it is a layout keyword, not a themed value) and is set
+ * directly.
  */
 
 .pc-session-head {
@@ -48,7 +68,7 @@
  * UI-X2 removed `.pc-session-head__facts`. The restored-message/queued node
  * it styled is still rendered, for the three Playwright test ids several
  * specs wait on, but is now `pc-visually-hidden` and therefore draws
- * nothing — the design reference's `.main-head` has no such line, and a
+ * nothing — `web-spec.html`'s `.main-head` has no such line, and a
  * visible one made our header a line taller than the reference at every
  * viewport. No rule replaces it: the utility class owns the node entirely.
  */
