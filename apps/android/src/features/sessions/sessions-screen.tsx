@@ -124,6 +124,37 @@
  * `SessionSummary` actually carries (provider, working directory, age)
  * rather than the mock's invented turn count and token total — see the
  * T363 paragraph above, which is unchanged.
+ *
+ * **PAD-FADEUP — A1's own `.pad>.row,.pad>.card` entrance
+ * (`android-spec.html`).** The spec's raw `a1` markup is one flat `.pad`
+ * of `.sbar` / a bare chip row / `.lbl` / `.row` siblings; this screen's
+ * `.pad` (`styles.body`) has grown several conditional banners, the
+ * create-session form, and loading/error/empty placeholder states the
+ * spec's markup has no equivalent for at all — none of them a `.row` or
+ * `.card` kind, and several of them transient runtime states rather
+ * than anything present at initial mount. Rather than thread a live,
+ * every-render-shifting position through all of them (which would
+ * re-stagger every row's own delay whenever an unrelated banner
+ * appeared or vanished — a live entrance replaying on state churn is
+ * exactly the hazard this file's own T385/`transcript-window.tsx`
+ * precedent warns against for a virtualizing list, here for a different
+ * reason), the counted `.pad`-sibling sequence is deliberately narrowed
+ * to the four kinds the spec itself draws inside `.pad`: the search row
+ * (position 0, unwrapped — the `.sbar` stand-in), the filter-chip row
+ * (position 1, unwrapped), then each group's `Section` label (unwrapped,
+ * the `.lbl` stand-in) followed immediately by that group's own
+ * `SessionRow`s (each wrapped in `PadEntrance kind="row"`), counted
+ * CONTINUOUSLY across groups rather than restarting per group — mirroring
+ * the spec's own `a1` frame, where the second group's `.lbl` ("aivigil ·
+ * 1") sits at position 7 and its one row at position 8 (past
+ * `PAD_ENTRANCE_LAST_STAGGERED_CHILD`, so it animates with the
+ * spec-literal 0ms delay — see `pad-entrance-model.ts`'s doc comment,
+ * section 2). Every banner, the create-session form, and every
+ * loading/error/empty placeholder state is left entirely OUTSIDE this
+ * counted sequence — rendered exactly as before this task, never wrapped
+ * in `PadEntrance` and never advancing the position counter — which is
+ * the ambiguity this task's own instructions call for resolving and
+ * documenting rather than leaving unstated.
  */
 import type { KeyValueStorage, NetworkReachability } from "@picompanion/frontend-core";
 import type { NativeTheme } from "@picompanion/design-tokens";
@@ -142,6 +173,7 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
+  PadEntrance,
   SearchField,
   Section,
   StatusPill,
@@ -317,6 +349,14 @@ const FILTER_CHIP_FONT_SIZE = 11.5;
 /** A1's `.sbar` magnifier, 14px in the artifact. */
 const SEARCH_MARK_SIZE = 14;
 
+/**
+ * PAD-FADEUP: the two counted `.pad` siblings that always precede the
+ * first group's `.lbl` — the search row (position 0) and the filter-chip
+ * row (position 1) — see this file's own module doc comment for the
+ * full counted sequence.
+ */
+const SESSIONS_PAD_LEADING_POSITION_COUNT = 2;
+
 const DEFAULT_STATE: SessionListState = { kind: "ready", sessions: [] };
 
 export function SessionsScreen({
@@ -417,6 +457,25 @@ export function SessionsScreen({
     model.kind === "ready" && visibleGroups.length === 0
       ? sessionFilterEmptyMessage(filterInput)
       : null;
+
+  // PAD-FADEUP: see this file's own module doc comment for which `.pad`
+  // siblings are counted at all (search row, filter-chip row, each
+  // group's label, each group's rows — continuously across groups) and
+  // why everything else (banners, the create form, placeholder states)
+  // is left outside the sequence entirely. Precomputed once per render
+  // rather than mutated inline during JSX construction, so the render
+  // below only ever reads a plain number.
+  let nextPadPosition = SESSIONS_PAD_LEADING_POSITION_COUNT;
+  const groupPadPositions = visibleGroups.map((group) => {
+    const labelPosition = nextPadPosition;
+    nextPadPosition += 1;
+    const rowPositions = group.rows.map(() => {
+      const rowPosition = nextPadPosition;
+      nextPadPosition += 1;
+      return rowPosition;
+    });
+    return { labelPosition, rowPositions };
+  });
 
   const [createState, setCreateState] = useState<CreateSessionState>(EMPTY_CREATE_SESSION_STATE);
   // T364: the create form is revealed by A1's "+ New session" chip
@@ -765,7 +824,7 @@ export function SessionsScreen({
           />
         ) : null}
         {model.kind === "ready"
-          ? visibleGroups.map((group) => (
+          ? visibleGroups.map((group, groupIndex) => (
               <Section
                 key={group.kind}
                 title={sessionGroupLabel(group)}
@@ -773,35 +832,40 @@ export function SessionsScreen({
                 testId={`${testId}-group-${group.kind}`}
               >
                 <View style={styles.rows}>
-                  {group.rows.map((row) => {
+                  {group.rows.map((row, rowIndex) => {
                     const rawSession = sessionsById.get(row.id);
                     const isPending = actionsState.pendingSessionId === row.id;
                     return (
-                      <SessionRow
+                      <PadEntrance
                         key={row.id}
-                        row={row}
-                        age={rawSession ? sessionAgeLabel(rawSession.updatedAt, nowMs) : null}
-                        theme={theme}
-                        onOpen={sessionService ? () => handleOpenSession(row.id) : undefined}
-                        onArchive={
-                          sessionService && rawSession && !rawSession.archivedAt
-                            ? () => handleArchiveSession(rawSession)
-                            : undefined
-                        }
-                        archiving={isPending && actionsState.pendingPhase === "archiving"}
-                        onRequestDelete={
-                          sessionService && rawSession
-                            ? () => handleRequestDelete(rawSession)
-                            : undefined
-                        }
-                        deleting={isPending && actionsState.pendingPhase === "deleting"}
-                        errorMessage={
-                          actionsState.error?.sessionId === row.id
-                            ? actionsState.error.message
-                            : undefined
-                        }
-                        testId={`${testId}-row-${row.id}`}
-                      />
+                        kind="row"
+                        position={groupPadPositions[groupIndex].rowPositions[rowIndex]}
+                      >
+                        <SessionRow
+                          row={row}
+                          age={rawSession ? sessionAgeLabel(rawSession.updatedAt, nowMs) : null}
+                          theme={theme}
+                          onOpen={sessionService ? () => handleOpenSession(row.id) : undefined}
+                          onArchive={
+                            sessionService && rawSession && !rawSession.archivedAt
+                              ? () => handleArchiveSession(rawSession)
+                              : undefined
+                          }
+                          archiving={isPending && actionsState.pendingPhase === "archiving"}
+                          onRequestDelete={
+                            sessionService && rawSession
+                              ? () => handleRequestDelete(rawSession)
+                              : undefined
+                          }
+                          deleting={isPending && actionsState.pendingPhase === "deleting"}
+                          errorMessage={
+                            actionsState.error?.sessionId === row.id
+                              ? actionsState.error.message
+                              : undefined
+                          }
+                          testId={`${testId}-row-${row.id}`}
+                        />
+                      </PadEntrance>
                     );
                   })}
                 </View>

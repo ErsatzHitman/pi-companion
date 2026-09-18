@@ -9,6 +9,7 @@ import type { DaemonConnectionPhase } from "../connect/daemon-connection-store";
 import { Banner } from "../../ui/primitives/Banner";
 import { Card } from "../../ui/primitives/Card";
 import { Divider } from "../../ui/primitives/Divider";
+import { PadEntrance } from "../../ui/primitives/PadEntrance";
 import { Section } from "../../ui/primitives/Section";
 import { StatusPill } from "../../ui/primitives/StatusPill";
 import { ScreenBar } from "../../ui/recipes/ScreenBar";
@@ -132,7 +133,40 @@ export interface SettingsScreenProps {
  * explains why: neither `../extensions/registry.ts` nor any sibling
  * renderer module keeps a namespace -> extension-name table at runtime
  * for this to read back live.
+ *
+ * **PAD-FADEUP — A3's own `.pad>.row,.pad>.card` entrance
+ * (`android-spec.html`).** This screen has no single flat `.pad` of
+ * `.lbl`/`.row`/`.card` siblings the way the spec's raw markup does — it
+ * is a `Section`+`Card` pair per group, and `Section` (not owned by this
+ * task) renders its own label and children as one unit, so there is no
+ * separate JSX slot to wrap a bare label in. The chosen mapping: each
+ * `Section`'s label is left unwrapped (it is never a `.row`/`.card` kind
+ * either way and renders identically whether or not it is passed through
+ * `PadEntrance`) but still CONSUMES one zero-based `.pad`-sibling
+ * position — see `pad-entrance-model.ts`'s own doc comment, section 1,
+ * for why a `.lbl`-kind sibling must still be counted — and each
+ * group's `Card` (or, for the voice-vocabulary group, the whole
+ * `VoiceVocabularySection` — a real settings block, closer to a `.card`
+ * than a bare label, even though this task does not own that file to
+ * wrap its own internal Card) is wrapped in `PadEntrance` at the next
+ * position. Positions, in render order: Host label (0, unwrapped) / Host
+ * card (1, nth-child(2) -> 45ms) / On-this-device label (2, unwrapped)
+ * / Haptics card (3, nth-child(4) -> 135ms) / VoiceVocabularySection
+ * (4, nth-child(5) -> 180ms) / Extensions-that-draw label (5,
+ * unwrapped) / Extensions card (6, nth-child(7) -> 270ms) / Loaded-but-
+ * silent label (7, unwrapped) / Loaded-but-silent card (8, past
+ * PAD_ENTRANCE_LAST_STAGGERED_CHILD -> 0ms, the spec-literal choice —
+ * see `pad-entrance-model.ts`'s doc comment, section 2) / More label (9,
+ * unwrapped, only when `onOpenDevices`/`onOpenDiagnostics` render the
+ * section at all) / More card (10, also past the schedule -> 0ms).
  */
+const PAD_POSITION_HOST_CARD = 1;
+const PAD_POSITION_HAPTICS_CARD = 3;
+const PAD_POSITION_VOICE_VOCABULARY = 4;
+const PAD_POSITION_EXTENSIONS_CARD = 6;
+const PAD_POSITION_SILENT_CARD = 8;
+const PAD_POSITION_MORE_CARD = 10;
+
 export function SettingsScreen({
   storage,
   onOpenDevices,
@@ -172,54 +206,60 @@ export function SettingsScreen({
         testId={testId ? `${testId}-bar` : undefined}
       />
       <Section title="Host" variant="label" testId={testId ? `${testId}-host-section` : undefined}>
-        <Card style={styles.card}>
-          <View
-            accessible
-            accessibilityLabel={settingsHostAccessibilityLabel(hostProfile, connectionPhase)}
-            style={styles.hostRow}
-            testID={testId ? `${testId}-host-row` : undefined}
-          >
-            <View style={styles.hostText}>
-              <Text style={styles.hostTitle} numberOfLines={1}>
-                {settingsHostTitle(hostProfile)}
-              </Text>
-              <Text style={styles.hostDetail} numberOfLines={1}>
-                {settingsHostDetail(hostProfile)}
-              </Text>
+        <PadEntrance kind="card" position={PAD_POSITION_HOST_CARD}>
+          <Card style={styles.card}>
+            <View
+              accessible
+              accessibilityLabel={settingsHostAccessibilityLabel(hostProfile, connectionPhase)}
+              style={styles.hostRow}
+              testID={testId ? `${testId}-host-row` : undefined}
+            >
+              <View style={styles.hostText}>
+                <Text style={styles.hostTitle} numberOfLines={1}>
+                  {settingsHostTitle(hostProfile)}
+                </Text>
+                <Text style={styles.hostDetail} numberOfLines={1}>
+                  {settingsHostDetail(hostProfile)}
+                </Text>
+              </View>
+              <StatusPill
+                label={settingsHostStatus(connectionPhase).label}
+                tone={settingsHostStatus(connectionPhase).tone}
+                showDot
+                testId={testId ? `${testId}-host-status` : undefined}
+              />
             </View>
-            <StatusPill
-              label={settingsHostStatus(connectionPhase).label}
-              tone={settingsHostStatus(connectionPhase).tone}
-              showDot
-              testId={testId ? `${testId}-host-status` : undefined}
-            />
-          </View>
-        </Card>
+          </Card>
+        </PadEntrance>
       </Section>
       <Section title="On this device" variant="label">
-        <Card style={styles.card}>
-          {snapshot.loadError ? (
-            <Banner
-              tone="info"
-              message="Couldn't read your saved settings, so defaults are in use."
-              testId={testId ? `${testId}-load-error` : undefined}
+        <PadEntrance kind="card" position={PAD_POSITION_HAPTICS_CARD}>
+          <Card style={styles.card}>
+            {snapshot.loadError ? (
+              <Banner
+                tone="info"
+                message="Couldn't read your saved settings, so defaults are in use."
+                testId={testId ? `${testId}-load-error` : undefined}
+              />
+            ) : null}
+            <Toggle
+              label="Haptics"
+              checked={snapshot.hapticsEnabled}
+              onCheckedChange={(checked) => void controller.setHapticsEnabled(checked)}
+              testId={testId ? `${testId}-haptics-toggle` : undefined}
             />
-          ) : null}
-          <Toggle
-            label="Haptics"
-            checked={snapshot.hapticsEnabled}
-            onCheckedChange={(checked) => void controller.setHapticsEnabled(checked)}
-            testId={testId ? `${testId}-haptics-toggle` : undefined}
-          />
-          <Text style={styles.hint}>
-            Vibrate for approvals, blocked turns, and finished or failed runs.
-          </Text>
-        </Card>
+            <Text style={styles.hint}>
+              Vibrate for approvals, blocked turns, and finished or failed runs.
+            </Text>
+          </Card>
+        </PadEntrance>
       </Section>
-      <VoiceVocabularySection
-        storage={storage}
-        testId={testId ? `${testId}-voice-vocabulary` : undefined}
-      />
+      <PadEntrance kind="card" position={PAD_POSITION_VOICE_VOCABULARY}>
+        <VoiceVocabularySection
+          storage={storage}
+          testId={testId ? `${testId}-voice-vocabulary` : undefined}
+        />
+      </PadEntrance>
       {/*
         UI-A5: the two informational A3 regions the module doc's
         "other two ... are informational" paragraph describes — static,
@@ -234,33 +274,37 @@ export function SettingsScreen({
         variant="label"
         testId={testId ? `${testId}-extensions-drawing-section` : undefined}
       >
-        <Card style={styles.navCard}>
-          {DRAWING_EXTENSIONS.map((row, index) => (
-            <View key={row.name}>
-              <ExtensionRow
-                name={row.name}
-                description={row.description}
-                onPress={onOpenExtension ? () => onOpenExtension(row.name) : undefined}
-                testId={testId ? `${testId}-extension-${row.name}` : undefined}
-              />
-              {index < DRAWING_EXTENSIONS.length - 1 ? <Divider /> : null}
-            </View>
-          ))}
-        </Card>
+        <PadEntrance kind="card" position={PAD_POSITION_EXTENSIONS_CARD}>
+          <Card style={styles.navCard}>
+            {DRAWING_EXTENSIONS.map((row, index) => (
+              <View key={row.name}>
+                <ExtensionRow
+                  name={row.name}
+                  description={row.description}
+                  onPress={onOpenExtension ? () => onOpenExtension(row.name) : undefined}
+                  testId={testId ? `${testId}-extension-${row.name}` : undefined}
+                />
+                {index < DRAWING_EXTENSIONS.length - 1 ? <Divider /> : null}
+              </View>
+            ))}
+          </Card>
+        </PadEntrance>
       </Section>
       <Section
         title="Loaded but silent"
         variant="label"
         testId={testId ? `${testId}-extensions-silent-section` : undefined}
       >
-        <Card style={styles.card}>
-          <Text
-            style={styles.silentSummary}
-            testID={testId ? `${testId}-extensions-silent-summary` : undefined}
-          >
-            {silentExtensionsSummary()}
-          </Text>
-        </Card>
+        <PadEntrance kind="card" position={PAD_POSITION_SILENT_CARD}>
+          <Card style={styles.card}>
+            <Text
+              style={styles.silentSummary}
+              testID={testId ? `${testId}-extensions-silent-summary` : undefined}
+            >
+              {silentExtensionsSummary()}
+            </Text>
+          </Card>
+        </PadEntrance>
       </Section>
       {onOpenDevices || onOpenDiagnostics ? (
         <Section
@@ -268,23 +312,25 @@ export function SettingsScreen({
           variant="label"
           testId={testId ? `${testId}-more-section` : undefined}
         >
-          <Card style={styles.navCard}>
-            {onOpenDevices ? (
-              <NavRow
-                label="Devices"
-                onPress={onOpenDevices}
-                testId={testId ? `${testId}-devices-row` : undefined}
-              />
-            ) : null}
-            {onOpenDevices && onOpenDiagnostics ? <Divider /> : null}
-            {onOpenDiagnostics ? (
-              <NavRow
-                label="Diagnostics"
-                onPress={onOpenDiagnostics}
-                testId={testId ? `${testId}-diagnostics-row` : undefined}
-              />
-            ) : null}
-          </Card>
+          <PadEntrance kind="card" position={PAD_POSITION_MORE_CARD}>
+            <Card style={styles.navCard}>
+              {onOpenDevices ? (
+                <NavRow
+                  label="Devices"
+                  onPress={onOpenDevices}
+                  testId={testId ? `${testId}-devices-row` : undefined}
+                />
+              ) : null}
+              {onOpenDevices && onOpenDiagnostics ? <Divider /> : null}
+              {onOpenDiagnostics ? (
+                <NavRow
+                  label="Diagnostics"
+                  onPress={onOpenDiagnostics}
+                  testId={testId ? `${testId}-diagnostics-row` : undefined}
+                />
+              ) : null}
+            </Card>
+          </PadEntrance>
         </Section>
       ) : null}
     </ScrollView>

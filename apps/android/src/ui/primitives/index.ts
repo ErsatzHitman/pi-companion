@@ -21,6 +21,16 @@ export { Icon } from "./icons";
 export type { IconName } from "./icons";
 export { Link } from "./Link";
 export type { LinkProps } from "./Link";
+export { PadEntrance } from "./PadEntrance";
+export type { PadEntranceProps } from "./PadEntrance";
+export {
+  PAD_ENTRANCE_LAST_STAGGERED_CHILD,
+  PAD_ENTRANCE_STAGGER_MS,
+  isPadEntranceChildAnimated,
+  padEntranceDelayForChild,
+  padEntranceDelayMs,
+} from "./pad-entrance-model";
+export type { PadEntranceChildKind } from "./pad-entrance-model";
 export { EmptyState, ErrorState, LoadingState } from "./PlaceholderState";
 export type { PlaceholderStateProps } from "./PlaceholderState";
 export { Popover } from "./Popover";

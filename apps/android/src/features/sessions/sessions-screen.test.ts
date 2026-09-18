@@ -357,8 +357,21 @@ describe("SessionsScreen source: T363 A1's row", () => {
 
   it("invents neither of the artifact's two unavailable figures", () => {
     // "18 turns · 184k" — `SessionSummary` carries neither.
-    expect(code).not.toMatch(/turns/);
-    expect(code).not.toMatch(/\d+k/);
+    //
+    // CORRECTED at the P10-W15 merge gate. Both patterns held a literal
+    // BACKSPACE control character (U+0008) where a word boundary was
+    // meant. That is the signature of a two-character regex escape
+    // written inside a non-raw Python string by whatever generated this
+    // block: there the sequence is an escape for that control character,
+    // not the two literal characters a JavaScript regex needs. Because
+    // both cases are `.not.toMatch`, a pattern that can never match
+    // passes every single time - two committed assertions that could not
+    // fail, which is the shape this repository closes elsewhere under
+    // the name of a check that cannot fail. The boundaries are restored
+    // below, and both cases still pass: measured against the real
+    // stripped source, which contains neither figure.
+    expect(code).not.toMatch(/\bturns\b/);
+    expect(code).not.toMatch(/\d+k\b/);
   });
 
   it("gives the pill a dot only where the state is worth one", () => {
@@ -478,5 +491,40 @@ describe("SessionsScreen source: T385 A1 chrome, body and rows", () => {
     // (unstripped) source -- `code` above already has comments removed and
     // could never see it either way.
     expect(readScreenSource()).not.toMatch(/7px/);
+  });
+});
+
+// PAD-FADEUP (P10-W15): the spec's `.pad>.row,.pad>.card` entrance is
+// wired HERE, not merely available from the primitives barrel. This
+// case exists because six defects in this session's own waves took one
+// shape - a component built, exported, type-correct, and reached by
+// nothing. A `PadEntrance` that no screen renders would pass every case
+// in `../../ui/primitives/pad-entrance-model.test.ts` and
+// `PadEntrance.test.ts` and still ship a screen with no entrance at
+// all, so the wiring needs an assertion of its own against the screen's
+// own source.
+describe("PAD-FADEUP: the Sessions screen renders the pad entrance (P10-W15)", () => {
+  it("wraps its animated pad children in PadEntrance, and every opening tag carries both a kind and a position", () => {
+    const code = readScreenCode();
+    expect(code).toMatch(/<PadEntrance[\s>]/);
+    const openTags = code.match(/<PadEntrance[\s\S]*?>/g) ?? [];
+    expect(openTags.length).toBeGreaterThan(0);
+    for (const tag of openTags) {
+      // `kind` decides whether the child animates at all; `position` is
+      // the `:nth-child` index the spec's 45ms schedule is keyed to.
+      // Either one omitted is a silent default, never a type error.
+      expect(tag).toMatch(/kind=/);
+      expect(tag).toMatch(/position=/);
+    }
+  });
+
+  it("reads the delay schedule from the shared model instead of restating the spec's step here", () => {
+    const code = readScreenCode();
+    // The 45ms step and the eighth-child boundary live in
+    // `pad-entrance-model.ts`, where a real vitest run executes them. A
+    // screen computing its own delay would be provable only by source
+    // text, which is exactly what that module exists to avoid.
+    expect(code).not.toMatch(/45\s*\*/);
+    expect(code).not.toMatch(/animationDelay/);
   });
 });

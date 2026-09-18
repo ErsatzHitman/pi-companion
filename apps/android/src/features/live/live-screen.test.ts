@@ -130,3 +130,38 @@ describe("LiveScreen source", () => {
     expect(readCode()).toMatch(/model\.statsText\.length > 0 \?/);
   });
 });
+
+// PAD-FADEUP (P10-W15): the spec's `.pad>.row,.pad>.card` entrance is
+// wired HERE, not merely available from the primitives barrel. This
+// case exists because six defects in this session's own waves took one
+// shape — a component built, exported, type-correct, and reached by
+// nothing. A `PadEntrance` that no screen renders would pass every case
+// in `../../ui/primitives/pad-entrance-model.test.ts` and
+// `PadEntrance.test.ts` and still ship a screen with no entrance at
+// all, so the wiring needs an assertion of its own against the screen's
+// own source.
+describe("PAD-FADEUP: the Live screen renders the pad entrance (P10-W15)", () => {
+  it("wraps its animated pad children in PadEntrance, and every opening tag carries both a kind and a position", () => {
+    const code = readCode();
+    expect(code).toMatch(/<PadEntrance[\s>]/);
+    const openTags = code.match(/<PadEntrance[\s\S]*?>/g) ?? [];
+    expect(openTags.length).toBeGreaterThan(0);
+    for (const tag of openTags) {
+      // `kind` decides whether the child animates at all; `position` is
+      // the `:nth-child` index the spec's 45ms schedule is keyed to.
+      // Either one omitted is a silent default, never a type error.
+      expect(tag).toMatch(/kind=/);
+      expect(tag).toMatch(/position=/);
+    }
+  });
+
+  it("reads the delay schedule from the shared model instead of restating the spec's step here", () => {
+    const code = readCode();
+    // The 45ms step and the eighth-child boundary live in
+    // `pad-entrance-model.ts`, where a real vitest run executes them.
+    // A screen computing its own delay would be provable only by source
+    // text, which is what that module exists to avoid.
+    expect(code).not.toMatch(/45\s*\*/);
+    expect(code).not.toMatch(/animationDelay/);
+  });
+});

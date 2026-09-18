@@ -3262,6 +3262,36 @@ export const CAPABILITIES = [
       /(?:no|nothing) (?:sheet |panel )?variant (?:ever )?(?:animates|fades) (?:itself )?(?:in )?on open/i,
     ],
   },
+
+  {
+    // PAD-FADEUP (P10-W15). A T168 AND-group over three names declared in ONE
+    // shipped file, `apps/android/src/ui/primitives/pad-entrance-model.ts`.
+    // The group shape is load-bearing rather than decorative here, for a
+    // reason specific to what this rule is easy to get wrong: a delay
+    // function alone would call the capability shipped while a caller still
+    // counted only the children it meant to animate, which silently shifts
+    // every stagger on a pad that opens with a label, a search bar or a chip
+    // row -- which is every pad the spec actually draws.
+    // `isPadEntranceChildAnimated` is what forces an unanimated sibling's
+    // position to be counted, and `padEntranceDelayForChild` is what keeps
+    // "does not animate at all" (null) distinguishable from "animates with no
+    // delay" (0), which is a real state here because the spec stops
+    // enumerating at the eighth child. The capability is a CORRECT stagger,
+    // not the arithmetic, so all three have to be present.
+    //
+    // Phrased in this entry's own voice. Nothing is lifted from
+    // `transcript-entrance.ts`, whose prose legitimately narrates a capped,
+    // watermark-gated rule this one deliberately does not share, nor from
+    // `expressive-motion.ts`, which carries live "no consumer" prose about
+    // unrelated token families.
+    name: "the settings and list pads animate their rows and cards in on the spec's own 45ms nth-child schedule (padEntranceDelayMs/isPadEntranceChildAnimated/padEntranceDelayForChild)",
+    methodNames: [["padEntranceDelayMs", "isPadEntranceChildAnimated", "padEntranceDelayForChild"]],
+    denyingPhrases: [
+      /(?:the )?(?:settings|sessions|live) (?:screen|pad)(?:'s)? (?:rows?|cards?) (?:do not|don't|never) (?:animate|fade) in/i,
+      /no (?:pad|list|settings) (?:row|card) entrance (?:animation|treatment) (?:ships|exists|is wired)/i,
+      /(?:nothing|no screen) (?:ever )?(?:uses|consumes|reads) (?:the )?`?listRow`? (?:fade.up )?duration/i,
+    ],
+  },
 ];
 
 // Marks a denying phrase as a QUOTATION of a past false statement rather

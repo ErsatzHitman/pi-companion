@@ -5,7 +5,7 @@ import type { AgentUsage } from "@picompanion/protocol/agent-types";
 import type { PiUiElement } from "@picompanion/protocol/pi-ui-bridge/schema";
 
 import { buildContextCardViewModel, type ContextUsageBand } from "../telemetry";
-import { StatusPill, VectorIcon } from "../../ui/primitives";
+import { PadEntrance, StatusPill, VectorIcon } from "../../ui/primitives";
 import { PixelLoader, ScreenBar } from "../../ui/recipes";
 import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
@@ -36,6 +36,24 @@ import {
  * `session-nav-actions-terminal` — the same testIDs on the same
  * controls doing the same thing, per this redesign's testID-continuity
  * rule — so nothing that names them has to change to find them.
+ *
+ * **PAD-FADEUP — A2's own `.pad>.row,.pad>.card` entrance
+ * (`android-spec.html`).** A2's `.pad` is the one frame the spec draws
+ * with NO non-animated sibling at all — `.row.sub` rows live nested
+ * INSIDE each `.card`, not as `.pad`'s own direct children, so they get
+ * no stagger of their own (the spec's `nth-child` selector only ever
+ * matches `.pad`'s direct children) and this screen's own
+ * `SubagentRow`/`WorkflowRow` stay unwrapped for the same reason. Every
+ * direct child of this screen's `ScrollView` body IS a `.card`: the
+ * Subagents card (position 0, nth-child(1) -> 0ms), the Workflow card
+ * (position 1, nth-child(2) -> 45ms), the Context card (position 2,
+ * nth-child(3) -> 90ms), and — a real fourth card the spec's own `a2`
+ * markup does not draw, the Files/Terminal "Workspace" card that only
+ * renders when the route supplies `navActions` — the next position in
+ * the same sequence (position 3, nth-child(4) -> 135ms), simply because
+ * it is exactly the same `.card` kind as the three before it and the
+ * spec's own selector has no notion of "this card wasn't in the mock"
+ * to exclude it by.
  */
 export interface LiveScreenProps {
   /** Every Pi UI element for this session, straight from the store the route already reads. */
@@ -108,6 +126,17 @@ const GLYPH_SIZE = 12;
 const CONTEXT_BAR_HEIGHT = 6;
 /** The artifact's mono stats row under that meter. */
 const CONTEXT_STATS_SIZE = 11;
+
+/**
+ * PAD-FADEUP: this screen's four `.pad>.card` positions, in render
+ * order — see this file's own module doc comment for why the fourth
+ * (a real card, but one the spec's own `a2` markup does not draw) still
+ * continues the same sequence rather than being excluded.
+ */
+const PAD_POSITION_SUBAGENTS_CARD = 0;
+const PAD_POSITION_WORKFLOW_CARD = 1;
+const PAD_POSITION_CONTEXT_CARD = 2;
+const PAD_POSITION_WORKSPACE_CARD = 3;
 
 function RowGlyph({ glyph }: { glyph: LiveRowGlyph }) {
   const { theme } = useTheme();
@@ -320,41 +349,49 @@ export function LiveScreen({
         testId={`${testId}-bar`}
       />
       <ScrollView contentContainerStyle={styles.body}>
-        <LiveCard
-          title={model.subagents.title}
-          summary={model.subagents.summary}
-          emptyText={model.subagents.emptyText}
-          testId={`${testId}-subagents`}
-        >
-          <View style={styles.rows}>
-            {model.subagents.rows.map((row) => (
-              <SubagentRow key={row.key} row={row} />
-            ))}
-          </View>
-        </LiveCard>
-        <LiveCard
-          title={model.workflow.title}
-          summary={model.workflow.summary}
-          emptyText={model.workflow.emptyText}
-          testId={`${testId}-workflow`}
-        >
-          <View style={styles.rows}>
-            {model.workflow.rows.map((row) => (
-              <WorkflowRow key={row.key} row={row} />
-            ))}
-          </View>
-        </LiveCard>
-        <ContextCard usage={usage} autoCompaction={autoCompaction} testId={`${testId}-context`} />
+        <PadEntrance kind="card" position={PAD_POSITION_SUBAGENTS_CARD}>
+          <LiveCard
+            title={model.subagents.title}
+            summary={model.subagents.summary}
+            emptyText={model.subagents.emptyText}
+            testId={`${testId}-subagents`}
+          >
+            <View style={styles.rows}>
+              {model.subagents.rows.map((row) => (
+                <SubagentRow key={row.key} row={row} />
+              ))}
+            </View>
+          </LiveCard>
+        </PadEntrance>
+        <PadEntrance kind="card" position={PAD_POSITION_WORKFLOW_CARD}>
+          <LiveCard
+            title={model.workflow.title}
+            summary={model.workflow.summary}
+            emptyText={model.workflow.emptyText}
+            testId={`${testId}-workflow`}
+          >
+            <View style={styles.rows}>
+              {model.workflow.rows.map((row) => (
+                <WorkflowRow key={row.key} row={row} />
+              ))}
+            </View>
+          </LiveCard>
+        </PadEntrance>
+        <PadEntrance kind="card" position={PAD_POSITION_CONTEXT_CARD}>
+          <ContextCard usage={usage} autoCompaction={autoCompaction} testId={`${testId}-context`} />
+        </PadEntrance>
         {navActions ? (
-          <View style={styles.card} testID={`${testId}-nav`}>
-            <Text accessibilityRole="header" style={styles.cardTitle}>
-              Workspace
-            </Text>
-            <Text style={styles.cardSummary}>
-              Browse this session's files, or open its terminal
-            </Text>
-            {navActions}
-          </View>
+          <PadEntrance kind="card" position={PAD_POSITION_WORKSPACE_CARD}>
+            <View style={styles.card} testID={`${testId}-nav`}>
+              <Text accessibilityRole="header" style={styles.cardTitle}>
+                Workspace
+              </Text>
+              <Text style={styles.cardSummary}>
+                Browse this session's files, or open its terminal
+              </Text>
+              {navActions}
+            </View>
+          </PadEntrance>
         ) : null}
       </ScrollView>
     </View>
