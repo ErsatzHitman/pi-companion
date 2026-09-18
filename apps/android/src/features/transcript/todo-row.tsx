@@ -16,15 +16,34 @@
  * beside `PinnedLiveExtensionArea`, and `app-shell/session-transcript-
  * model.ts` no longer keeps `todo` entries in the transcript list.
  *
- * **The artifact's own `.ov` shape.** Quoting the artifact's CSS:
- * `.ov { border-radius: 12px; background: var(--surface); box-shadow:
- * var(--sh-card); padding: 8px 10px; margin-bottom: 8px }`,
- * `.ov-head { display: flex; align-items: center; gap: 8px; cursor:
- * pointer }`, `.ov-row { display: flex; gap: 8px; font-size: 11px;
- * line-height: 1.6 }`, `.ov-row .g { width: 11px; flex: none;
- * text-align: center }`, `.ov-hint { font-size: 10.5px }`. `Card`
- * already draws the tier `.ov`'s `--sh-card` names (`ringShadow`), so
- * the widget overrides only the radius and the padding.
+ * **The artifact's own `.ov` shape, corrected (T360 follow-up).** The
+ * paragraph this replaces quoted four rules that do not exist in the
+ * confirmed spec (`C:/Users/aksha/Downloads/pi-ui-goal/android-spec.html`,
+ * md5 `498c3bd3…`; `docs/ui-reference/pi-companion-app.html` genuinely
+ * differs from it, md5 `3ff70c21…`, so it is never cited here — and
+ * CLAUDE.md's "Reference-only documents" list does not cover
+ * `docs/ui-reference/` at all, so it never governed this file either):
+ * `.ov-row { font-size: 11px; line-height: 1.6 }`, `.ov-hint { font-size:
+ * 10.5px }`, `.ov-head .lab { font-size: 11px }`, and `.ov-row .g { width:
+ * 11px }` — measured directly (`grep -o '\.ov-row \.g{[^}]*}'` on the
+ * spec returns nothing; the other three resolve to different rules
+ * below). The real rules: `.ov{margin:0 10px 6px;padding:8px 12px
+ * 9px;border-radius:var(--r-blk);background:var(--surface);box-shadow:
+ * var(--shadow-card);font:12.5px/1.62 'JetBrains Mono',ui-monospace,
+ * monospace}` (`--r-blk` resolves to `14px`; the old `--sh-card` name
+ * was also wrong, the token is `--shadow-card`), `.ov-head{font-weight:
+ * 700;margin-bottom:1px}`, `.ov-row{border-radius:6px;margin:0
+ * -4px;padding:0 4px}` (no font of its own), `.ov-hint{display:none}`
+ * (shown only via `.ov.closed .ov-hint{display:block}`). Neither
+ * `.ov-row` nor `.ov-hint` sets a font, so both read `.ov`'s own
+ * 12.5px/1.62 JetBrains Mono — the head's own `<span class="lab">` is
+ * the one exception, styled by a real, separate `.lab{font-size:12px;
+ * line-height:1.25}` rule that overrides the inherited size for that
+ * element specifically (confirmed: no `.ov-head .lab` descendant rule
+ * exists, but a bare `.lab` class rule does, and the head's markup
+ * carries that class directly). `Card` already draws the tier `.ov`'s
+ * `--shadow-card` names (`ringShadow`), so the widget overrides only
+ * the radius, the padding and the bottom margin.
  *
  * **The head is the collapse control.** `.ov.closed .ov-row,
  * .ov.closed .ov-hint { display: none }` and the artifact's line reads
@@ -78,18 +97,44 @@ export { isTodoEntry } from "./todo-row-model";
 
 /** The artifact's 18px ring box: `2r` plus the stroke it draws centred on that radius. */
 const RING_SIZE = RING_RADIUS * 2 + RING_STROKE;
-/** `.ov { border-radius: 12px; padding: 8px 10px; margin-bottom: 8px }`. */
-const OVERLAY_RADIUS = 12;
-const OVERLAY_PADDING_VERTICAL = 8;
-const OVERLAY_PADDING_HORIZONTAL = 10;
-const OVERLAY_MARGIN_BOTTOM = 8;
-/** `.ov-head .lab { font-size: 11px }` and `.ov-row { font-size: 11px }`. */
-const BODY_FONT_SIZE = 11;
-/** `.ov-row { line-height: 1.6 }`. */
-const BODY_LINE_HEIGHT = BODY_FONT_SIZE * 1.6;
-/** `.ov-row .g { width: 11px }` and `.ov-hint { font-size: 10.5px }`. */
+/**
+ * `.ov{margin:0 10px 6px;padding:8px 12px 9px;border-radius:var(--r-blk)}`
+ * (`--r-blk` measured as `14px`). The padding is asymmetric — 8 top, 12
+ * each side, 9 bottom — which is why it is three constants below, not
+ * one `paddingVertical`.
+ */
+const OVERLAY_RADIUS = 14;
+const OVERLAY_PADDING_TOP = 8;
+const OVERLAY_PADDING_HORIZONTAL = 12;
+const OVERLAY_PADDING_BOTTOM = 9;
+const OVERLAY_MARGIN_BOTTOM = 6;
+/**
+ * `.ov`'s own `font:12.5px/1.62 'JetBrains Mono',ui-monospace,monospace`.
+ * Neither `.ov-row{border-radius:6px;margin:0 -4px;padding:0 4px}` nor
+ * `.ov-hint{display:none}` declares a font, so this is what every row
+ * and the hint line actually render at — see the file header for the
+ * four phantom citations (`.ov-row`'s and `.ov-hint`'s own font-sizes,
+ * plus `.ov-head .lab`) this replaces.
+ */
+const BODY_FONT_SIZE = 12.5;
+/** `.ov`'s `1.62` line-height, applied at `BODY_FONT_SIZE`. */
+const BODY_LINE_HEIGHT = BODY_FONT_SIZE * 1.62;
+/**
+ * The head's own `<span class="lab">` is styled by a real, separate
+ * `.lab{font-size:12px;line-height:1.25}` rule (measured: exactly one
+ * such rule in the spec, and no `.ov-head .lab` descendant rule at all)
+ * that overrides `.ov`'s inherited size for that element specifically.
+ */
+const HEAD_LABEL_FONT_SIZE = 12;
+const HEAD_LABEL_LINE_HEIGHT = HEAD_LABEL_FONT_SIZE * 1.25;
+/**
+ * No `.ov-row .g` rule exists (measured: `grep -o '\.ov-row \.g{[^}]*}'`
+ * on the spec returns nothing) — the artifact draws each row's glyph as
+ * a plain inline character with no dedicated column. This is a layout
+ * choice, not a citation: wide enough to hold `✓`/`◐`/`○` without the
+ * subject text reflowing under it.
+ */
 const GLYPH_COLUMN_WIDTH = 11;
-const HINT_FONT_SIZE = 10.5;
 
 export interface TranscriptTodoRowProps {
   entry: TodoTranscriptEntry;
@@ -156,7 +201,7 @@ function TranscriptTodoRowImpl({ entry, testId }: TranscriptTodoRowProps) {
             </View>
           ))}
       {collapsed ? null : (
-        <Text style={[styles.hint, styles.dim]}>└─ tap the ring to collapse</Text>
+        <Text style={[styles.body, styles.dim]}>└─ tap the ring to collapse</Text>
       )}
     </Card>
   );
@@ -169,11 +214,16 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     card: {
       gap: theme.spacing[1],
       borderRadius: OVERLAY_RADIUS,
-      paddingVertical: OVERLAY_PADDING_VERTICAL,
+      paddingTop: OVERLAY_PADDING_TOP,
+      paddingBottom: OVERLAY_PADDING_BOTTOM,
       paddingHorizontal: OVERLAY_PADDING_HORIZONTAL,
       marginBottom: OVERLAY_MARGIN_BOTTOM,
-      // `.ovslot { padding: 0 12px }` — the widget sits in the pinned
-      // slot, which has no inset of its own.
+      // No `.ovslot` padding rule exists (measured: `.ovslot{flex:none}`,
+      // `.ovslot{transition:opacity .55s ease}`, `.ovslot.fade{opacity:0}`
+      // — the earlier "`.ovslot { padding: 0 12px }`" quote here was a
+      // fifth phantom citation this file carried, of the same class the
+      // header above now documents). This inset is an implementation
+      // choice, not a citation.
       marginHorizontal: theme.spacing[3],
     },
     // `.ov-head` is 18dp tall in the artifact; the head is the widget's
@@ -183,15 +233,19 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
     headLabel: {
       flex: 1,
       fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: BODY_FONT_SIZE,
+      fontSize: HEAD_LABEL_FONT_SIZE,
+      lineHeight: HEAD_LABEL_LINE_HEIGHT,
       fontWeight: asFontWeight(theme.typography.variant.label.fontWeight),
     },
     row: { flexDirection: "row", alignItems: "flex-start", gap: theme.spacing[2] },
-    body: { fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT },
+    body: {
+      fontFamily: theme.typography.variant.code.fontFamily,
+      fontSize: BODY_FONT_SIZE,
+      lineHeight: BODY_LINE_HEIGHT,
+    },
     glyph: { width: GLYPH_COLUMN_WIDTH, textAlign: "center" },
     subject: { flex: 1 },
     struck: { textDecorationLine: "line-through" },
-    hint: { fontSize: HINT_FONT_SIZE },
     dim: { color: theme.colors["ink-3"] },
   });
 }

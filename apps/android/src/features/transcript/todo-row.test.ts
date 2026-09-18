@@ -54,13 +54,37 @@ describe("todo-row.tsx: the artifact's .ov widget (T360)", () => {
     expect(code).not.toMatch(/row\.connector/);
   });
 
-  it("draws the artifact's own `.ov` shape: radius 12, 8×10 padding, an 8 bottom margin", () => {
+  it("draws the artifact's own `.ov` shape: radius 14, asymmetric 8/12/9 padding, a 6 bottom margin", () => {
+    // `.ov{margin:0 10px 6px;padding:8px 12px 9px;border-radius:var(--r-blk)}`
+    // (`--r-blk` measured as `14px`) — corrected from an earlier `radius
+    // 12, 8×10 padding, 8 bottom margin` that matched no rule in the spec.
     const code = readCode();
-    expect(code).toMatch(/const OVERLAY_RADIUS = 12;/);
-    expect(code).toMatch(/const OVERLAY_PADDING_VERTICAL = 8;/);
-    expect(code).toMatch(/const OVERLAY_PADDING_HORIZONTAL = 10;/);
-    expect(code).toMatch(/const OVERLAY_MARGIN_BOTTOM = 8;/);
+    expect(code).toMatch(/const OVERLAY_RADIUS = 14;/);
+    expect(code).toMatch(/const OVERLAY_PADDING_TOP = 8;/);
+    expect(code).toMatch(/const OVERLAY_PADDING_HORIZONTAL = 12;/);
+    expect(code).toMatch(/const OVERLAY_PADDING_BOTTOM = 9;/);
+    expect(code).toMatch(/const OVERLAY_MARGIN_BOTTOM = 6;/);
     expect(code).toMatch(/borderRadius: OVERLAY_RADIUS/);
+    expect(code).toMatch(/paddingTop: OVERLAY_PADDING_TOP/);
+    expect(code).toMatch(/paddingBottom: OVERLAY_PADDING_BOTTOM/);
+  });
+
+  it("reads its type from `.ov` itself, not from citations `.ov-row`/`.ov-hint`/`.ov-head .lab` never carried", () => {
+    // Measured directly against the spec: `.ov-row{border-radius:6px;
+    // margin:0 -4px;padding:0 4px}` and `.ov-hint{display:none}` declare
+    // no font at all, and no `.ov-head .lab` rule exists — so the body
+    // text is `.ov`'s own `font:12.5px/1.62 'JetBrains Mono'`, and only
+    // the head label gets its own size, from a real, separate
+    // `.lab{font-size:12px;line-height:1.25}` rule.
+    const code = readCode();
+    expect(code).toMatch(/const BODY_FONT_SIZE = 12\.5;/);
+    expect(code).toMatch(/const HEAD_LABEL_FONT_SIZE = 12;/);
+    expect(code).toMatch(/const HEAD_LABEL_LINE_HEIGHT = HEAD_LABEL_FONT_SIZE \* 1\.25;/);
+    expect(code).toMatch(
+      /fontFamily: theme\.typography\.variant\.code\.fontFamily,\s*\n\s*fontSize: BODY_FONT_SIZE,/,
+    );
+    expect(code).not.toMatch(/const BODY_FONT_SIZE = 11;/);
+    expect(code).not.toMatch(/const HINT_FONT_SIZE/);
   });
 
   it("prints the count in the head, beside the ring", () => {
@@ -82,11 +106,14 @@ describe("todo-row.tsx: the artifact's .ov widget (T360)", () => {
     expect(code).toMatch(/setCollapsed\(\(current\) => !current\)/);
   });
 
-  it("hides the rows and the hint while collapsed, exactly as `.ov.closed` does", () => {
+  it("hides the rows and the hint while collapsed, and draws the hint at the body's own size", () => {
     const code = readCode();
     expect(code).toMatch(/collapsed\s*\? null\s*:\s*rows\.map/);
     expect(code).toMatch(/tap the ring to collapse/);
-    expect(code).toMatch(/const HINT_FONT_SIZE = 10\.5;/);
+    // `.ov-hint{display:none}` sets no font-size of its own (measured
+    // directly), so the hint line reuses `styles.body` rather than a
+    // separate `HINT_FONT_SIZE` — the old `10.5` matched no rule.
+    expect(code).toMatch(/style=\{\[styles\.body, styles\.dim\]\}>└─ tap the ring to collapse/);
   });
 
   it("strikes a done row through, from the model's own flag", () => {

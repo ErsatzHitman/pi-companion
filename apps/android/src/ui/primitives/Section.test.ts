@@ -20,12 +20,43 @@ describe("Section: the redesign's quiet `.lbl` heading (T366)", () => {
     expect(readCode()).toMatch(/variant = "heading"/);
   });
 
-  it("draws the label variant at the artifact's size, tracking and top padding", () => {
+  it("draws the label variant at the artifact's real size, weight, tracking and padding", () => {
+    // `.lbl{font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:
+    // .09em;text-transform:uppercase;color:var(--ink-3);padding:2px 4px}`
+    // — measured directly against the confirmed spec. The prior `9.5px`
+    // at `fontWeight.bold`, a hardcoded `LABEL_LETTER_SPACING = 0.95`,
+    // and a `paddingTop`-only `8` each matched no rule there.
     const code = readCode();
-    expect(code).toMatch(/const LABEL_FONT_SIZE = 9\.5;/);
-    expect(code).toMatch(/const LABEL_LETTER_SPACING = 0\.95;/);
-    expect(code).toMatch(/paddingTop: LABEL_PADDING_TOP/);
+    expect(code).toMatch(/const LABEL_FONT_SIZE = 10;/);
+    expect(code).toMatch(/const LABEL_PADDING_VERTICAL = 2;/);
+    expect(code).toMatch(/const LABEL_PADDING_HORIZONTAL = 4;/);
+    expect(code).toMatch(/paddingVertical: LABEL_PADDING_VERTICAL/);
+    expect(code).toMatch(/paddingHorizontal: LABEL_PADDING_HORIZONTAL/);
+    expect(code).toMatch(/fontWeight: asFontWeight\(theme\.typography\.fontWeight\.medium\)/);
     expect(code).toMatch(/textTransform: "uppercase"/);
+    expect(code).not.toMatch(/const LABEL_FONT_SIZE = 9\.5;/);
+    expect(code).not.toMatch(/LABEL_LETTER_SPACING/);
+    expect(code).not.toMatch(/LABEL_PADDING_TOP/);
+    expect(code).not.toMatch(/theme\.typography\.fontWeight\.bold/);
+  });
+
+  it("scales the theme's em-ratio tracking into React Native's absolute dp", () => {
+    // `NativeTypography` (packages/design-tokens/src/native.ts) exposes no
+    // top-level `letterSpacing` map, only `variant.<name>.letterSpacing`,
+    // and `variant.label` carries `typography.letterSpacing.wide` UNSCALED.
+    // That token is an em RATIO, not a length: `web.ts`'s emitter writes
+    // every `letterSpacing` token as `${value}em`. `.lbl` is `.09em` on a
+    // `10px` font, so the design figure is 0.9dp; spending the variant
+    // value directly would track at 0.09dp, 10x too tight. `buildTypeStyle`
+    // converts the sibling relative token via `resolveNativeLineHeight`
+    // (`fontSize * multiplier`) and has no `letterSpacing` counterpart, so
+    // the multiplication is done at this call site.
+    const code = readCode();
+    expect(code).toMatch(
+      /letterSpacing: theme\.typography\.variant\.label\.letterSpacing \* LABEL_FONT_SIZE,/,
+    );
+    // The bare, unscaled read is the regression this pins against.
+    expect(code).not.toMatch(/letterSpacing: theme\.typography\.variant\.label\.letterSpacing,/);
   });
 
   it("takes every colour and face from the theme", () => {

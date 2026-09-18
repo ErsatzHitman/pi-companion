@@ -45,11 +45,27 @@ export interface SectionProps {
   variant?: SectionVariant;
 }
 
-/** The artifact's `.lbl`: 9.5px, uppercase, with its tracking in dp at that size. */
-const LABEL_FONT_SIZE = 9.5;
-const LABEL_LETTER_SPACING = 0.95;
-/** The artifact's `.lbl { padding: 8px 2px 0 }`. */
-const LABEL_PADDING_TOP = 8;
+/**
+ * The artifact's `.lbl{font:500 10px/1 'JetBrains Mono',monospace;
+ * letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);
+ * padding:2px 4px}`, measured directly against the confirmed spec. An
+ * earlier `9.5px` at `fontWeight.bold` and a `paddingTop`-only 8 matched
+ * no rule there. Weight 500 comes from the theme below; so does the
+ * tracking, scaled — see the `letterSpacing` comment in `titleLabel`.
+ *
+ * (CORRECTED, at the wave's merge gate: an earlier revision of this
+ * paragraph listed the previous `hardcoded 0.95 letter-spacing` beside
+ * those two as a third value that "matched no rule there", and the
+ * change that landed replaced it with an unscaled read of the theme's
+ * `variant.label.letterSpacing`. That was backwards. `.09em` on this
+ * 10px font IS 0.9dp, so `0.95` was very nearly right and the unscaled
+ * token, at 0.09dp, was 10x too tight.)
+ */
+const LABEL_FONT_SIZE = 10;
+/** `.lbl`'s `10px/1` — line-height equal to the font size. */
+const LABEL_LINE_HEIGHT = LABEL_FONT_SIZE;
+const LABEL_PADDING_VERTICAL = 2;
+const LABEL_PADDING_HORIZONTAL = 4;
 
 /**
  * Section primitive (plan.md §10.3): a labelled grouping. Native TalkBack
@@ -95,9 +111,28 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       color: theme.colors["ink-3"],
       fontFamily: theme.typography.variant.code.fontFamily,
       fontSize: LABEL_FONT_SIZE,
-      fontWeight: asFontWeight(theme.typography.fontWeight.bold),
-      letterSpacing: LABEL_LETTER_SPACING,
-      paddingTop: LABEL_PADDING_TOP,
+      lineHeight: LABEL_LINE_HEIGHT,
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
+      // `.lbl`'s `letter-spacing:.09em`, resolved against this element's own
+      // font size because React Native's `letterSpacing` is absolute dp, not
+      // a ratio.
+      //
+      // `NativeTypography` (packages/design-tokens/src/native.ts) exposes no
+      // top-level `letterSpacing` map — only `variant.<name>.letterSpacing` —
+      // and `variant.label` carries `typography.letterSpacing.wide` UNSCALED.
+      // That token is an em RATIO: `web.ts`'s token emitter writes it as
+      // `${value}em`, and `.lbl` is `.09em` on a `10px` font, i.e. 0.9dp.
+      // Spending `variant.label.letterSpacing` directly therefore tracks at
+      // 0.09dp — 10x too tight, visually none — so it is multiplied here.
+      // `buildTypeStyle` already does the matching conversion for the other
+      // relative token in the same struct via `resolveNativeLineHeight`
+      // (`fontSize * multiplier`); it has no `letterSpacing` counterpart, so
+      // every `variant.<name>.letterSpacing` consumer on this surface carries
+      // the same 1/fontSize error. Fixing that belongs in design-tokens, not
+      // in this primitive.
+      letterSpacing: theme.typography.variant.label.letterSpacing * LABEL_FONT_SIZE,
+      paddingVertical: LABEL_PADDING_VERTICAL,
+      paddingHorizontal: LABEL_PADDING_HORIZONTAL,
       textTransform: "uppercase",
     },
   });
