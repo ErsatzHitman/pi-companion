@@ -204,3 +204,46 @@ describe("work-group-row.tsx: W5-RUNHEAD design numbers reached through a token"
     expect(getNativeMotion(true).duration.moderate).toBeLessThan(200);
   });
 });
+
+describe("work-group-row.tsx: W6-RUNHEAD-BORDER — the dashed failure outline is gone", () => {
+  // ADDED this pass. Every CSS rule in
+  // `C:/Users/aksha/Downloads/pi-ui-goal/android-spec.html` whose selector
+  // names `.runhead` was enumerated against each block's OWN full selector
+  // — five: the base rule (quoted in the W5-RUNHEAD box-metrics tests
+  // above), a shared `cursor:pointer` selector list, the shared
+  // `.thead:hover,.runhead:hover{background:var(--hover)}`, and the
+  // chevron's `.runhead svg` and `.t.runfold .runhead svg` rules.
+  // (CORRECTED at the wave's merge gate: this said the set was pulled by a
+  // `grep -oE` whose character class excludes `:` and a space, and listed
+  // four. That class cropped the `:hover` rule and the `.t.runfold ` state
+  // prefix. The conclusion is unchanged — `:hover` sets `background` and
+  // nothing else.) None
+  // declares `border`, `box-shadow`, or `outline` in any state, and no
+  // `.runhead.fail`/`.runhead.err`/`.runhead.red` variant exists anywhere in
+  // the file — so the 1px dashed `line`/`red` outline this trigger drew
+  // before this pass had no basis in the confirmed design and is removed
+  // entirely, not just re-tinted.
+  it("draws the trigger with a single, unconditional style — no failure-tinted border variant", () => {
+    const code = readCode();
+    expect(code).toMatch(/style=\{styles\.trigger\}/);
+    expect(code).not.toMatch(/triggerFailed/);
+    expect(code).not.toMatch(/group\.hasFailure \? styles\./);
+  });
+
+  it("declares no borderWidth, borderStyle, or line/red borderColor on the trigger", () => {
+    const code = readCode();
+    expect(code).not.toMatch(/borderWidth/);
+    expect(code).not.toMatch(/borderStyle/);
+    expect(code).not.toMatch(/borderColor/);
+  });
+
+  it("still carries a failure signal in the label colour alone, since the border no longer can", () => {
+    // Same assertion the disclosure-semantics describe block above already
+    // makes for `labelTint`; repeated here under this task's own name
+    // because it is the fact that makes the border removal non-silent —
+    // colour, not the outline, is what a failed run reads by now.
+    expect(readCode()).toMatch(
+      /group\.hasFailure \? theme\.colors\.red : theme\.colors\["ink-2"\]/,
+    );
+  });
+});

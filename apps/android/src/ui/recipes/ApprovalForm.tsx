@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Button } from "../primitives/Button";
 import { asFontWeight, ringShadow } from "../theme/native-style-helpers";
 import { useTheme } from "../theme/theme-context";
+import { EXPRESSIVE_RADII } from "../theme/expressive-shape";
 
 export interface ApprovalFormProps {
   toolLabel: string;
@@ -67,12 +68,24 @@ export function ApprovalForm({
   );
 }
 
+/**
+ * `.card{...border-radius:var(--r-md);padding:12px 14px}`, measured
+ * directly against `C:/Users/aksha/Downloads/pi-ui-goal/android-spec.html`
+ * — this recipe draws its wrapper as the same `.card` surface `Card.tsx`
+ * draws, so it is repointed the same way and for the same reason: see that
+ * file's own doc comment. 14 has no `spacing` scale entry (steps
+ * `spacing[3]=12` -> `spacing[4]=16`), so the horizontal half stays a named
+ * literal.
+ */
+const WRAPPER_PADDING_HORIZONTAL = 14;
+
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
     wrapper: {
       gap: theme.spacing[2],
-      padding: theme.spacing[4],
-      borderRadius: theme.radii.card,
+      paddingVertical: theme.spacing[3],
+      paddingHorizontal: WRAPPER_PADDING_HORIZONTAL,
+      borderRadius: EXPRESSIVE_RADII.md,
       backgroundColor: theme.colors.surface,
       ...ringShadow(theme, "card"),
     },

@@ -35,12 +35,45 @@
  * land exactly on an existing token (`spacing[1]`, `radii.control`,
  * `typography.fontSize.base` via `typography.variant.body.fontSize`) and
  * use that token directly rather than re-wrapping it. `font-variant-numeric`
- * and the `.runhead` box's own dashed border/failure-tint chrome are
- * unchanged by this pass — the first is not one of the four deltas this
- * task's brief lists, and the second (this row's dashed outline, `.blk`'s
- * shape rather than a borderless `.runhead`) predates this task and this
- * task's brief never asks for it to be removed; see the file's own W5-
- * RUNHEAD report for both, rather than silently dropping either.
+ * is unchanged by this pass — it is not one of the four box-metric deltas
+ * this task's brief lists.
+ *
+ * ## W6-RUNHEAD-BORDER: the trigger's dashed outline had no basis in the
+ * confirmed design and was removed
+ *
+ * Every CSS rule in `android-spec.html` whose selector names `.runhead`
+ * was enumerated by matching each declaration block against its OWN full
+ * selector, rather than by a selector-shaped character class — five rules:
+ * the base rule quoted above; `.runhead,...{cursor:pointer}`, a selector
+ * list shared with several other components; `.thead:hover,.runhead:hover
+ * {background:var(--hover)}`, shared with the reasoning column; and the
+ * chevron's `.runhead svg{transition:transform .2s}` and `.t.runfold
+ * .runhead svg{transform:rotate(-90deg)}`.
+ *
+ * (CORRECTED, at the wave's merge gate: this said "four hits" and named a
+ * `grep -oE` whose character class excludes both `:` and a space. That
+ * class silently cropped the `:hover` rule and the `.t.runfold ` state
+ * prefix, so the count was short and "every selector" was not what the
+ * command measured. Two further hits the broader scan returns are the
+ * design's own `runheadTap(h)` function body and its `q('.runhead')` call
+ * site — JavaScript, not CSS rules, so the CSS count is five, not seven.
+ * The conclusion below is unchanged: `:hover` sets `background` alone.)
+ *
+ * None declares a `border`, `box-shadow`, or `outline` in any state, and no
+ * `.runhead.fail`/`.runhead.err`/`.runhead.red`-shaped variant exists
+ * anywhere in the file. The 1px dashed `line`/`red` outline this trigger
+ * drew before this pass (`.blk`'s own chrome, `ui/theme/block-shape.ts`)
+ * was therefore never part of this row's design and is removed, not just
+ * re-shaped. This is a real, visible change beyond a corner-radius or
+ * padding correction: the row now reads as plain inline text with no box
+ * around it, matching `.runhead`'s `display:inline-flex` with no border
+ * property at all. Failure is still legible without the outline — the
+ * label text itself already switches from `ink-2` to `theme.colors.red`
+ * on `group.hasFailure` (`labelTint` below), a colour change the design's
+ * own CSS never gated on the border either — but this was not re-verified
+ * on a device (no emulator in this workspace, the same disclosure the
+ * announcement paragraph below already makes), so a colour-only failure
+ * signal's real-world legibility is reported, not assumed adequate.
  *
  * The design's own `runheadTap(h)` script (quoted verbatim in the design
  * doc) does three things on every tap: toggles `.runfold` (this file's
@@ -162,7 +195,7 @@ function TranscriptWorkGroupHeadImpl({
         accessibilityState={{ expanded: !collapsed }}
         onPress={() => onToggle(group.id)}
         hitSlop={4}
-        style={[styles.trigger, group.hasFailure ? styles.triggerFailed : null]}
+        style={styles.trigger}
       >
         <Animated.View
           style={chevronStyle}
@@ -211,19 +244,20 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       // `.runhead{padding:4px 6px}`.
       paddingVertical: theme.spacing[1],
       paddingHorizontal: RUNHEAD_PADDING_HORIZONTAL,
-      borderWidth: 1,
-      borderStyle: "dashed",
-      borderColor: theme.colors.line,
       // `.runhead{border-radius:8px}` — `radii.control` (8), not the
       // shared `.blk` radius (`ui/theme/block-shape.ts`'s `BLOCK_RADIUS`,
       // 14) this trigger drew before W5-RUNHEAD: the two components have
       // different radii in the design, and this row is a `.runhead`, not
-      // a `.blk`.
+      // a `.blk`. This declares the design's own value; whether it is
+      // visible depends on `borderWidth`/`backgroundColor`, neither of
+      // which this trigger sets after W6-RUNHEAD-BORDER (see below).
       borderRadius: theme.radii.control,
     },
-    triggerFailed: {
-      borderColor: theme.colors.red,
-    },
+    // W6-RUNHEAD-BORDER: `.runhead` declares no `border`/`box-shadow` in
+    // any state (measured directly against `android-spec.html` — see this
+    // file's own doc comment), so the dashed `line`/`red` outline this
+    // trigger drew before this pass is gone, not just re-tinted. Failure
+    // is still carried by `labelTint` below turning the label text red.
     label: {
       flex: 1,
       // `.runhead{font:12.5px/1 ...}` — `typography.fontSize.base` (12.5),
