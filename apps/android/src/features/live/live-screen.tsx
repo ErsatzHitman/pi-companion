@@ -107,12 +107,16 @@ export interface LiveScreenProps {
  * `docs/ui-reference/pi-companion-app.html` rather than the confirmed
  * `android-spec.html`. Those two files are NOT the same document — their
  * md5s differ (`3ff70c21a0b512f169bad358608144f0` against the confirmed
- * design's `498c3bd38ac8da0636e0bc05b705a7be`), measured directly — and
- * under CLAUDE.md's "reference-only documents" corollary a file like that
- * is never authority for a product decision regardless. (`CLAUDE.md` names
- * no file under `docs/ui-reference/` anywhere; an earlier revision of this
- * comment cited a warning there that does not exist, so the evidence is
- * stated here instead of attributed.) See `CARD_TITLE_FONT_SIZE` below for the title
+ * design's `498c3bd38ac8da0636e0bc05b705a7be`), measured directly, so the
+ * four values were read off a document that is not this product's design.
+ * That measurement is the whole argument; no repository rule is needed or
+ * cited. (Two earlier revisions of this comment attributed one anyway —
+ * first a `CLAUDE.md` warning about `docs/ui-reference/`, then `CLAUDE.md`'s
+ * "reference-only documents" corollary as governing "a file like that ...
+ * regardless". Neither exists: `grep -c 'ui-reference' CLAUDE.md` is 0 and
+ * that section is a closed enumeration of 14 named files, none of them
+ * under that directory. The second revision contradicted its own next
+ * sentence, which already said so.) See `CARD_TITLE_FONT_SIZE` below for the title
  * size, kept as its own literal the same way `CARD_SUMMARY_SIZE` already
  * is: no token in `theme.typography.variant` sits at 13.
  */

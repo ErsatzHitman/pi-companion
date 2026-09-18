@@ -27,10 +27,17 @@ import { describe, expect, it } from "vitest";
  * all — grepped, not assumed — so that was a citation of repository law
  * that does not exist. The measured md5 difference above is the real
  * evidence, and it is stated here rather than attributed elsewhere.) The 40/44 confusion is corrected
- * here rather than merely reported, because this repository's own rule
- * (`CLAUDE.md`, "reference-only documents") treats an assertion this
- * concretely falsifiable, once it is caught, as a defect to fix rather
- * than a historical curiosity to preserve.
+ * here rather than merely reported for a reason that needs no rule behind
+ * it: this file is a test, its assertions are the contract, and one
+ * pinning a number the confirmed design does not declare is a failing
+ * contract whether or not it currently passes.
+ *
+ * (CORRECTED, CITE-TAIL: the sentence above used to ground that in
+ * "this repository's own rule (`CLAUDE.md`, \"reference-only documents\")".
+ * That section governs whether a frozen document may be cited as
+ * authority and whether it may be annotated; it says nothing about
+ * falsifiable assertions, so the attribution was invented — the same
+ * defect the paragraph above it is already correcting.)
  */
 function readSource(): string {
   return readFileSync(fileURLToPath(new URL("./Toggle.tsx", import.meta.url)), "utf8");
