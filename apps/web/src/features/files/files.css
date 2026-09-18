@@ -46,12 +46,11 @@
 }
 
 /**
- * `.srow` row grammar (UI-W7, docs/ui-reference/pi-companion-web.html):
- * the row wrapper is a plain flex container, not itself a link — the
- * `<li>` holds one real `<a>` (kind glyph + name + meta, the click/nav
- * target) plus a sibling `.pc-file-browser__row-actions` (rename/
- * delete/download icon buttons), so an icon button never nests inside
- * an anchor.
+ * Row grammar (UI-W7): the row wrapper is a plain flex container, not
+ * itself a link — the `<li>` holds one real `<a>` (kind glyph + name +
+ * meta, the click/nav target) plus a sibling
+ * `.pc-file-browser__row-actions` (rename/delete/download icon
+ * buttons), so an icon button never nests inside an anchor.
  */
 .pc-file-browser__row-item {
   display: flex;

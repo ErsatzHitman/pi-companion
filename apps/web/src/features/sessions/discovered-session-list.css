@@ -1,6 +1,6 @@
 /**
  * Discovered-session list styles (T27B5, plan.md §8.3/§10.2; restyled
- * at UI-W13 to the same `.srow`-family row grammar `features/files`'
+ * at UI-W13 to the same row grammar `features/files`'
  * `.pc-file-browser__row-item` and `SessionRail`'s
  * `.pc-session-rail__row` already use — a mono glyph column, a title,
  * and a mono meta line, with hairline separators between rows and a

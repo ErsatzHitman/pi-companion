@@ -20,8 +20,8 @@ export interface FileBrowserEntryListProps {
 }
 
 /**
- * The directory listing itself, in the app's `.srow` row grammar
- * (UI-W7, docs/ui-reference/pi-companion-web.html): a kind glyph plus
+ * The directory listing itself, in the row grammar `files.css`'s
+ * `.pc-file-browser__row-item` defines (UI-W7): a kind glyph plus
  * name on the left, mono size/modified metadata right-aligned in a
  * fixed column, and rename/delete (every row) plus download (file rows
  * only) revealed on hover/focus-within instead of standing full-width
