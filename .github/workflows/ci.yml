@@ -1120,16 +1120,21 @@ jobs:
 
   # --- Docker and Nix checks when their paths change -----------------------
   #
-  # T43A3 added the real packaging inputs, under `packaging/docker/` and
-  # `packaging/nix/` rather than the repository-root paths the `docker`/`nix`
-  # filters below were written for — so those two filters still match
-  # nothing, and `docker-checks`/`nix-checks` below (real `docker build`/`nix
-  # build`; neither toolchain runs anywhere else in this workflow) stay
-  # dormant. That is a distinct, still-open gap: pointing `docker`/`nix` in
-  # .github/ci-paths.yml at `packaging/docker/**`/`packaging/nix/**` so these
-  # two jobs actually run. It is not this section's `guard-docker-packaging-
-  # paths` job below, which T176 wires against the new `packaging` filter —
-  # see packaging/README.md's disclosure for the exact seam.
+  # CORRECTED (T397). This said T43A3's packaging inputs meant the
+  # `docker`/`nix` filters "still match nothing" and that the two jobs "stay
+  # dormant", and named repointing those filters as the whole remaining gap.
+  # The first half was true and is now fixed — .github/ci-paths.yml selects
+  # `packaging/docker/**` and `packaging/nix/**`. The second half was
+  # INCOMPLETE, and that is the part worth recording: both job BODIES were
+  # also written for repository-root paths (`docker build ... .` with no
+  # `-f`, and a bare `nix flake check`), so repointing the filters alone
+  # would have turned two jobs on and watched them fail on a missing file
+  # rather than on anything about the packaging inputs. A dormant job hides
+  # more than its trigger. Both bodies are corrected below alongside the
+  # filters. This is not this section's `guard-docker-packaging-paths` job,
+  # which T176 wires against the `packaging` filter — that one has always
+  # run, which is exactly why the static guard stayed green while the two
+  # real build jobs never executed at all.
   #
   # guard-docker-packaging-paths (T176) runs the static packaging guard
   # (scripts/ci/run-guard-docker-packaging-paths.mjs, T43A3/T174) — it reads
@@ -1224,8 +1229,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # T397: this said `docker build -t picompanion-ci-check .`, with no
+      # `-f`. There is no repository-root Dockerfile, so the job could not
+      # have passed even once the filter above began selecting it — the
+      # build context IS the root (the Dockerfile's own `COPY . .` and the
+      # root `.dockerignore` are both written for that), but the file has
+      # to be named explicitly. `guard-docker-packaging-paths.mjs` already
+      # documented this exact invocation.
       - name: Build Docker image
-        run: docker build -t picompanion-ci-check .
+        run: docker build -f packaging/docker/Dockerfile -t picompanion-ci-check .
 
   nix-checks:
     name: nix-checks
@@ -1235,8 +1247,16 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: cachix/install-nix-action@ba0dd844c9180cbf77aa72a116d6fbc515d0e87b # v27
+      # T397: this said a bare `nix flake check`, which resolves the flake
+      # in the working directory — and there is no repository-root
+      # `flake.nix`, so it could not have passed either. The flake takes no
+      # `checks` output, so this evaluates `packages.default` and
+      # `devShells.default` without building them; `packages.default`'s
+      # `npmDepsHash` is still `pkgs.lib.fakeHash`, which fails at FETCH
+      # time rather than evaluation time, and packaging/nix/README.md
+      # records that as unverified.
       - name: Evaluate flake
-        run: nix flake check
+        run: nix flake check ./packaging/nix
 
   # T124 (scope corrected T186 — this comment, the job name, and the step
   # name below said "packages/client/src" ships and "apps/web/src or

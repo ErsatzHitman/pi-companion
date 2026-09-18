@@ -84,6 +84,18 @@ functional defect in the path this task built.
 this file:**
 
 - That `docker build` actually completes against this Dockerfile.
+
+  **T397 note:** this bullet is the reason `docker-checks` was wired to run
+  at all. Until T397 that job could not fire — `.github/ci-paths.yml`'s
+  `docker` filter selected only repository-root paths, and the job body ran
+  `docker build ... .` with no `-f`, so it would have failed on a missing
+  file even once the filter matched. Both are corrected, and this README is
+  one of the files whose change selects the job, so the run that lands T397
+  is the first real answer this bullet has ever had. Whatever that run says
+  is recorded in `docs/issues-from-plan.md`'s T397 section — including a
+  red one, since a first execution with no track record is the whole point
+  of observing it rather than assuming it.
+
 - That `npm ci` resolves and installs cleanly inside the `node:22.23.1-bookworm-slim`
   image (in particular, that `node-pty`'s `node-gyp rebuild` fallback
   succeeds with only `python3 make g++ git` installed, and that

@@ -50,18 +50,26 @@ does and does not prove — T174 changed those assertions in the same wave
 this disclosure was updated, so this file intentionally does not enumerate
 them; they are the guard's business, not this README's.
 
-What is still genuinely undone, and was never this task's scope: no CI job
-runs a real `docker build` or `nix build` against these packaging paths.
-`.github/workflows/ci.yml` already defines `docker-checks` (`docker build`)
-and `nix-checks` (`nix flake check`) jobs, gated on `docker`/`nix` outputs
-from `.github/ci-paths.yml` — but those two filters still only match a
-repository-root `Dockerfile`/`docker/**` and `flake.nix`/`nix/**`, the
-convention they were written under before this task's packaging landed
-under `packaging/docker/` and `packaging/nix/` instead. So `docker-checks`
-and `nix-checks` never trigger on a `packaging/**` change today, and remain
-exactly as dormant as before T176. The exact seam to close that: point
-`docker`/`nix` in `.github/ci-paths.yml` at `packaging/docker/**` and
-`packaging/nix/**` respectively (or fold them into the `packaging` filter
-above and gate those two jobs on it too). This is real, undone work; it is
-not filed as a task ID here because `docs/issues-from-plan.md` is out of
-scope for this task.
+CORRECTED (T397). This paragraph said no CI job runs a real `docker build`
+or `nix build` against these packaging paths, that the `docker`/`nix`
+filters in `.github/ci-paths.yml` "still only match a repository-root
+`Dockerfile`/`docker/**` and `flake.nix`/`nix/**`", that both jobs "remain
+exactly as dormant as before T176", and that the exact seam to close was
+repointing those two filters. Every one of those statements was true when
+written and the first three are now fixed. The fourth was INCOMPLETE, which
+is the part worth keeping: repointing the filters was necessary and not
+sufficient, because both job BODIES were also written for repository-root
+paths — `docker build -t picompanion-ci-check .` with no `-f`, and a bare
+`nix flake check` — so a filter-only fix would have started two jobs and
+watched each fail on a missing file rather than on anything about the
+inputs here. T397 corrected the filters and both bodies together.
+
+What is genuinely undone is now narrower and is named rather than implied:
+`packaging/nix/flake.nix` still carries `npmDepsHash = pkgs.lib.fakeHash`,
+a placeholder its own header discloses. `nix flake check` EVALUATES the
+flake's outputs without building them, and this flake declares no `checks`
+output, so that placeholder is not reached by the CI job as wired — but
+`nix build .#default` would still fail on it, and nothing in CI covers that
+today. Substituting a real hash needs someone who can run `nix` locally.
+The task ID for the CI half is T397 in `docs/issues-from-plan.md`; the
+hash half remains unfiled work for whoever has a `nix` binary.

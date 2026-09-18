@@ -115,14 +115,25 @@ packaging:
 # ci.yml's "Docker and Nix checks" section comment and packaging/README.md's
 # disclosure for the exact seam.
 docker:
+  # T397: the four repo-root patterns below matched nothing this repository
+  # contains, so `docker-checks` reported `skipped` on every run from T43A3
+  # until this entry was corrected. They are kept because a root `Dockerfile`
+  # would still be a docker change if one were ever added; the two
+  # `packaging/` entries are the ones that actually select today's inputs.
   - "Dockerfile"
   - "Dockerfile.*"
   - "docker/**"
   - "docker-compose*.yml"
+  - "packaging/docker/**"
+  - ".dockerignore"
   - ".github/workflows/docker.yml"
 
 nix:
+  # T397, same correction as `docker` above: the real flake lives at
+  # packaging/nix/flake.nix, which none of the three repo-root patterns
+  # below can match.
   - "flake.nix"
   - "flake.lock"
   - "nix/**"
+  - "packaging/nix/**"
   - ".github/workflows/nix.yml"

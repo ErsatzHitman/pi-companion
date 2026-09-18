@@ -47,6 +47,21 @@ this file:**
 - That `nix build` or `nix develop` parse and evaluate this flake at all
   (Nix's own error messages for a malformed flake are often only legible
   once you can actually run `nix flake check`).
+
+  **T397 note:** CI now runs exactly that command. Until T397 the
+  `nix-checks` job could not fire — `.github/ci-paths.yml`'s `nix` filter
+  selected only repository-root paths, and the job body ran a bare `nix
+flake check`, which resolves the flake in the working directory and would
+  have failed on a missing `flake.nix` even once the filter matched. Both
+  are corrected (`nix flake check ./packaging/nix`), and this README is one
+  of the files whose change selects the job. Note what that does and does
+  not settle: `nix flake check` EVALUATES outputs, and this flake declares
+  no `checks` output, so a green run answers this bullet and nothing more.
+  The `npmDepsHash` placeholder below is a FETCH-time failure and is not
+  reached by it — `nix build .#default` remains unverified, and still needs
+  someone with a `nix` binary. The run's conclusion is recorded in
+  `docs/issues-from-plan.md`'s T397 section either way.
+
 - The real `npmDepsHash` (see above).
 - Whether `sherpa-onnx-node`'s platform-specific optional-dependency
   binary and `node-pty`'s `node-gyp rebuild` fallback succeed inside Nix's
