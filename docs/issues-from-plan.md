@@ -23719,3 +23719,97 @@ font-size: 12px; line-height: 1.62 }`. `.ln` declares no font in `android-spec.h
 Confirmed as recorded decisions rather than gaps, re-checked this wave: settings-as-route (not the
 spec's 420px sheet), the absent SHA chip (no wire response carries one), the missing dictate button,
 the Build/Plan group, the sub-860px stacked tier, and the four per-agent Settings rows Android omits.
+
+## Wave P10-W18 (the three files the reader-partition reached that the file-partition had missed)
+
+Three implement packages, three verifiers, two read-only scouts, one gate — 9 agents, 0 errors, one
+workflow, no red pass. P10-W18's partitions were drawn by READERS, per P10-58, and the gate's
+partition check came back clean on the first attempt: 6 changed paths, all inside the union. Green at
+CI run **35333704742** (success, `cf828f3`).
+
+### P10-60: the same wrong document, three files further out
+
+Every defect this wave fixed is P10-57's, in a file that sat outside wave 17's partitions:
+
+| Package   | What the confirmed spec says                                                                     | What shipped                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| AND-EXT   | `.blk{padding:9px 12px}`, and `.blk.ext{background:var(--ext-bg)}` is its ONLY `.blk.ext` rule   | a local `EXTENSION_BLOCK_PADDING_HORIZONTAL = 11` whose comment cited the other document, plus the phantom `--sh-hairline` ring |
+| AND-THINK | `.think{padding:2px 2px 0;font:italic 12.5px/1.6 Inter,system-ui,sans-serif;color:var(--ink-2)}` | a 2px `line-strong` left rule, `1px 0 1px 11px`, mono, `12px`×1.62, `ink-3`                                                     |
+| AND-FOOT  | `.fbar i{...transition:width .4s cubic-bezier(.23,1,.32,1)}`                                     | the fill snapped                                                                                                                |
+
+Two things are worth keeping beyond the values.
+
+**`.ln { font-size: 12px; line-height: 1.62 }` has now been found cited in three separate files** —
+`features/transcript/tool-call-row.tsx`, `ui/recipes/StreamingMessage.tsx`, and
+`ui/recipes/ThinkingSection.tsx` — and it exists in none of them's authority. `.ln` declares no font
+at all. The real rule differs per component: the transcript's `.t` is `12.5px/1.62`, `.think` is
+`12.5px/1.6`. A citation repeated across three files is not three mistakes; it is one mistake copied,
+and the copy is what makes it look verified.
+
+**AND-EXT's ring was the last one.** The other six `ringShadow(theme, "card")` call sites under
+`apps/android/src` are `.card`/`.row`/`.sbar` surfaces, and the confirmed spec really does give all
+three `box-shadow: var(--shadow-card)` — checked per call site rather than swept.
+
+**`THEAD_GAP` is a correction of a correction.** UI-X8 replaced that row's `spacing[2]` token with a
+literal because no token holds the artifact's figure. The non-token decision was right; the digit was
+read off the wrong document. It is 7, not 6.
+
+### P10-61: the thinking-effort segmented control is closed WILL-NOT-DO, with a reason
+
+`web-spec.html` renders the effort control as `.seg` — a segmented control over a hardcoded, closed
+five-value enum (`low`/`med`/`high`/`xhigh`/`max`). The app's `ModelThinkingPicker` keeps a native
+`<select>`. A read-only scout was asked whether to swap it, and returned WILL-NOT-DO on two
+independent grounds, either of which is sufficient:
+
+1. **The option set is dynamic.** `use-model-thinking.ts`'s own doc comment on
+   `AgentModelOption.thinkingOptions` records that different models under one provider support
+   different reasoning levels or none, and `agent-turn-client.ts` declares
+   `thinkingOptions?: readonly AgentThinkingOption[]` per model, fetched at runtime.
+   `thinkingSelectOptions` then adds a synthetic "Automatic (provider default)" entry and a
+   conditional "(unavailable)" entry for a stale selection. The real count runs from 1 (automatic
+   only) to unbounded — never the spec's fixed 5.
+2. **This codebase already decided the fixed-vs-dynamic question.** `QueueModePicker.tsx`'s own
+   header, written by the one task that ever wired `SegmentedControl`, states the rule:
+   `SegmentedControl` "models a fixed set of real values with a sliding highlight, not an open-ended
+   'we don't actually know yet' placeholder". `QueueModePicker` swaps only its two literal hardcoded
+   modes and keeps every other branch on the `<select>`. `ModelThinkingPicker` has no
+   known-fixed-set branch to carve out, because its known set is itself per-model and fetched.
+
+The accessibility direction also runs the wrong way: a labelled `<select>` announces as one form
+field with its current value visible unopened and needs no custom key handling; an `aria-pressed`
+button group over a runtime-varying list would have to reimplement all of it.
+
+**A reviewer could disagree** by arguing the app should present the five spec levels as the fixed
+vocabulary and map each model's real support onto it — that is a product decision about what the
+control MEANS, not a styling fix, and it is not one this wave is entitled to make on its own.
+
+### P10-62: the session-controls popover is scoped and ready, and its real cost is the focus contract
+
+The same scouting pass returned DO-IT for the popover, with the file list and the one genuine design
+decision named. `web-spec.html`'s `.menu` is `position:absolute; bottom:calc(100% + 10px); left:0;
+width:336px; border-radius:12px; padding:6px; box-shadow:var(--sh-overlay)` — anchored and undimmed.
+The app opens a modal sheet behind a full-viewport scrim.
+
+The inner content already matches: `.pc-composer__session-controls` and its four
+`.pc-composer__ring-group` children mirror the reference's `.menu-g`/`.menu-l` verbatim, and
+`.pc-composer` is already `position: relative`. Only the outer wrapper is wrong, and `Popover.tsx` —
+already named beside `Sheet` and `Dialog` in plan.md §10.3 — encodes most of the non-modal contract.
+
+What makes it a real task rather than a swap, split by where each half actually lives — checked,
+because the scout attributed all of it to one file: `use-modal-behavior.ts`'s own header states, and
+its code does, "moves focus into the panel on open, restores it to the trigger on close, traps
+`Tab`/`Shift+Tab` within the panel, and closes on `Escape`". `role="dialog"` and `aria-modal="true"`
+are `Sheet.tsx`'s own attributes, not the hook's. `Popover.tsx` already renders `role="dialog"` with
+an `aria-label` and no `aria-modal`, which is the shape an anchored popover wants. An
+anchored undimmed popover drops the trap and the scrim by definition. Which of the rest it must keep
+is a contract to be stated and asserted, not inherited — and
+`apps/web/e2e/keyboard-navigation.spec.ts` currently narrates the OLD trap, so it has to assert the
+new contract rather than be deleted.
+
+### What the scouts did not touch
+
+Both scouts were read-only and wrote nothing, so neither item cost a line of source this wave. Still
+open, unchanged from P10-W17's list: the Settings screen's discrete-pill-per-row structure, and
+`.thead`'s `margin: 0 0 4px -4px` — deliberately not landed by AND-THINK because nothing measured how
+a negative `marginLeft` interacts with the wrapper's own padding or with plan.md §9.3's 48dp touch
+floor on that row. Approximating it silently is exactly what this wave's other findings are about.
