@@ -203,4 +203,33 @@ describe("primitives.css (declared rule text, not getComputedStyle)", () => {
     expect(checked).toMatch(/background-color:\s*var\(--color-accent\)/);
     expect(checked).not.toMatch(/--color-accent-tint/);
   });
+
+  /**
+   * Pins the mockup's `.sw` track (34 x 20px) and `.sw i` knob (16 x 16px)
+   * box metrics (C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html) — this
+   * rule used to ship a 36 x 22px track (2.25rem x 1.375rem) with an 18px
+   * knob (1.125rem), one size step off the mockup in both dimensions.
+   */
+  it("sizes pc-toggle's track at 34x20px and its knob at 16x16px", () => {
+    const track = ruleBodyFor(".pc-toggle");
+    expect(track).toMatch(/width:\s*2\.125rem/);
+    expect(track).toMatch(/height:\s*1\.25rem/);
+    const knob = ruleBodyFor(".pc-toggle__knob");
+    expect(knob).toMatch(/width:\s*1rem/);
+    expect(knob).toMatch(/height:\s*1rem/);
+  });
+
+  /**
+   * Pins the checked knob's travel and the knob's inset unchanged by the
+   * box-metric fix above: both are correct under the new 34 x 20px track /
+   * 16px knob geometry by the same arithmetic that made them correct under
+   * the old 36 x 22px / 18px one (track - knob - 2*inset = 14px either way).
+   */
+  it("keeps pc-toggle's knob travel and inset unchanged by the box-metric fix", () => {
+    const knob = ruleBodyFor(".pc-toggle__knob");
+    expect(knob).toMatch(/top:\s*0\.125rem/);
+    expect(knob).toMatch(/left:\s*0\.125rem/);
+    const checkedKnob = ruleBodyFor('.pc-toggle[aria-checked="true"] .pc-toggle__knob');
+    expect(checkedKnob).toMatch(/transform:\s*translateX\(0\.875rem\)/);
+  });
 });
