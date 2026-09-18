@@ -653,6 +653,7 @@ that recomputation has to be domain-specific:
 | T394   | The install doc told a user to run a command whose package has never been published                                     | phase-9   | docs             | P9-W   | —                                                                     |
 | T395   | A checkpoint could be taken but no client or screen could ask to restore one, or answer a conflict                      | phase-9   | frontend         | P9-W   | T383                                                                  |
 | T396   | A Windows-only stall failed one test in the server suite at its 30s budget twice, and left a locked temp dir behind     | phase-9   | tooling          | P9-W   | T240                                                                  |
+| T397   | Two CI jobs that run a real `docker build` and `nix build` have never once been able to fire                            | phase-9   | tooling          | P9-W   | T43A3, T176                                                           |
 | T50    | Decide how the agent's configured surface is exposed                                                                    | phase-7   | docs             | P7-W2  | T10                                                                   |
 | T51A   | Audit the Pi RPC mirror and decide what to carry                                                                        | phase-7   | daemon           | P6-W11 | T10, T38A0, T38B0c                                                    |
 | T51B   | Add a drift-detection test for the Pi RPC mirror                                                                        | phase-7   | daemon           | P7-W3  | T51A                                                                  |
@@ -694,7 +695,9 @@ that recomputation has to be domain-specific:
 | T58B   | Keep the generated validator out of browser bundles                                                                     | phase-4   | core             | P4-W16 | T58                                                                   |
 | T58C   | Make the browser validator fix apply to Android too                                                                     | phase-5   | android          | P5-W2  | T58B                                                                  |
 
-**604 tasks** (distinct IDs counted directly from the table above), eight past the **596** at T387 — the first count to grow past the P9-V wave, whose T384–T387 rows were the last filed before this one — four past the **592** at T383, one past the **591** at T382 — verified, not assumed: `grep -o "^| T[0-9A-Za-z]*"` over the table's rows yields 598 hits minus the two prose rows `| This` and `| That` from a non-task table, i.e. 596 distinct IDs — two past the **589** at T380, three past the **588** at T379, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
+**606 tasks** (distinct IDs counted directly from the table above, recounted at the P10-W15 close-out on top of `c1c31ec`), which is **605** as the table stood when that recount ran plus T397 filed by the same wave — two past the **604** the line was left at, ten past the **596** at T387 — the first count to grow past the P9-V wave, whose T384–T387 rows were the last filed before this one — four past the **592** at T383, one past the **591** at T382 — verified, not assumed, and the RECIPE is corrected here because its two halves had drifted apart: `grep -o "^| T[0-9A-Za-z]*"` run over the WHOLE FILE yields 607 hits, of which two are the prose rows `| This` and `| That` belonging to non-task tables far below the master table, leaving 605; the same grep bounded to the master table's own row range yields 605 directly, and `sort -u` over it leaves 605, so no ID is duplicated. Both methods agree today. The older wording — 598 hits minus two prose rows, i.e. 596 — conflated a whole-file count with a table count, which is exactly how a recipe stops reproducing the number it claims to verify. Run the bounded form; it needs no subtraction
+
+The recount at P10-W15 also closed the reason the two figures had diverged: the table held one row, T394, with no task-detail section at all, so a count taken over sections answered 604 while a count taken over rows answered 605. Both counts were honest and they were counting different things. T394's section is now written, and **every row in the table has one** — checked by differencing the two sorted lists, not by comparing their totals, since two equal totals can still disagree row by row. — two past the **589** at T380, three past the **588** at T379, two past the **577** at T368, two past the **576** at T367, two past the **575** at T366, two past the **574** at T365, two past the **573** at T364, two past the **572** at T363, two past the **571** at T362, two past the **570** at T361, two past the **569** at T360, two past the **568** at T359, two past the **567** at T358, two past the **566** at T357, two past the **565** at T356, two past the **564** at T355, two past the **563** at T354, two past the **562** at T353, two past the **561** at T352, two past the **560** at T351, two past the **559** at T350, two past the **558** at T349, two past the **557** at T348, two past the **556** at T347, two past the **555** at T346, two past the **554** at T345, two past the **552** at T343, two past the **551** at T342, three past the **549** at T340, four past the **547** at T338, four past the **545** at T336, four past the **541** at T332, one past the **540** at T331, six past the **535** at T326, 73 rows past the **462** recounted at the P9-C
 merge gate, which is how far this hand-maintained tally had drifted in the meantime, exactly the
 shape `CLAUDE.md`'s T217 section names it as the likeliest site for — the commit that filed
 `T250` and `T251`, two rows past the **460** recounted at the
@@ -18792,6 +18795,16 @@ Checked by reading that predicate, not assumed.
 - [x] Nothing here claims to be evidence about what TalkBack speaks
 - [ ] A human runs the pass against a signed release candidate and appends a Pass log entry
 
+**Left open at the P10-W15 close-out, and this is the reason rather than an omission.** No agent can
+close this box. It needs a person with a screen reader running against a SIGNED release candidate,
+and both halves are out of reach: this repository's Android CI builds are dry-run/unsigned, and a
+Maestro flow can drive the controls but cannot hear what TalkBack speaks — which is the distinction
+this task's own fourth box ("Nothing here claims to be evidence about what TalkBack speaks") was
+filed to protect. A reviewer could disagree by arguing that a mechanical flow sampling every control
+is close enough to tick; that is the argument this task already rejected, and ticking on those
+grounds would put a false Pass log entry in a runbook whose whole value is that its entries were
+observed. Everything this task CAN deliver is done and ticked above.
+
 #### T374 — The owner's release checklist still asked for a secret that had been configured, and named no project id
 
 `labels: phase-9, area: docs` · `depends-on: T373`
@@ -18857,6 +18870,14 @@ with no shippable member there is nothing for an entry to key on.
 - [x] The pin was watched failing, then restored from a scratchpad copy
 - [x] Nothing here asserts anything about the remote EAS project's current state
 - [ ] The owner runs §4 steps 2, 4 and 5, and the run id and conclusion are recorded here
+
+**Left open at the P10-W15 close-out, for the same class of reason as T373's last box.** These three
+steps run against the owner's own expo.dev account and produce a run id only that account can see.
+An agent has no credential for it and must not acquire one, and this brief's own hard rules put
+owner-account actions off limits. A reviewer could disagree by arguing the runbook should not carry
+an unticked box at all; the counter is that deleting it would erase the one thing still owed, which
+is the failure mode this ledger repeatedly records. The parts that do not need expo.dev — naming the
+project id, pinning it to the config with a test, watching that pin fail — are done and ticked.
 
 #### T375 — The authoritative spec described an Android session screen that twenty-three tasks had replaced
 
@@ -19075,7 +19096,7 @@ real 48dp fixes under a task whose subject is a different file; it is filed as T
 - [x] Every derived set has a floor, so an empty loop fails rather than passing silently
 - [x] Three mutations watched failing by name, restored from scratchpad copies
 - [x] The ledger prose this change falsifies is corrected where it stands
-- [ ] The identical shape in `touch-targets.test.ts`'s component list is closed — filed as T378
+- [x] The identical shape in `touch-targets.test.ts`'s component list is closed — filed as T378, which landed at `6c55c13` (ticked at the P10-W15 close-out, where the commit was confirmed an ancestor of `main`)
 
 #### T378 — The 48dp audit's component list was the last curated list, and a screen shipped tomorrow joined it by memory
 
@@ -19313,7 +19334,7 @@ entry would be inert on the shipping side.
 - [x] The circular exclusion is named as circular and removed, with the sound reason kept
 - [x] The dated wave headers are deliberately left alone, and that line is stated
 - [x] `guard-capability-prose` exits 0 with the new quotations in place, run rather than reasoned about
-- [ ] The four flows actually run — filed as T381, since correcting the reason is not the same as removing it
+- [x] The four flows actually run — filed as T381, which landed at `a94012d` and closed out at `9f12d23` (ticked at the P10-W15 close-out; both commits confirmed ancestors of `main`, and T381's own section records that two of the four stay deliberately unobserved, which is the decision this box was waiting on)
 
 #### T381 — Four flows have never run because no shard owns them, and correcting the reason did not give them one
 
@@ -19518,6 +19539,15 @@ Supernova source files by symbol name, never by line number, per the T269 rule).
 - [x] `docs/T383-provenance.md` + `THIRD_PARTY_NOTICES.md` row + per-file headers name the Supernova source paths and commit
 - [x] `plan.md` §4.2 carries the decision record and the shipped code cites it
 - [ ] `npm run test:unit --workspace=@picompanion/server` 3× green locally, typecheck + oxlint + oxfmt clean, push with a Maestro dispatch read
+
+**Left open at the P10-W15 close-out, deliberately, and the distinction matters.** The PUSH half is
+proven: T383's six commits (`9344932`, `f346313`, `1cd680e`, `329576a`, `06bd2c4`, `72ba66f`) are all
+ancestors of `main`, and `main` has been green many waves past them. The LOCAL half — the same
+command run three times on one commit, all three exit codes read by hand — was never recorded, and
+T240 exists in `CLAUDE.md` precisely because this package's local command has disagreed with itself
+three ways on one commit with zero assertion failures. Ticking this box now would assert an
+observation nobody made. It is left open as a procedural record, not as a product gap: nothing in
+T383's shipped behaviour is missing.
 
 **Evidence, measured.** `npx vitest run packages/server/src/server/agent/checkpoints
 packages/server/src/server/agent/rewind --bail=1` → 2 files, 11 tests passed;
@@ -19933,6 +19963,101 @@ and web typechecks exit 0. Committed as `8e7dc65`, merged as `4c88e47`.
 - [x] A restore never re-stamps `cachedAt`, with a test that advances the clock past the write
 - [x] The banner is honest about being offline and about when the copy was saved
 - [x] `/h/:serverId` is a real landing, and every test that pinned the placeholder is re-anchored
+
+#### T394 — The install doc told a user to run a command whose package has never been published
+
+**Written at the P10-W15 close-out, not at the time.** T394 is the one master-table row in this file
+that shipped without a detail section — it is why the table held 605 rows against 604 sections, and
+why the tally line beside the table read 604. It landed at `46ad818` (`docs/clean-install-and-rollback.md`,
+`memory.md`); this section is reconstructed from that commit's own diff, and says so rather than
+pretending to be contemporaneous.
+
+**The defect.** §B.3's install step was a single `npm install -g @picompanion/cli`. Nothing that
+command needs is on the registry: `npm view @picompanion/cli version` answers `E404 Not Found`, and
+every workspace package the install would resolve (`@picompanion/client`, `protocol`, `server`,
+`relay`, `highlight`) is unpublished too. There is no npm-publish workflow in this repository, and
+publishing would need an npm account owning the `@picompanion` scope plus a token — owner-supplied
+credentials this repository does not carry. So the doc's headline instruction could not succeed for
+anyone, and its "what you should see" line described output that command never produced.
+
+**The fix, and why it is a doc change rather than a publish.** The section now documents the
+from-source path, verified end to end on 2026-09-12 at `bd366dd`, with the real commands and their
+real output. Two measured details are what make it a record rather than a rewrite:
+
+- **Six builds, not one.** `@picompanion/cli`'s own build script already builds `protocol`, `client`
+  and `server`, but the daemon imports `@picompanion/relay` and `@picompanion/highlight` as
+  workspace packages and a fresh checkout has no `dist/` for either. Skipping them fails with
+  `ERR_MODULE_NOT_FOUND: Cannot find module ...@picompanion/highlight/dist/index.js` — which is what
+  the first run of the verification actually printed, not a predicted failure.
+- **`added 1698 packages in 30s`**, measured, replacing a claim of "N in the low hundreds" that
+  described installing one package rather than the whole repository.
+
+**The container path was deliberately NOT offered as verified**, and that disclosure is what
+P10-W15 turned into its own task. `packaging/docker/README.md` and `packaging/nix/README.md` carry
+real build steps, but no CI job has ever run `docker build` or `nix build` against them. See T397.
+
+##### Acceptance criteria
+
+- [x] No install step names a package that `npm view` cannot resolve
+- [x] The from-source path is the one that was executed, at a named commit, with its real output
+- [x] The build ORDER is justified by the failure that skipping a step actually produced
+- [x] An unverified path is labelled unverified rather than omitted or quietly presented as tested
+- [x] A detail section exists for this row (closed at P10-W15; the row had shipped without one)
+
+#### T397 — Two CI jobs that run a real `docker build` and `nix build` have never once been able to fire
+
+**Filed at the P10-W15 close-out.** `.github/workflows/ci.yml` defines `docker-checks` (a real
+`docker build`) and `nix-checks` (a real `nix flake check`). Neither toolchain runs anywhere else in
+the workflow, so these two jobs are the only thing that would ever exercise the packaging inputs as
+inputs rather than as text.
+
+**Measured, not inferred.** `.github/ci-paths.yml`'s `docker` filter lists `Dockerfile`,
+`Dockerfile.*`, `docker/**`, `docker-compose*.yml`, `.github/workflows/docker.yml`; its `nix` filter
+lists `flake.nix`, `flake.lock`, `nix/**`, `.github/workflows/nix.yml`. T43A3 put the real inputs at
+`packaging/docker/Dockerfile` and `packaging/nix/flake.nix`. `docker/**` does not match
+`packaging/docker/**`, and `nix/**` does not match `packaging/nix/**`, so both filters match nothing
+this repository contains. On run `35284514824` both jobs report `skipped`, as they have on every run.
+
+This is the "a check that cannot fail" shape this repository has closed four times inside
+`guard-capability-prose.mjs`'s scope boundary and once at its tracking boundary (P10-35) — here it
+sits one layer further out, at the CI path filter, where no guard in `scripts/ci` can see it because
+nothing in `scripts/ci` reads `ci-paths.yml`'s filters against the tree they are supposed to select.
+
+**It was already disclosed twice and tracked nowhere.** `ci.yml`'s own comment calls it "a distinct,
+still-open gap" and names the exact fix; `packaging/README.md` says the two jobs "remain exactly as
+dormant as before T176". Neither disclosure had a task ID or a master-table row, which is how a
+known gap survives every subsequent audit: a reader greps the ledger, finds nothing, and concludes
+there is nothing to find.
+
+**The decision, and why it is not simply "point the filters at `packaging/**`".** That one-line
+change is the named fix and is almost certainly correct. What makes it more than a one-liner is that
+these jobs have NEVER executed. Turning them on puts a first-ever container build and a first-ever
+flake check in front of `main`, and a first run of anything has no track record. Two failure modes
+follow, and they need different answers:
+
+1. **The fix lands but changes nothing observable.** A filter only fires when a matching path
+   changes. Repointing the filters in a commit that touches nothing under `packaging/` leaves both
+   jobs skipped again, and the fix ships unproven — the same inert shape one level up.
+2. **The fix lands, the jobs run, and one goes red.** `main` is then red on a job that has never
+   passed, and this brief's first completion gate treats local green with CI red as a failed
+   iteration.
+
+So the fix must be landed **together with a real change under `packaging/`**, in its own commit
+separate from any feature work, so the first run is observed rather than deferred, and so a red
+result is attributable to exactly one change and revertible on its own. A reviewer could disagree
+and argue the filters should be repointed immediately as an obvious correction, accepting whatever
+CI says; the counter is that an unobserved first run is how this repository acquired the dormant
+jobs in the first place.
+
+##### Acceptance criteria
+
+- [ ] `docker` and `nix` in `.github/ci-paths.yml` select the real `packaging/docker/**` and
+      `packaging/nix/**` inputs
+- [ ] The landing commit also touches a path each filter selects, so both jobs actually run
+- [ ] The first run's id and per-job conclusion are recorded here — including a red one
+- [ ] If either job is red, the measured failure is recorded and the filter change is reverted on
+      its own rather than left gating `main`
+- [ ] `ci.yml`'s and `packaging/README.md`'s disclosures are corrected to match the outcome
 
 #### T395 — A checkpoint could be taken but no client or screen could ask to restore one, or answer a conflict
 
@@ -23064,3 +23189,234 @@ all three declared in one shipped file, and each alone proves nothing: an offset
 padding is a panel still drawn at the wrong size, an entrance without either animates a panel
 sitting where the old default put it. Proven able to fire before being trusted, then restored from
 a scratchpad copy.
+
+## Wave P10-W15 (ledger completeness audit + the spec's `.pad` entrance)
+
+Two packages. The second is an implementation; the first is the one the goal named — read
+`docs/issues-from-plan.md` to the end and establish, with commands rather than assertion, what in it
+is actually still open.
+
+### P10-47: the completeness audit, and why the two obvious oracles both lie
+
+The question "what in this ledger is not done" has two tempting mechanical answers. Both are wrong
+here, and saying why is the durable part.
+
+**Oracle 1 — `git log`. Unusable before 2026-09-06.** Cross-referencing all 605 master-table IDs
+against every commit message reports **312 IDs with no commit**, which would read as half the
+project being unbuilt. It is an artifact: this repository's history begins at `ac367b9`
+("Recovered baseline: working tree at the post-P6-W24 state"), because the P6-W24 merge gate deleted
+`.git/` and history was not recoverable. `git rev-list ac367b9 --count` is 1. Every task that landed
+before that date has a real, shipped deliverable and no surviving commit message. **Presence in
+`git log` proves a task landed; absence proves nothing about anything older than the recovery.**
+
+**Oracle 2 — unchecked acceptance boxes. Uninformative before roughly T296.** The file carries 1682
+`- [ ]` boxes against 774 `- [x]`, which again reads as mostly-unfinished. Counted by region:
+
+| Lines       | unchecked | checked |
+| ----------- | --------- | ------- |
+| 1–5000      | 560       | 64      |
+| 5000–10000  | 475       | 60      |
+| 10000–14000 | 574       | 16      |
+| 14000–18000 | 68        | 281     |
+| 18000–end   | 5         | 353     |
+
+The ratio inverts at about line 14000. Ticking boxes became a convention partway through the
+project; before that, acceptance criteria were written and the work was done without anyone
+returning to the checklist. `- [ ]` in a Phase 0–5 section therefore carries **no information** about
+whether that task shipped, and no future reader should treat it as a backlog. Boxes from T296
+onward do mean what they say.
+
+**What was actually used: the behaviour search, per P10-29.** For every candidate the two oracles
+flagged, run one command that would find the BEHAVIOUR, never the document's name for it. Ten
+master-table IDs survived both filters — every ID whose planned wave was post-recovery (`P7-*`,
+`P8-*`) or which git had never seen and whose section still carried live boxes. All ten are shipped:
+
+| ID     | Title                                                | The command that found it shipped                                                                                                       |
+| ------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| T41A1b | Detect file write conflicts                          | `file-edit-model.ts` classifies a `"conflict"` `FileWriteResult` for a lost optimistic-concurrency race                                 |
+| T41A2  | Build the conflict resolution flow                   | `apps/web/src/features/files/file-conflict-resolution-panel.tsx` + `use-file-conflict-resolution.ts`                                    |
+| T41A3  | Add transfer progress and cancellation               | `file-download-model.ts`'s protocol-native `progress`; `file.upload.cancel.request`/`.response` in `packages/protocol/src/messages.ts`  |
+| T41A4  | Keep terminal latency within budget                  | `terminal-view.test.tsx`'s own `describe("T41A4 — terminal latency budget (plan.md §14.5)")`                                            |
+| T43A2  | Verify the bundled UI serves correctly               | `scripts/ci/guard-daemon-web-ui-bundled.mjs`; `config-web-ui.test.ts`; `PASEO_WEB_UI_ENABLED` in `config.ts`                            |
+| T43A3  | Add Docker and Nix packaging paths                   | `packaging/docker/Dockerfile`, `packaging/nix/flake.nix`, and CI's `docker-checks`/`nix-checks` jobs                                    |
+| T50    | Decide how the agent's configured surface is exposed | `docs/agent-configuration-surface.md`                                                                                                   |
+| T51B   | Add a drift-detection test for the Pi RPC mirror     | `rpc-types.pi-mirror.contract.test.ts`                                                                                                  |
+| T54A2  | Give the app shell a level-one heading               | `Shell`'s `<h1>` plus the per-route visually-hidden `<h1>` the shell tests enumerate                                                    |
+| T54A3  | Feed browser offline events into connection status   | `apps/web/src/platform/network.ts` reads `navigator.onLine` and registers `online`/`offline` with teardown; `network.test.ts` covers it |
+
+**Conclusion: the master table is 100% landed.** Not one of the 605 rows is unbuilt. What remains
+open in this file is five acceptance boxes, three of which no agent can close — each now carries its
+own written reason immediately below it, rather than being ticked or quietly dropped:
+
+- T373's TalkBack pass needs a person with a screen reader and a SIGNED release candidate.
+- T374's three EAS steps run against the owner's expo.dev account.
+- T383's local `test:unit` 3×-green observation was never recorded; the push half IS proven, and the
+  two halves are separated there rather than conflated into one tick.
+
+The other two — T377's `touch-targets.test.ts` follow-up and T380's four unsharded flows — were
+waiting on T378 and T381, both of which landed (`6c55c13`; `a94012d` + `9f12d23`, all confirmed
+ancestors of `main`). They are ticked with those SHAs.
+
+### P10-48: the master table's tally, and a recipe that had stopped reproducing its own number
+
+The tally line read **604**; the table holds **605** distinct IDs. That is the drift this file's own
+T219 decision predicted and asked future readers to recount rather than trust.
+
+The more useful finding is in the recipe beside it. It said: `grep -o "^| T[0-9A-Za-z]*"` yields 598
+hits "minus the two prose rows `| This` and `| That` from a non-task table, i.e. 596". Those two
+prose rows sit at lines far below the master table, in tables that are not the master table at all —
+so the subtraction only makes sense against a WHOLE-FILE grep, while the sentence describes it as
+running "over the table's rows". Today the whole-file form yields 607, and bounding the same grep to
+the master table's own row range yields 605 with no subtraction needed. **A verification recipe whose
+two halves describe different populations stops reproducing the number it exists to verify, and
+nothing notices** — the same shape as a firing proof that does not fire (P10-35). The recipe is
+rewritten to the bounded form and both figures recorded.
+
+### P10-49: one table row had no task-detail section, and that is why the tally disagreed with itself
+
+Differencing the sorted list of master-table IDs against the sorted list of `#### T...` detail
+headings — not comparing their totals, since two equal totals can still disagree row by row — found
+exactly one row with no section: **T394**. It shipped at `46ad818` and was recorded nowhere but in
+the table.
+
+That single gap explains the tally drift in P10-48 completely. A count taken over detail sections
+answers 604; a count taken over table rows answers 605. Both were honest, and they were counting
+different populations — the same failure the verification recipe beside the tally had, one level up.
+T394's section is now written from its own commit diff, and says outright that it is reconstructed
+rather than contemporaneous.
+
+### P10-50: two CI jobs that run a real `docker build` and `nix build` have never been able to fire
+
+Writing T394's section surfaced the disclosure it had made and nobody had tracked. Filed as **T397**,
+with its own row and section.
+
+`.github/ci-paths.yml`'s `docker` filter selects `Dockerfile`, `Dockerfile.*`, `docker/**`; its `nix`
+filter selects `flake.nix`, `nix/**`. T43A3 put the real inputs at `packaging/docker/Dockerfile` and
+`packaging/nix/flake.nix`. Neither glob matches, so `docker-checks` and `nix-checks` — the only jobs
+in the whole workflow that would ever run either toolchain — match nothing and report `skipped` on
+every run, including `35284514824`.
+
+**This was disclosed twice and tracked nowhere**: `ci.yml`'s own comment calls it "a distinct,
+still-open gap" and names the fix, and `packaging/README.md` says both jobs "remain exactly as
+dormant as before T176". Neither had a task ID. That is precisely how a known gap survives every
+later audit — a reader greps the ledger, finds nothing, and concludes there is nothing to find. It
+is also why this wave files it rather than fixing it inline: the fix turns a first-ever `docker
+build` and `nix flake check` into gates on `main`, and a filter repointed in a commit that touches
+nothing under `packaging/` would leave both jobs skipped and ship unproven. T397's acceptance
+criteria require the landing commit to also touch a path each filter selects, so the first run is
+observed, and require a red result to be recorded and reverted on its own rather than left gating
+`main`.
+
+### P10-51: the spec's `.pad` entrance, and the two things its CSS says that are easy to invert
+
+`.pad>.row,.pad>.card{animation:fade-up .3s cubic-bezier(.23,1,.32,1) both}` with seven
+`nth-child` delay rules stepping 45ms from `nth-child(2)` to `nth-child(8)`. It is the last of the
+three `fade-up` targets P10-38 enumerated; `.t>*` closed at W12-ENTRANCE and `.pmenu` at W14-PMENU.
+Android shipped nothing on any of the three `.pad` screens - Settings, Sessions and Live - while
+`EXPRESSIVE_FADE_UP_DURATION_MS.listRow` had carried this rule's own 300ms, with `.pad>.row,.pad>.card`
+written in the comment beside it, for several waves.
+
+**Android-only, decided rather than assumed.** `class="pad"` occurs zero times in `web-spec.html`,
+which has one `fade-up` consumer (`.fade`, at the transcript's own 0.32s) and no `nth-child` stagger
+anywhere. So this rule is not shared vocabulary, and the framework-neutral package was the wrong
+home: the rule lives in `apps/android/src/ui/primitives/pad-entrance-model.ts`, a plain TypeScript
+module importing nothing from `react-native`, `react-native-reanimated` or `react`, so a real vitest
+run EXECUTES it. That matters for the same reason W12-ENTRANCE's did - every Android `.tsx` test in
+this workspace is a source-text assertion - and it is achieved here without widening a shared package
+for a single consumer.
+
+**Inversion 1: `:nth-child` counts every sibling, not every animated one.** A `.lbl` section label
+first inside `.pad` is `nth-child(1)`; the `.row` after it is `nth-child(2)` and takes the first
+non-zero delay, 45ms. A caller that incremented only for rows it meant to animate would shift every
+later delay - on every pad the spec draws, since `a1`, `a2` and `a3` all open with a label, a search
+bar or a chip row. `isPadEntranceChildAnimated` exists to force that: a kind that does not animate
+still consumes its position.
+
+**Inversion 2: the ninth child gets NO delay, and that is the spec, not a gap to clamp.** The spec
+enumerates exactly seven delay rules. `nth-child(9)` matches none of them, and CSS does not carry the
+last matched rule's value forward - an unmatched `animation-delay` sits at its initial value, `0s`.
+So a ninth-or-later row enters at the same instant as the first child, not at the eighth child's
+315ms. **This was checked against the spec's own content, not only its CSS**: the `a3` Settings frame
+has fourteen direct `.pad` children, so the artifact itself exercises the un-delayed tail. It is
+therefore deliberately un-clamped, which is the OPPOSITE of
+`packages/frontend-core/src/timeline/transcript-entrance.ts`, whose `TRANSCRIPT_ENTRANCE_STAGGER_CAP_MS`
+exists because a transcript's batch position grows without bound and an uncapped delay would hold a
+late turn at `opacity: 0` for most of a second. A short, fixed settings pad has no such growth. The
+module says all of this in place, so the next reader does not "fix" one rule into the other.
+
+The capability is registered as a T168 AND-group over all three exported names, and the group shape
+is load-bearing rather than tidy: a delay function alone would read as shipped while a caller still
+mis-counted, and `padEntranceDelayForChild` is what keeps "does not animate" (`null`) distinct from
+"animates with no delay" (`0`) - a distinction that is only a real state here BECAUSE of inversion 2.
+Proven able to fire before being trusted, with the new files `git add`ed first, per P10-35.
+
+**Three screen mappings, each recorded with the ambiguity it resolved:**
+
+- **Settings** has no flat `.pad`; it is `Section`+`Card` pairs, and `Section` renders its label and
+  children as one unit with no slot for wrapping a bare label. Labels are left unwrapped but still
+  consume positions. `VoiceVocabularySection` is animated as one opaque card-kind unit because its
+  file sits outside this package's partition - disclosed rather than reached into.
+- **Sessions**' real `.pad` has grown banners, a create-session form and loading/error/empty states
+  the spec has no equivalent for. Threading a live position through all of them would re-stagger
+  every row whenever an unrelated banner appeared, so the counted sequence is narrowed to the four
+  kinds the spec itself draws inside `.pad`, counted continuously across groups - which reproduces
+  the spec's own `a1`, where the second group's label is position 7 and its row position 8, past the
+  schedule. The "+ New session" bar was confirmed by reading the artifact's markup to be a SIBLING of
+  `.pad`, not a child, so it is outside the count.
+- **Live**'s `.row.sub` rows are nested inside each `.card`, not direct `.pad` children, so they take
+  no stagger of their own - which is what `nth-child` on direct children already implies and what the
+  existing `SubagentRow`/`WorkflowRow` keep doing. A fourth card the spec does not draw (Workspace)
+  continues the same sequence, being the identical kind.
+
+**None of the three screens virtualizes.** All use a plain `ScrollView` with `.map()`, so the
+recycled-cell replay hazard that forced W12-ENTRANCE's watermark does not apply and no watermark is
+used. That was measured per screen, not assumed from the transcript's case.
+
+### P10-52: the package proved the rule and left the wiring unpinned — the seventh instance of one shape
+
+Found at this wave's merge gate. `pad-entrance-model.test.ts` executes the rule, `PadEntrance.test.ts`
+pins the component, and between them every number in the spec is covered. Nothing asserted that any
+SCREEN renders `PadEntrance` at all.
+
+That is precisely the defect this session has now hit seven times - `SegmentedControl`, `RunHeader`,
+`onSetAutoRetry`, the streaming caret, the `fade-up` entrance, `PromptControlsMenu`'s missing
+`variant`, and now this. A `PadEntrance` reached by no screen would have passed all 23 new cases and
+shipped three screens with no entrance. The component's own tests cannot see it, by construction:
+they read the component's file, and the wiring lives in somebody else's.
+
+One case per screen was added at the gate, against each screen's own source - the opening tag exists,
+and **every** opening tag carries both `kind` and `position`, since either omitted is a silent
+default rather than a type error. Watched failing before being trusted: dropping `kind=` from one tag
+in `live-screen.tsx` failed the Live case by name; restoring from a scratchpad copy returned it to
+17 passed.
+
+A second case per screen pins that the screen does NOT compute its own delay (`/45\s*\*/`,
+`animationDelay`), because the whole reason the rule sits in a separate RN-free module is that a
+screen-local calculation would be provable only by source text.
+
+### P10-53: two committed assertions on `main` could never fail, and the cause is a tooling trap this gate then walked into itself
+
+`sessions-screen.test.ts`'s `it("invents neither of the artifact's two unavailable figures")` read:
+
+```js
+expect(code).not.toMatch(/<U+0008>turns<U+0008>/);
+expect(code).not.toMatch(/\d+k<U+0008>/);
+```
+
+Those are literal BACKSPACE control characters where `\b` word boundaries were meant. Since both
+cases are `.not.toMatch`, a pattern that can never match passes every time - two committed
+assertions with no power to fail, guarding a real invariant (`SessionSummary` carries neither the
+artifact's `18 turns` nor its `184k`, so the screen must not invent them). Restored, with the
+boundaries the author intended; both still pass, measured against the real comment-stripped source.
+
+**The cause is worth naming because this gate reproduced it before finding it.** Writing `\b`
+inside a NON-RAW Python string yields `\b`, which Python reads as the backspace escape, not as the
+two characters a JavaScript regex needs. The gate's own first attempt at P10-52's cases emitted
+`/<PadEntrance\x08/` the same way and failed all three screens immediately - which is the only
+reason the older pair was noticed at all, since a `grep` for `\x08` was run to explain the fresh
+failure. A generator bug that breaks a `.toMatch` is loud; the identical bug in a `.not.toMatch` is
+silent forever.
+
+**The rule that follows:** when a test is written by a script, assert the produced text contains no
+control characters before writing the file. That one check is what the gate added, and it is what
+would have caught the committed pair on the day it landed.
