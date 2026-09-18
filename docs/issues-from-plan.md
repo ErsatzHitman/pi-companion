@@ -23813,3 +23813,148 @@ open, unchanged from P10-W17's list: the Settings screen's discrete-pill-per-row
 `.thead`'s `margin: 0 0 4px -4px` — deliberately not landed by AND-THINK because nothing measured how
 a negative `marginLeft` interacts with the wrapper's own padding or with plan.md §9.3's 48dp touch
 floor on that row. Approximating it silently is exactly what this wave's other findings are about.
+
+## Wave P10-W19 (the wave where the orchestrator's own brief was the defect)
+
+Six implement packages, six verifiers, one gate — 13 agents, 0 errors, one workflow, no red pass.
+Partitions were drawn by readers again, per P10-58, and the gate's partition check came back clean on
+the first attempt: 26 changed paths plus one authorised new file, all inside the union;
+`packages/design-tokens/src/tokens.ts` untouched. Seven commits, `68c8b3d..cb462d4`.
+
+Two packages came back NEEDS WORK, both for prose rather than values, and both were fixed at the gate
+before their commits were written. Test counts: `apps/web` 2014 -> 2018, `apps/android` 3884 -> 3889,
+every delta reconciled per file against added and removed test blocks, with no test deleted.
+
+### P10-61: a brief written by the orchestrator can ship one unit error into every package at once
+
+The wave-19 AND-TODO-LABEL brief told its implementer that `Section.tsx` "hardcodes
+`letterSpacing 0.95` where `typography.letterSpacing.wide = 0.09` exists". Every clause of that is
+either false or a unit error, and it inverted a correct value:
+
+- `NativeTypography` exposes `fontFamily`, `fontWeight` and `variant` and nothing else. There is no
+  top-level `letterSpacing` map on the Android theme at all. The implementer found this itself,
+  reported it under `briefClaimsIDisproved`, and reached for `variant.label.letterSpacing` instead.
+- That variant is built by `buildTypeStyle` from `typography.letterSpacing.wide`, which assigns the
+  number through **unscaled**.
+- `letterSpacing.wide` is an em RATIO, not a length. `web.ts`'s token emitter writes every
+  letter-spacing token with an `em` suffix, and the token's own comment cites Beautiful UI's
+  `tracking-[0.09em]`.
+- React Native's `letterSpacing` is absolute dp. `.lbl` is `letter-spacing:.09em` on a `10px` font,
+  so the design figure is **0.9dp**.
+
+So the shipped read resolved to 0.09dp — ten times too tight, visually no tracking — and the `0.95`
+it replaced was very nearly right. The file it came from said so: the deleted constant's own comment
+read "9.5px, uppercase, with its tracking **in dp at that size**". The original author knew the unit;
+the brief did not check, and asserted a token existed without calling the type that would have
+disproved it.
+
+Caught twice independently before the commit: by the merge gate, and by the orchestrator reading
+`native.ts` after an IDE diagnostic flagged `Property 'letterSpacing' does not exist on type
+'NativeTypography'`. That diagnostic was the seventh IDE-diagnostics event this session and the first
+that was not a stale mid-edit snapshot — worth recording, because the standing (and repeatedly
+correct) instinct to dismiss them nearly buried a real finding.
+
+**The structural lesson is about briefs, not about tracking.** The playbook already requires an
+implementer to re-derive every spec rule its brief quotes, and that requirement is what caught this.
+It does **not** require re-deriving a claim about the repository's own types, and nothing else in the
+pipeline does either: five agents had already accepted brief claims of that shape without checking.
+A brief's claims about this codebase need the same treatment as its claims about the design.
+
+`Section.tsx` now multiplies the variant value by the font size, with the mismatch stated in-code and
+pinned by a test that also asserts the bare, unscaled read is absent.
+
+### P10-62: the correction machinery produced its own false measurement
+
+AND-SHAPE's comments — both the source header and the new test block — justified removing the work
+group trigger's dashed border by quoting a command and its result: every selector naming `.runhead`
+was pulled with a `grep -oE` whose character class was `[.a-zA-Z0-9_-]` before the name and
+`[.a-zA-Z0-9_ >,-]` after it, giving "four hits". The command runs and does return four. That class
+excludes the colon, so it cannot match `.thead:hover,.runhead:hover{background:var(--hover)}`, and
+nothing in it lets a descendant prefix through, so `.t.runfold .runhead svg` is cropped to its tail.
+Enumerating instead by testing each declaration block against its own full selector returns **five**
+CSS rules, plus two further hits that are the design's own JavaScript rather than rules.
+
+The conclusion never moved: `:hover` sets `background` alone, so no `.runhead` state declares a
+border, box-shadow or outline, and the code change is correct. What was wrong is the evidence, and
+specifically its completeness framing — "every selector ... four hits" is a claim about what was
+measured, made by a command that could not have measured it.
+
+This is the same shape as P10-57 and P10-59 one level up: not a wrong value read from the wrong
+document, but a wrong _method_ quoted as proof, in a comment written to fix exactly that class of
+defect. A reader who re-runs the quoted command gets four and concludes the comment is sound.
+
+### P10-63: a self-correction that invents a new attribution while fixing the old one
+
+Two files were deliberately excluded from all six partitions because they already carried
+self-corrections of the false-CLAUDE.md-attribution defect. Both self-corrections were themselves
+false attributions.
+
+`live-screen.tsx` is three revisions deep. Revision 1 read four values off
+`docs/ui-reference/pi-companion-app.html`. Revision 2 corrected the values and cited "`CLAUDE.md`'s
+warning that it is a stale reconstruction", which does not exist. Revision 3, at P10-W17, replaced
+that with "under `CLAUDE.md`'s 'reference-only documents' corollary a file like that is never
+authority for a product decision regardless" — and then said, in its own next sentence, that
+`CLAUDE.md` names no file under `docs/ui-reference/` anywhere. Both cannot be true.
+
+`Toggle.test.ts` grounded "fix a falsifiable assertion rather than preserve it" in the same section.
+That section governs whether a frozen document may be cited as authority and whether it may be
+annotated; it says nothing about falsifiable assertions.
+
+Both are closed by `cb462d4`, each stating the measurement rather than attributing it: the count of
+`ui-reference` mentions in `CLAUDE.md` is zero, and that section is a closed enumeration of 14 named
+files. The rule this encodes is narrow and now has three instances behind it: **when a correction
+needs a reason, state the measurement; reach for a repository rule only after grepping the rule.**
+Every false attribution in this class was written while fixing a different false attribution, by an
+agent that had just been told to be careful about exactly this.
+
+A grep for `reference-only` across both app source trees now returns no live false attribution:
+every remaining hit is a correction narrating the old claim, or an unrelated accurate use.
+
+### What this wave closed
+
+| Package                | Defect                                                                                                                                                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AND-SHAPE              | `Card.tsx` and `ApprovalForm.tsx` paired `ringShadow(theme,"card")` with `radii.card` (10) against `.card`'s `--r-md` (22), and a uniform `spacing[4]` against `padding:12px 14px`; `work-group-row.tsx` drew a dashed failure border `.runhead` never declares |
+| AND-TODO-LABEL         | `todo-row.tsx` took its type and box model from `.ov-row`/`.ov-hint`/`.ov-head .lab` citations that do not exist, where `.ov` itself carries `12.5px/1.62` mono at `--r-blk` with `padding:8px 12px 9px`; `Section.tsx`'s `.lbl` was 9.5px at 700               |
+| AND-SESSIONS-CHIP      | `.newbtn` is a phantom — the element is a base `.chip` with an inline height override; the filter chips ran 28/11/11.5 against `.chip`'s real 30/13/12, and painted `accent-tint`/`accent-ink` where `.chip[data-on]` fills solid `var(--accent)`               |
+| WEB-TRANSCRIPT-CHROME  | `.pc-code-block` rendered all tool output at `codeForeground`, the PRIMARY ink role, and 11px against `.tool-out`'s `--ink-2` and 11.5px; `.pc-toggle` drew a track shadow and an accent ring `.sw` never declares                                              |
+| WEB-SETTINGS-CITATIONS | the spec's whole `.set` family had **no rule anywhere in `apps/web`** — every auto-compaction and auto-retry row rendered unstyled; four false citations, each repointed for its own measured reason                                                            |
+| WEB-MENU               | the session controls opened as a modal `Sheet` behind a full-viewport scrim where `.menu` is an anchored, undimmed popover; the focus contract was re-decided clause by clause rather than inherited                                                            |
+| CITE-TAIL              | P10-63's two sites                                                                                                                                                                                                                                              |
+
+WEB-MENU is the only behavioural change in the wave and the only one whose real cost was not a value.
+Dropping the scrim and the `Tab` trap is what "anchored popover" means; everything else
+`use-modal-behavior.ts` gave that surface was re-decided explicitly and written into `Composer.tsx`'s
+module doc — focus-on-open into the panel's first control (because this panel is placed by CSS at the
+end of `.pc-composer` rather than sitting as the trigger's DOM sibling the way `Popover.tsx`'s does),
+focus-restoration-on-close (**preserved**, conditional on focus still being inside the panel),
+Escape, click-outside (deliberately without restoration, because at `mousedown` the click's own focus
+move has not happened yet), and Tab-out (allowed, no trap, disclosed). The Playwright spec
+`apps/web/e2e/keyboard-navigation.spec.ts` asserts all five against the new contract rather than
+being deleted; the old trap survives only inside narration of what the walk used to do.
+
+### Still open, with reasons
+
+- **`resolveNativeLetterSpacing` does not exist.** P10-61 is fixed at one call site. The underlying
+  asymmetry is not: `buildTypeStyle` converts the relative line-height token through
+  `resolveNativeLineHeight` and passes the equally relative letter-spacing token through raw, so
+  **every** `variant.<name>.letterSpacing` consumer on Android under-tracks by a factor of its own
+  font size. Not fixed here because the fix lives in `packages/design-tokens/src/native.ts`, which
+  was outside all six partitions, and because changing it moves every Android label at once — a
+  wave-sized change that needs its own partition and its own readers, not a gate-time edit.
+- **`Popover.tsx` cannot take an external controlled trigger.** WEB-MENU implements the anchored
+  popover locally in `composer.css` and says so in-code. Generalising the primitive is the cleaner
+  shape and was explicitly not attempted, because `ui/primitives/` was out of bounds for that package
+  and another package owned `primitives.css` the same wave.
+- **`.pc-toggle` is `2.25rem` by `1.375rem` (36 by 22) against the web spec's `.sw` at 34 by 20.**
+  Found by the orchestrator while auditing the gate's shadow verdict, owned by no package and
+  therefore never re-derived by a verifier. Recorded rather than fixed on the spot for that reason.
+- **`.thead`'s `margin: 0 0 4px -4px`** — carried unchanged from P10-W18, for the reason given there:
+  nothing has measured how a negative `marginLeft` interacts with the wrapper's own padding or with
+  plan.md section 9.3's 48dp touch floor.
+- **The settings route beyond the agent-settings rows.** `agent-settings.css` gives
+  `AgentSettingsPanel`'s rows the full `.set` family, which closes the discrete-pill-per-row item
+  P10-W17 opened _for that panel_. `host-settings-screen.tsx` renders only `pc-settings-nav` and
+  `pc-agent-settings` classes, so there is no second unstyled row family on that route — but the rest
+  of the route was not re-audited against the spec this wave, and that is stated as unfinished rather
+  than claimed as clean.
