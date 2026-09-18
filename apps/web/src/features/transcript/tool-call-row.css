@@ -8,9 +8,24 @@
  */
 
 .pc-tool-call {
+  /* The mockup's `.tool-h`/`.tool-out` share one horizontal inset (`padding:
+   * 7px 10px` / `padding: 8px 10px`) that has no exact spacing-token match:
+   * 10px sits equidistant between `--spacing-2` (8px) and `--spacing-3`
+   * (12px). `.tool-h`'s own 7px vertical inset is one step off
+   * `--spacing-2` (8px) too. Both are kept as local custom properties
+   * quoting the mockup's own figures, the pattern
+   * `features/sessions/session-rail.css` already uses for its own
+   * token-less fixed dimensions, rather than rounded to a visibly
+   * different step. */
+  --pc-tool-call-pad-inline: 10px;
+  --pc-tool-call-header-pad-block: 7px;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  /* No gap: the mockup's `.tool` has none — `.tool-h` and `.tool-out` sit
+   * flush against each other, and the divider between them is
+   * `.tool-out`'s own `border-top` (`.pc-tool-call__content` below), not
+   * extra space. */
+  gap: 0;
   /* The mockup's `.tool` block spans the thread column, so the card fills
    * the transcript's own 53.5rem content column rather than a narrower cap. */
   max-width: 53.5rem;
@@ -20,27 +35,50 @@
  * background: var(--inset); box-shadow: var(--sh-hairline); overflow:
  * hidden`. `Card` (`ui/primitives`) defaults to an elevated white surface
  * (`--color-surface` + `--shadow-card`, its raised-card treatment used
- * everywhere else in the app); this card is flatter and tinted, so it is
- * overridden here — scoped to `.pc-tool-call.pc-card` (both classes on
- * the same element, so this always wins over `.pc-card` alone regardless
- * of stylesheet order) rather than changing the shared primitive. */
+ * everywhere else in the app) with its own `padding: var(--spacing-4)`;
+ * this card is flatter and tinted, paddingless, and clips its content, so
+ * all three are overridden here — scoped to `.pc-tool-call.pc-card` (both
+ * classes on the same element, so this always wins over `.pc-card` alone
+ * regardless of stylesheet order) rather than changing the shared
+ * primitive. `.pc-tool-call__header` and `.pc-tool-call__content` below
+ * carry their own insets instead, matching the mockup's `.tool-h`/
+ * `.tool-out` exactly. */
 .pc-tool-call.pc-card {
   background-color: var(--color-inset);
   box-shadow: var(--shadow-hairline);
+  padding: 0;
+  overflow: hidden;
 }
 
 .pc-tool-call__header {
   display: flex;
   align-items: center;
+  /* The mockup's `.tool-h { gap: 8px }` — matches `--spacing-2` exactly. */
   gap: var(--spacing-2);
-  /* The mockup's `.tool-out { border-top: 1px solid var(--line) }` divider
-   * between the header and the body, drawn here as the header's own
-   * bottom rule so every family's body needs no change. */
-  padding-bottom: var(--spacing-2);
-  border-bottom: 1px solid var(--color-line);
+  padding: var(--pc-tool-call-header-pad-block) var(--pc-tool-call-pad-inline);
   font-family: var(--font-family-mono);
   /* `--font-size-md` is 11.5px, the mockup's own `.tool-h` figure. */
   font-size: var(--font-size-md);
+}
+
+/* The mockup's `.tool-out { border-top: 1px solid var(--line); padding: 8px
+ * 10px }` — the divider between the header and everything below it, drawn
+ * as this wrapper's own top rule so it runs the full card width edge to
+ * edge now that the card itself carries no padding (`tool-call-row.tsx`
+ * wraps every child after the header in this element for exactly that
+ * reason: a card can have more than one such child — a summary line, an
+ * error line, the family body, a details disclosure, an actions row — and
+ * only one shared wrapper can own one full-bleed divider and one shared
+ * inset for all of them, the way the mockup's single `.tool-out` does). The
+ * 8px vertical figure matches `--spacing-2` exactly; the 10px horizontal
+ * figure is the same token-less mockup value `.pc-tool-call__header`
+ * already uses above. */
+.pc-tool-call__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  border-top: 1px solid var(--color-line);
+  padding: var(--spacing-2) var(--pc-tool-call-pad-inline);
 }
 
 .pc-tool-call__name {
@@ -98,10 +136,20 @@
   gap: var(--spacing-2);
 }
 
-/* The reference's finished-tool-block fill (`docs/ui-reference/
- * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`,
- * `background: var(--tool-success-bg)` / `var(--tool-error-bg)`). Those
- * two roles are already published design tokens
+/* (CORRECTED, WEB-TOOLCARD: this cited "`docs/ui-reference/
+ * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`" as
+ * this fill's authority. Nothing under `docs/ui-reference/` may be cited
+ * as authority for a product decision — see CLAUDE.md's "reference-only
+ * documents" section, whose corollary requires the fact to be restated in
+ * a citable home and that home cited instead. The values were not wrong:
+ * `docs/ui-reference/pi-companion-web.html` and the confirmed
+ * `web-spec.html` were md5-compared before repointing and are
+ * byte-identical (`9c49b1a697dff4a6fbc547dc6c257e96`), so this is a
+ * provenance fix, not a value fix. That identity is a fact about the WEB
+ * pair alone — the Android pair's two files differ.) The mockup's
+ * finished-tool-block fill (`.tool-out.tool-ok` / `.tool-out.tool-err`,
+ * `background: var(--tool-success-bg)` / `var(--tool-error-bg)`) is
+ * already published as design tokens
  * (`packages/design-tokens/src/tokens.ts`'s `PiRoleColorTokens`), emitted
  * here as `--color-tool-success-bg` / `--color-tool-error-bg` by the same
  * `color-${key}` convention every other role token uses

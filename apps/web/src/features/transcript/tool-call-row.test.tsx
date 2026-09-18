@@ -351,6 +351,22 @@ describe("TranscriptToolCallRow — known tool families render their specific ca
     );
     expect(screen.getByText("Waiting for approval")).toBeTruthy();
   });
+
+  // WEB-TOOLCARD: the card itself is paddingless (`.pc-tool-call.pc-card`)
+  // so the mockup's `.tool-out` divider can run the full card width; every
+  // known-family card's family body must therefore sit inside the shared
+  // `.pc-tool-call__content` inset wrapper, not directly on the card,
+  // otherwise it would render flush against the card's clipped edge.
+  it("nests the header directly on the card and the family body inside the shared .pc-tool-call__content inset", () => {
+    render(<TranscriptToolCallRow entry={toolEntry(SHELL_TOOL)} testId="tc-content" />);
+    const card = screen.getByTestId("tc-content");
+    const header = card.querySelector(".pc-tool-call__header");
+    const content = card.querySelector(".pc-tool-call__content");
+    const body = card.querySelector(".pc-tool-call__body");
+    expect(header?.parentElement).toBe(card);
+    expect(content?.parentElement).toBe(card);
+    expect(body?.parentElement).toBe(content);
+  });
 });
 
 describe("TranscriptToolCallRow — the safe generic card", () => {
@@ -480,6 +496,26 @@ describe("TranscriptToolCallRow — the safe generic card", () => {
     await user.click(within(card).getByRole("button", { name: "Copy details" }));
     expect(await within(card).findByRole("button", { name: "Copied" })).toBeTruthy();
     expect(within(card).queryByTestId("tc-generic-retry-copy-status")).toBeNull();
+  });
+
+  // WEB-TOOLCARD: the generic card has more direct-child regions than the
+  // mockup's single `.tool-out` (a result body, an Input disclosure, and
+  // an actions row) — all three must live inside the one shared
+  // `.pc-tool-call__content` wrapper so the full-bleed divider and inset
+  // apply to all of them, not just the first.
+  it("nests the result body, the Input disclosure, and the actions row inside the shared .pc-tool-call__content inset", () => {
+    render(<TranscriptToolCallRow entry={toolEntry(GENERIC_TOOL)} testId="tc-generic-content" />);
+    const card = screen.getByTestId("tc-generic-content");
+    const content = card.querySelector(".pc-tool-call__content");
+    expect(content).toBeTruthy();
+    const body = card.querySelector(".pc-tool-call__body");
+    const inputDetails = within(card as HTMLElement)
+      .getByText("Input")
+      .closest("details");
+    const actionsRow = card.querySelector(".pc-tool-call__actions-row");
+    expect(body?.parentElement).toBe(content);
+    expect(inputDetails?.parentElement).toBe(content);
+    expect(actionsRow?.parentElement).toBe(content);
   });
 
   it("keeps the two clipboard actions' failures independent of each other", async () => {

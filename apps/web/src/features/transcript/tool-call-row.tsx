@@ -64,12 +64,23 @@ const STATUS_TEXT: Record<tools.ToolCallViewStatus, string> = {
 };
 
 /**
- * The reference's finished-tool-block fill (`docs/ui-reference/
- * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`,
+ * (CORRECTED, WEB-TOOLCARD: this cited "`docs/ui-reference/
+ * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`" as
+ * this tint's authority. Nothing under `docs/ui-reference/` may be cited
+ * as authority for a product decision — see CLAUDE.md's "reference-only
+ * documents" section, whose corollary requires the fact to be restated in
+ * a citable home and that home cited instead. The values were not wrong:
+ * that file and the confirmed `web-spec.html` were md5-compared before
+ * repointing and are byte-identical
+ * (`9c49b1a697dff4a6fbc547dc6c257e96`), so this is a provenance fix, not
+ * a value fix — a fact about the WEB pair alone, since the Android pair's
+ * two files differ.) The mockup's
+ * finished-tool-block fill (`.tool-out.tool-ok` / `.tool-out.tool-err`,
  * backed by its `--tool-success-bg` / `--tool-error-bg` custom
- * properties) applies only once a call has actually settled — a
- * `running`/`blocked`/`canceled` call gets no tint, matching the
- * reference, which never marks an in-flight block either way. Returns a
+ * properties, matching `packages/design-tokens/src/tokens.ts`'s
+ * `PiRoleColorTokens`) applies only once a call has actually settled — a
+ * `running`/`blocked`/`canceled` call gets no tint, matching the mockup,
+ * which never marks an in-flight block either way. Returns a
  * `pc-tool-call--*` modifier for the card root; `tool-call-row.css`
  * applies the tint to `.pc-tool-call__body` from that ancestor class
  * rather than every body needing to know its own tool's status.
@@ -634,53 +645,59 @@ function UnknownToolCard({
       data-testid={testId}
     >
       <ToolCallHeader tool={tool} testId={testId} />
-      <div className="pc-tool-call__body">
-        <p className="pc-tool-call__meta">
-          Unrecognized tool{tool.source ? ` from ${tool.source}` : ""}: {tool.toolName}
-        </p>
-        {tool.status === "failed" ? (
-          <p className="pc-tool-call__meta pc-tool-call__meta--error">
-            {safeStringify(tool.rawError)}
+      {/* `.pc-tool-call__content` (`tool-call-row.css`) is the mockup's
+          `.tool-out`: the one full-bleed divider plus one shared inset for
+          everything below the header, now that `.pc-tool-call.pc-card`
+          carries no padding of its own. */}
+      <div className="pc-tool-call__content">
+        <div className="pc-tool-call__body">
+          <p className="pc-tool-call__meta">
+            Unrecognized tool{tool.source ? ` from ${tool.source}` : ""}: {tool.toolName}
           </p>
-        ) : imageResult ? (
-          <ImageResult dataUri={imageResult} label={`Image result from ${tool.toolName}`} />
-        ) : tool.result !== undefined ? (
-          <details className="pc-tool-call__details">
-            <summary>Result</summary>
-            <CodeBlock code={safeStringify(tool.result)} language="json" />
-          </details>
-        ) : null}
-      </div>
-      <details className="pc-tool-call__details">
-        <summary>Input</summary>
-        <CodeBlock code={safeStringify(tool.collapsibleInput)} language="json" />
-      </details>
-      <div className="pc-tool-call__actions-row">
-        <Button kind="secondary" onClick={() => void copy.run(tool.copyPayload)}>
-          {copy.text}
-        </Button>
-        {copy.state.kind === "failed" ? (
-          <StatusIndicator
-            label="Copy details"
-            tone="danger"
-            statusText={`Copy failed — ${copy.state.reason}`}
-            testId={testId ? `${testId}-copy-status` : undefined}
-          />
-        ) : null}
-        <Button
-          kind="secondary"
-          onClick={() => void report.run(JSON.stringify(tool.reportPayload, null, 2))}
-        >
-          {report.text}
-        </Button>
-        {report.state.kind === "failed" ? (
-          <StatusIndicator
-            label="Copy report"
-            tone="danger"
-            statusText={`Copy failed — ${report.state.reason}`}
-            testId={testId ? `${testId}-report-status` : undefined}
-          />
-        ) : null}
+          {tool.status === "failed" ? (
+            <p className="pc-tool-call__meta pc-tool-call__meta--error">
+              {safeStringify(tool.rawError)}
+            </p>
+          ) : imageResult ? (
+            <ImageResult dataUri={imageResult} label={`Image result from ${tool.toolName}`} />
+          ) : tool.result !== undefined ? (
+            <details className="pc-tool-call__details">
+              <summary>Result</summary>
+              <CodeBlock code={safeStringify(tool.result)} language="json" />
+            </details>
+          ) : null}
+        </div>
+        <details className="pc-tool-call__details">
+          <summary>Input</summary>
+          <CodeBlock code={safeStringify(tool.collapsibleInput)} language="json" />
+        </details>
+        <div className="pc-tool-call__actions-row">
+          <Button kind="secondary" onClick={() => void copy.run(tool.copyPayload)}>
+            {copy.text}
+          </Button>
+          {copy.state.kind === "failed" ? (
+            <StatusIndicator
+              label="Copy details"
+              tone="danger"
+              statusText={`Copy failed — ${copy.state.reason}`}
+              testId={testId ? `${testId}-copy-status` : undefined}
+            />
+          ) : null}
+          <Button
+            kind="secondary"
+            onClick={() => void report.run(JSON.stringify(tool.reportPayload, null, 2))}
+          >
+            {report.text}
+          </Button>
+          {report.state.kind === "failed" ? (
+            <StatusIndicator
+              label="Copy report"
+              tone="danger"
+              statusText={`Copy failed — ${report.state.reason}`}
+              testId={testId ? `${testId}-report-status` : undefined}
+            />
+          ) : null}
+        </div>
       </div>
     </Card>
   );
@@ -693,31 +710,37 @@ function KnownToolCard({ tool, testId }: { tool: KnownToolCallViewModel; testId?
   return (
     <Card className={["pc-tool-call", toneClass].filter(Boolean).join(" ")} data-testid={testId}>
       <ToolCallHeader tool={tool} testId={testId} />
-      {tool.summary ? <p className="pc-tool-call__meta">{tool.summary}</p> : null}
-      {tool.status === "failed" && tool.errorText ? (
-        <p className="pc-tool-call__meta pc-tool-call__meta--error">{tool.errorText}</p>
-      ) : null}
-      {tool.family === "shell" ? (
-        <ShellBody tool={tool} />
-      ) : tool.family === "read" ? (
-        <ReadBody tool={tool} />
-      ) : tool.family === "write" ? (
-        <WriteBody tool={tool} />
-      ) : tool.family === "edit" ? (
-        <EditBody tool={tool} testId={testId} />
-      ) : tool.family === "search" ? (
-        <SearchBody tool={tool} />
-      ) : tool.family === "fetch" ? (
-        <FetchBody tool={tool} />
-      ) : tool.family === "worktree_setup" ? (
-        <WorktreeSetupBody tool={tool} />
-      ) : tool.family === "sub_agent" ? (
-        <SubAgentBody tool={tool} />
-      ) : tool.family === "plan" ? (
-        <PlanBody tool={tool} />
-      ) : (
-        <PlainTextBody tool={tool} />
-      )}
+      {/* `.pc-tool-call__content` (`tool-call-row.css`) is the mockup's
+          `.tool-out`: the one full-bleed divider plus one shared inset for
+          everything below the header, now that `.pc-tool-call.pc-card`
+          carries no padding of its own. */}
+      <div className="pc-tool-call__content">
+        {tool.summary ? <p className="pc-tool-call__meta">{tool.summary}</p> : null}
+        {tool.status === "failed" && tool.errorText ? (
+          <p className="pc-tool-call__meta pc-tool-call__meta--error">{tool.errorText}</p>
+        ) : null}
+        {tool.family === "shell" ? (
+          <ShellBody tool={tool} />
+        ) : tool.family === "read" ? (
+          <ReadBody tool={tool} />
+        ) : tool.family === "write" ? (
+          <WriteBody tool={tool} />
+        ) : tool.family === "edit" ? (
+          <EditBody tool={tool} testId={testId} />
+        ) : tool.family === "search" ? (
+          <SearchBody tool={tool} />
+        ) : tool.family === "fetch" ? (
+          <FetchBody tool={tool} />
+        ) : tool.family === "worktree_setup" ? (
+          <WorktreeSetupBody tool={tool} />
+        ) : tool.family === "sub_agent" ? (
+          <SubAgentBody tool={tool} />
+        ) : tool.family === "plan" ? (
+          <PlanBody tool={tool} />
+        ) : (
+          <PlainTextBody tool={tool} />
+        )}
+      </div>
     </Card>
   );
 }
