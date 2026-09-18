@@ -475,13 +475,22 @@ describe("panel.tsx: a sheet-placement panel is the redesign's .pop (T361)", () 
     expect(code).not.toMatch(/1-2 to answer/);
   });
 
-  it("draws every other placement directly in the shared .blk.ext, with no inner Card", () => {
-    // Only the `sheet` branch is special; `inline`/`pinned`/`status`/
-    // `screen` render straight into the shared extension surface
-    // (`registry-view.tsx`'s wrapper), so a second Card inside it is gone.
+  it("draws every placement directly in the shared .blk.ext, with no inner Card anywhere in this file — including the closed-sheet reopen row", () => {
+    // `registry-view.tsx`'s `.blk.ext` wrapper (T356) applies regardless of
+    // `placement`, so every branch this file renders — the non-sheet
+    // `inline`/`pinned`/`status`/`screen` card AND the sheet placement's own
+    // closed-state reopen row — sits on that shared surface already. A
+    // second `Card` anywhere in this file would double-paint a surface the
+    // wrapper already drew, so the assertion below is not scoped to one
+    // style name: it fails on ANY `<Card` in `panel.tsx`'s source, not only
+    // `<Card style={styles.card}`. A narrower regex here is exactly the
+    // trap this test used to fall into — it passed while the module's own
+    // header comment claiming "no inner Card" was false, because the
+    // closed-sheet reopen row used `<Card style={styles.reopenCard}>`, a
+    // different style name the old assertion never looked for.
     const code = readPanelCode();
     expect(code).toMatch(/element\.placement === "sheet"/);
     expect(code).toMatch(/<View style=\{styles\.card\} testID=\{testId\}>/);
-    expect(code).not.toMatch(/<Card style=\{styles\.card\}/);
+    expect(code).not.toMatch(/<Card\b/);
   });
 });

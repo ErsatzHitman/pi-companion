@@ -37,7 +37,12 @@
  * that does not exist yet. Every other placement (`inline`/`pinned`/
  * `status`) renders the same content directly in the shared `.blk.ext`
  * wrapper — no inner `Card`, because the wrapper is already the surface.
- * The namespace tag for every placement is drawn once by that wrapper
+ * That same reasoning covers the sheet placement's own reopen affordance
+ * below: `registry-view.tsx`'s `.blk.ext` wrapper (T356) applies
+ * regardless of `placement`, so the closed-sheet reopen row is already
+ * drawn on that surface too and renders as a plain `View`, never a
+ * second, differently-coloured `Card` stacked on top of it. The
+ * namespace tag for every placement is drawn once by that wrapper
  * (`registry-view.tsx`), never here.
  *
  * **Fault isolation** ("a failing child does not take down the panel"):
@@ -56,7 +61,7 @@
 import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { Banner, Button, Card, Sheet } from "../../../ui/primitives";
+import { Banner, Button, Sheet } from "../../../ui/primitives";
 import { asFontWeight } from "../../../ui/theme/native-style-helpers";
 import { useTheme } from "../../../ui/theme/theme-context";
 import {
@@ -210,7 +215,7 @@ export function PanelRenderer(props: PiUiElementRendererProps<"panel">) {
     return (
       <View style={styles.sheetTrigger} testID={testId}>
         {!sheetOpen ? (
-          <Card style={styles.reopenCard}>
+          <View style={styles.reopenCard}>
             <Text style={styles.title}>{title}</Text>
             <Button
               label="Open"
@@ -218,7 +223,7 @@ export function PanelRenderer(props: PiUiElementRendererProps<"panel">) {
               onPress={() => setSheetOpen(true)}
               testId={`${testId}-reopen`}
             />
-          </Card>
+          </View>
         ) : null}
         <Sheet
           open={sheetOpen}

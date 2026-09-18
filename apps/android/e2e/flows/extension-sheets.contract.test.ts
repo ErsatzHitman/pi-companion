@@ -101,13 +101,23 @@ describe("extension-sheets.yaml anchors exist in source", () => {
   });
 
   describe("roster.tsx", () => {
-    it("RosterRenderer's Card carries testID={testId} built as `pi-roster-${element.ns}-${element.id}`", () => {
+    it("RosterRenderer's outer View carries testID={testId} built as `pi-roster-${element.ns}-${element.id}`, and it renders no Card", () => {
       const code = readComponentCode(
         "../../src/features/extensions/renderers/roster.tsx",
         "RosterRenderer",
       );
       expect(code).toMatch(/const testId = `pi-roster-\$\{element\.ns\}-\$\{element\.id\}`;/);
-      expect(code).toMatch(/<Card style=\{styles\.card\} testID=\{testId\}/);
+      expect(code).toMatch(/<View style=\{styles\.card\} testID=\{testId\}/);
+      // Widened past the one style key the original named. P10-W21 changed this
+      // wrapper from `<Card style={styles.card}>` to a plain `<View>` because the
+      // shared `.blk.ext` surface already paints it, and the old assertion —
+      // `/<Card style=\{styles\.card\} testID=\{testId\}/` — could only ever have
+      // failed for THAT exact style key. Its sibling in `panel-model.test.ts` named
+      // `styles.card` while the real defect sat on `styles.reopenCard`, so it passed
+      // while its own title was false. `readCode` strips block and line comments
+      // before slicing, so the prose above `RosterRenderer` explaining why it is a
+      // View cannot satisfy this negative match.
+      expect(code).not.toMatch(/<Card\b/);
     });
 
     it("RosterRow's outer View carries testID={`pi-roster-row-${row.key}`}", () => {

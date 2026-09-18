@@ -6,13 +6,17 @@
  * The Android counterpart to `apps/web/src/features/extensions/renderers/
  * roster.tsx`: same composite `${element.id}#${row.id}` row-action routing
  * (that file's header comment explains why a row action is not folded into
- * `actionId`), built from the §10.3 `Card`/`Chip`/`Progress`/`Button`
- * primitives instead of the web `TaskRows` recipe — Android's `TaskRows`
- * recipe (`ui/recipes/TaskRows.tsx`) only models Pi's own four-state
- * plan-mode task list (no per-row detail/model/elapsed/actions), so a
- * roster composes primitives directly rather than forcing a shape that
- * does not fit, matching how `widget.tsx` already composes `Card`/`Chip`
- * rather than reusing a recipe built for something narrower.
+ * `actionId`), built from the §10.3 `Chip`/`Progress`/`Button` primitives
+ * instead of the web `TaskRows` recipe — Android's `TaskRows` recipe
+ * (`ui/recipes/TaskRows.tsx`) only models Pi's own four-state plan-mode
+ * task list (no per-row detail/model/elapsed/actions), so a roster
+ * composes primitives directly rather than forcing a shape that does not
+ * fit, matching how `widget.tsx` composes primitives directly rather than
+ * reusing a recipe built for something narrower. This file's whole body
+ * wraps in a plain `View`, not `Card`: the shared `.blk.ext` surface
+ * `registry-view.tsx` already draws around every top-level extension
+ * element (T356) is the surface, and a `Card` here would paint a second,
+ * differently-coloured one nested inside it.
  *
  * Every decision — row fields, state tone, the fleet-active predicate, and
  * each row action's pending/feedback state — lives in `roster-model.ts`
@@ -32,7 +36,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { PiUiRosterRow } from "@picompanion/protocol/pi-ui-bridge/schema";
 
-import { Button, Card, Chip, Progress } from "../../../ui/primitives";
+import { Button, Chip, Progress } from "../../../ui/primitives";
 import { asFontWeight } from "../../../ui/theme/native-style-helpers";
 import { useTheme } from "../../../ui/theme/theme-context";
 import type { PiUiElementRendererProps } from "../registry";
@@ -146,7 +150,7 @@ export function RosterRenderer({
   const testId = `pi-roster-${element.ns}-${element.id}`;
 
   return (
-    <Card style={styles.card} testID={testId} accessibilityState={{ busy: model.active }}>
+    <View style={styles.card} testID={testId} accessibilityState={{ busy: model.active }}>
       <Text style={styles.title} accessibilityRole="header">
         {model.title}
       </Text>
@@ -174,7 +178,7 @@ export function RosterRenderer({
         accessibilityLabel={model.actionsAccessibilityLabel}
         testIdPrefix={testId}
       />
-    </Card>
+    </View>
   );
 }
 

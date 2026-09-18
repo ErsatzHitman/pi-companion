@@ -15,7 +15,7 @@
 
 /** `roster.tsx`'s `RosterRenderer`/`RosterRow` (T34B1). */
 export const ROSTER_FLOW = {
-  /** `pi-roster-${element.ns}-${element.id}` — the `Card`'s own testID. */
+  /** `pi-roster-${element.ns}-${element.id}` — the outer `View`'s own testID. */
   cardTestId: (ns: string, id: string): string => `pi-roster-${ns}-${id}`,
   /** `pi-roster-row-${row.key}` — one row's outer `accessible` `View`. */
   rowTestId: (rowKey: string): string => `pi-roster-row-${rowKey}`,
@@ -53,7 +53,7 @@ export const FORM_FLOW = {
  * placement values at once).
  */
 export const PANEL_FLOW = {
-  /** `pi-panel-${element.ns}-${element.id}` — the outer `Card`/`View`'s testID either way. */
+  /** `pi-panel-${element.ns}-${element.id}` — the outer `View`'s testID, both placements. */
   cardTestId: (ns: string, id: string): string => `pi-panel-${ns}-${id}`,
   /** `${testId}-sections` — the `ScrollView` wrapping every resolved section. */
   sectionsTestId: (cardTestId: string): string => `${cardTestId}-sections`,

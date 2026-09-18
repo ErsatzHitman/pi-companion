@@ -186,7 +186,7 @@ tags:
 # =====================================================================
 # Roster (`roster.tsx`'s `RosterRenderer`/`RosterRow`, T34B1) — a
 # `pinned`-placement `roster` element (e.g. `subagents:fleet`) renders as
-# an inline Card; every row is its own `accessible` group carrying label,
+# an inline block; every row is its own `accessible` group carrying label,
 # state, model, elapsed time, and actions in one utterance (see the wave
 # report's "touch targets" section for why each row's action Button needs
 # no separate touch-target proof here: it is `ui/primitives/Button.tsx`,
@@ -195,8 +195,11 @@ tags:
 # CORRECTED (T334): this said "Blocked on KNOWN BLOCKER (2) above:
 # nothing here makes the daemon emit a real roster element yet"; the
 # prompt above does. `pi-roster-subagents-fleet` below is the
-# `RosterRenderer`'s own Card testID for a `{ns: "subagents", id:
-# "fleet"}` element, exactly as `ROSTER_FLOW.cardTestId` computes it.
+# `RosterRenderer`'s own outer-wrapper testID for a `{ns: "subagents",
+# id: "fleet"}` element, exactly as `ROSTER_FLOW.cardTestId` computes it.
+# That wrapper is a plain `View`, not a `Card`: P10-W21 removed the inner
+# `Card` because the shared `.blk.ext` surface already paints it. The
+# testID value is unchanged, so this flow's own steps are unaffected.
 # =====================================================================
 - assertVisible:
     id: "pi-roster-subagents-fleet"
