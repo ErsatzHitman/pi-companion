@@ -147,7 +147,7 @@
  * mockup's own `.composer-foot` under the prompt row — no chip row above
  * it — so nothing here overrides `.pc-prompt-bar__foot`'s layout any
  * more; `PromptBar`'s `metaChips` slot is simply unused. Mode, Model &
- * effort and Queue moved back into the ring's own `Sheet`; see this
+ * effort and Queue moved back into the ring's own popover; see this
  * file's `.pc-composer__ring-group` rules, below `.pc-composer__session-
  * controls`. */
 
@@ -227,10 +227,41 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The session-controls sheet opened by the ring (UI-X1, restoring T386):
- * Mode, Model & effort, Queue and Context all live here again, each its
- * own `.pc-composer__ring-group` below, in the reference `#ctx-menu`'s
- * own order (`docs/ui-reference/pi-companion-web.html`). */
+/* POPOVER-1: the reference `#ctx-menu`'s own outer `.menu` rule
+ * (`C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html`, confirmed
+ * byte-identical to this repo's own `docs/ui-reference/pi-companion-web.html`
+ * this session) — an ANCHORED, UNDIMMED popover, never this app's modal
+ * `Sheet`. `.pc-composer` (this element's positioned ancestor) is already
+ * `position: relative`, so no new positioning infrastructure is needed.
+ * `background`/`border-radius`/`box-shadow` map onto this codebase's own
+ * nearest token matches: `var(--color-surface)` and `var(--shadow-overlay)`
+ * are exact matches for the reference's `var(--surface)`/`var(--sh-overlay)`;
+ * `var(--radius-card)` (10px) is the nearest token to the reference's
+ * literal `12px` — no exact match exists on this scale, the same treatment
+ * this file already gives other off-scale mockup values (e.g. this file's
+ * `--pc-context-ring-percent-size` comment). `width`/`padding`/the
+ * `bottom`/`z-index` offsets are the reference's own literal pixel values,
+ * restated directly for the same reason — no spacing token lands on 336px,
+ * 10px or 6px either. `Composer.tsx`'s own module doc comment on this
+ * popover's `controlsOpen` state has the full focus/Escape/click-outside
+ * contract this outer wrapper's behaviour follows. */
+.pc-composer__session-controls-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: 336px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-overlay);
+  padding: 6px;
+  z-index: 40;
+}
+
+/* The session-controls popover's own inner content (UI-X1, restoring
+ * T386): Mode, Model & effort, Queue and Context all live here again,
+ * each its own `.pc-composer__ring-group` below, in the reference
+ * `#ctx-menu`'s own order (`docs/ui-reference/pi-companion-web.html`).
+ * Unchanged by POPOVER-1 — only the outer wrapper above changed. */
 .pc-composer__session-controls {
   display: flex;
   flex-direction: column;

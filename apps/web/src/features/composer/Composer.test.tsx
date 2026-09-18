@@ -79,25 +79,31 @@ class FlakyStructuredStorage implements StructuredStorage {
 }
 
 /**
- * UI-X1 (restoring T386's ring-opens-the-menu sheet, reversing T388's
+ * UI-X1 (restoring T386's ring-opens-the-menu popover, reversing T388's
  * metadata-row chips): model/effort, per-message routing, and the
  * session-wide queue mode each live inside their own labelled group in
- * the context ring's own `Sheet` again, so a test that reads one of
- * those pickers opens the ring, exactly like `openRingSheet` below —
+ * the context ring's own popover again, so a test that reads one of
+ * those pickers opens the ring, exactly like `openRingPopover` below —
  * these three names stay so every call site below reads the same as it
  * did before, without touching each of the (many) individual tests.
+ * POPOVER-1 replaced the popover's outer wrapper with a local anchored
+ * panel (no longer `Sheet`) — see `Composer.tsx`'s own module doc comment
+ * for the full contract; nothing here needed to change beyond this
+ * comment and `openRingPopover`'s own name, since every call below reads
+ * through `getByTestId`/`getByLabelText`, not through `Sheet`'s own DOM
+ * shape.
  */
 async function openModelChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await openRingSheet(user);
+  await openRingPopover(user);
 }
 async function openRoutingChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await openRingSheet(user);
+  await openRingPopover(user);
 }
 async function openQueueChip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await openRingSheet(user);
+  await openRingPopover(user);
 }
-/** The ring's own Sheet (UI-X1): Mode, Model & effort, Queue and Context. */
-async function openRingSheet(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+/** The ring's own popover (UI-X1): Mode, Model & effort, Queue and Context. */
+async function openRingPopover(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByRole("button", { name: /^Session controls/ }));
 }
 
@@ -115,7 +121,7 @@ type FakeSessionCostUpdateMessage = {
 /**
  * A minimal fake `DaemonSessionCostClient` (UI-W11), mirroring
  * `SessionCostMeterContainer.test.tsx`'s own `createFakeDaemon` — this
- * feature only needs to prove the sheet forwards a wired
+ * feature only needs to prove the popover forwards a wired
  * `sessionCostClient` through; the adapter's own wire behaviour is
  * already proven there.
  */
@@ -1214,8 +1220,10 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
     await user.selectOptions(select, "steer");
     expect(select.value).toBe("steer");
 
-    // The choice is made for the next message, so the sheet is dismissed
+    // The choice is made for the next message, so the popover is dismissed
     // before typing it — the same order a reader works through in the UI.
+    // Escape closes it from anywhere inside it (POPOVER-1's document-level
+    // listener, `Composer.tsx`), not only from the message textarea.
     await user.keyboard("{Escape}");
 
     await user.type(screen.getByLabelText("Message Pi"), "steer this one");
@@ -1231,8 +1239,8 @@ describe("Composer per-message steer/follow-up routing (T38B1b)", () => {
     );
     // Consumed by that submission: re-opening the controls shows the
     // selector back at "Auto", rather than silently steering the next,
-    // unrelated message too. (The sheet unmounts its content on close, so
-    // the value has to be re-read from a freshly opened sheet.)
+    // unrelated message too. (The popover unmounts its content on close,
+    // so the value has to be re-read from a freshly opened popover.)
     await openRoutingChip(user);
     expect((screen.getByLabelText("Send this message as") as HTMLSelectElement).value).toBe("auto");
   });
@@ -1365,7 +1373,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     expect((input as HTMLTextAreaElement).value).toBe("kept");
   });
 
-  it("the context ring opens the session-controls sheet, showing the context summary, an honest cost readout, and the Mode/Model/Queue pickers (UI-X1, UI-W11)", async () => {
+  it("the context ring opens the session-controls popover, showing the context summary, an honest cost readout, and the Mode/Model/Queue pickers (UI-X1, UI-W11)", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
 
@@ -1376,8 +1384,12 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     await user.click(ring);
 
     expect(ring.getAttribute("aria-expanded")).toBe("true");
-    const sheet = screen.getByTestId("composer-session-controls");
-    expect(sheet).toBeTruthy();
+    const popover = screen.getByTestId("composer-session-controls");
+    expect(popover).toBeTruthy();
+    // POPOVER-1: an anchored, undimmed popover, not a modal dialog.
+    expect(popover.getAttribute("role")).toBe("dialog");
+    expect(popover.getAttribute("aria-modal")).toBeNull();
+    expect(popover.getAttribute("aria-label")).toBe("Session controls");
     expect(screen.getByTestId("composer-context-summary").textContent).toContain(
       "not been reported",
     );
@@ -1385,16 +1397,50 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     // only `sessionId`, not `contextTelemetry`) directly after
     // `ContextMeter`, and with no live `sessionCostClient` shows its own
     // honest "not priced yet" state — never a fabricated $0.00.
-    expect(within(sheet).getByTestId("composer-session-cost-meter-unknown")).toBeTruthy();
-    // UI-X1: Mode, Model & effort and Queue moved back into this sheet
+    expect(within(popover).getByTestId("composer-session-cost-meter-unknown")).toBeTruthy();
+    // UI-X1: Mode, Model & effort and Queue moved back into this popover
     // (reversing T388's metadata-row chips), so the picker IS here now.
-    expect(within(sheet).getByLabelText("Model")).toBeTruthy();
+    expect(within(popover).getByLabelText("Model")).toBeTruthy();
   });
 
-  it("draws a 'Compact now' row at the end of the Context group, in the ring's own sheet (UI-W12)", async () => {
+  it("POPOVER-1: moves focus into the popover's first focusable control on open, and restores it to the ring on Escape", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
-    await openRingSheet(user);
+
+    const ring = screen.getByTestId("composer-context-ring");
+    await user.click(ring);
+
+    const popover = screen.getByTestId("composer-session-controls");
+    await waitFor(() => expect(popover.contains(document.activeElement)).toBe(true));
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("composer-session-controls")).toBeNull();
+    expect(document.activeElement).toBe(ring);
+  });
+
+  it("POPOVER-1: a click outside the popover closes it without stealing focus from whatever was actually clicked", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} testId="composer" />);
+
+    await user.click(screen.getByTestId("composer-context-ring"));
+    expect(screen.getByTestId("composer-session-controls")).toBeTruthy();
+
+    // The message textarea is unrelated composer chrome, outside the
+    // popover — clicking it must close the popover (POPOVER-1's
+    // document-level outside-click listener) and land focus on the
+    // element actually clicked, never snap it back to the ring.
+    const input = screen.getByLabelText("Message Pi");
+    await user.click(input);
+
+    expect(screen.queryByTestId("composer-session-controls")).toBeNull();
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("draws a 'Compact now' row at the end of the Context group, in the ring's own popover (UI-W12)", async () => {
+    const user = userEvent.setup();
+    render(<Composer {...baseProps()} testId="composer" />);
+    await openRingPopover(user);
 
     const compactNow = screen.getByTestId("composer-compact-now");
     expect(compactNow.textContent).toContain("Compact now");
@@ -1404,7 +1450,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     render(<Composer {...baseProps()} client={client} testId="composer" />);
-    await openRingSheet(user);
+    await openRingPopover(user);
 
     await user.click(screen.getByTestId("composer-compact-now"));
 
@@ -1423,7 +1469,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
 
     const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
     await user.type(input, "/compact");
-    await openRingSheet(user);
+    await openRingPopover(user);
 
     await user.click(screen.getByTestId("composer-compact-now"));
 
@@ -1451,7 +1497,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
 
     const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
     await user.type(input, "don't forget the deploy notes");
-    await openRingSheet(user);
+    await openRingPopover(user);
 
     await user.click(screen.getByTestId("composer-compact-now"));
 
@@ -1475,7 +1521,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
       expect(screen.getByTestId("composer-attachments").textContent).not.toContain("uploading"),
     );
 
-    await openRingSheet(user);
+    await openRingPopover(user);
     await user.click(screen.getByTestId("composer-compact-now"));
 
     await waitFor(() => expect(client.sentMessages).toHaveLength(1));
@@ -1496,7 +1542,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
 
     const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
     await user.type(input, "don't forget the deploy notes");
-    await openRingSheet(user);
+    await openRingPopover(user);
 
     await user.click(screen.getByTestId("composer-compact-now"));
 
@@ -1542,7 +1588,7 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
 
     const input = screen.getByLabelText("Message Pi") as HTMLTextAreaElement;
     await user.type(input, "don't lose this either");
-    await openRingSheet(user);
+    await openRingPopover(user);
 
     structuredStorage.failNextPut = true;
     await user.click(screen.getByTestId("composer-compact-now"));
@@ -1562,19 +1608,19 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
   it("the Compact now row is disabled with a real explanation when there is no live client (UI-W12)", async () => {
     const user = userEvent.setup();
     render(<Composer {...baseProps()} testId="composer" />);
-    await openRingSheet(user);
+    await openRingPopover(user);
 
     const compactNow = screen.getByTestId("composer-compact-now");
     expect(compactNow.hasAttribute("disabled")).toBe(true);
     expect(compactNow.textContent).toContain("Connect to a session");
   });
 
-  it("UI-W11: reflects live agent_update cost pushes from a wired sessionCostClient inside the session-controls sheet", async () => {
+  it("UI-W11: reflects live agent_update cost pushes from a wired sessionCostClient inside the session-controls popover", async () => {
     const user = userEvent.setup();
     const daemon = createFakeSessionCostDaemon();
     render(<Composer {...baseProps()} sessionCostClient={daemon} testId="composer" />);
 
-    await openRingSheet(user);
+    await openRingPopover(user);
     expect(screen.getByTestId("composer-session-cost-meter-unknown")).toBeTruthy();
 
     act(() => {
@@ -1615,12 +1661,12 @@ describe("Composer prompt row, footer, ring and Escape (T386)", () => {
     ).toBeTruthy();
   });
 
-  it("has no axe violations with the session-controls sheet open", async () => {
+  it("has no axe violations with the session-controls popover open", async () => {
     const user = userEvent.setup();
     const client = new FakeAgentTurnClient();
     const { container } = render(<Composer {...baseProps()} client={client} testId="composer" />);
 
-    await openRingSheet(user);
+    await openRingPopover(user);
 
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);

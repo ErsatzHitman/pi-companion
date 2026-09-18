@@ -4,14 +4,7 @@ import type { KeyboardEvent } from "react";
 import { composer as coreComposer } from "@picompanion/frontend-core";
 import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
 
-import {
-  Button,
-  Chip,
-  ChipGroup,
-  IconButton,
-  Sheet,
-  StatusIndicator,
-} from "../../ui/primitives/index.js";
+import { Button, Chip, ChipGroup, IconButton, StatusIndicator } from "../../ui/primitives/index.js";
 import type { ChipTone } from "../../ui/primitives/index.js";
 import { CommandSearch, PromptBar } from "../../ui/recipes/index.js";
 import type { CommandSearchItem } from "../../ui/recipes/index.js";
@@ -74,7 +67,7 @@ function describeRouting(routing: PromptStreamingBehavior | null): string {
   return "Auto — steers the turn in flight, or starts a new one when idle";
 }
 
-/** The ring's Sheet body (UI-X1, restoring the reference's ring-opens-the-menu design): the same known/unknown split `ContextRing` itself draws, in words. */
+/** The ring's popover body (UI-X1, restoring the reference's ring-opens-the-menu design; POPOVER-1 replaced the outer `Sheet` with a local anchored popover — see this file's module doc comment): the same known/unknown split `ContextRing` itself draws, in words. */
 function describeContextSummary(
   telemetry: coreTelemetry.ContextWindowTelemetry | undefined,
 ): string {
@@ -101,6 +94,19 @@ function describeContextSummary(
  * below) rather than a fabricated client method.
  */
 const COMPACT_NOW_TEXT = "/compact";
+
+/**
+ * POPOVER-1: which elements inside the session-controls popover panel can
+ * take focus — used to move focus into the panel's first such element on
+ * open. The same generic focusable-elements selector
+ * `ui/primitives/use-modal-behavior.ts`'s own `FOCUSABLE_SELECTOR` uses,
+ * restated here rather than imported: this popover deliberately does not
+ * use that hook at all (no Tab trap — see this file's module doc comment
+ * for the full contract), so nothing here actually depends on that file's
+ * own value staying in sync.
+ */
+const POPOVER_FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Why the "Compact now" row can't send right now, or `null` when it can.
@@ -142,7 +148,7 @@ export interface ComposerProps extends UseComposerOptions {
   editorTextClient?: DaemonEditorTextSource;
   /**
    * This session's derived context-window telemetry, from
-   * `useSessionContextTelemetry`. The ring's own sheet is now the only
+   * `useSessionContextTelemetry`. The ring's own popover is now the only
    * place `ContextMeter` renders: UI-W9 removed `routes/root-route.tsx`'s
    * direct mount beside `PiExtensionRail`, because the reference `.live`
    * region (`docs/ui-reference/pi-companion-web.html`) carries no
@@ -153,10 +159,13 @@ export interface ComposerProps extends UseComposerOptions {
   contextTelemetry?: coreTelemetry.ContextWindowTelemetry;
   /**
    * Live `DaemonSessionCostClient` for the session-cost readout mounted
-   * in the same sheet, directly after `ContextMeter` (UI-W11).
+   * in the same popover, directly after `ContextMeter` (UI-W11).
    * `SessionCostMeterContainer`'s own doc (`features/telemetry/
-   * SessionCostMeterContainer.tsx`) names this composer sheet as exactly
-   * where it is "ready to mount" — this is that mount. `undefined` — no
+   * SessionCostMeterContainer.tsx`) names this composer surface — still
+   * "context-ring sheet" in that file's own words as of this session,
+   * outside this task's file list, so not corrected here; see this file's
+   * own POPOVER-1 module doc comment for what it actually is now — as
+   * exactly where it is "ready to mount". `undefined` — no
    * live connection yet, the same "no live client yet" seam every other
    * daemon-backed prop on this component already uses — leaves the
    * meter in `SessionCostStore`'s own honest "not priced yet" state,
@@ -236,7 +245,7 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * `use-drag-and-drop.ts`'s own docs make for capabilities that are not
  * really there.
  *
- * **The context ring's session-controls sheet (UI-X1, restoring T386's
+ * **The context ring's session-controls popover (UI-X1, restoring T386's
  * ring-opens-the-menu design after T388/UI-P4 had moved it out into a
  * chip row under the prompt bar).** The owner reversed that divergence:
  * the reference (`docs/ui-reference/pi-companion-web.html`'s `#ctx-menu`)
@@ -245,7 +254,7 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * now does too, closing the last deliberate web/Android split over where
  * these controls live. `ModelThinkingPicker`, `PromptRoutingPicker` and
  * `QueueModePicker` are unchanged, just re-anchored back inside the
- * `Sheet` the ring opens, each in its own labelled `.pc-composer__ring-
+ * popover the ring opens, each in its own labelled `.pc-composer__ring-
  * group` (`composer.css`'s UI-X1 comment), in the reference's own order.
  * There is exactly one foot row left under the prompt bar —
  * `PromptBar`'s own `footer`/queued-count/keyboard-hint/`footEnd`
@@ -253,6 +262,72 @@ function toCommandSearchItem(command: AgentSlashCommand): CommandSearchItem {
  * `⏎ send · ⇧⏎ newline · Esc interrupt`) plus this repo's queued-count
  * and Stop additions — with no chip row above it and no `metaChips` slot
  * used.
+ *
+ * **POPOVER-1 (this task): the outer wrapper is a local anchored popover,
+ * not `Sheet`.** The reference `#ctx-menu`'s own `.menu` rule
+ * (`C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html`, confirmed
+ * byte-identical to this repo's `docs/ui-reference/pi-companion-web.html`
+ * this session) is `position: absolute; bottom: calc(100% + 10px); left:
+ * 0; width: 336px; background: var(--surface); border-radius: 12px;
+ * box-shadow: var(--sh-overlay); padding: 6px; z-index: 40`, with no
+ * scrim behind it, and carries `role="dialog" aria-label="Session
+ * controls"` directly on itself — an ANCHORED, UNDIMMED popover, never
+ * this app's modal `Sheet` (a bottom scrim plus an `aria-modal="true"`
+ * panel; see `ui/primitives/Sheet.tsx`). `Sheet` and the focus
+ * trap/Escape/restore contract it gets from
+ * `ui/primitives/use-modal-behavior.ts` both belong to another package
+ * this wave and were not edited; this component instead renders its own
+ * `role="dialog"` panel directly (`.pc-composer__session-controls-menu`,
+ * `composer.css`), the same shape `ui/primitives/Popover.tsx` already uses
+ * for a non-modal disclosure (`role="dialog"` with `aria-label`, no
+ * `aria-modal`). `Popover.tsx` itself was not reused: its trigger is a
+ * plain internal `triggerLabel` button, while this surface's trigger is
+ * `ContextRing`'s own SVG ring button — generalizing `Popover.tsx` to
+ * accept an externally controlled trigger would need changes to a file
+ * outside this task's exclusive list, so it was reported rather than
+ * attempted, and this popover is implemented locally instead.
+ *
+ * Dropping the modal scrim and the Tab trap is not free — every other
+ * piece of `use-modal-behavior.ts`'s contract had to be re-decided
+ * explicitly here rather than silently lost:
+ * - **Focus on open**: moves into the panel's first focusable control
+ *   (the effect near `sessionControlsPanelRef`, below). Unlike
+ *   `Popover.tsx` — whose trigger and content are DOM siblings, so an
+ *   unforced Tab from the trigger already reaches the content next —
+ *   this panel is not a DOM sibling of the ring: it renders at the end of
+ *   `.pc-composer`, positioned purely by CSS against that ancestor (which
+ *   is already `position: relative`), so leaving focus on the trigger
+ *   would force a keyboard user to tab through the rest of the prompt row
+ *   first before ever reaching it.
+ * - **Focus restoration on close**: PRESERVED, not dropped — losing it
+ *   would be the accessibility regression this task exists to avoid
+ *   shipping quietly. `closeSessionControls` (below) checks whether focus
+ *   is still inside the panel at the moment it closes and, only then,
+ *   returns it to the ring trigger — the outcome
+ *   `use-modal-behavior.ts`'s own close cleanup gives a modal panel,
+ *   adapted so a click that already moved focus somewhere else on the
+ *   page (the ordinary outside-click-closes case, below) is never yanked
+ *   back to the ring.
+ * - **Escape**: closes the popover from anywhere inside it — a document
+ *   `keydown` listener while the popover is open, mirroring
+ *   `Popover.tsx`'s own — separate from the message textarea's own
+ *   Escape handling (`handlePromptEscape`, below), which this panel does
+ *   not touch.
+ * - **Click outside**: closes the popover — a document `mousedown`
+ *   listener while open, mirroring `Popover.tsx`'s own — except a click on
+ *   the ring trigger itself, left to the trigger's own `onToggle`
+ *   (`ContextRing`'s `onClick`) so the two handlers do not race and
+ *   close-then-reopen it on the same click. This path never restores
+ *   focus (a plain `setControlsOpen(false)`, not `closeSessionControls`):
+ *   at `mousedown` time the click's own focus move has not happened yet,
+ *   so restoring focus to the ring here would only fight the click's own,
+ *   more relevant destination — see the effect itself, below, for the
+ *   full reasoning.
+ * - **Tab moving out of the panel into the page**: ALLOWED — there is no
+ *   trap. This is the direct, disclosed consequence of not using
+ *   `use-modal-behavior.ts`: tabbing past the panel's last control (or
+ *   Shift+Tab before its first) moves focus to whatever the DOM's normal
+ *   order puts next, not back into the panel or to the ring.
  *
  * "Stop" (T28B2) is a second, distinctly-labelled control from "Send" —
  * cancelling the agent's active turn rather than submitting the draft —
@@ -442,7 +517,15 @@ export function Composer({
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
-  /** Whether the context ring's session-controls sheet is showing. */
+  /** POPOVER-1: the session-controls popover panel itself — see this file's module doc comment for the full focus contract. */
+  const sessionControlsPanelRef = useRef<HTMLDivElement>(null);
+  /**
+   * Whether the context ring's session-controls popover is showing.
+   * POPOVER-1: an anchored, undimmed popover (this file's own
+   * `.pc-composer__session-controls-menu`) — no longer the modal `Sheet`
+   * this used to render; see this file's module doc comment for why and
+   * for the full focus contract.
+   */
   const [controlsOpen, setControlsOpen] = useState(false);
   /**
    * FIX-W9: the most recent Compact-now send's failure, once it has
@@ -479,6 +562,98 @@ export function Composer({
   function focusMessageInput(): void {
     wrapperRef.current?.querySelector<HTMLTextAreaElement>(".pc-prompt-bar__input")?.focus();
   }
+
+  /**
+   * POPOVER-1 (focus-on-open half of the contract — see this file's module
+   * doc comment): moves focus into the popover's first focusable control
+   * once it has actually rendered. Falls back to the panel itself
+   * (`tabIndex={-1}` in the JSX below) the same defensive way `Sheet`'s own
+   * `useModalBehavior` does, though every real render of this panel has
+   * several focusable controls in it.
+   */
+  useEffect(() => {
+    if (!controlsOpen) return;
+    const panel = sessionControlsPanelRef.current;
+    const first = panel?.querySelector<HTMLElement>(POPOVER_FOCUSABLE_SELECTOR);
+    (first ?? panel)?.focus();
+  }, [controlsOpen]);
+
+  /**
+   * POPOVER-1: closes the session-controls popover and, only when focus is
+   * still somewhere inside it right now, returns focus to the ring trigger
+   * that opened it — see this file's module doc comment for why this
+   * restore is deliberately kept (not dropped along with the modal scrim
+   * and Tab trap) and why it is conditional. Checked BEFORE
+   * `setControlsOpen(false)` runs: the panel unmounts once `controlsOpen`
+   * goes false, and by then `document.activeElement` has already reset to
+   * `<body>`, so the containment check has to happen while the panel (and
+   * whatever inside it currently has focus) is still in the DOM.
+   */
+  function closeSessionControls(): void {
+    const panel = sessionControlsPanelRef.current;
+    const focusWasInPanel = Boolean(
+      panel && document.activeElement && panel.contains(document.activeElement),
+    );
+    setControlsOpen(false);
+    if (focusWasInPanel) {
+      wrapperRef.current?.querySelector<HTMLButtonElement>(".pc-context-ring")?.focus();
+    }
+  }
+
+  // POPOVER-1: Escape-closes-from-anywhere-inside-it and click-outside-
+  // closes-it, mirroring `ui/primitives/Popover.tsx`'s own document-level
+  // listeners (registered only while open, removed on close/unmount) —
+  // see this file's module doc comment for the full contract these two
+  // behaviours are half of.
+  useEffect(() => {
+    if (!controlsOpen) return;
+
+    function isInsideSessionControls(target: EventTarget | null): boolean {
+      const node = target as Node | null;
+      if (!node) return false;
+      if (sessionControlsPanelRef.current?.contains(node)) return true;
+      // The ring trigger itself: its own `onClick` (`ContextRing`'s
+      // `onToggle`) already closes the popover when clicked while open, so
+      // a `mousedown` landing there must not ALSO be treated as an
+      // outside click — that would close it a beat before the trigger's
+      // own click re-opens it. `Popover.tsx` avoids this by wrapping
+      // trigger and content in one root ref; this popover's panel is a
+      // separate DOM subtree from the ring (see the module doc comment for
+      // why), so the check is done by class instead.
+      return node instanceof Element && node.closest(".pc-context-ring") !== null;
+    }
+
+    function onPointerDown(event: MouseEvent): void {
+      // Plain `setControlsOpen(false)`, never `closeSessionControls`: at
+      // `mousedown` time the click's own focus move (e.g. into the
+      // textarea being clicked) has not happened yet — `userEvent`/real
+      // browsers apply it as a later step of the same click — so
+      // `document.activeElement` here is still whatever the popover left
+      // focused, and restoring focus to the ring at this point would only
+      // race the click's own, more relevant focus destination. This
+      // mirrors `Popover.tsx`'s own outside-pointerdown handler, which
+      // does not attempt focus restoration either.
+      if (!isInsideSessionControls(event.target)) {
+        setControlsOpen(false);
+      }
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent): void {
+      // `closeSessionControls`, not the plain setter: a keydown has no
+      // competing focus destination of its own, so restoring focus to the
+      // ring here is unambiguous (mirrors `Popover.tsx`'s own Escape
+      // handler, which does the same).
+      if (event.key === "Escape") {
+        closeSessionControls();
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `closeSessionControls` and `isInsideSessionControls` close only over refs and the stable `setControlsOpen`, so re-running this effect on every render would add nothing.
+  }, [controlsOpen]);
 
   // Applies a caret position queued by a reference insertion, after React
   // has committed the rewritten draft value.
@@ -753,7 +928,12 @@ export function Composer({
    */
   function handleCompactNow(): void {
     if (compactNowUnavailableReason) return;
-    setControlsOpen(false);
+    // POPOVER-1: the click that reaches this handler was itself inside the
+    // popover (the "Compact now" row), so `closeSessionControls` restores
+    // focus to the ring trigger once it closes, rather than leaving focus
+    // to fall off the now-unmounted button — see this file's module doc
+    // comment for the full focus-restoration contract.
+    closeSessionControls();
     attachments.clear();
     const trimmedDraft = draftText.trim();
     const restoreText =
@@ -810,7 +990,7 @@ export function Composer({
   const attachmentsTestId = testId ? `${testId}-attachments` : undefined;
   const dropHintTestId = testId ? `${testId}-drop-hint` : undefined;
   const contextRingTestId = testId ? `${testId}-context-ring` : undefined;
-  const controlsSheetTestId = testId ? `${testId}-session-controls` : undefined;
+  const controlsPopoverTestId = testId ? `${testId}-session-controls` : undefined;
   const compactNowTestId = testId ? `${testId}-compact-now` : undefined;
   const compactErrorTestId = testId ? `${testId}-compact-error` : undefined;
   const footerStateTestId = testId ? `${testId}-foot-state` : undefined;
@@ -1024,101 +1204,113 @@ export function Composer({
           testId={queueStatusTestId}
         />
       ) : null}
-      <Sheet
-        open={controlsOpen}
-        title="Session controls"
-        description="Mode, model and effort, queue delivery, and this session's context-window usage."
-        onClose={() => setControlsOpen(false)}
-        testId={controlsSheetTestId}
-      >
-        <div className="pc-composer__session-controls">
-          {/* UI-X1: restores the reference `#ctx-menu` popover's own
-              grouping and ordering (`docs/ui-reference/pi-companion-web.html`
-              — Mode, then Model & effort, then Queue, then Context), which
-              T388 had moved out into a chip row under the prompt bar. The
-              owner has since reversed that divergence: these three pickers
-              — `PromptRoutingPicker`, `ModelThinkingPicker`, `QueueModePicker`
-              — are unchanged, just re-anchored back inside this sheet,
-              keeping their own testIds and labels exactly as the chip row
-              left them. The reference's own "Mode" group is a Build/Plan
-              agent-mode toggle this codebase has no provider-backed feature
-              for (mirrored by Android's own `PromptControlsMenu`, whose
-              `modeControl` slot renders a DIFFERENT component,
-              `SessionControlsPicker`, for that same reason); the nearest
-              real web control is `PromptRoutingPicker`'s per-message
-              steer/follow-up routing, so it fills this group instead. */}
-          <div className="pc-composer__ring-group" data-testid={routingGroupTestId}>
-            <div className="pc-composer__ring-group-label">Mode</div>
-            <PromptRoutingPicker
-              value={promptRouting}
-              onChange={setPromptRouting}
-              testId={testId ? `${testId}-prompt-routing` : undefined}
-            />
-          </div>
-          <div className="pc-composer__ring-group" data-testid={modelGroupTestId}>
-            <div className="pc-composer__ring-group-label">Model &amp; effort</div>
-            <ModelThinkingPicker
-              state={modelThinking}
-              testId={testId ? `${testId}-model-thinking` : undefined}
-            />
-          </div>
-          <div className="pc-composer__ring-group" data-testid={queueGroupTestId}>
-            <div className="pc-composer__ring-group-label">Queue</div>
-            <QueueModePicker
-              state={queueModes}
-              testId={testId ? `${testId}-queue-modes` : undefined}
-            />
-          </div>
-          <div className="pc-composer__ring-group" data-testid={contextGroupTestId}>
-            <div className="pc-composer__ring-group-label">Context</div>
-            <p data-testid={contextSummaryTestId}>{describeContextSummary(contextTelemetry)}</p>
-            {/* UI-W9: the reference `#ctx-menu` popover's own
-                final `.menu-g` group is its "Context" readout
-                (`docs/ui-reference/pi-companion-web.html`) — the SAME
-                `ContextMeter` the right rail used to mount directly now
-                renders here instead, off the ring's own `contextTelemetry`
-                prop, so the two can never disagree. */}
-            {contextTelemetry ? (
-              <ContextMeter
-                telemetry={contextTelemetry}
-                testId={testId ? `${testId}-context-meter` : undefined}
+      {/* POPOVER-1: the reference `#ctx-menu`'s own `.menu` (see this
+          file's module doc comment for the exact rule, confirmed this
+          session against `C:/Users/aksha/Downloads/pi-ui-goal/
+          web-spec.html`) is an anchored, undimmed popover carrying
+          `role="dialog" aria-label="Session controls"` directly on
+          itself — never the app's modal `Sheet`. `tabIndex={-1}` is the
+          same defensive fallback `Sheet`'s own focus-on-open used to give
+          a panel with no focusable child; see the focus-on-open effect
+          near `sessionControlsPanelRef`, above, for why. */}
+      {controlsOpen ? (
+        <div
+          ref={sessionControlsPanelRef}
+          className="pc-composer__session-controls-menu"
+          role="dialog"
+          aria-label="Session controls"
+          tabIndex={-1}
+          data-testid={controlsPopoverTestId}
+        >
+          <div className="pc-composer__session-controls">
+            {/* UI-X1: restores the reference `#ctx-menu` popover's own
+                grouping and ordering (`docs/ui-reference/pi-companion-web.html`
+                — Mode, then Model & effort, then Queue, then Context), which
+                T388 had moved out into a chip row under the prompt bar. The
+                owner has since reversed that divergence: these three pickers
+                — `PromptRoutingPicker`, `ModelThinkingPicker`, `QueueModePicker`
+                — are unchanged, just re-anchored back inside this popover,
+                keeping their own testIds and labels exactly as the chip row
+                left them. The reference's own "Mode" group is a Build/Plan
+                agent-mode toggle this codebase has no provider-backed feature
+                for (mirrored by Android's own `PromptControlsMenu`, whose
+                `modeControl` slot renders a DIFFERENT component,
+                `SessionControlsPicker`, for that same reason); the nearest
+                real web control is `PromptRoutingPicker`'s per-message
+                steer/follow-up routing, so it fills this group instead. */}
+            <div className="pc-composer__ring-group" data-testid={routingGroupTestId}>
+              <div className="pc-composer__ring-group-label">Mode</div>
+              <PromptRoutingPicker
+                value={promptRouting}
+                onChange={setPromptRouting}
+                testId={testId ? `${testId}-prompt-routing` : undefined}
               />
-            ) : null}
-            {/* UI-W11: the reference `#ctx-menu` group also carries a Cost
-                readout — `SessionCostMeterContainer` (`features/telemetry/`)
-                mounts directly after `ContextMeter` so the ring's popover
-                carries the full context/cost group. Unlike `ContextMeter`
-                above, this always mounts (it needs only `sessionId`, not
-                `contextTelemetry`) and shows its own honest "not priced
-                yet" state whenever there is no live `sessionCostClient` or
-                no priced turn — never a fabricated `$0.00`. */}
-            <SessionCostMeterContainer
-              agentId={composerOptions.sessionId}
-              client={sessionCostClient}
-              testId={testId ? `${testId}-session-cost-meter` : undefined}
-            />
-            {/* UI-W12: the reference `#ctx-menu` popover's Context group ends
-                with its `.mrow`-styled `#row-compact`
-                (`docs/ui-reference/pi-companion-web.html`) — "Compact now"
-                sends the literal `COMPACT_NOW_TEXT` chat message through the
-                same submit path any typed message takes; see that constant's
-                own doc comment above for why there is no RPC to call
-                instead. */}
-            <button
-              type="button"
-              className="pc-composer__compact-now"
-              onClick={handleCompactNow}
-              disabled={compactNowUnavailableReason !== null}
-              data-testid={compactNowTestId}
-            >
-              <span className="pc-composer__compact-now-label">Compact now</span>
-              <span className="pc-composer__compact-now-value">
-                {compactNowUnavailableReason ?? "Sends /compact as a message"}
-              </span>
-            </button>
+            </div>
+            <div className="pc-composer__ring-group" data-testid={modelGroupTestId}>
+              <div className="pc-composer__ring-group-label">Model &amp; effort</div>
+              <ModelThinkingPicker
+                state={modelThinking}
+                testId={testId ? `${testId}-model-thinking` : undefined}
+              />
+            </div>
+            <div className="pc-composer__ring-group" data-testid={queueGroupTestId}>
+              <div className="pc-composer__ring-group-label">Queue</div>
+              <QueueModePicker
+                state={queueModes}
+                testId={testId ? `${testId}-queue-modes` : undefined}
+              />
+            </div>
+            <div className="pc-composer__ring-group" data-testid={contextGroupTestId}>
+              <div className="pc-composer__ring-group-label">Context</div>
+              <p data-testid={contextSummaryTestId}>{describeContextSummary(contextTelemetry)}</p>
+              {/* UI-W9: the reference `#ctx-menu` popover's own
+                  final `.menu-g` group is its "Context" readout
+                  (`docs/ui-reference/pi-companion-web.html`) — the SAME
+                  `ContextMeter` the right rail used to mount directly now
+                  renders here instead, off the ring's own `contextTelemetry`
+                  prop, so the two can never disagree. */}
+              {contextTelemetry ? (
+                <ContextMeter
+                  telemetry={contextTelemetry}
+                  testId={testId ? `${testId}-context-meter` : undefined}
+                />
+              ) : null}
+              {/* UI-W11: the reference `#ctx-menu` group also carries a Cost
+                  readout — `SessionCostMeterContainer` (`features/telemetry/`)
+                  mounts directly after `ContextMeter` so the ring's popover
+                  carries the full context/cost group. Unlike `ContextMeter`
+                  above, this always mounts (it needs only `sessionId`, not
+                  `contextTelemetry`) and shows its own honest "not priced
+                  yet" state whenever there is no live `sessionCostClient` or
+                  no priced turn — never a fabricated `$0.00`. */}
+              <SessionCostMeterContainer
+                agentId={composerOptions.sessionId}
+                client={sessionCostClient}
+                testId={testId ? `${testId}-session-cost-meter` : undefined}
+              />
+              {/* UI-W12: the reference `#ctx-menu` popover's Context group ends
+                  with its `.mrow`-styled `#row-compact`
+                  (`docs/ui-reference/pi-companion-web.html`) — "Compact now"
+                  sends the literal `COMPACT_NOW_TEXT` chat message through the
+                  same submit path any typed message takes; see that constant's
+                  own doc comment above for why there is no RPC to call
+                  instead. */}
+              <button
+                type="button"
+                className="pc-composer__compact-now"
+                onClick={handleCompactNow}
+                disabled={compactNowUnavailableReason !== null}
+                data-testid={compactNowTestId}
+              >
+                <span className="pc-composer__compact-now-label">Compact now</span>
+                <span className="pc-composer__compact-now-value">
+                  {compactNowUnavailableReason ?? "Sends /compact as a message"}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
-      </Sheet>
+      ) : null}
     </div>
   );
 }

@@ -13,10 +13,13 @@ import type { telemetry as coreTelemetry } from "@picompanion/frontend-core";
  *
  * The fraction is the SAME derived telemetry `ContextMeter`
  * (`features/rail/context-meter.tsx`, reused inside this ring's own
- * session-controls sheet in `Composer.tsx`) renders:
+ * session-controls popover in `Composer.tsx` — POPOVER-1 replaced that
+ * popover's outer wrapper with a local anchored panel, no longer `Sheet`;
+ * see `Composer.tsx`'s own module doc comment for the full contract)
+ * renders:
  * `@picompanion/frontend-core`'s `telemetry.ContextWindowTelemetry`
  * (T29C1's pure derivation off `AgentUsage`), so the ring's percentage and
- * the sheet's full readout can never disagree.
+ * the popover's full readout can never disagree.
  *
  * **Unknown is not zero.** When the provider has not reported both token
  * fields, the ring draws its bare track and no percentage at all — the

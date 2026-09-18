@@ -175,14 +175,14 @@ test.describe("keyboard-only navigation", () => {
       // glossing: on the chip row each chip was itself a popover trigger
       // (`aria-haspopup="dialog"`), so the old assertions matched buttons by
       // the chip's summary text ("E2E Fake Model", "Routing: Auto"). Inside
-      // the sheet the same pickers render their `<select>` directly, with no
+      // the popover the same pickers render their `<select>` directly, with no
       // second popover layer, so matching a button here finds nothing at all
       // — which is exactly how the first version of this fix failed. Asserted
       // against the real, current shape rather than the one this walk
       // remembered.
       await page.keyboard.press("Enter");
       await expect(contextRing).toHaveAttribute("aria-expanded", "true");
-      const sheet = page.getByRole("dialog", { name: "Session controls" });
+      const popover = page.getByRole("dialog", { name: "Session controls" });
       for (const name of [
         "Send this message as",
         "Model",
@@ -190,18 +190,54 @@ test.describe("keyboard-only navigation", () => {
         "Steering queue delivery",
         "Follow-up queue delivery",
       ]) {
-        await expect(sheet.getByRole("combobox", { name })).toBeVisible({ timeout: 15_000 });
+        await expect(popover.getByRole("combobox", { name })).toBeVisible({ timeout: 15_000 });
       }
-      // The keyboard path is already proven by this point without a further
-      // focus assertion: the ring was reached by Shift+Tab, opened with Enter,
-      // and the controls above are inside a focus-trapped dialog that only
-      // that keypress can open. A `:focus` count inside `sheet` was tried here
-      // and deliberately removed — Playwright's `locator` searches DESCENDANTS,
-      // so it silently reads zero whenever the trap parks focus on the dialog
-      // element itself, making it a coin flip on trap internals rather than a
-      // statement about keyboard operability.
+
+      // POPOVER-1: this is now an ANCHORED, UNDIMMED popover -- never the
+      // app's modal `Sheet` -- which drops the modal scrim and the Tab trap
+      // by definition. `Composer.tsx`'s own module doc comment states what
+      // the rest of the modal contract does instead; the two
+      // keyboard-observable halves of it are asserted directly below,
+      // rather than the "the keypress alone proves it" reasoning this test
+      // used to lean on for the (now-removed) focus trap.
+      //
+      // Focus on open: moved into the popover's first focusable control.
+      // Unlike `ui/primitives/Popover.tsx` (whose trigger and content are
+      // DOM siblings, so an unforced Tab from the trigger already reaches
+      // the content next), this panel is not a DOM sibling of the ring --
+      // it renders at the end of `.pc-composer`, positioned purely by CSS
+      // -- so leaving focus on the trigger would force a keyboard user to
+      // tab through the rest of the prompt row first.
+      const firstControl = popover.getByRole("combobox", { name: "Send this message as" });
+      await expect(firstControl).toBeFocused();
+
+      // No trap: Shift+Tab from the popover's first control leaves the
+      // popover entirely rather than wrapping to its own last control --
+      // the direct, disclosed consequence of not using
+      // `ui/primitives/use-modal-behavior.ts`. It lands on "Attach files",
+      // the real control `PromptBar`'s own DOM order (ring -> textarea ->
+      // send -> attach, see that recipe's own module doc) puts immediately
+      // before this popover; Stop is absent on this idle session (FIX-L2,
+      // this file's module doc item 3), so nothing sits between them. The
+      // popover itself stays open (no auto-close-on-blur either) -- only
+      // Escape, an outside click, or a control inside it closes it.
+      await page.keyboard.press("Shift+Tab");
+      await expect(page.getByRole("button", { name: "Attach files" })).toBeFocused();
+      await expect(popover).toBeVisible();
+
+      // Focus restoration on close: PRESERVED, not dropped along with the
+      // trap -- losing it would be a regression, not a simplification. It
+      // is conditional on focus still being inside the popover at the
+      // moment it closes (`Composer.tsx`'s own `closeSessionControls`), so
+      // this moves focus back into the popover deliberately first, rather
+      // than pressing Escape from "Attach files" above (where it would
+      // correctly NOT restore focus, since nothing inside the popover was
+      // focused when the popover closed).
+      await firstControl.focus();
+      await expect(firstControl).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(contextRing).toHaveAttribute("aria-expanded", "false");
+      await expect(contextRing).toBeFocused();
 
       // FIX-CI5: Stop is honestly ABSENT here -- this session is idle
       // (FIX-L2, see this file's module doc item 3) -- a hard assertion
