@@ -138,15 +138,20 @@
 
 /* (CORRECTED, WEB-TOOLCARD: this cited "`docs/ui-reference/
  * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`" as
- * this fill's authority. Nothing under `docs/ui-reference/` may be cited
- * as authority for a product decision — see CLAUDE.md's "reference-only
- * documents" section, whose corollary requires the fact to be restated in
- * a citable home and that home cited instead. The values were not wrong:
- * `docs/ui-reference/pi-companion-web.html` and the confirmed
- * `web-spec.html` were md5-compared before repointing and are
- * byte-identical (`9c49b1a697dff4a6fbc547dc6c257e96`), so this is a
- * provenance fix, not a value fix. That identity is a fact about the WEB
- * pair alone — the Android pair's two files differ.) The mockup's
+ * this fill's authority, then a later pass repointed the citation to
+ * `web-spec.html` while claiming CLAUDE.md's "reference-only documents"
+ * section required it. That claim was itself false: that section is a
+ * closed enumeration of 14 named files (`grep -c 'ui-reference'
+ * CLAUDE.md` is 0 — none of the 14 is under `docs/ui-reference/`), so it
+ * never governed this citation either way. The real, narrower reason to
+ * repoint stands on its own, with no rule needed: `docs/ui-reference/
+ * pi-companion-web.html` and the confirmed `web-spec.html` were
+ * md5-compared and are byte-identical (`9c49b1a697dff4a6fbc547dc6c257e96`
+ * for both), so the value cited here was never wrong — naming
+ * `web-spec.html` is a provenance preference that keeps this citation
+ * valid if the copy under `docs/ui-reference/` ever drifts from it,
+ * nothing more. That identity is a fact about the WEB pair alone — the
+ * Android pair's two files differ.) The mockup's
  * finished-tool-block fill (`.tool-out.tool-ok` / `.tool-out.tool-err`,
  * `background: var(--tool-success-bg)` / `var(--tool-error-bg)`) is
  * already published as design tokens
@@ -246,9 +251,18 @@
 .pc-diff-line--meta {
   color: var(--color-ink-3);
 }
-.pc-diff-line--context {
-  color: var(--code-code-foreground);
-}
+/* Context lines carry no colour rule of their own on purpose. The mockup's
+ * `diffHtml()` (C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html) only
+ * wraps `+`/`-` lines in `.add`/`.del` spans — an unchanged line gets no
+ * span class at all, so it just inherits `.tool-out`'s own `color:
+ * var(--ink-2)`. This file used to repaint `.pc-diff-line--context` at
+ * `--code-code-foreground` (`packages/design-tokens/src/tokens.ts`:
+ * `codeForeground: p.ink`, the primary ink role) to match
+ * `.pc-code-block`'s own colour, which was the same wrong role at the
+ * time. Now that `primitives.css`'s `.pc-code-block` is corrected to
+ * `--color-ink-2`, a context `<span>` needs no rule here at all: it
+ * inherits the right colour from the `<code>`/`.pc-code-block` ancestor
+ * the same way the mockup's unclassed line inherits from `.tool-out`. */
 
 /* Image results (T28A5) -------------------------------------------------
  * A bounded preview frame — `--shadow-hairline` ring, not a blur shadow,

@@ -174,4 +174,33 @@ describe("primitives.css (declared rule text, not getComputedStyle)", () => {
     expect(body).toMatch(/color:\s*var\(--color-ink\)/);
     expect(body).toMatch(/font-weight:\s*var\(--font-weight-medium\)/);
   });
+
+  /**
+   * Pins the mockup's `.tool-out { font-size: 11.5px; color: var(--ink-2) }`
+   * (C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html) — `.pc-code-block`
+   * used to be `--code-code-foreground` (the PRIMARY ink role,
+   * `packages/design-tokens/src/tokens.ts`'s `codeForeground: p.ink`) and
+   * `--font-size-sm` (11px, one step short of the mockup's 11.5px).
+   */
+  it("colours pc-code-block at the secondary ink role and the 11.5px size step", () => {
+    const body = ruleBodyFor(".pc-code-block");
+    expect(body).toMatch(/color:\s*var\(--color-ink-2\)/);
+    expect(body).toMatch(/font-size:\s*var\(--font-size-md\)/);
+  });
+
+  /**
+   * Pins the mockup's `.sw`/`.sw[aria-pressed="true"]` track
+   * (C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html): no `box-shadow` on
+   * the track in either state, and a solid `--accent` fill when checked —
+   * not the `--color-accent-tint` near-white tint this rule used to draw
+   * alongside a 1px accent ring.
+   */
+  it("draws pc-toggle's track with no box-shadow, and a solid accent fill when checked", () => {
+    const unchecked = ruleBodyFor(".pc-toggle");
+    expect(unchecked).not.toMatch(/box-shadow/);
+    const checked = ruleBodyFor('.pc-toggle[aria-checked="true"]');
+    expect(checked).not.toMatch(/box-shadow/);
+    expect(checked).toMatch(/background-color:\s*var\(--color-accent\)/);
+    expect(checked).not.toMatch(/--color-accent-tint/);
+  });
 });

@@ -219,6 +219,17 @@
   align-items: center;
   gap: var(--spacing-3);
 }
+/* The mockup's track (`.sw` in C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html):
+ * `width: 34px; height: 20px; border-radius: 999px; background:
+ * var(--line-strong); border: 0` unchecked, and `.sw[aria-pressed="true"] {
+ * background: var(--accent); }` checked — measured directly rather than
+ * assumed. Neither state draws a `box-shadow` on the track itself (only the
+ * knob, `.sw i`, carries one — `box-shadow: var(--sh-btn)`, already matched
+ * below by `.pc-toggle__knob`). This rule used to draw `--shadow-hairline`
+ * here unchecked and a separate 1px accent ring checked, and the checked
+ * fill was `--color-accent-tint` (a near-white tint,
+ * `packages/design-tokens/src/tokens.ts`) rather than the mockup's solid
+ * `--accent`; all three are corrected below. */
 .pc-toggle {
   position: relative;
   width: 2.25rem;
@@ -226,7 +237,6 @@
   border: none;
   border-radius: var(--radius-full);
   background-color: var(--color-field);
-  box-shadow: var(--shadow-hairline);
   cursor: pointer;
   flex: none;
   transition:
@@ -234,8 +244,7 @@
     transform var(--motion-duration-fast) var(--motion-easing-standard);
 }
 .pc-toggle[aria-checked="true"] {
-  background-color: var(--color-accent-tint);
-  box-shadow: 0 0 0 1px var(--color-accent);
+  background-color: var(--color-accent);
 }
 .pc-toggle:disabled {
   cursor: not-allowed;
@@ -640,16 +649,39 @@
 
 /* CodeBlock -------------------------------------------------------------- */
 
+/* The mockup's `.tool-out` (C:/Users/aksha/Downloads/pi-ui-goal/web-spec.html)
+ * sets `font-size: 11.5px; color: var(--ink-2)` on the same block every
+ * tool command, output, diff and JSON result renders through. This rule
+ * used to set `color: var(--code-code-foreground)` — measured directly
+ * against `packages/design-tokens/src/tokens.ts`: `codeForeground: p.ink`,
+ * the PRIMARY ink role, not the secondary `ink-2` the mockup uses — and
+ * `font-size: var(--font-size-sm)` (11px, one token step below the
+ * mockup's 11.5px). Both are corrected here, at this call site only:
+ * `--font-size-md` already resolves to exactly 11.5
+ * (`packages/design-tokens/src/tokens.ts`'s `typography.fontSize.md`), and
+ * `--color-ink-2` is the existing secondary-ink token every other
+ * de-emphasised label in this file already uses. Neither
+ * `codeForeground` nor `--font-size-sm` is retinted/rescaled — the former
+ * also paints the terminal and file browser (an unrelated fact), and the
+ * latter is read by 20 web files total, including this one
+ * (`git grep -l -- '--font-size-sm' -- 'apps/web/*'`).
+ *
+ * The third property `.tool-out` declares, `line-height: 1.6`, is NOT
+ * matched and is left as `--line-height-relaxed` (1.625) deliberately.
+ * There is no 1.6 step on the scale, and the difference resolves to
+ * 0.29px at this 11.5px size — below the threshold at which introducing
+ * a fourth one-off literal into the line-height scale pays for itself.
+ * Recorded here rather than dropped silently. */
 .pc-code-block {
   margin: 0;
   padding: var(--spacing-3);
   background-color: var(--code-code-background);
-  color: var(--code-code-foreground);
+  color: var(--color-ink-2);
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-hairline);
   overflow-x: auto;
   font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   line-height: var(--line-height-relaxed);
   font-variant-numeric: tabular-nums;
 }

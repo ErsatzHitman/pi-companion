@@ -66,15 +66,19 @@ const STATUS_TEXT: Record<tools.ToolCallViewStatus, string> = {
 /**
  * (CORRECTED, WEB-TOOLCARD: this cited "`docs/ui-reference/
  * pi-companion-web.html`'s `.tool-out.tool-ok` / `.tool-out.tool-err`" as
- * this tint's authority. Nothing under `docs/ui-reference/` may be cited
- * as authority for a product decision — see CLAUDE.md's "reference-only
- * documents" section, whose corollary requires the fact to be restated in
- * a citable home and that home cited instead. The values were not wrong:
- * that file and the confirmed `web-spec.html` were md5-compared before
- * repointing and are byte-identical
- * (`9c49b1a697dff4a6fbc547dc6c257e96`), so this is a provenance fix, not
- * a value fix — a fact about the WEB pair alone, since the Android pair's
- * two files differ.) The mockup's
+ * this tint's authority, then a later pass repointed the citation to
+ * `web-spec.html` while claiming CLAUDE.md's "reference-only documents"
+ * section required it. That claim was itself false: that section is a
+ * closed enumeration of 14 named files (`grep -c 'ui-reference'
+ * CLAUDE.md` is 0 — none of the 14 is under `docs/ui-reference/`), so it
+ * never governed this citation either way. The real, narrower reason to
+ * repoint stands on its own, with no rule needed: that file and the
+ * confirmed `web-spec.html` were md5-compared and are byte-identical
+ * (`9c49b1a697dff4a6fbc547dc6c257e96` for both), so the value cited here
+ * was never wrong — naming `web-spec.html` is a provenance preference
+ * that keeps this citation valid if the copy under `docs/ui-reference/`
+ * ever drifts from it, nothing more. That identity is a fact about the
+ * WEB pair alone — the Android pair's two files differ.) The mockup's
  * finished-tool-block fill (`.tool-out.tool-ok` / `.tool-out.tool-err`,
  * backed by its `--tool-success-bg` / `--tool-error-bg` custom
  * properties, matching `packages/design-tokens/src/tokens.ts`'s
