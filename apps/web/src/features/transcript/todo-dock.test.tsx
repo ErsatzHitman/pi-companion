@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import userEvent from "@testing-library/user-event";
@@ -178,4 +182,28 @@ describe("TodoDock", () => {
     const { container } = render(<TodoDock entry={todoEntry()} testId="dock-axe" />);
     expect(await axe(container)).toHaveNoViolations();
   }, 20_000);
+
+  describe("CSS", () => {
+    // jsdom applies no stylesheet, so this pins the declared rule text
+    // itself rather than a computed style.
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "todo-dock.css"),
+      "utf8",
+    );
+
+    const ruleBodyFor = (selector: string) => {
+      const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+      const at = stripped.indexOf(`${selector} {`);
+      expect(at, `${selector} not found in todo-dock.css`).toBeGreaterThanOrEqual(0);
+      const close = stripped.indexOf("}", at);
+      expect(close, `${selector} has no closing brace`).toBeGreaterThan(at);
+      return stripped.slice(at, close);
+    };
+
+    it("transitions the chevron over --motion-duration-moderate, the scale step nearest the mockup's 180ms", () => {
+      expect(ruleBodyFor(".pc-todo-dock__chevron")).toMatch(
+        /transition:\s*transform\s+var\(--motion-duration-moderate\)\s+var\(--motion-easing-standard\)/,
+      );
+    });
+  });
 });
