@@ -24,15 +24,18 @@ import { usePressScale } from "../theme/use-press-scale";
  * string keeps this recipe from owning a glyph vocabulary of its own;
  * the caller says what its bar means.
  *
- * **Touch target.** The visible mark box is the artifact's 34dp rounded
- * square, and the `Pressable` around it is the full 48dp minimum
- * (plan.md §9.3, T26C) — the same split
- * `ui/primitives/IconButton.tsx` already uses, and audited by the same
- * shared loop in `ui/primitives/touch-targets.test.ts`. Because that
- * 48dp minimum is two dp past the artifact's 46dp `.bar`, the bar's own
- * height is 48: §9.3 wins over a two-pixel difference a reader cannot
- * see, and the alternative (a 46dp bar with a target that overflows it)
- * is the shape the 48dp rule exists to prevent. The mark itself is
+ * **Touch target.** The visible mark box is the confirmed spec's 36dp
+ * rounded square (`.ic{width:36px;height:36px;...}`, android-spec.html),
+ * and the `Pressable` around it is the full 48dp minimum (plan.md §9.3,
+ * T26C) — the same split `ui/primitives/IconButton.tsx` already uses,
+ * and audited by the same shared loop in
+ * `ui/primitives/touch-targets.test.ts`. (CORRECTED: this used to size
+ * the mark box at 34dp and justify the bar's 48dp height against "the
+ * artifact's 46dp `.bar`" — the confirmed spec's own `.bar` rule
+ * declares no height at all (`display:flex;align-items:center;gap:8px;
+ * padding:8px 10px;flex:none`), so there was never a 46dp bar height to
+ * reconcile a two-pixel difference against. `BAR_MIN_HEIGHT` stands on
+ * plan.md §9.3's own 48dp touch floor alone.) The mark itself is
  * hidden from assistive tech; `accessibleName` is the only name the
  * button has, and it is required, so a bar action can never ship
  * announced as its glyph (plan.md §10.5).
@@ -74,7 +77,7 @@ export interface ScreenBarProps {
 }
 
 /** The confirmed Android design's `.ic`, a full pill. The touch target around it is 48dp; see this file's doc comment. */
-const MARK_BUTTON_SIZE = 34;
+const MARK_BUTTON_SIZE = 36;
 /** The artifact's `.ic` font size. */
 const MARK_FONT_SIZE = 15;
 /** The artifact's `.bar-t`. */
@@ -201,7 +204,10 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       color: theme.colors.ink,
       fontSize: TITLE_FONT_SIZE,
       letterSpacing: TITLE_LETTER_SPACING,
-      fontWeight: asFontWeight(theme.typography.fontWeight.semibold),
+      // CORRECTED: this read `fontWeight.semibold` (600). The confirmed
+      // spec's `.bar-t{font:500 13.5px/1.3 Inter,sans-serif;...}` is 500,
+      // one step lighter — `fontWeight.medium`.
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
     // The mono family, so a working directory reads as a path rather
     // than as prose.

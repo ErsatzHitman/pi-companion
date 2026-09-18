@@ -39,6 +39,22 @@ const KNOB_INSET = 4;
  * visually smaller track, and a Reanimated knob slide driven by the
  * shared motion tokens (near-instant when `reduceMotion` is on, per
  * plan.md §10.5).
+ *
+ * **The knob recolours, not just slides.** The confirmed spec's `.sw i`
+ * rule is `background:var(--ink-2)` off and, under
+ * `.sw[data-on="on"] i`, `background:#08131f` on — a real colour change,
+ * not only the `left` position `knobStyle` already drove. `#08131f` is a
+ * raw hex with no exact match in `packages/design-tokens/src/tokens.ts`
+ * (read-only from this package): the nearest named token for "text/an
+ * icon painted directly on a saturated solid fill" is `accentContrast`,
+ * already used the identical way by `ui/recipes/PromptBar.tsx`'s send
+ * icon for the spec's own `#0d1b2a`/`--surface` pair — close, not
+ * byte-identical (measured: `accentContrast` resolves to
+ * `beautifulDark.page` (`#17181a`) in dark mode and `#f7f8f9` in light,
+ * neither of which is `#08131f`). Reading the shared alias here keeps
+ * this knob off the same on-accent colour as every other on-accent
+ * surface by construction, rather than hardcoding a fourth near-miss
+ * literal of its own.
  */
 export function Toggle({ label, checked, onCheckedChange, disabled, testId }: ToggleProps) {
   const { theme, motion } = useTheme();
@@ -58,6 +74,9 @@ export function Toggle({ label, checked, onCheckedChange, disabled, testId }: To
         translateX: KNOB_INSET + progress.value * (TRACK_WIDTH - KNOB_SIZE - KNOB_INSET * 2),
       },
     ],
+    // See this file's own doc comment for why `accentContrast` stands
+    // in for the spec's raw `#08131f` on-state knob colour.
+    backgroundColor: progress.value > 0.5 ? theme.colors.accentContrast : theme.colors["ink-2"],
   }));
 
   const trackStyle = useAnimatedStyle(() => ({
@@ -100,7 +119,9 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       width: KNOB_SIZE,
       height: KNOB_SIZE,
       borderRadius: theme.radii.full,
-      backgroundColor: theme.colors.surface,
+      // No static colour here: the knob recolours with the toggle's own
+      // progress, in `knobStyle` above, the same way `trackStyle`
+      // already drives the track's colour.
     },
     label: {
       color: theme.colors.ink,

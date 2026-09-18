@@ -94,15 +94,19 @@ describe("LiveScreen source", () => {
     expect(readCode()).toMatch(/tone=\{turnRunning \? "info" : "neutral"\}/);
   });
 
-  it("T385: draws A2's card chrome — 14dp radius, a 12.5/600 title and an 11px ink-3 summary", () => {
+  it("UI-A-SHAPE: draws A2's card chrome at the Expressive md radius (22), a 13/500 title and an 11.5px ink-2 summary, matching the confirmed spec's .card/.card h3/.card p", () => {
     const code = readCode();
-    expect(code).toMatch(/borderRadius: theme\.radii\.window/);
+    expect(code).toMatch(/borderRadius: EXPRESSIVE_RADII\.md/);
+    expect(code).not.toMatch(/borderRadius: theme\.radii\.window/);
     expect(code).toMatch(/paddingVertical: theme\.spacing\[3\],/);
     expect(code).toMatch(/paddingHorizontal: theme\.spacing\[3\] \+ 1,/);
-    expect(code).toMatch(/fontSize: theme\.typography\.variant\.body\.fontSize/);
-    expect(code).toMatch(/fontWeight: asFontWeight\(theme\.typography\.fontWeight\.semibold\)/);
+    expect(code).toMatch(/const CARD_TITLE_FONT_SIZE = 13;/);
+    expect(code).toMatch(/fontSize: CARD_TITLE_FONT_SIZE/);
+    expect(code).toMatch(/fontWeight: asFontWeight\(theme\.typography\.fontWeight\.medium\)/);
+    expect(code).not.toMatch(/fontWeight: asFontWeight\(theme\.typography\.fontWeight\.semibold\)/);
+    expect(code).toMatch(/const CARD_SUMMARY_SIZE = 11\.5;/);
     expect(code).toMatch(/fontSize: CARD_SUMMARY_SIZE/);
-    expect(code).toMatch(/color: theme\.colors\["ink-3"\]/);
+    expect(code).toMatch(/cardSummary: \{\s*color: theme\.colors\["ink-2"\],/);
   });
 
   it("T385: renders a subagent's state word through the neutral StatusPill, not as bare text", () => {

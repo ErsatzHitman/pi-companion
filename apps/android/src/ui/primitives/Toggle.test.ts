@@ -15,11 +15,18 @@ import { describe, expect, it } from "vitest";
  * backwards from the confirmed spec. Grepped directly against the
  * confirmed Android design, the real rule
  * is `.sw{width:44px;height:26px;...}`; nothing in that file's `.sw`
- * selector or its `.sw i` knob rule says `40` anywhere. `docs/ui-reference/`
- * is the likely source of the old, wrong `40` — see `CLAUDE.md`'s warning
- * that it is a stale reconstruction agents have twice cited as authority
- * against the real spec — but this file cites no path, so that is
- * inference, not a confirmed provenance. The 40/44 confusion is corrected
+ * selector or its `.sw i` knob rule says `40` anywhere.
+ * `docs/ui-reference/pi-companion-app.html` is the likely source of the
+ * old, wrong `40`: it is a reconstruction that does NOT match the
+ * confirmed Android design — the two files' md5s differ
+ * (`3ff70c21a0b512f169bad358608144f0` against the confirmed design's
+ * `498c3bd38ac8da0636e0bc05b705a7be`), measured directly. But this file
+ * cites no path, so the provenance is inference, not confirmed. (CORRECTED,
+ * AND-SHELL: this said "see `CLAUDE.md`'s warning that it is a stale
+ * reconstruction". `CLAUDE.md` says nothing about `docs/ui-reference/` at
+ * all — grepped, not assumed — so that was a citation of repository law
+ * that does not exist. The measured md5 difference above is the real
+ * evidence, and it is stated here rather than attributed elsewhere.) The 40/44 confusion is corrected
  * here rather than merely reported, because this repository's own rule
  * (`CLAUDE.md`, "reference-only documents") treats an assertion this
  * concretely falsifiable, once it is caught, as a defect to fix rather
@@ -67,6 +74,16 @@ describe("Toggle: knob dimensions match the reference's own .sw i (A-SIZE: 18dp 
     expect(readCode()).toMatch(
       /translateX: KNOB_INSET \+ progress\.value \* \(TRACK_WIDTH - KNOB_SIZE - KNOB_INSET \* 2\),/,
     );
+  });
+});
+
+describe('Toggle: knob recolours with progress, matching the spec\'s .sw i / .sw[data-on="on"] i', () => {
+  it("drives the knob's backgroundColor from progress, in knobStyle, not a static style value", () => {
+    const code = readCode();
+    expect(code).toMatch(
+      /backgroundColor: progress\.value > 0\.5 \? theme\.colors\.accentContrast : theme\.colors\["ink-2"\],/,
+    );
+    expect(code).not.toMatch(/knob: \{[^}]*backgroundColor/);
   });
 });
 

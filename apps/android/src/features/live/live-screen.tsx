@@ -9,6 +9,7 @@ import { PadEntrance, StatusPill, VectorIcon } from "../../ui/primitives";
 import { PixelLoader, ScreenBar } from "../../ui/recipes";
 import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
+import { EXPRESSIVE_RADII } from "../../ui/theme/expressive-shape";
 import {
   buildLiveScreenViewModel,
   formatLiveElapsed,
@@ -95,11 +96,28 @@ export interface LiveScreenProps {
 }
 
 /**
- * The artifact's `.card`: radius 14 (`theme.radii.window`, applied in
- * `createStyles`), padding 12px 13px. Its `h3` is 12.5px/600 — the
- * theme's own `body` size at `semibold` — and its `p` is 11px `ink-3`.
+ * The confirmed spec's `.card`: `border-radius: var(--r-md)` (22,
+ * `EXPRESSIVE_RADII.md`, applied in `createStyles`), padding 12px 14px.
+ * Its `h3` is `font:500 13px/1.3 Inter,sans-serif` and its `p` is
+ * `font-size:11.5px;...;color:var(--ink-2)`.
+ *
+ * CORRECTED: this used to say the radius was 14 (`theme.radii.window`),
+ * the `h3` was 12.5px at `fontWeight.semibold` (600, the theme's own
+ * `body` size), and the `p` was 11px `ink-3` — all four read off
+ * `docs/ui-reference/pi-companion-app.html` rather than the confirmed
+ * `android-spec.html`. Those two files are NOT the same document — their
+ * md5s differ (`3ff70c21a0b512f169bad358608144f0` against the confirmed
+ * design's `498c3bd38ac8da0636e0bc05b705a7be`), measured directly — and
+ * under CLAUDE.md's "reference-only documents" corollary a file like that
+ * is never authority for a product decision regardless. (`CLAUDE.md` names
+ * no file under `docs/ui-reference/` anywhere; an earlier revision of this
+ * comment cited a warning there that does not exist, so the evidence is
+ * stated here instead of attributed.) See `CARD_TITLE_FONT_SIZE` below for the title
+ * size, kept as its own literal the same way `CARD_SUMMARY_SIZE` already
+ * is: no token in `theme.typography.variant` sits at 13.
  */
-const CARD_SUMMARY_SIZE = 11;
+const CARD_TITLE_FONT_SIZE = 13;
+const CARD_SUMMARY_SIZE = 11.5;
 /** The artifact's `.row.sub` height. */
 const ROW_MIN_HEIGHT = 34;
 /** The artifact's subagent name: its `.sub` rows are mono 11.5px. */
@@ -413,17 +431,17 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       gap: theme.spacing[1],
       paddingVertical: theme.spacing[3],
       paddingHorizontal: theme.spacing[3] + 1,
-      borderRadius: theme.radii.window,
+      borderRadius: EXPRESSIVE_RADII.md,
       backgroundColor: theme.colors.surface,
       ...ringShadow(theme, "card"),
     },
     cardTitle: {
       color: theme.colors.ink,
-      fontSize: theme.typography.variant.body.fontSize,
-      fontWeight: asFontWeight(theme.typography.fontWeight.semibold),
+      fontSize: CARD_TITLE_FONT_SIZE,
+      fontWeight: asFontWeight(theme.typography.fontWeight.medium),
     },
     cardSummary: {
-      color: theme.colors["ink-3"],
+      color: theme.colors["ink-2"],
       fontSize: CARD_SUMMARY_SIZE,
     },
     emptyText: {

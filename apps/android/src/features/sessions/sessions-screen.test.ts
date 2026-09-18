@@ -331,10 +331,15 @@ describe("SessionsScreen source: T363 A1's row", () => {
   const code = readScreenCode();
 
   it("draws the row as one raised pill, not a dashed rule", () => {
-    expect(code).toMatch(/borderRadius: ROW_RADIUS/);
     expect(code).toMatch(/backgroundColor: theme\.colors\.surface/);
     expect(code).toMatch(/\.\.\.ringShadow\(theme, "card"\)/);
     expect(code).not.toMatch(/borderStyle: "dashed"/);
+  });
+
+  it("UI-A-SHAPE: draws the row at the Expressive md radius (22), matching the spec's .row{border-radius:var(--r-md)}, not the old literal 12", () => {
+    expect(code).toMatch(/borderRadius: EXPRESSIVE_RADII\.md/);
+    expect(code).not.toMatch(/const ROW_RADIUS/);
+    expect(code).not.toMatch(/borderRadius: ROW_RADIUS/);
   });
 
   it("UI-X8: uses the artifact's own `.row { gap: 10px }`, not the 8px spacing token", () => {
@@ -445,8 +450,8 @@ describe("SessionsScreen source: T385 A1 chrome, body and rows", () => {
     );
   });
 
-  it("draws the row as the artifact's 52dp, 12-radius pill with an ink-3 mono meta line", () => {
-    expect(code).toMatch(/const ROW_RADIUS = 12;/);
+  it("draws the row as the artifact's 52dp, Expressive-md-radius pill with an ink-3 mono meta line", () => {
+    expect(code).toMatch(/borderRadius: EXPRESSIVE_RADII\.md/);
     expect(code).toMatch(/const ROW_MIN_HEIGHT = 52;/);
     expect(code).toMatch(/minHeight: ROW_MIN_HEIGHT/);
     expect(code).toMatch(/color: theme\.colors\["ink-3"\]/);

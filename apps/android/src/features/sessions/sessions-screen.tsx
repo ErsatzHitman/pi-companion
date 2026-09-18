@@ -183,6 +183,7 @@ import {
 import { ScreenBar } from "../../ui/recipes";
 import { asFontWeight, ringShadow } from "../../ui/theme/native-style-helpers";
 import { useTheme } from "../../ui/theme/theme-context";
+import { EXPRESSIVE_RADII } from "../../ui/theme/expressive-shape";
 import { useKeyboardInset } from "../../app-shell/keyboard-inset";
 import {
   DEFAULT_SESSION_FILTER_CHIP_ID,
@@ -306,13 +307,19 @@ export interface SessionsScreenProps {
 }
 
 /**
- * A1's `.row` geometry (T385). The artifact's radius is 12; the nearest
- * named token, `theme.radii.card`, is 10, so the artifact's own figure
- * stays a named constant rather than being rounded to a shape a reader
- * would see as different. `minHeight` is the artifact's 52 — comfortably
+ * A1's `.row` geometry. `minHeight` is the artifact's 52 — comfortably
  * above this platform's 48dp touch minimum (plan.md §9.3).
+ *
+ * CORRECTED: this pinned `ROW_RADIUS` at the literal `12`, on the
+ * premise that the artifact's own radius was 12 and no named token sat
+ * at that figure. The confirmed spec's `.row` rule reads
+ * `border-radius: var(--r-md)` — `a1`'s own `.row` markup carries no
+ * inline radius override, so it draws at the same `--r-md: 22px` the
+ * Android Expressive scale exposes as `EXPRESSIVE_RADII.md`
+ * (`ui/theme/expressive-shape.ts`). Read from that shared scale rather
+ * than repeating the literal, so this row and every other Expressive
+ * `md` surface can never drift apart silently.
  */
-const ROW_RADIUS = 12;
 const ROW_MIN_HEIGHT = 52;
 const ROW_PADDING_VERTICAL = 9;
 const ROW_PADDING_HORIZONTAL = 12;
@@ -320,9 +327,8 @@ const ROW_PADDING_HORIZONTAL = 12;
  * UI-X8: the artifact's `.row { gap: 10px }`. No spacing token holds
  * 10 (the scale steps 8 -> 12), and this row was reading `spacing[2]`
  * (8) instead — a real 2px shrink of the gap between the title/meta
- * column and the status pill. Kept as its own literal, the same
- * treatment `ROW_RADIUS` above already gives the artifact's 12 against
- * the nearest token (10).
+ * column and the status pill. Kept as its own literal; unlike the
+ * radius above, no Expressive scale entry sits at 10 either.
  */
 const ROW_GAP = 10;
 
@@ -1219,7 +1225,7 @@ function createStyles(theme: NativeTheme) {
       gap: ROW_GAP,
       paddingVertical: ROW_PADDING_VERTICAL,
       paddingHorizontal: ROW_PADDING_HORIZONTAL,
-      borderRadius: ROW_RADIUS,
+      borderRadius: EXPRESSIVE_RADII.md,
       backgroundColor: theme.colors.surface,
       ...ringShadow(theme, "card"),
     },
