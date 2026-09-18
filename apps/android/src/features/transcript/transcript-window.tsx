@@ -189,6 +189,16 @@ function createTranscriptEntranceEntering(delayMs: number): EntryExitAnimationFu
   };
 }
 
+/**
+ * android-spec.html's `.t { padding: 4px 10px 10px }` — top is
+ * `theme.spacing[1]` (4), but there is no design token at 10dp, so the
+ * horizontal and bottom figures are stated with the reference, the same
+ * pattern `../../ui/theme/block-shape.ts`'s `BLOCK_PADDING_HORIZONTAL`
+ * already follows for its own token-less figure.
+ */
+const TRANSCRIPT_INSET_HORIZONTAL_DP = 10;
+const TRANSCRIPT_INSET_BOTTOM_DP = 10;
+
 function metricsFromScrollEvent(
   event: NativeSyntheticEvent<NativeScrollEvent>,
 ): TranscriptScrollMetrics {
@@ -214,13 +224,20 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       backgroundColor: theme.colors["accent-tint"],
     },
     list: { flex: 1 },
-    // The artifact's `.t { padding: 12px 12px 4px; gap: 9px }` — the
-    // transcript's own inset and the space between its blocks.
+    // android-spec.html's `.t { padding: 4px 10px 10px }` — the
+    // transcript's own inset. (CORRECTED: this used to quote
+    // docs/ui-reference/pi-companion-app.html's stale `.t { padding:
+    // 12px 12px 4px; gap: 9px }` instead, with top and bottom swapped
+    // and the wrong horizontal figure; see `../../ui/theme/
+    // block-shape.ts`'s module doc comment for the full correction.)
+    // The space between blocks is `BLOCK_GAP`, not a `gap` on `.t`
+    // itself — the confirmed spec's `.t` declares none; see that
+    // constant's own doc comment.
     listContent: {
       gap: BLOCK_GAP,
-      paddingHorizontal: theme.spacing[3],
-      paddingTop: theme.spacing[3],
-      paddingBottom: theme.spacing[1],
+      paddingHorizontal: TRANSCRIPT_INSET_HORIZONTAL_DP,
+      paddingTop: theme.spacing[1],
+      paddingBottom: TRANSCRIPT_INSET_BOTTOM_DP,
     },
   });
 }

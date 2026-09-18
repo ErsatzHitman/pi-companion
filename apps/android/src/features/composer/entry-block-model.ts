@@ -15,13 +15,20 @@ import type { ComposerEntryStatus } from "./composer-model";
  * The composer's queued-entry blocks (T355) — the redesign's `.blk`.
  *
  * The artifact draws everything the session screen stacks as one block
- * shape: radius 14, padding 9×11, 9 between blocks, and a background
+ * shape: radius 14, padding 9×12, 10 between blocks, and a background
  * that says what KIND of thing it is — `.usr` on `field` for a
  * prompt the user sent, `.pend` on `inset` for one still queued, `.err`
  * on `tool-error-bg` for one that failed. The composer's own entry list
  * used to be a flat row per entry with a chip on the right; this module
  * is the part of turning it into that block shape that can be proven
  * without rendering.
+ *
+ * (CORRECTED: the geometry figures above were `9×11, 9 between blocks`,
+ * quoting `docs/ui-reference/pi-companion-app.html`'s stale
+ * reconstruction. `../../ui/theme/block-shape.ts`'s own module comment
+ * has the confirmed spec's real numbers and how it re-derived them; the
+ * constants below are unchanged re-exports of that file's, so fixing
+ * this comment did not require touching a value here.)
  *
  * RN-free on purpose, like every `-model.ts` beside it: the mapping
  * below is the whole decision, and it is worth a real behavioural test
@@ -50,10 +57,12 @@ import type { ComposerEntryStatus } from "./composer-model";
 
 /** Radius of every block the redesign draws (`.blk`). */
 export const ENTRY_BLOCK_RADIUS = BLOCK_RADIUS;
-/** `.blk`'s `padding: 9px 11px`, in the artifact's own order. */
+/** `.blk`'s `padding: 9px 12px`, in the confirmed spec's own order. */
 export const ENTRY_BLOCK_PADDING_VERTICAL = BLOCK_PADDING_VERTICAL;
 export const ENTRY_BLOCK_PADDING_HORIZONTAL = BLOCK_PADDING_HORIZONTAL;
-/** `.t`'s `gap: 9px` — expressed as the gap between stacked blocks. */
+/** `.blk`'s own `margin: 10px 0` collapsing between adjacent siblings —
+ * expressed as the gap between stacked blocks. See `BLOCK_GAP`'s own
+ * doc comment in `block-shape.ts` for why this is not a `gap` on `.t`. */
 export const ENTRY_BLOCK_GAP = BLOCK_GAP;
 
 /**
@@ -93,14 +102,20 @@ export function entryBlockIsOutlined(status: ComposerEntryStatus): boolean {
 }
 
 /**
- * The `theme.colors` key a block's 1px ring reads from, or `null` when
- * that block has none.
+ * The `theme.colors` key a block's 1px ring reads from. Always `null`:
+ * `blockRing` in `block-shape.ts` never returns anything else, because
+ * the confirmed spec draws no ring, shadow, or border on `.blk` in any
+ * state — see that function's own doc comment for the full correction.
  *
- * `sent` is the artifact's `.usr`, the one block kind the design turns
- * the ring off for, so a delivered prompt is the only entry in this list
- * without one. A `failed` entry returns `null` here too — its single
- * border is the red outline `entryBlockIsOutlined` reports, and a view
- * can only have one border colour.
+ * (CORRECTED: this used to say `sent` was "the one block kind the
+ * design turns the ring off for", implying `pending` and `failed` each
+ * had one. `pending` did — `entryBlockRing("pending")` returned
+ * `"line"` — until `blockRing` was corrected to return `null`
+ * unconditionally; there was never a real ring to turn off for `sent`
+ * specifically. `failed`'s `null` is unchanged and for the reason
+ * already given: its single border is the red outline
+ * `entryBlockIsOutlined` reports, and a view can only have one border
+ * colour.)
  */
 export function entryBlockRing(status: ComposerEntryStatus): BlockRingToken | null {
   return blockRing(entryBlockKind(status));

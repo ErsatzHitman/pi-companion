@@ -1,16 +1,40 @@
 /**
  * The one block shape the redesigned session screen draws everything in
- * (T356) — the artifact's `.blk`.
+ * (T356) — the confirmed spec's `.blk`.
  *
- * The design artifact's `.blk` gives it once and then reuses it for
- * every kind of thing the screen stacks. Quoting the artifact's own
- * CSS, which is the authority for every figure below:
+ * (CORRECTED: this comment used to quote the CSS below as "the artifact's
+ * own CSS, which is the authority for every figure below" —
  *
  * ```css
  * .blk { border-radius: 14px; padding: 9px 11px; box-shadow: var(--sh-hairline); }
  * .t   { padding: 12px 12px 4px; gap: 9px; }
  * .blk.usr { background: var(--usr-bg); box-shadow: none; }
  * ```
+ *
+ * — but that is `docs/ui-reference/pi-companion-app.html`'s stale
+ * reconstruction, not the confirmed design: `grep -c -- '--sh-hairline'`
+ * returns 9 there and 0 over the confirmed spec,
+ * `C:/Users/aksha/Downloads/pi-ui-goal/android-spec.html`. The confirmed
+ * spec is the real authority; its own text, read directly out of the
+ * file, is:)
+ *
+ * ```css
+ * .blk { border-radius: var(--r-blk); padding: 9px 12px; margin: 10px 0; }
+ * .t   { flex: 1; min-height: 0; overflow: auto; padding: 4px 10px 10px;
+ *        font: 12.5px/1.62 'JetBrains Mono', ui-monospace, monospace;
+ *        scrollbar-width: thin; }
+ * .blk.usr { background: var(--usr-bg); }
+ * ```
+ *
+ * `--r-blk` is `14px` — the one figure the stale reconstruction happened
+ * to get right. There is no `box-shadow` and no `border` on `.blk`
+ * anywhere in the confirmed spec, in any state, not even `.blk.err` — see
+ * `blockRing` below for what that means for the hairline ring this file
+ * used to draw. `.blk`'s own `margin: 10px 0` (not a `gap` on `.t`,
+ * which the confirmed spec never declares) is the real source of the
+ * space between stacked blocks: adjacent blocks' 10px top/bottom margins
+ * collapse to a single 10px in the reference's own box model, which
+ * `BLOCK_GAP` below reproduces as a single number.
  *
  * `--usr-bg` is itself `var(--field)` (the artifact's own comment on that
  * declaration reads `userMessageBg #343541`) — the confirmed design paints
@@ -44,13 +68,19 @@
  * execution rather than by a source-regex pin.
  */
 
-/** Radius of every block (`.blk`'s `border-radius: 14px`). */
+/** Radius of every block (`.blk`'s `border-radius: var(--r-blk)`, `14px`). */
 export const BLOCK_RADIUS = 14;
-/** `.blk`'s `padding: 9px 11px`, in the artifact's own order. */
+/** `.blk`'s `padding: 9px 12px`, in the confirmed spec's own order.
+ * (CORRECTED: this was `11`, docs/ui-reference/pi-companion-app.html's
+ * stale `9px 11px` — see the module doc comment above.) */
 export const BLOCK_PADDING_VERTICAL = 9;
-export const BLOCK_PADDING_HORIZONTAL = 11;
-/** `.t`'s `gap: 9px` — the space between stacked blocks. */
-export const BLOCK_GAP = 9;
+export const BLOCK_PADDING_HORIZONTAL = 12;
+/** The space between stacked blocks — `.blk`'s own `margin: 10px 0`
+ * collapsing between adjacent siblings, not a `gap` on `.t` (the
+ * confirmed spec's `.t` declares none). (CORRECTED: this was `9`, quoting
+ * docs/ui-reference/pi-companion-app.html's stale `.t { gap: 9px }` — see
+ * the module doc comment above.) */
+export const BLOCK_GAP = 10;
 
 /**
  * What a block IS. Named after the artifact's own class suffixes where
@@ -115,37 +145,40 @@ export function blockOutline(kind: BlockKind): BlockOutlineToken | null {
 }
 
 /**
- * `true` when a block carries the artifact's own hairline ring —
- * `.blk`'s `box-shadow: var(--sh-hairline)` — and the `theme.colors`
- * key to draw it in.
+ * Always `null`: the confirmed spec draws no ring, shadow, or border on
+ * `.blk`, in any state — not `pending`, not `tool-ok`, not `extension`,
+ * not even `tool-error` (whose own red outline is `blockOutline` above,
+ * a separate and independently-justified decision this correction does
+ * not touch — see that function's own doc comment).
  *
- * Every FILLED block except `usr` has one (`.blk.usr` is the one rule
- * that turns it off), and so does every unfilled outline this app
- * draws a border on. It is drawn as a 1px `line` border rather than a
- * shadow because React Native has no hairline box-shadow and a 1px
- * border is the same pixel at the same weight on both platforms.
+ * (CORRECTED: this function used to return `"line"` for every filled
+ * kind except `usr`, and this comment used to justify it as "the
+ * artifact's own hairline ring — `.blk`'s `box-shadow: var(
+ * --sh-hairline)`", explaining only WHY it was drawn as an RN border
+ * rather than a CSS box-shadow, never independently why a ring should
+ * exist at all. That rule, and the `--sh-hairline` token it names, exist
+ * only in `docs/ui-reference/pi-companion-app.html`'s stale
+ * reconstruction — `grep -c -- '--sh-hairline'` returns 9 there and 0
+ * over the confirmed spec, `C:/Users/aksha/Downloads/pi-ui-goal/
+ * android-spec.html`. Because the only reason ever given was matching
+ * that reference, and the reference was the wrong one, there is no
+ * accessibility, contrast, or dark-theme legibility constraint this
+ * correction regresses — this function's own prior text is the entire
+ * justification that existed, and it named no such constraint.)
  *
- * Two kinds return `null` here for two different reasons, and a caller
- * must not read either as "this block has no border": `user` draws
- * none at all, exactly as the artifact specifies, while `tool-error`'s
- * single border is claimed by `blockOutline` above (a block can only
- * have one border colour, and the error's is the red one).
+ * Kept as a function, not deleted, and `BlockRingToken` kept as a type:
+ * both are still called across `tool-call-row.tsx` in this same package
+ * and, in other packages this task does not own,
+ * `apps/android/src/features/composer/entry-block-model.ts` and
+ * `apps/android/src/ui/recipes/StreamingMessage.tsx`. Their two calls in
+ * `StreamingMessage.tsx` were already always `null` (`"user"`/
+ * `"assistant"`, both already-null kinds) and are unaffected;
+ * `entry-block-model.ts`'s `entryBlockRing("pending")` was `"line"` and
+ * is now `null` too — a real behaviour change in a file this task may
+ * only read, reported rather than resolved here.
  */
 export type BlockRingToken = "line";
 
-export function blockRing(kind: BlockKind): BlockRingToken | null {
-  switch (kind) {
-    case "user":
-      return null;
-    case "assistant":
-      // Not a block at all — the model's prose is bare text on the
-      // canvas, so there is no box to ring.
-      return null;
-    case "tool-error":
-      return null;
-    case "pending":
-    case "tool-ok":
-    case "extension":
-      return "line";
-  }
+export function blockRing(_kind: BlockKind): BlockRingToken | null {
+  return null;
 }

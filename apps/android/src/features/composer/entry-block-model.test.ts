@@ -59,11 +59,17 @@ describe("entryBlockIsOutlined", () => {
 });
 
 describe("entryBlockRing", () => {
-  it("rings a still-pending block in the artifact's `line` hairline", () => {
-    expect(entryBlockRing("pending")).toBe("line");
+  // CORRECTED: this case used to be "rings a still-pending block in the
+  // artifact's `line` hairline" and expected `"line"`. The confirmed
+  // spec draws no ring, shadow, or border on `.blk` in any state — see
+  // `blockRing`'s own doc comment in `block-shape.ts` — so a pending
+  // entry now renders with no ring at all, the same as every other
+  // status.
+  it("draws no ring on a pending block — the confirmed spec rings nothing", () => {
+    expect(entryBlockRing("pending")).toBeNull();
   });
 
-  it("leaves the user's own tinted block unringed, as `.blk.usr { box-shadow: none }` specifies", () => {
+  it("leaves the user's own tinted block unringed too — no `.blk` state has one", () => {
     expect(entryBlockRing("sent")).toBeNull();
   });
 
@@ -71,13 +77,23 @@ describe("entryBlockRing", () => {
     expect(entryBlockRing("failed")).toBeNull();
     expect(entryBlockIsOutlined("failed")).toBe(true);
   });
+
+  it("rings no status at all — the ring is gone, not selectively applied", () => {
+    for (const status of EVERY_STATUS) {
+      expect(entryBlockRing(status)).toBeNull();
+    }
+  });
 });
 
 describe("block geometry", () => {
   it("carries the artifact's own `.blk` numbers, not approximations", () => {
+    // CORRECTED: padding-horizontal and gap were `11`/`9`, quoting
+    // docs/ui-reference/pi-companion-app.html's stale reconstruction —
+    // see block-shape.ts's own corrected doc comments for the confirmed
+    // spec's real `padding: 9px 12px; margin: 10px 0`.
     expect(ENTRY_BLOCK_RADIUS).toBe(14);
     expect(ENTRY_BLOCK_PADDING_VERTICAL).toBe(9);
-    expect(ENTRY_BLOCK_PADDING_HORIZONTAL).toBe(11);
-    expect(ENTRY_BLOCK_GAP).toBe(9);
+    expect(ENTRY_BLOCK_PADDING_HORIZONTAL).toBe(12);
+    expect(ENTRY_BLOCK_GAP).toBe(10);
   });
 });

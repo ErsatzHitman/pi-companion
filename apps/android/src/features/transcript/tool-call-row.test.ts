@@ -102,12 +102,18 @@ describe("tool-call-row.tsx: memoized on the model's comparator", () => {
 });
 
 describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
-  it("takes the card's fill, ring and outline from the shared block table, never from a colour written here", () => {
+  it("takes the card's fill and outline from the shared block table, never from a colour written here", () => {
+    // CORRECTED: this also asserted `blockRing(kind)` was called, pinning
+    // a 1px hairline this file drew on every filled block except a
+    // running one's — a ring that only existed in
+    // docs/ui-reference/pi-companion-app.html's stale `.blk { ...
+    // box-shadow: var(--sh-hairline) }` rule. `block-shape.ts`'s own
+    // `blockRing` now always returns null; nothing here calls it.
     const code = readCode();
     expect(code).toMatch(/blockSurface\(kind\)/);
-    expect(code).toMatch(/blockRing\(kind\)/);
     expect(code).toMatch(/blockOutline\(kind\)/);
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(code).not.toMatch(/blockRing/);
   });
 
   it("maps a finished call to tool-ok and a failed one to tool-error", () => {
@@ -119,7 +125,10 @@ describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
   it("leaves a still-running call on the artifact's own `.blk` resting fill, because it has no outcome to colour", () => {
     // `toolBlockKind` returns `null` for everything that is not finished,
     // and `useToolBlockStyle` turns that into the artifact's default
-    // `inset` fill, the `.blk` hairline, and no outcome tint.
+    // `inset` fill and no outcome tint — and, like every other block, no
+    // border at all (CORRECTED: this used to say "the `.blk` hairline"
+    // instead of "no border at all" — see `useToolBlockStyle`'s own doc
+    // comment for the full correction).
     const code = readCode();
     expect(code).toMatch(/const kind = toolBlockKind\(status\);/);
     expect(code).toMatch(
@@ -142,18 +151,45 @@ describe("tool-call-row.tsx: the redesign's tool surfaces (T356)", () => {
     expect(code).not.toMatch(/<Card\b/);
   });
 
-  it("renders the header's `.tchip` from toolHeaderChipLabel, in `teal` on `surface` (A-TEAL)", () => {
-    // android-spec.html: `.pa{color:var(--teal)}` — the chip text, not the
-    // `.tchip` box (background/border stay as they were before A-TEAL).
+  it("renders the header's `.tchip` from toolHeaderChipLabel, in `teal` on `field` (A-TEAL)", () => {
+    // android-spec.html: `.pa{color:var(--teal)}` for the chip text, and
+    // `.tchip{background:var(--field);box-shadow:0 0 0 1px var(--line)}`
+    // for the box. (CORRECTED: the title and this comment used to say
+    // the box sat on `surface` and "stay[ed] as they were before
+    // A-TEAL" — `surface` was itself docs/ui-reference/
+    // pi-companion-app.html's stale background token, fixed together
+    // with this comment.)
     const code = readCode();
     expect(code).toMatch(/const chipLabel = toolHeaderChipLabel\(tool\);/);
     expect(code).toMatch(/\{chipLabel\}/);
     expect(code).toMatch(/color: theme\.colors\.teal/);
+    expect(code).toMatch(/backgroundColor: theme\.colors\.field/);
     expect(code).toMatch(/borderRadius: TOOL_CHIP_RADIUS/);
   });
 
   it("keeps the status in words beside the fill, so colour is never the only signal", () => {
     expect(readCode()).toMatch(/statusText=\{statusTextFor\(tool\.status\)\}/);
+  });
+});
+
+describe("tool-call-row.tsx: the confirmed android-spec.html numbers, not the stale reconstruction's", () => {
+  it("pins .tchip's own radius/padding/font-size as literal RN constants", () => {
+    // android-spec.html: `.tchip{padding:1px 6px;border-radius:6px;
+    // background:var(--field);box-shadow:0 0 0 1px var(--line);
+    // font-size:11.5px}` — none of these has a design token, so all four
+    // are stated with the reference, same as before this correction.
+    const code = readCode();
+    expect(code).toMatch(/^const TOOL_CHIP_RADIUS = 6;$/m);
+    expect(code).toMatch(/^const TOOL_CHIP_PADDING_HORIZONTAL = 6;$/m);
+    expect(code).toMatch(/^const TOOL_CHIP_PADDING_VERTICAL = 1;$/m);
+    expect(code).toMatch(/^const TOOL_CHIP_FONT_SIZE = 11\.5;$/m);
+  });
+
+  it("pins the transcript line's own font size at the confirmed spec's 12.5, not the stale reconstruction's 12", () => {
+    // android-spec.html's `.t{font:12.5px/1.62 'JetBrains Mono',
+    // ui-monospace,monospace}` — `.ln` itself declares no font of its
+    // own and inherits this.
+    expect(readCode()).toMatch(/^const LINE_FONT_SIZE = 12\.5;$/m);
   });
 });
 

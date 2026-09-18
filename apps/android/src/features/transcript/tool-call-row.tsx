@@ -18,13 +18,18 @@
  * artifact draws a finished tool call on `tool-success-bg` and a failed
  * one on `tool-error-bg`, which is what `toolBlockKind` below maps a
  * `ToolCallViewModel.status` onto. The frame itself is the shared
- * `.blk` — radius 14, padding 9×11, and its 1px `line` hairline — so a
- * tool call reads as the same kind of object as every other block in
- * the transcript. A running call keeps `.blk`'s own `inset` resting
- * fill: it has no outcome yet, and colouring it as though it did is the
- * thing this whole table exists to avoid. `StatusIndicator` above still
- * spells the status out in words, so none of this is colour alone
- * (plan.md §10.5).
+ * `.blk` — radius 14, padding 9×12 — so a tool call reads as the same
+ * kind of object as every other block in the transcript. It carries no
+ * ring: the confirmed spec draws no border or box-shadow on `.blk` in
+ * any state, and `block-shape.ts`'s `blockRing` always returns `null`
+ * for exactly that reason (CORRECTED — this used to say "and its 1px
+ * `line` hairline", the stale reconstruction's `box-shadow: var(
+ * --sh-hairline)`; see `blockRing`'s own doc comment for the full
+ * correction). A running call keeps `.blk`'s own `inset` resting fill:
+ * it has no outcome yet, and colouring it as though it did is the thing
+ * this whole table exists to avoid. `StatusIndicator` above still spells
+ * the status out in words, so none of this is colour alone (plan.md
+ * §10.5).
  *
  * **The header is the artifact's own line.** `.tt` names the tool in
  * bold `ink`, `.tchip` carries the one path or argument this call
@@ -97,7 +102,6 @@ import {
   BLOCK_PADDING_VERTICAL,
   BLOCK_RADIUS,
   blockOutline,
-  blockRing,
   blockSurface,
   type BlockKind,
 } from "../../ui/theme/block-shape";
@@ -153,12 +157,28 @@ export { isToolCallEntry } from "./tool-call-row-model";
 
 const MAX_LIST_ROWS = 20;
 
-/** The transcript line's own mono metrics: `.ln { font-size: 12px; line-height: 1.62 }`. */
-const LINE_FONT_SIZE = 12;
+/** The transcript line's own mono metrics: `.t`'s `font: 12.5px/1.62
+ * 'JetBrains Mono', ui-monospace, monospace` — `.ln` itself declares no
+ * font of its own and inherits this. (CORRECTED: this was `12`, quoting
+ * `.ln { font-size: 12px; line-height: 1.62 }`, a rule that exists only
+ * in docs/ui-reference/pi-companion-app.html's stale reconstruction —
+ * `grep -c -- 'var(--mono)'` returns 21 there and 0 over the confirmed
+ * spec, C:/Users/aksha/Downloads/pi-ui-goal/android-spec.html.) */
+const LINE_FONT_SIZE = 12.5;
 const LINE_HEIGHT = LINE_FONT_SIZE * 1.62;
-/** `.tchip { border-radius: 5px; padding: 0 4px }` — no token at 5 or 4, so both are stated with the reference. */
-const TOOL_CHIP_RADIUS = 5;
-const TOOL_CHIP_PADDING_HORIZONTAL = 4;
+/** `.tchip { border-radius: 6px; padding: 1px 6px; background:
+ * var(--field); box-shadow: 0 0 0 1px var(--line); font-size: 11.5px }`
+ * — no design token at 6dp radius, 1px/6px padding, or 11.5px text, so
+ * all three stay stated with the reference. (CORRECTED: radius was `5`
+ * and padding `0 4px`, quoting docs/ui-reference/pi-companion-app.html's
+ * stale `.tchip { border-radius: 5px; padding: 0 4px }` instead.)
+ * `TOOL_CHIP_FONT_SIZE` is deliberately its own constant, distinct from
+ * `LINE_FONT_SIZE` above: the chip's `.pa` text is smaller than the
+ * surrounding `.ln` line it sits on. */
+const TOOL_CHIP_RADIUS = 6;
+const TOOL_CHIP_PADDING_HORIZONTAL = 6;
+const TOOL_CHIP_PADDING_VERTICAL = 1;
+const TOOL_CHIP_FONT_SIZE = 11.5;
 
 /**
  * `.xbtn { position: absolute; right: 8px; top: 7px; width: 26px; height:
@@ -201,25 +221,35 @@ function toolBlockKind(status: tools.ToolCallViewModel["status"]): BlockKind | n
   return null;
 }
 
-/** The block frame's fill, ring and outline for one tool call's status. */
+/**
+ * The block frame's fill and outline for one tool call's status. No
+ * ring: the confirmed spec draws no border or box-shadow on `.blk` in
+ * any state (`block-shape.ts`'s `blockRing` always returns `null`), so
+ * only a failed call gets a border at all — `blockOutline`'s red
+ * outline. (CORRECTED: this used to also compute a `ring` and fall back
+ * to it — and, for a still-running call, to a hardcoded `"line"` — so
+ * every card drew a 1px border. Neither had an independent reason; both
+ * were reproducing the stale reconstruction's `.blk { box-shadow: var(
+ * --sh-hairline) }`. See `blockRing`'s own doc comment for the full
+ * correction.)
+ */
 function useToolBlockStyle(status: tools.ToolCallViewModel["status"]) {
   const { theme } = useTheme();
   const kind = toolBlockKind(status);
   const surface = kind === null ? "inset" : (blockSurface(kind) ?? "inset");
-  const ring = kind === null ? "line" : blockRing(kind);
   const outline = kind === null ? null : blockOutline(kind);
   return {
     backgroundColor: theme.colors[surface],
-    borderWidth: 1,
-    borderColor: theme.colors[outline ?? ring ?? "line"],
+    ...(outline === null ? null : { borderWidth: 1, borderColor: theme.colors[outline] }),
   };
 }
 
 function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
   return StyleSheet.create({
-    // `.blk { border-radius: 14px; padding: 9px 11px }` — the same block
-    // every other transcript element is drawn in. The fill, ring and
-    // outline come from `useToolBlockStyle` above.
+    // `.blk { border-radius: 14px; padding: 9px 12px }` — the same block
+    // every other transcript element is drawn in. The fill and outline
+    // come from `useToolBlockStyle` above; there is no ring (see that
+    // function's own doc comment).
     // `.blk.hasx,.blk[data-r]{position:relative}` — always applied here
     // rather than conditionally, since an absolutely positioned `.xbtn`
     // only ever renders as a sibling when `toolCardHasExpandButton` is
@@ -286,20 +316,26 @@ function createStyles(theme: ReturnType<typeof useTheme>["theme"]) {
       lineHeight: LINE_HEIGHT,
       fontWeight: asFontWeight(theme.typography.fontWeight.bold),
     },
-    // `.tchip { background: var(--surface); border-radius: 5px; padding:
-    // 0 4px; box-shadow: var(--sh-hairline) }` (box, unchanged by A-TEAL);
-    // text is android-spec.html's `.pa{color:var(--teal)}`.
+    // android-spec.html's `.tchip { background: var(--field);
+    // border-radius: 6px; padding: 1px 6px; box-shadow: 0 0 0 1px
+    // var(--line); font-size: 11.5px }` (box, unchanged by A-TEAL — see
+    // that section's own comment above); text colour is
+    // `.pa{color:var(--teal)}`. (CORRECTED: the box used to sit on
+    // `theme.colors.surface`, docs/ui-reference/pi-companion-app.html's
+    // stale `background: var(--surface)`, not the confirmed spec's
+    // `var(--field)`.)
     chip: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.field,
       borderRadius: TOOL_CHIP_RADIUS,
       paddingHorizontal: TOOL_CHIP_PADDING_HORIZONTAL,
+      paddingVertical: TOOL_CHIP_PADDING_VERTICAL,
       borderWidth: 1,
       borderColor: theme.colors.line,
     },
     chipText: {
       color: theme.colors.teal,
       fontFamily: theme.typography.variant.code.fontFamily,
-      fontSize: LINE_FONT_SIZE,
+      fontSize: TOOL_CHIP_FONT_SIZE,
       lineHeight: LINE_HEIGHT,
     },
     duration: {

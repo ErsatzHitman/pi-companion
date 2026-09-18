@@ -34,6 +34,27 @@ describe("transcript-window.tsx: FlatList renders the bounded window, never the 
   });
 });
 
+describe("transcript-window.tsx: the transcript's own inset (android-spec.html's `.t`)", () => {
+  it("pads top 4 and bottom 10, not the other way round", () => {
+    // CORRECTED: this file used to pad paddingTop: theme.spacing[3] (12)
+    // and paddingBottom: theme.spacing[1] (4) — top and bottom swapped
+    // from the confirmed spec's `.t { padding: 4px 10px 10px }`, quoting
+    // docs/ui-reference/pi-companion-app.html's stale `.t { padding:
+    // 12px 12px 4px }` instead. See ../../ui/theme/block-shape.ts's
+    // module doc comment for the full correction.
+    const code = readCode();
+    expect(code).toMatch(/paddingTop: theme\.spacing\[1\]/);
+    expect(code).toMatch(/paddingBottom: TRANSCRIPT_INSET_BOTTOM_DP/);
+    expect(code).not.toMatch(/paddingTop: theme\.spacing\[3\]/);
+  });
+
+  it("pads 10dp horizontally, the confirmed spec's own figure with no design token", () => {
+    const code = readCode();
+    expect(code).toMatch(/^const TRANSCRIPT_INSET_HORIZONTAL_DP = 10;$/m);
+    expect(code).toMatch(/paddingHorizontal: TRANSCRIPT_INSET_HORIZONTAL_DP/);
+  });
+});
+
 describe("transcript-window.tsx: rowExtraData (W11-STREAMCARET)", () => {
   it("declares rowExtraData on TranscriptWindowListProps", () => {
     expect(readCode()).toMatch(/rowExtraData\?:\s*unknown;/);
@@ -94,13 +115,6 @@ describe("transcript-window.tsx: scroll/gesture events wire into the model's own
 });
 
 describe("transcript-window.tsx: the artifact's `.t` inset and block gap", () => {
-  it("adds the reference's 12dp horizontal/top inset and a 4dp bottom inset to the list content", () => {
-    const code = readCode();
-    expect(code).toMatch(/paddingHorizontal: theme\.spacing\[3\]/);
-    expect(code).toMatch(/paddingTop: theme\.spacing\[3\]/);
-    expect(code).toMatch(/paddingBottom: theme\.spacing\[1\]/);
-  });
-
   it("takes the gap between blocks from the shared block shape, not a second literal", () => {
     const code = readCode();
     expect(code).toMatch(/import \{ BLOCK_GAP \} from "\.\.\/\.\.\/ui\/theme\/block-shape"/);
