@@ -23623,3 +23623,99 @@ paragraph records **31.39s**, of which 29.79s was module import. The box it was 
 was not read off the file. Every TRUE verdict in the table above was re-derived here with its own
 command or grep before its box was ticked, and none of the others disagreed with the tree. **A
 verifier's report is a lead, not evidence; the evidence is the command rerun at the gate.**
+
+## Wave P10-W17 (the Android components built against a reconstruction of the design, not the design)
+
+Eight file-disjoint packages, two dynamic workflows (`ui-spec-conformance-w17`, then `-w17b` after
+the first gate came back red), 30 agents across the two, 0 agent errors. Nine commits, 38 files.
+This wave is green at CI run **35328173073** (success, `0fd74b7`). P10-W16's own close-out landed at
+run **35317717548** (success) and its id is recorded here rather than spending a separate CI cycle on
+one line.
+
+### P10-57: a whole class of Android components cited the confirmed spec and used a different file
+
+`docs/ui-reference/pi-companion-app.html` and the confirmed `android-spec.html` are not the same
+document — md5 `3ff70c21a0b512f169bad358608144f0` against `498c3bd38ac8da0636e0bc05b705a7be`. The
+components' comments named the confirmed design; their figures came from the other file. The proof is
+in the tokens the quoted CSS uses, counted rather than argued:
+
+| token quoted as "the reference's own CSS, the authority" | in `android-spec.html` | in `docs/ui-reference/pi-companion-app.html` |
+| -------------------------------------------------------- | ---------------------- | -------------------------------------------- |
+| `--sh-hairline`                                          | 0                      | 9                                            |
+| `--sh-raised`                                            | 0                      | 4                                            |
+| `var(--mono)`                                            | 0                      | 21                                           |
+
+`git grep -ln "sh-hairline\|sh-raised\|ui-reference/pi-companion-app" 1134b35 -- 'apps/android/*'`
+returned **15 files** at this wave's base. Re-run it against a later tree and the figure is higher,
+because this wave's own CORRECTED comments quote those token names while explaining them — measure it
+at a stated commit or not at all.
+What it cost, measured per value and fixed this wave: a hairline ring drawn around every transcript
+block that the confirmed design draws on nothing in any state; a prompt bar whose surface, radius,
+padding, alignment, font family, font size and icon size were all the other file's; a streaming caret
+at the full line height in the accent hue where the spec gives `1.05em` in `ink`; a 34dp bar mark
+against `.ic`'s 36; a 600-weight bar title against `.bar-t`'s 500; a card at radius 14 against
+`.card`'s `var(--r-md)` (22).
+
+**The web pair is NOT the same story, and conflating them is how this finding first went wrong.**
+`docs/ui-reference/pi-companion-web.html` and `web-spec.html` are byte-identical, md5
+`9c49b1a697dff4a6fbc547dc6c257e96`. Web citations of that file are a provenance defect under
+CLAUDE.md's reference-only corollary — the fact has to be restated in a citable home and that home
+cited — but every web VALUE they carried was correct. Three files shipped a correction this wave
+justifying the repoint by calling every file under `docs/ui-reference/` "a stale reconstruction",
+which the md5 falsifies; all three were corrected again before their commits.
+
+### P10-58: file-disjoint is not test-disjoint, and the first gate proved it
+
+The first workflow partitioned by source file, exactly as the playbook says, and the merge gate came
+back with android `vitest` red on five failures across three packages — every one of them in a test
+file that sat in NO partition:
+
+| failing file                                    | package that broke it | what it asserted                               |
+| ----------------------------------------------- | --------------------- | ---------------------------------------------- |
+| `features/composer/entry-block-model.test.ts`   | AND-BLOCK             | the ring AND-BLOCK removed                     |
+| `features/transcript/message-row-model.test.ts` | AND-CARET             | `LINE_FONT_SIZE = 12`                          |
+| `ui/recipes/recipe-accessibility.test.ts`       | AND-PROMPTBAR         | "PromptBar contains no raw hex colour literal" |
+
+Each implementer changed a shared constant its own partition owned, and a reader outside every
+partition asserted the old value. The second workflow re-partitioned **by readers**, with a mandatory
+`git grep -ln <name>` (no pathspec) on every constant, in both the implement and the verify brief.
+All five cleared. **The next wave's partitioner walks the readers of every file it hands out, not
+just the file.**
+
+### P10-59: three corrections in this wave cited authority that does not exist
+
+Each was a comment written to FIX a citation defect, which then invented its own:
+
+- `live-screen.tsx` and `Toggle.test.ts` both cited "`CLAUDE.md`'s warning that `docs/ui-reference/`
+  is a stale reconstruction". `CLAUDE.md` names no file under `docs/ui-reference/` anywhere —
+  grepped, not assumed. Both now state the measured md5 difference as their own evidence.
+- `session-resume.css`, `pi-extension-rail.css`, and web `tool-call-row.css`/`.tsx` called the web
+  reference stale, one of them in the sentence before saying the two files are identical.
+
+The shape is P10-54's, one level up: a document stating something it did not derive. **A correction
+is prose too — derive its premise the same way the fix's own values were derived.** Two commit
+messages in this wave were written from the workflow's report rather than from `git diff`, described
+changes the diff did not contain, and were reset and rewritten from the diff before the push. The
+same rule caught them.
+
+### What this wave deliberately did NOT do
+
+Recorded so none of it reads as silently dropped. Each is real, each is outside the eight partitions,
+and none has a written reason to stay open beyond "not this wave":
+
+- the session-controls popover — `web-spec.html`'s `.menu` is an undimmed 336px panel absolutely
+  positioned above its trigger (`bottom: calc(100% + 10px)`); the app opens a modal `Sheet` behind a
+  scrim. A structural change, not a value change, which is why it is not in any package here
+- `ModelThinkingPicker`'s effort control — the spec's `.seg`; `.pc-segmented` already exists and
+  `QueueModePicker` already uses it
+- the Settings screen's discrete-pill-per-row structure, and the context pill's `width .4s`
+- `apps/android/src/features/extensions/registry-view.tsx` cites `docs/ui-reference/
+pi-companion-app.html`'s `.blk` padding as authority, and carries a 1px-off value with it
+- `apps/android/src/ui/recipes/ThinkingSection.tsx`'s `LINE_FONT_SIZE` comment cites `.ln {
+font-size: 12px; line-height: 1.62 }`. `.ln` declares no font in `android-spec.html`; `.t` does,
+  at 12.5px. Same defect AND-CARET fixed in `StreamingMessage.tsx`, one file over
+- the Android composer's pending-entry hairline, now unpinned by AND-BLOCK's `blockRing` change
+
+Confirmed as recorded decisions rather than gaps, re-checked this wave: settings-as-route (not the
+spec's 420px sheet), the absent SHA chip (no wire response carries one), the missing dictate button,
+the Build/Plan group, the sub-860px stacked tier, and the four per-agent Settings rows Android omits.
