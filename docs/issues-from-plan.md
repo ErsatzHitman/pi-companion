@@ -14001,14 +14001,16 @@ Found by the first axe run in a REAL browser (jsdom never caught it). Measured p
 
 Suggested minimal moves: light `ink-3` -> `#707377` (4.57:1), light accent -> `#0275e0` (4.54:1).
 
-- [ ] Audit EVERY token pair actually used as text-on-background, not only the five axe happened to
+- [x] Audit EVERY token pair actually used as text-on-background, not only the five axe happened to
       render — compute the ratios programmatically for both themes
-- [ ] Every such pair meets 4.5:1 for normal text (3:1 is acceptable only for large text and
+- [x] Every such pair meets 4.5:1 for normal text (3:1 is acceptable only for large text and
       non-text UI boundaries, and each such case is named)
-- [ ] A test asserts the ratios so the palette cannot silently regress
-- [ ] Web and Android stay in step; no raw hex is introduced at any call site
-- [ ] `docs/beautiful-ui-reference.md` records the old value, the new value and the measured ratio
+- [x] A test asserts the ratios so the palette cannot silently regress
+- [x] Web and Android stay in step; no raw hex is introduced at any call site
+- [x] `docs/beautiful-ui-reference.md` records the old value, the new value and the measured ratio
       for each change, so the deviation from the reference is deliberate and reviewable
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T54A2 — Give the app shell a level-one heading
 
@@ -14018,10 +14020,12 @@ axe's `page-has-heading-one` fails: the assembled shell renders no `<h1>` on any
 
 Owns: `apps/web/src/ui/shell.tsx` and its stylesheet. No other task in this wave touches those files.
 
-- [ ] Every route exposes exactly one level-one heading naming the current view
-- [ ] It is meaningful to a screen reader and not visually intrusive (visually-hidden is acceptable)
-- [ ] The existing heading hierarchy below it is not broken (no skipped levels)
-- [ ] axe's `page-has-heading-one` passes in the real browser, asserted by the E2E keyboard spec
+- [x] Every route exposes exactly one level-one heading naming the current view
+- [x] It is meaningful to a screen reader and not visually intrusive (visually-hidden is acceptable)
+- [x] The existing heading hierarchy below it is not broken (no skipped levels)
+- [x] axe's `page-has-heading-one` passes in the real browser, asserted by the E2E keyboard spec
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T54A3 — Feed browser offline events into connection status
 
@@ -14036,10 +14040,12 @@ connection controller. No other task in this wave touches those files.
 
 Do NOT fix this by lengthening the spec's timeout; the heartbeat is a backstop, not the signal.
 
-- [ ] `navigator.onLine` and the `online`/`offline` events reach connection status promptly
-- [ ] Going offline marks the session stale quickly; coming back online triggers catch-up
-- [ ] The heartbeat still covers the silent-socket case (plan.md §7.4) where no browser event fires
-- [ ] The listener is removed on teardown, leaking nothing across route changes
+- [x] `navigator.onLine` and the `online`/`offline` events reach connection status promptly
+- [x] Going offline marks the session stale quickly; coming back online triggers catch-up
+- [x] The heartbeat still covers the silent-socket case (plan.md §7.4) where no browser event fires
+- [x] The listener is removed on teardown, leaking nothing across route changes
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T51A — Audit the Pi RPC mirror and decide what to carry
 
@@ -14083,8 +14089,32 @@ Also record here the discarded compaction payload T38B3 depends on: `compaction_
 `details.{readFiles, modifiedFiles}` never reach a client.
 
 - [ ] Every Pi request type is listed with a decision: mirrored, deliberately excluded with a reason, or deferred to a named task
-- [ ] Anything a planned task already depends on is mirrored, not deferred
-- [ ] The findings section records the Pi version audited against, and the corrected 32/2 count
+- [x] Anything a planned task already depends on is mirrored, not deferred
+- [x] The findings section records the Pi version audited against, and the corrected 32/2 count
+
+**Verified at P10-W16. The first box is left UNTICKED, and this is the reason rather than an
+omission.** Boxes two and three hold. The first does not, read literally: `docs/pi-extension-compatibility.md`
+§9.2 gives all 32 arms a verdict, but every one of the seven `Deferred` rows — `new_session`,
+`cycle_model`, `cycle_thinking_level`, `get_available_thinking_levels`, `abort_retry`,
+`switch_session`, `get_fork_messages` — defers to a CONDITION ("revisit only if in-process session
+switching becomes a stated requirement"), never to a named task. `get_fork_messages`'s row says
+outright "when one is filed", i.e. no task exists to name. The criterion's third option is therefore
+unmet for seven of the 32.
+
+**It cannot be fixed in place, and that is the interesting half.** `docs/pi-extension-compatibility.md`
+is on `CLAUDE.md`'s frozen reference-only list (T242), which forbids editing one of those files to
+layer this product's later decisions onto it — and T269 already declined, on exactly that ground, to
+fix real line-number citations in this same file. Naming seven tasks in seven of its rows is that
+edit. So the substance goes here instead, in the one document that governs: **no planned task depends
+on any of the seven** — which is this task's own second box, and which was re-checked at P10-W16 by
+grepping `docs/issues-from-plan.md` and `plan.md` for each of the seven names and finding only
+inventory mentions — and none is filed, deliberately, because filing seven tasks nothing depends on
+is how a backlog stops meaning anything. A reviewer could disagree two ways: by arguing T51A's own
+`Owns:` line ("`docs/pi-extension-compatibility.md` (the findings section only)") outranks T242's
+later freeze, in which case the fix is one clause per row; or by arguing §9 was authored in this
+repository about Pi rather than copied from Paseo, so the freeze should never have covered it. Both
+are real arguments. Neither is this task's to settle, and both would be settled by relocating §9 to a
+citable home outside the frozen list — which is a task nobody has filed.
 
 #### T51B — Add a drift-detection test for the Pi RPC mirror
 
@@ -14098,8 +14128,10 @@ how the drift returns.
 Owns: `packages/server/src/server/agent/providers/pi/rpc-types.test.ts` (new file). No other
 task in this wave touches that file.
 
-- [ ] A test fails if Pi's installed RPC command set diverges from T51A's recorded decision list
-- [ ] The test names the specific new, renamed, or removed type in its failure message
+- [x] A test fails if Pi's installed RPC command set diverges from T51A's recorded decision list
+- [x] The test names the specific new, renamed, or removed type in its failure message
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 ---
 
@@ -14298,11 +14330,13 @@ the failure, and removing it.
 
 Owns: `packages/server/src/server/agent/provider-registry.ts` and its test.
 
-- [ ] Every optional `AgentSession` method survives the wrap, proven per member
-- [ ] The proof fails when a new optional member is not forwarded, demonstrated
-- [ ] The unwrapped fast path (`inner.provider === provider && !hasModelOverrides`) is stated
+- [x] Every optional `AgentSession` method survives the wrap, proven per member
+- [x] The proof fails when a new optional member is not forwarded, demonstrated
+- [x] The unwrapped fast path (`inner.provider === provider && !hasModelOverrides`) is stated
       accurately wherever it is described
-- [ ] `getEditorText` is exercised through a model-override profile specifically
+- [x] `getEditorText` is exercised through a model-override profile specifically
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T297 — Land T280's deterministic `ENOTEMPTY` reproduction as a real test
 
@@ -14339,11 +14373,13 @@ one test and its own asynchronous continuation, not between sibling files.
 Owns: `packages/server/src/server/agent/create-agent/create.test.ts` and any test-only helper
 it needs.
 
-- [ ] Removing the fix makes a committed test FAIL, demonstrated both ways
-- [ ] The forced-ordering mechanism is explicit, not a sleep or a timing assumption
-- [ ] At least one prompt-bearing case is covered, so the handle is a real one
-- [ ] No retry, no raised `testTimeout`, no new `test:unit:serial` member
-- [ ] `create.test.ts`'s own comment about coverage matches what the tests actually cover
+- [x] Removing the fix makes a committed test FAIL, demonstrated both ways
+- [x] The forced-ordering mechanism is explicit, not a sleep or a timing assumption
+- [x] At least one prompt-bearing case is covered, so the handle is a real one
+- [x] No retry, no raised `testTimeout`, no new `test:unit:serial` member
+- [x] `create.test.ts`'s own comment about coverage matches what the tests actually cover
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T298 — Pin `app.config.ts`'s permission decision as a registered capability
 
@@ -14385,13 +14421,15 @@ scratchpad copy (**never `git checkout --`**), and confirm exit 0 with
 Owns: `scripts/ci/guard-capability-prose.mjs`, its test, and — only if option 2 is chosen —
 the named export in `apps/android/app.config.ts`.
 
-- [ ] The chosen shape is argued against the other two, with the literal-erasure trap addressed
-- [ ] The entry is watched firing and restoring, or a will-not-register is recorded with its
+- [x] The chosen shape is argued against the other two, with the literal-erasure trap addressed
+- [x] The entry is watched firing and restoring, or a will-not-register is recorded with its
       measurement
-- [ ] `isAppSourcePath` and `isShippedSourcePath` are each called on the real path
-- [ ] The full-tree scan still exits 0
-- [ ] Neither forbidden count (`scripts/ci` tests, `CAPABILITIES` entries) is restated in
+- [x] `isAppSourcePath` and `isShippedSourcePath` are each called on the real path
+- [x] The full-tree scan still exits 0
+- [x] Neither forbidden count (`scripts/ci` tests, `CAPABILITIES` entries) is restated in
       `CLAUDE.md`
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T299 — Revoking a trusted device does not stop its push notifications
 
@@ -14428,13 +14466,15 @@ Owns: `packages/server/src/server/push/token-store.ts` and its test,
 `handleTrustedDeviceRevokeRequest`, and — only for the mitigation clause —
 `apps/android/src/features/devices/DevicesScreen.tsx`.
 
-- [ ] A token is attributable to the `clientId` that registered it, proven by a test
-- [ ] Revoking a device removes that device's tokens, proven by an observable consequence (the
+- [x] A token is attributable to the `clientId` that registered it, proven by a test
+- [x] Revoking a device removes that device's tokens, proven by an observable consequence (the
       next send does not reach it), not by "a removal was called"
-- [ ] Tokens persisted without a `clientId` have a stated, tested disposition
-- [ ] Removing the revoke-time call makes a committed test FAIL, demonstrated both ways
-- [ ] Any prose asserting revocation stops notifications, or that it does not, matches the code
+- [x] Tokens persisted without a `clientId` have a stated, tested disposition
+- [x] Removing the revoke-time call makes a committed test FAIL, demonstrated both ways
+- [x] Any prose asserting revocation stops notifications, or that it does not, matches the code
       in the same commit (T124)
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T300 — No revoked-`clientId` denylist: a revoked device can silently re-register
 
@@ -14471,13 +14511,15 @@ Owns: the new revoked-`clientId` store and its test,
 `handleTrustedDeviceRevokeRequest`, and the protocol addition if the rejection is named on the
 wire.
 
-- [ ] A revoked `clientId` cannot re-establish a trusted connection, proven by a test that fails
+- [x] A revoked `clientId` cannot re-establish a trusted connection, proven by a test that fails
       when the `handleHello` consultation is removed
-- [ ] The denylist survives a daemon restart, proven against real storage
-- [ ] A revoked device's rejection is either named on the wire or the silence is a recorded
+- [x] The denylist survives a daemon restart, proven against real storage
+- [x] A revoked device's rejection is either named on the wire or the silence is a recorded
       decision with its reason
-- [ ] Un-revoking is possible and tested, or its absence is a recorded decision
-- [ ] The dialog copy in `DevicesScreen.tsx` matches whatever this task actually delivers
+- [x] Un-revoking is possible and tested, or its absence is a recorded decision
+- [x] The dialog copy in `DevicesScreen.tsx` matches whatever this task actually delivers
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T301 — Give the devices and diagnostics routes a navigable entry point
 
@@ -14509,15 +14551,17 @@ not a test that the prop type exists.
 Owns: `apps/android/src/features/settings/SettingsScreen.tsx` and its test,
 `apps/android/src/app/h/[serverId]/(tabs)/settings.tsx`.
 
-- [ ] A user can reach the devices screen from the shipped UI, proven by a test that fails when
+- [x] A user can reach the devices screen from the shipped UI, proven by a test that fails when
       the entry point is removed
-- [ ] The same for diagnostics, proven separately — one row passing must not stand in for the
+- [x] The same for diagnostics, proven separately — one row passing must not stand in for the
       other
-- [ ] Neither row renders when its callback is absent, so no dead row ships
-- [ ] The `<Composer>`-adjacent app-shell contract tests still pass (P9-P's regression shape:
+- [x] Neither row renders when its callback is absent, so no dead row ships
+- [x] The `<Composer>`-adjacent app-shell contract tests still pass (P9-P's regression shape:
       those pin shared source text whole)
-- [ ] `DevicesScreen.tsx`'s doc comment describing the unreachability is corrected in the same
+- [x] `DevicesScreen.tsx`'s doc comment describing the unreachability is corrected in the same
       commit that makes it false (T124)
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T302 — Move `websocket-server.browser-tools.test.ts` into `test:unit:serial`
 
@@ -14552,12 +14596,14 @@ Owns: `packages/server/package.json`'s `test:unit:parallel` / `test:unit:serial`
 `CLAUDE.md`'s T240 paragraph (which must record this sixth member and its measurement, the way
 it records the fifth).
 
-- [ ] The file runs in `test:unit:serial` and no longer in the parallel lane
-- [ ] Neither `connectTimeoutMs` nor `testTimeout` is raised
+- [x] The file runs in `test:unit:serial` and no longer in the parallel lane
+- [x] Neither `connectTimeoutMs` nor `testTimeout` is raised
 - [ ] `npm run test:unit --workspace=@picompanion/server` run three times on one commit, all
       three exit codes read individually, all 0
-- [ ] `CLAUDE.md`'s T240 paragraph records this member with its own measurement
-- [ ] `guard-workspace-test-coverage.mjs` still exits 0 (the file must not fall out of both lanes)
+- [x] `CLAUDE.md`'s T240 paragraph records this member with its own measurement
+- [x] `guard-workspace-test-coverage.mjs` still exits 0 (the file must not fall out of both lanes)
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T303 — Fix the format-check guard's bracketed-path parent-existence false positive
 
@@ -14597,14 +14643,16 @@ the shape that let this sit unnoticed.
 
 Owns: `scripts/ci/guard-format-check-per-commit.mjs` and its test.
 
-- [ ] A bracketed path absent at a commit is reported absent, proven by a test using a real
+- [x] A bracketed path absent at a commit is reported absent, proven by a test using a real
       `app/**/[param]/*` path
-- [ ] The test FAILS against the pre-fix implementation, demonstrated both ways
-- [ ] The doc comment's "the only realistic cause here is exactly that" premise is corrected
-- [ ] `node scripts/ci/run-guard-format-check-per-commit.mjs <base>..HEAD` still exits 0 and no
+- [x] The test FAILS against the pre-fix implementation, demonstrated both ways
+- [x] The doc comment's "the only realistic cause here is exactly that" premise is corrected
+- [x] `node scripts/ci/run-guard-format-check-per-commit.mjs <base>..HEAD` still exits 0 and no
       longer prints the commit-dump noise
-- [ ] The guard is exercised with a range argument, never with none (it defaults to the entire
+- [x] The guard is exercised with a range argument, never with none (it defaults to the entire
       repository history)
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T304 — Retire the duplicate exhaustiveness check that only the ceiling guard sees
 
@@ -14637,12 +14685,14 @@ not predicted — and re-run the guard, since a ceiling set below the true count
 Owns: `packages/server/src/server/agent/provider-registry-wrap.test.ts` and
 `scripts/ci/guard-server-test-typecheck-ceiling.mjs`'s `TYPECHECK_ERROR_CEILING`.
 
-- [ ] The `TS6133` is gone, or its retention is argued in the file
-- [ ] `TYPECHECK_ERROR_CEILING` is lowered by the measured delta and the guard exits 0
-- [ ] `npm run typecheck --workspace=@picompanion/server` still exits 0
-- [ ] The production exhaustiveness check is re-proven able to FAIL after the change, in both
+- [x] The `TS6133` is gone, or its retention is argued in the file
+- [x] `TYPECHECK_ERROR_CEILING` is lowered by the measured delta and the guard exits 0
+- [x] `npm run typecheck --workspace=@picompanion/server` still exits 0
+- [x] The production exhaustiveness check is re-proven able to FAIL after the change, in both
       directions
-- [ ] The file's own header comment still describes what the file actually does
+- [x] The file's own header comment still describes what the file actually does
+
+**Verified box by box and ticked at P10-W16.** The command or the file-and-symbol that proves each one is recorded in that wave's own evidence table; nothing here was ticked on the strength of the task's own report.
 
 #### T305 — Give `.pc-message__text` the same `white-space: pre-wrap` the thinking body has
 
@@ -14664,14 +14714,40 @@ mid-wave.
 Do not "fix" this by reformatting the model's text anywhere in the pipeline. The text is
 already correct by the time it reaches the DOM; only the CSS drops the newlines.
 
-- [ ] `.pc-message__text` preserves newlines in rendered assistant text
-- [ ] A test pins it — assert the computed/declared `white-space`, or assert rendered
+- [x] `.pc-message__text` preserves newlines in rendered assistant text
+- [x] A test pins it — assert the computed/declared `white-space`, or assert rendered
       output for a two-line message, rather than only eyeballing it
 - [ ] Show the same two-line message rendering identically on web and Android, or state
       plainly which check you could not run
 - [ ] Confirm the shimmer-gradient treatment on `.pc-message__text:has(.pc-message__cursor)`
       still looks right with the new wrapping, since `background-clip: text` interacts with
       line boxes
+
+**Verified at P10-W16. The first two boxes hold; the last two are left UNTICKED, for two different
+reasons.**
+
+The third box asks for the same two-line message shown rendering identically on web and Android, "or
+state plainly which check was not run". The web half's gap was disclosed at landing (no Playwright
+run); the Android half was not — the commit asserted as settled fact that "RN `<Text>` preserves
+newlines by default and needs no equivalent declaration", which is a platform claim, not a disclosed
+skip, and a grep of `apps/android` and `packages` for `T305` returns nothing. **So the disclosure is
+made here, plainly: no side-by-side render was performed on either platform.** What was checked at
+P10-W16 is structural — `apps/android/src/ui/recipes/StreamingMessage.tsx` renders the body as
+`{headText}` plus per-character nested `<Text>` runs inside ONE `<Text>`, so a `\n` in the string is
+never split out by that wrapping — and that is a reason to expect the platforms to agree, not
+evidence that they were seen agreeing. A reviewer could disagree by holding that a structural
+argument plus RN's documented default is enough to tick; the box's own wording asks for a render or a
+disclosure, so it gets the disclosure.
+
+The fourth box asks to confirm the shimmer gradient on `.pc-message__text:has(.pc-message__cursor)`
+still looks right with the new wrapping. **That selector no longer exists.** STREAM-1 landed after
+T305 and removed the whole-paragraph shimmer from `.pc-message__text` entirely, replacing it with a
+trailing blur and `mask-image` on `.pc-message__tail`, which uses no `background-clip: text` —
+`apps/web/src/ui/recipes/recipes.css` carries its own `CORRECTED (STREAM-1)` comment saying so, and
+the surviving `background-clip: text` there belongs to the unrelated `.pc-thinking__summary--live`.
+The interaction this box asks about was reasoned about correctly at landing time and has since been
+deleted by a later task, so there is nothing left to confirm. It is recorded as overtaken rather than
+ticked, because ticking it would claim an observation of a treatment that is gone.
 
 #### T306 — Re-pin `expo-secure-store` to the version this app's own `expo` bundles
 
@@ -14958,6 +15034,14 @@ test pins the single return path directly.
       `<time>` whose class has no rule is invisible to every DOM assertion
 - [ ] Confirm on a real device and a real browser that the two look consistent, or state
       plainly which check was not run
+
+**Verified at P10-W16. The last box is left UNTICKED as UNVERIFIABLE-HERE.** Every other box holds
+against the tree. This one asks someone to look at a real device and a real browser and judge that
+the two agree — an act, not a property. It also has no committed stand-in: a P10-W16 search of
+`apps/web/e2e` and `apps/android/maestro` found no spec referencing `formatMessageTimestamp` or
+`timestampLabelFor`, so nothing mechanical is quietly standing in for the human check either. The box
+is honestly open, and its alternative clause ("or state plainly which check was not run") is
+satisfied by this paragraph: **neither the device nor the browser check was run.**
 
 #### T309 — The observation test's self-heal tick is both required and harmful, depending on when it lands
 
@@ -16078,8 +16162,18 @@ occurrence of this error starts from a candidate list instead of a fresh investi
 - [x] The `EBUSY` file is serialised, with its solo runtime measured and the difference from the
       previous six stated
 - [x] `agent-manager.test.ts` passes locally (158 tests)
-- [ ] Two consecutive green `server-tests (windows-latest)` runs, since one green run cannot
+- [x] Two consecutive green `server-tests (windows-latest)` runs, since one green run cannot
       distinguish a fixed race from a lucky one
+
+**Ticked at P10-W16, against GitHub's own run history rather than a local observation.** The
+`ENOTEMPTY` fix landed at `eb25fd6`, 414 commits behind `main`'s head at the time of this check.
+`gh run list --branch main --limit 15` returns 14 consecutive completed runs, 2026-09-17 14:17
+through 2026-09-18 06:19, every one `conclusion: success`; `gh run view` at job level on two of them
+(`35312965757`, `35284514824`) confirms `server-tests (windows-latest)` itself is `success` in both,
+not merely the aggregate workflow. Two consecutive green runs is the floor this box asks for and the
+record clears it by an order of magnitude. This box reads like an external-observation claim and is
+not one: unlike T302's and T308's, the observation it describes is recorded by a system that can be
+queried after the fact.
 
 #### T324 — The emulator ran with `-accel off` for every run, and nothing said so
 
@@ -23457,3 +23551,75 @@ silent forever.
 **The rule that follows:** when a test is written by a script, assert the produced text contains no
 control characters before writing the file. That one check is what the gate added, and it is what
 would have caught the committed pair on the day it landed.
+
+## Wave P10-W16 (the acceptance boxes the completeness audit's own table had already counted)
+
+One package, the ledger only. P10-W15 established that the master table is 100% landed; this wave
+establishes what the acceptance boxes under those landed tasks actually say.
+
+### P10-54: the previous wave's conclusion disagreed with the previous wave's own table
+
+P10-47 ends "what remains open in this file is five acceptance boxes, three of which no agent can
+close". Twenty lines above it, in the same section, its own region table reports **68 unchecked boxes
+between lines 14000 and 18000** — the region that section separately argues is the one where a `- [ ]`
+means what it says. Both halves were honest. They were counting different populations: the
+conclusion counted boxes under tasks the audit had opened, the table counted every box in the
+meaningful region, and nothing reconciled them. The true figure at that close-out was **73**, not 5.
+
+This is the third instance of the same shape in two waves — P10-48's verification recipe whose two
+halves described different populations, P10-49's tally counted over rows versus over sections, and
+now a conclusion counted against a table in the same paragraph. **When a document states a count
+twice, derive both from the same command or state which population each one covers.**
+
+### P10-55: what the 68 boxes turned out to be, and how they were closed
+
+All 68 belong to seventeen tasks that HAVE landed commits — box state was stale bookkeeping, not open
+work. They were verified by two READ-ONLY agents over file-disjoint task sets, both forbidden to
+write anything, to run a whole-directory `vitest`/`tsc`/`oxfmt`/`oxlint`, or to touch port `6767`,
+and both required to return exactly one verdict per box: **TRUE** with the one command or
+file-and-symbol that proves it, **FALSE** with what was found instead, or **UNVERIFIABLE-HERE** for a
+claim about a past act rather than a property of the tree. Both were told that a test whose name says
+one thing while its assertion pins another is FALSE, and that this repository has found that exact
+defect twice.
+
+**63 ticked, 5 left open.** The decisive evidence per task:
+
+| Task  | What closed its boxes                                                                                                 |
+| ----- | --------------------------------------------------------------------------------------------------------------------- |
+| T54A1 | `packages/design-tokens/src/contrast.test.ts` computes real WCAG luminance per pair; 14/14 pass                       |
+| T54A2 | `ROUTE_HEADINGS`/`useRouteHeading` in `shell.tsx`; axe ran green in a real Chromium at CI run `35314409932`           |
+| T54A3 | `createBrowserNetworkReachability`, `handleNetworkStatus`, and `network.test.ts`'s unsubscribe case                   |
+| T51A  | §9.1's audited Pi version and 32/2 reconciliation; `get_commands` mirrored because T28B4 depends on it                |
+| T51B  | `rpc-types.test.ts` diffs a vendored snapshot against both the audit table and the installed Pi; 12/12 pass           |
+| T296  | `SESSION_OPTIONAL_METHOD_KEYS: Record<AgentSessionOptionalMethodKey, true>` fails to compile in both directions       |
+| T297  | `create.test.ts` forces both orderings with `ControllableAgentSession` plus a `writeJsonFileAtomic` spy, no sleep     |
+| T298  | `run-guard-capability-prose.mjs` exit 0, 91 groups; the test calls both path predicates on the real path              |
+| T299  | `websocket-server.ts`'s `handleTrustedDeviceRevokeRequest` calls `removeTokensForClient`; asserted via `getAllTokens` |
+| T300  | `RevokedDeviceStore.isRevoked` consulted in `handleHello` before both branches; close code 4004                       |
+| T301  | `onOpenDevices`/`onOpenDiagnostics` render only when supplied; each row pinned by its own test                        |
+| T302  | both lanes read directly from `packages/server/package.json`; `guard-workspace-test-coverage.mjs` exit 0              |
+| T303  | `tryLoadBlobAtCommit` uses `git cat-file -e`; tested against the real bracketed path `[serverId]/devices.tsx`         |
+| T304  | the three retired symbols survive only inside a doc comment; ceiling guard exit 0                                     |
+| T305  | `.pc-message__text`'s `white-space: pre-wrap` in `recipes.css`, pinned by rule text and by rendered `textContent`     |
+| T308  | one `frontend-core` formatter, fixed-zone and half-hour-offset cases, unparseable input renders nothing               |
+| T323  | 14 consecutive `conclusion: success` runs on `main`; `server-tests (windows-latest)` green at job level in two        |
+
+The five left open each carry their own written reason immediately under the box, and they are three
+different kinds of open, which is the part worth keeping:
+
+- **T51A's first box is FALSE and unfixable in place.** Seven `Deferred` rows defer to a condition,
+  not a named task. The fix would mean editing a file T242 freezes and T269 already refused to touch
+  for this exact class of defect, so the substance is recorded in the ledger instead.
+- **T305's third and fourth boxes.** The third's Android half was never disclosed as skipped, so this
+  wave discloses it. The fourth asks about a selector STREAM-1 has since deleted.
+- **T302's third and T308's last are UNVERIFIABLE-HERE** — each asserts an act someone performed, and
+  neither has a committed stand-in. Re-running would answer a different question.
+
+### P10-56: a verifier's report carried a number the tree does not have, and spot-checking is why
+
+One report stated that `CLAUDE.md`'s T302 paragraph records "20.54s alone, 19.28s import". The
+paragraph records **31.39s**, of which 29.79s was module import. The box it was closing is still TRUE
+— the paragraph exists and carries its own measurement, which is all the box asks — but the figure
+was not read off the file. Every TRUE verdict in the table above was re-derived here with its own
+command or grep before its box was ticked, and none of the others disagreed with the tree. **A
+verifier's report is a lead, not evidence; the evidence is the command rerun at the gate.**
